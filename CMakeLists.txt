@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 project(icey)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -14,8 +14,12 @@ include_directories(
     include
 )
 
-ament_auto_add_executable(icey_example_node
-  src/icey_example_node.cpp 
+ament_auto_add_executable(icey_example_talker
+  src/icey_example_talker.cpp 
+)
+
+ament_auto_add_executable(icey_example_listener
+  src/icey_example_listener.cpp 
 )
 
 ament_auto_package(
