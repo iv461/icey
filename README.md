@@ -26,8 +26,8 @@ auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
 
 ## Mixing with old ROS 2 API: 
 
-This is a library that is a thin wrapper around ROS 2 (ROS 1 is also supported). 
-It has virtually no buy-in cost: You can always still use callbacks for some topics, mix it with the regular ROS 2 API. 
+Icey is a thin wrapper around ROS 2/1 and you can always switch and also mix 
+with the regular ROS-API. It has virtually no buy-in cost: You can always still use callbacks for some topics, mix it with the regular ROS 2 API. 
 
 You can always listen on changes of a state, like a subscriber callback:
 
