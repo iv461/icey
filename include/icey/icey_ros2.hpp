@@ -39,8 +39,9 @@ public:
     using Timer = rclcpp::TimerBase::SharedPtr;
 
     template<typename Msg>
-    using Subscriber = rclcpp::Subscription<Msg>::SharedPtr;
-    using Publisher = rclcpp::Publisher<Msg>::SharedPtr;
+    using Subscriber = typename rclcpp::Subscription<Msg>::SharedPtr;
+    template<typename Msg>
+    using Publisher = typename rclcpp::Publisher<Msg>::SharedPtr;
 
     using _Node = rclcpp::Node; /// Underlying Node type
     /// A node interface, wrapping to some common
@@ -76,7 +77,7 @@ public:
 
         template<typename F>
         void add_timer(std::string name, Duration time_interval, F cb) {
-            my_timers_[name] = create_wall_timer(time_interval, timer_callback);
+            my_timers_[name] = create_wall_timer(time_interval, cb);
         }
 
         /// TODO add service 
@@ -86,10 +87,12 @@ public:
         std::map<std::string, std::any> my_subscribers_;
         std::map<std::string, std::any> my_publishers_;
     };
+
+    using NodeHandle = Node;
 };
 
 using ROSAdapter = ROS2Adapter;
 
 }
 
-#include <icey.hpp> 
+#include <icey/icey.hpp> 

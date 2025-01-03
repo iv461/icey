@@ -6,10 +6,11 @@ using StringMsg = std_msgs::msg::String;
 
 int main(int argc, char **argv) {
 
-    auto my_string = icey::SubscribedState<StringMsg>("my_string");
+    auto my_string = icey::create_signal<StringMsg>("my_string");
 
     auto derived_value = icey::compute_based_on([](const auto &my_string_val) {
-            return string_val.toUpper();
+            //return my_string_val.toUpper();
+            return my_string_val;
     },
     my_string);
 

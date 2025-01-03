@@ -11,12 +11,13 @@
 #include <unordered_map>
 #include <any> 
 
+#include <boost/noncopyable.hpp>
 namespace icey {
 
 
 /// A read-only observable
 template<typename _StateValue>
-class Observable {
+class Observable : private boost::noncopyable {
 public:
     using StateValue = _StateValue;
     using Cb = std::function<void(const StateValue&)>;
@@ -33,7 +34,7 @@ public:
     auto has_value() const {return value_.has_value(); }
 
 //protected:
-    void _set_value(const StateValue &new_value) {
+    void _set(const StateValue &new_value) {
         value_ = new_value;
         notify();
     }
@@ -53,8 +54,8 @@ public:
 template<typename StateValue>
 class WritableObservable : public Observable<StateValue> {
 public: 
-    void set_value(const StateValue &new_value) {
-        _set_value(new_value);
+    void set(const StateValue &new_value) {
+        _set(new_value);
     }
 };
 
@@ -63,59 +64,61 @@ enum class FrequencyStrategy {
     INTERPOLATE
 };
 
-template<typename StateValue>
-class SubstribedState : public Observable<StateValue> {
-public:
-    using Base = Observable<StateValue>;
-
-    static auto create(const std::string &name) {
-        return std::make_shared<We>();
-    }
-
-    auto name() const {return name_;}
-
-    std::function<void(const ROSAdapter::NodeHandle &)> attach_to_node_;
-private:
-    SubscribedState(const std::string &name): name_(name) {
-        attach_to_node_ = [this, name](const auto &node_handle) {
-            node_handle->add_subscription<StateValue>(name, [this](const auto &new_value) {
-                set_value(new_value);
-            });
-        }
-    }
-    std::string name_; 
+// Smth that can be attached to a node smh
+struct NodeAttachable {
+    virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) = 0;
 };
 
 template<typename StateValue>
-class PublishedState : public WritableObservable<StateValue> {
+class SubscribedState : public Observable<StateValue>, public NodeAttachable {
 public:
-    using Base = WritableObservable<StateValue>;
-    using We = PublishedState<StateValue>
+    using Base = Observable<StateValue>;
+    using We = SubscribedState<StateValue>;
 
     static auto create(const std::string &name) {
-        return std::make_shared<We>();
+        return std::make_shared<We>(name);
+    }
+
+    auto name() const {return name_;}
+
+    void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) override {
+        node_handle->add_subscription<StateValue>(name, [this](const auto &new_value) {
+            set(new_value);
+        });
+    }
+private:
+    SubscribedState(const std::string &name): name_(name) {}
+    std::string name_; 
+};
+
+
+template<typename StateValue>
+class PublishedState : public WritableObservable<StateValue>, public NodeAttachable {
+public:
+    using Base = WritableObservable<StateValue>;
+    using We = PublishedState<StateValue>;
+
+    static auto create(const std::string &name) {
+        return std::make_shared<We>(name);
     }
     
     auto name() const {return name_;}
     
-    std::function<void(const ROSAdapter::NodeHandle &)> attach_to_node_;
-private:
-
-    PublishedState(const std::string &name): name_(name) {
-        attach_to_node_ = [this, name](const auto &node_handle) {
-            auto publish = node_handle->add_publication<StateValue>(name);
-            on_change([publish](const auto &new_value) {
-                publish(new_value);
-            });
-        };
+    void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) override {
+        auto publish = node_handle->add_publication<StateValue>(name);
+        on_change([publish](const auto &new_value) {
+            publish(new_value);
+        });
     }
+private:
+    PublishedState(const std::string &name): name_(name) {}
     std::string name_; 
 };
 
 /// Global state, used to enable a simple, purely functional API
 struct GState {
-    std::vector<std::any> staged_observables;
-    std::shared_ptr<ROSAdapter::Node> node_;
+    std::vector<std::shared_ptr<NodeAttachable>> staged_observables;
+    std::shared_ptr<ROSAdapter::NodeHandle> node_;
     ~GState() {
         if(!staged_observables.empty() && !node_) {
             std::cout << "WARNING: You created some signals, but no node was created, did you forget to call icey::spawn() ?" << std::endl;
@@ -123,38 +126,43 @@ struct GState {
     }
 };
 
+GState g_state;
+
 template<typename StateValue>
 auto create_signal(const std::string &name) {
-    auto signal = SubscribedState<StateValue>::create();
+    auto signal = SubscribedState<StateValue>::create(name);
     g_state.staged_observables.push_back(signal);
     return signal;
 }
 
 template<typename StateValue>
 auto create_state(const std::string &name) {
-    auto state = PublishedState<StateValue>::create();
+    auto state = PublishedState<StateValue>::create(name);
     g_state.staged_observables.push_back(state);
     return state;
+}
+
+template<typename F> 
+void create_timer(const ROSAdapter::Duration &interval, F cb) {
+
 }
 
 /// Args must be a Observable, i.e. not constants are supported.
 template<typename F, typename... Arguments>
 auto compute_based_on(F f, Arguments && ... args) {
-    using ReturnType = decltype(f());
+    using ReturnType = decltype(f(args...));
     auto new_observable = Observable<ReturnType>::create();
      ([&]{ 
-        args.on_change([new_observable](const auto &new_value) {
-            auto all_argunments_arrived = (args.has_value() && ...);
+        args->on_change([new_observable, args..., f](const auto &new_value) {
+            auto all_argunments_arrived = (args && ... && true);
             if(all_argunments_arrived) {
-                auto result = f(args.value_.get_value()...);
-                new_observable.set_value(result);
+                auto result = f(args.value_...);
+                new_observable->set(result);
             }
         });
      }(), ...);
     return new_observable;
 }
-
-GState g_state;
 
 /// Blocking spawn of a node
 void spawn(int argc, char **argv, 
@@ -164,10 +172,10 @@ void spawn(int argc, char **argv,
     /// TODO [Feature] spawn anonymous node
     auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
 
-    g_state.node_ = rclcpp::Node::make_shared(concrete_name);
+    g_state.node_ = std::make_shared<ROSAdapter::Node>(concrete_name);
 
     for(const auto &observable : g_state.staged_observables) {
-        observable->attach_to_node_(g_state.node_);
+        observable->attach_to_node(g_state.node_);
     }
 
     rclcpp::spin(g_state.node_);

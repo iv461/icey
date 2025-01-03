@@ -10,6 +10,8 @@ The core idea is that in common robotics applications, almost everything publish
 In Icey, you can have signals, meaning they originate from other nodes. Or, states can be published, meaning that they are held by the current node.
 
 ```cpp
+#include <icey/icey_ros2.hpp>
+
 auto current_velocity = icey::create_signal<float>("current_velocity");
 
 icey::spawn("ppc_controller_node");
