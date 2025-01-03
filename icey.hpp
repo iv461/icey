@@ -7,7 +7,11 @@
 #include <functional>
 #include <tuple>
 #include <map>
+#include <optional>
 #include <unordered_map>
+#include <any> 
+
+namespace icey {
 
 /// A ROS adapter, abstracting ROS 1 and ROS 2, so that everything works with both 
 class ROSAdapter {
@@ -56,18 +60,19 @@ class ROS2Adapter {
         }
 
         template<typename Msg, typename F>
-        void add_publication(std::string topic, F cb) {
+        auto add_publication(std::string topic, F cb) {
             if(my_publishers_.count(topic) != 0) {
                 /// TODO throw topic already exists
             }
             if(my_subscribers_.count(topic) != 0) {
                 /// TODO throw cannot publish on a topic that is being subscribed at the same time
             }
-            my_publishers_[topic] = create_publisher<Msg>(topic, 1);
-        }
-
-        void publish() {
-            
+            auto publisher = create_publisher<Msg>(topic, 1);
+            my_publishers_[topic] = publisher;
+            auto const publish = [publisher](const Msg &msg) {
+                publisher.publish(msg);
+            };
+            return publish;
         }
 
         template<typename F>
@@ -86,29 +91,41 @@ class GState {
     std::shared_ptr<rclcpp::Node> node_;
 };
 
-GState g_state;
-
-void spawn(int argc, char **argv, 
-    std::optional<std::string> node_name = std::nullopt) {
-
-    rclcpp::init(argc, argv);
-    auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
-    
-    g_state.node_ = rclcpp::Node::make_shared(concrete_name);
-    rclcpp::spin(g_state.node_);
-  rclcpp::shutdown();
-}
-
+/// A read-only observable
+template<typename StateValue>
 class Observable {
-    using Cb = std::function<void()>;
+public:
+    using Cb = std::function<void(const StateValue&)>;
 
-    void on_change() {
+    /// Register to be notified when smth. changes
+    void on_change(Cb cb) {
+        notify_list_.push_back(cb);
+    }
+
+protected:
+    void _set_value(const StateValue &new_value) {
+        value_ = new_value;
+        notify();
+    }
+
+    /// Notify all subcribers about the new value
+    void notify() {
         for(auto cb: notify_list_) {
-            cb();
+            cb(value_.value());
         }
     }
 
+    std::optional<StateValue> value_;
     std::vector<Cb> notify_list_;
+};
+
+/// A readable and writable observable
+template<typename StateValue>
+class WritableObservable : public Observable<StateValue> {
+public: 
+    void set_value(const StateValue &new_value) {
+        _set_value(new_value);
+    }
 };
 
 enum class FrequencyStrategy {
@@ -117,14 +134,37 @@ enum class FrequencyStrategy {
 };
 
 template<typename StateValue>
-class SubstribedState : public Observable {
+class SubstribedState : public Observable<StateValue> {
 public:
-    SubstribedState(const std::string &name, const StateValue &value): name_(name), value_(value) {
-        
+    using Base = Observable<StateValue>;
+
+    SubscribedState(const std::string &name): name_(name) {
+        /// TODO move out of the constructor, this should be a factory for consistency with create_timer 
+        /// and because this can fail and we do not want a failing constructor
+        g_state.node_.add_subscription<StateValue>(name, [this](const auto &new_value) {
+            set_value(new_value);
+        });
     }
 
+    auto name() const {return name_;}
+private:
     std::string name_; 
-    StateValue value_;
+};
+
+template<typename StateValue>
+class PublishedState : public WritableObservable<StateValue> {
+public:
+    using Base = WritableObservable<StateValue>;
+
+    PublishedState(const std::string &name): name_(name) {
+        g_state.node_.add_publication<StateValue>(name, [this](const auto &new_value) {
+            set_value(new_value);
+        });
+    }
+
+    auto name() const {return name_;}
+private:
+    std::string name_; 
 };
 
 template<typename F, typename... Arguments>
@@ -132,6 +172,31 @@ auto compute_based_on(F f, Arguments...) {
 
 }
 
-int main() {
+GState g_state;
 
+/// Blocking spawn of a node
+void spawn(int argc, char **argv, 
+    std::optional<std::string> node_name = std::nullopt) {
+    rclcpp::init(argc, argv);
+    auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
+
+    g_state.node_ = rclcpp::Node::make_shared(concrete_name);
+    rclcpp::spin(g_state.node_);
+  rclcpp::shutdown();
+}
+
+/// Non-blocking spawn of nodes.
+auto spawn_async(int argc, char **argv, 
+    std::optional<std::string> node_name = std::nullopt) {
+    rclcpp::init(argc, argv);
+    auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
+
+    g_state.node_ = rclcpp::Node::make_shared(concrete_name);
+    rclcpp::spin(g_state.node_);
+    rclcpp::shutdown();
+}
+}
+
+int main() {
+    
 }
