@@ -24,6 +24,5 @@ ament_auto_add_executable(icey_example_listener
 
 ament_auto_package(
   INSTALL_TO_SHARE
-  launch
-  config
+  
 )

@@ -5,12 +5,15 @@
 using StringMsg = std_msgs::msg::String;
 
 using namespace std::chrono_literals;
+
 int main(int argc, char **argv) {
 
-    auto my_string = icey::create_state<StringMsg>("my_string");
+    auto my_string = icey::create_state<StringMsg>("my_string", 10.);
 
     size_t cnt{0};
     icey::create_timer(100ms, [&my_string, &cnt] () {
+        std::cout << "Time was called # " << cnt << std::endl;
+
         StringMsg msg;
         msg.data = "hello_hello";
         msg.data += std::to_string(cnt);

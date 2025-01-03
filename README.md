@@ -97,6 +97,10 @@ Add examples for common applications:
 - SLAM: Front-end and backend, running asynchronously
 - Controller like PPC, gets position and velocity, etc. 
 
+# Missing features
+In this early version, some things are missing: 
+- Mutli-threading executor is not supported, everything is single-threaded. Therefore, not Callback-groups
+- 
 # Similar projects 
 
 Some similar projects exist, but not quite close:

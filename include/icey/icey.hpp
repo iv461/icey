@@ -35,12 +35,14 @@ public:
 
 //protected:
     void _set(const StateValue &new_value) {
+        std::cout << "[OBservable] set was called " << std::endl;
         value_ = new_value;
         notify();
     }
 
     /// Notify all subcribers about the new value
     void notify() {
+        std::cout << "[OBservable] notifying .." << std::endl;
         for(auto cb: notify_list_) {
             cb(value_.value());
         }
@@ -98,23 +100,26 @@ public:
     using Base = WritableObservable<StateValue>;
     using We = PublishedState<StateValue>;
 
-    static auto create(const std::string &name) {
-        return std::make_shared<We>(name);
+    static auto create(const std::string &name, std::optional<double> max_frequency) {
+        return std::make_shared<We>(name, max_frequency);
     }
     
     auto name() const {return name_;}
     
     NodeAttachable make_node_attachable() {
         return [this](const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
-            auto publish = node_handle->add_publication<StateValue>(name_);
+            auto publish = node_handle->add_publication<StateValue>(name_, max_frequency_);
             this->on_change([publish](const auto &new_value) {
+                std::cout << "[PublishedState] value changed, publishing .." << std::endl;
                 publish(new_value);
             });
         };
     }
 /// TODO make private
-    PublishedState(const std::string &name): name_(name) {}
+    PublishedState(const std::string &name, std::optional<double> max_frequency): name_(name), 
+        max_frequency_(max_frequency) {}
     std::string name_; 
+    std::optional<double> max_frequency_;
 };
 
 /// Global state, used to enable a simple, purely functional API
@@ -138,8 +143,8 @@ auto create_signal(const std::string &name) {
 }
 
 template<typename StateValue>
-auto create_state(const std::string &name) {
-    auto state = PublishedState<StateValue>::create(name);
+auto create_state(const std::string &name, std::optional<double> max_frequency = std::nullopt) {
+    auto state = PublishedState<StateValue>::create(name, max_frequency);
     g_state.staged_node_attachables.emplace_back(state->make_node_attachable());
     return state;
 }
@@ -154,13 +159,13 @@ void create_timer(const ROSAdapter::Duration &interval, F cb) {
 /// Args must be a Observable, i.e. not constants are supported.
 template<typename F, typename... Arguments>
 auto compute_based_on(F f, Arguments && ... args) {
-    using ReturnType = decltype(f(args->value_...));
+    using ReturnType = decltype(f(args->value_.value()...));
     auto new_observable = Observable<ReturnType>::create(); /// A result is rhs, i.e. read-only
      ([&]{ 
         const auto f_continued = [new_observable, f](auto&&... args) {
             auto all_argunments_arrived = (args && ... && true);
             if(all_argunments_arrived) {
-                auto result = f(args->value_...);
+                auto result = f(args->value_.value()...);
                 new_observable->_set(result);
             }
         };
