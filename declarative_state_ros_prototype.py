@@ -1,8 +1,22 @@
 from functools import partial 
 
-class ReadableState: 
-    def __init__(self, name: str, state_content: type):
-        ... 
+import rclpy
+
+from rclpy.node import Node
+from rclpy.executors import SingleThreadedExecutor, MultiThreadedExecutor
+
+g_node = None 
+
+class NodeWrap(Node):
+    def __init__(self, name):
+        super().__init__(name)
+        self.my_subs = {}
+        self.my_pubs = {}
+
+def launch_node():
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(g_node)
+    executor.spin()
 
 class Observable:
     def __init__(self):
@@ -11,6 +25,14 @@ class Observable:
     def on_change(self, msg):
         for cb in self.notify_list:
             cb(msg)
+
+    def notify(self, cb):
+        self.notify_list.append(cb)
+
+class ReadableState(Observable): 
+
+    def __init__(self, name: str, state_content: type):
+        super(Observable).__init__()
 
 class WritableState(Observable):
 
@@ -28,27 +50,22 @@ class ProxiedMsg(MutableState):
         ... 
 
 
-class SubscribedState(ImmutableState):
+class SubscribedState(ReadableState):
     # State that is stored somewhere else in a node
     def __init__(self, name: str, state_content: type):
-        self.subscriber = sub(name)
-        self.notify_list = []
-
-    def on_change(self, msg):
-        ...
+        super(ReadableState).__init__()
 
 class PublishedState(WritableState):
     # State that is public, i.e. published
     # The max frequency is a limit of the maximum frequency this message will be published at. 
     # If unlimited, then this potentially may cause 100% CPU usage due to positive feedback with other nodes. 
     def __init__(self, name: str, state_content: type, max_frequency: None | float):
-        self.publishers = []
+        super(ReadableState).__init__()
 
 class PrivateState(MutableState): 
     # State that is not published, otherwise same 
     # Can be enabled to be a published state at any time, usefull for debugging.
     def __init__(self, name: str, state_content: type):
-        
 
 class spawn_node:
     def __enter__(self):
@@ -67,9 +84,9 @@ class RTFunction:
     def __call__(self, **kwargs): self.cb(kwargs)
 
 def spawn(node_name: None | str):
-    flush_all_props() 
-    create_node(node_name)
-    remove_all_props()
+    global g_node
+    launch_node(node_name)
+    g_node = None # TODO correct ? 
 
 def compute_based_on(F, *args):
     computation = partial(F, *args) # 
@@ -92,13 +109,15 @@ def example1():
     #target_vel = 100 if (current_pose.x - 100) < 100 else 0
     current_velocity = PrivateState("current_velocity", float)
 
+    param_max_vel = ParameterState("v_max", float) # write using param mechanism of ros 
+
     def compute_vel(pose):
 
     derived_state = compute_based_on(compute_vel, current_pose) # Read-only derived state
 
     derived_state.publish("velocity")
 
-    create_talker_node.spawn()
+    spawn()
 
 
 
