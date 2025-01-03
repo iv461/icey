@@ -48,6 +48,10 @@ public:
 
     class Node : public rclcpp::Node {
     public:
+        using Base = rclcpp::Node;
+        
+        Node(const std::string &name) : Base(name) {}
+        
         template<typename Msg, typename F>
         void add_subscription(std::string topic, F cb) {
             if(my_subscribers_.count(topic) != 0) {
@@ -59,8 +63,8 @@ public:
             my_subscribers_[topic] = create_subscription<Msg>(topic, 1, cb);
         }
 
-        template<typename Msg, typename F>
-        auto add_publication(std::string topic, F cb) {
+        template<typename Msg>
+        auto add_publication(std::string topic) {
             if(my_publishers_.count(topic) != 0) {
                 /// TODO throw topic already exists
             }
@@ -70,20 +74,20 @@ public:
             auto publisher = create_publisher<Msg>(topic, 1);
             my_publishers_[topic] = publisher;
             auto const publish = [publisher](const Msg &msg) {
-                publisher.publish(msg);
+                publisher->publish(msg);
             };
             return publish;
         }
 
         template<typename F>
-        void add_timer(std::string name, Duration time_interval, F cb) {
-            my_timers_[name] = create_wall_timer(time_interval, cb);
+        void add_timer(Duration time_interval, F cb) {
+            my_timers_.emplace_back(create_wall_timer(time_interval, cb));
         }
 
         /// TODO add service 
         /// TODO add action
     private:
-        std::map<std::string, Timer> my_timers_;
+        std::vector<Timer> my_timers_;
         std::map<std::string, std::any> my_subscribers_;
         std::map<std::string, std::any> my_publishers_;
     };

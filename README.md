@@ -68,6 +68,7 @@ This library is designed to be robust against common usage mistakes: It will det
 - Disallow graph change after node is created. Detect it. Provide instead "Node enable" functionality if someone wants to disable a publisher/subscriber
 - After we have a DAG, we may add topological sorting. But at first we need a useEffect hook that translates to a timer, otherwise we are not able to make the programm run w/o external events 
 - Really think about memory leaks, they should not be possible !
+- Make sure we are moving all lambdas so that the captured values are moved as well !
 
 ## Features 
 
