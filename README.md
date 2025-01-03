@@ -5,12 +5,12 @@ In Icey, you can rapidly prototype Nodes in data-flow oriented manner:
 
 # Features 
 
-The core idea is that in common robotics applications, almost everything published is a state: The pose of the robot, state of joints, initialization states, etc. 
+The core idea is that in common robotics applications, almost everything published is either a state or a signal: The pose of the robot and state of joints are states, similar to the state of algorithms (i.e. "initialized"). Sensors on the other hand yield signals: Cameras, yaw rates etc.
 
-In Icey, you can have states that are subscribed (`SubscribedState`), meaning they originate from other nodes. Or, states can be published, (`PublishedState`), meaning that they are held by the current node.
+In Icey, you can have signals, meaning they originate from other nodes. Or, states can be published, meaning that they are held by the current node.
 
 ```cpp
-auto current_velocity = icey::PublishedState<float>("current_velocity");
+auto current_velocity = icey::create_signal<float>("current_velocity");
 
 icey::spawn("ppc_controller_node");
 ```
@@ -20,7 +20,7 @@ icey::spawn("ppc_controller_node");
 Paramters are persisted, but updates are communicated similar to topics. That is why they are very similar to states:
 
 ```cpp
-auto max_velocity_parameter = icey::ParameterState<float>("maximum_velocity");
+auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
 ```
 
 
@@ -42,6 +42,13 @@ auto max_velocity_parameter = icey::ParameterState<float>("maximum_velocity");
 max_velocity_parameter.on_change([](const auto &new_value) {
     ...
 });
+```
+
+Likewise, you can publish a state by calling `set()`: 
+
+```cpp
+auto slip_angle_state = icey::create_state<float>("/states/slip_angle");
+slip_angle_state.set(0.01f) /// This will get published
 ```
 
 # Robustness 

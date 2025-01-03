@@ -13,23 +13,26 @@
 
 namespace icey {
 
-/// Global state
-class GState {
-    std::shared_ptr<ROSAdapter::Node> node_;
-};
 
 /// A read-only observable
-template<typename StateValue>
+template<typename _StateValue>
 class Observable {
 public:
+    using StateValue = _StateValue;
     using Cb = std::function<void(const StateValue&)>;
+
+    static auto create() {
+        return std::make_shared< Observable<StateValue> >();
+    }
 
     /// Register to be notified when smth. changes
     void on_change(Cb cb) {
         notify_list_.push_back(cb);
     }
 
-protected:
+    auto has_value() const {return value_.has_value(); }
+
+//protected:
     void _set_value(const StateValue &new_value) {
         value_ = new_value;
         notify();
@@ -65,16 +68,21 @@ class SubstribedState : public Observable<StateValue> {
 public:
     using Base = Observable<StateValue>;
 
-    SubscribedState(const std::string &name): name_(name) {
-        /// TODO move out of the constructor, this should be a factory for consistency with create_timer 
-        /// and because this can fail and we do not want a failing constructor
-        g_state.node_.add_subscription<StateValue>(name, [this](const auto &new_value) {
-            set_value(new_value);
-        });
+    static auto create(const std::string &name) {
+        return std::make_shared<We>();
     }
 
     auto name() const {return name_;}
+
+    std::function<void(const ROSAdapter::NodeHandle &)> attach_to_node_;
 private:
+    SubscribedState(const std::string &name): name_(name) {
+        attach_to_node_ = [this, name](const auto &node_handle) {
+            node_handle->add_subscription<StateValue>(name, [this](const auto &new_value) {
+                set_value(new_value);
+            });
+        }
+    }
     std::string name_; 
 };
 
@@ -82,21 +90,68 @@ template<typename StateValue>
 class PublishedState : public WritableObservable<StateValue> {
 public:
     using Base = WritableObservable<StateValue>;
+    using We = PublishedState<StateValue>
+
+    static auto create(const std::string &name) {
+        return std::make_shared<We>();
+    }
+    
+    auto name() const {return name_;}
+    
+    std::function<void(const ROSAdapter::NodeHandle &)> attach_to_node_;
+private:
 
     PublishedState(const std::string &name): name_(name) {
-        g_state.node_.add_publication<StateValue>(name, [this](const auto &new_value) {
-            set_value(new_value);
-        });
+        attach_to_node_ = [this, name](const auto &node_handle) {
+            auto publish = node_handle->add_publication<StateValue>(name);
+            on_change([publish](const auto &new_value) {
+                publish(new_value);
+            });
+        };
     }
-
-    auto name() const {return name_;}
-private:
     std::string name_; 
 };
 
-template<typename F, typename... Arguments>
-auto compute_based_on(F f, Arguments...) {
+/// Global state, used to enable a simple, purely functional API
+struct GState {
+    std::vector<std::any> staged_observables;
+    std::shared_ptr<ROSAdapter::Node> node_;
+    ~GState() {
+        if(!staged_observables.empty() && !node_) {
+            std::cout << "WARNING: You created some signals, but no node was created, did you forget to call icey::spawn() ?" << std::endl;
+        }
+    }
+};
 
+template<typename StateValue>
+auto create_signal(const std::string &name) {
+    auto signal = SubscribedState<StateValue>::create();
+    g_state.staged_observables.push_back(signal);
+    return signal;
+}
+
+template<typename StateValue>
+auto create_state(const std::string &name) {
+    auto state = PublishedState<StateValue>::create();
+    g_state.staged_observables.push_back(state);
+    return state;
+}
+
+/// Args must be a Observable, i.e. not constants are supported.
+template<typename F, typename... Arguments>
+auto compute_based_on(F f, Arguments && ... args) {
+    using ReturnType = decltype(f());
+    auto new_observable = Observable<ReturnType>::create();
+     ([&]{ 
+        args.on_change([new_observable](const auto &new_value) {
+            auto all_argunments_arrived = (args.has_value() && ...);
+            if(all_argunments_arrived) {
+                auto result = f(args.value_.get_value()...);
+                new_observable.set_value(result);
+            }
+        });
+     }(), ...);
+    return new_observable;
 }
 
 GState g_state;
@@ -110,12 +165,17 @@ void spawn(int argc, char **argv,
     auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
 
     g_state.node_ = rclcpp::Node::make_shared(concrete_name);
+
+    for(const auto &observable : g_state.staged_observables) {
+        observable->attach_to_node_(g_state.node_);
+    }
+
     rclcpp::spin(g_state.node_);
-  rclcpp::shutdown();
+    rclcpp::shutdown();
 }
 
-/// Non-blocking spawn of nodes.
-auto spawn_async(int argc, char **argv, 
+/// Non-blocking spawn of nodes. TODO [Feature] implement this using MultiThreadedExecutor
+/*auto spawn_async(int argc, char **argv, 
     std::optional<std::string> node_name = std::nullopt) {
     rclcpp::init(argc, argv);
     auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
@@ -123,6 +183,6 @@ auto spawn_async(int argc, char **argv,
     g_state.node_ = rclcpp::Node::make_shared(concrete_name);
     rclcpp::spin(g_state.node_);
     rclcpp::shutdown();
-}
+}*/
 
 }
