@@ -5,16 +5,20 @@ In Icey, you can rapidly prototype Nodes in data-flow oriented manner:
 
 # Features 
 
-The core idea is that in common robotics applications, almost everything published is either a state or a signal: The pose of the robot and state of joints are states, similar to the state of algorithms (i.e. "initialized"). Sensors on the other hand yield signals: Cameras, yaw rates etc.
+The core idea is that in common robotics applications, almost everything published is either a state or a signal: The pose of the robot is a state, similar to the state of algorithms (i.e. "initialized"). Sensors on the other hand yield signals: Cameras, yaw rates etc.
 
-In Icey, you can have signals, meaning they originate from other nodes. Or, states can be published, meaning that they are held by the current node.
+In Icey, signals roughly correspond to subscribers and states to publishers.
+The real power comes in Icey that you can simply declare a data-driven pipeline of computations:
 
 ```cpp
 #include <icey/icey_ros2.hpp>
 
-auto current_velocity = icey::create_signal<float>("current_velocity");
+int main(int argc, char **argv) {
+    auto current_velocity = icey::create_signal<float>("current_velocity");
 
-icey::spawn("ppc_controller_node");
+    icey::spawn(argc, argv, "ppc_controller_node"); /// Create and start node
+
+}
 ```
 
 ## Parameters 
@@ -60,6 +64,7 @@ This library is designed to be robust against common usage mistakes: It will det
 # TODO 
 
 ## Robustness/ Preventing glitches: 
+
 - We have a concept of a state that is owned by a single node only, but how can we enforce that the state is only published by a single node ? 
 - Forbid and detect creating new states in callback
 - Forbid subscribing to the same topic that is published by the same node 
@@ -69,25 +74,43 @@ This library is designed to be robust against common usage mistakes: It will det
 - After we have a DAG, we may add topological sorting. But at first we need a useEffect hook that translates to a timer, otherwise we are not able to make the programm run w/o external events 
 - Really think about memory leaks, they should not be possible !
 - Make sure we are moving all lambdas so that the captured values are moved as well !
+- Check reference counts on all shared ptr to understand whrere they are all incremented
+- Allowing only readable and only writable nodes and publishing resulting nodes is enough to ensure DAG-propery. But is it expressive enough ?
+- Allow movable ? Likely not
+- Global variable: Check linkage issues regarding ODR: What happens if icey is included multiple times in the translation unit ? -> we likely need a context,
 
 ## Features 
 
--  Which values to take for a node that has multiple inputs, but only one input changes ?
+### Must-have for 0.1
+
+- TF Buffer 
+- Services
+- `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)
+- Allow accessing the node: For logging and for all other objects
+- Different Sync-policies, first implement latest
+-  Synch-policies ?
 * Every input may provide a frequency interpolator 
 * A strategy chooses between "last message" or interpolate
 * in case of interpolate, the queue must be long, in case of last message, the queue can be 1
 
-- `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)
+- Actions
 
-- Support Callback groups ? 
+### Nice-to-have
+
+- Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL OR even better, reference-track every thing internally in the staged list until the node is created, then attach everything to the node (!). And then simply return a weak reference (const T &) to the underlying objects
 - A way to enable/disable the node 
-
 - Maybe `RemindingPublishedState` that publishes regardless of whether the message changed or not
+- Maybe Simulink-style blocks, i.e. constant, step, function etc.
+
+- Lifecycle Nodes ?
 
 ## Documentation 
 
 - Document everything in a tutorial-style like modern JS frameworks (Svelte, Solid.js) do, otherwise adoptability will equal to zero 
 
+## Bugs 
+
+- [] Fix segfault on termination, cleanup properly
 
 ## Examples 
 

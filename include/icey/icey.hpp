@@ -122,6 +122,15 @@ public:
     std::optional<double> max_frequency_;
 };
 
+/// Global node object adapter, used to conveniently wrap getting the underlying node
+struct GlobNode {
+    std::shared_ptr<ROSAdapter::NodeHandle> node_;
+};
+
+struct NodeWithAttachedObservables {
+    /// TODO attach here all the observables
+};
+
 /// Global state, used to enable a simple, purely functional API
 struct GState {
     std::vector<NodeAttachable> staged_node_attachables;
@@ -195,6 +204,9 @@ void spawn(int argc, char **argv,
     }
 
     rclcpp::spin(g_state.node_);
+
+    /// TODO
+    //staged_node_attachables.clear();
     rclcpp::shutdown();
 }
 
