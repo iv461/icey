@@ -10,6 +10,7 @@ int main(int argc, char **argv) {
 
     auto my_string = icey::create_state<StringMsg>("my_string", 10.);
 
+    /*
     size_t cnt{0};
     icey::create_timer(100ms, [&my_string, &cnt] () {
         std::cout << "Time was called # " << cnt << std::endl;
@@ -20,6 +21,7 @@ int main(int argc, char **argv) {
         cnt ++;
         my_string->set(msg);
     });
+    */
 
     icey::spawn(argc, argv, "talker_node");
 

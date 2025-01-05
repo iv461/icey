@@ -21,6 +21,7 @@
 
 ### Must-have for 0.1
 
+- Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
 - TF Buffer 
 - Services
 - `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)

@@ -8,18 +8,32 @@ In Icey, you can rapidly prototype Nodes in data-flow oriented manner:
 The core idea is that in common robotics applications, almost everything published is either a state or a signal: The pose of the robot is a state, similar to the state of algorithms (i.e. "initialized"). Sensors on the other hand yield signals: Cameras, yaw rates etc.
 
 In Icey, signals roughly correspond to subscribers and states to publishers.
-The real power comes in Icey that you can simply declare a data-driven pipeline of computations:
+The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
 
+[Example1](examples/simple.cpp)
 ```cpp
 #include <icey/icey_ros2.hpp>
+#include "std_msgs/msg/float32.hpp"
 
 int main(int argc, char **argv) {
-    auto current_velocity = icey::create_signal<float>("current_velocity");
+    auto current_velocity = icey::create_signal<std_msgs::msg::Float32>("current_velocity");
+
+    auto result = icey::compute_based_on([](std_msgs::msg::Float32 new_velocity) {
+            std_msgs::msg::Float32 out_msg;
+            out_msg.data = 2. * new_velocity.data;
+            return out_msg;
+        },
+        current_velocity);
+
+    result->publish("new_velocity");
 
     icey::spawn(argc, argv, "ppc_controller_node"); /// Create and start node
-
 }
 ```
+
+You can build your own data-driven pipeline of computations.
+
+TODO more 
 
 ## Parameters 
 
@@ -32,8 +46,11 @@ auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
 
 ## Mixing with old ROS 2 API: 
 
-Icey is a thin wrapper around ROS 2/1 and you can always switch and also mix 
-with the regular ROS-API. It has virtually no buy-in cost: You can always still use callbacks for some topics, mix it with the regular ROS 2 API. 
+Icey is a thin wrapper around ROS 2/1 and you can always switch to using the regular ROS 2 API: 
+
+```cpp
+icey::node
+```
 
 You can always listen on changes of a state, like a subscriber callback:
 
