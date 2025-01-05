@@ -69,15 +69,6 @@ public:
     std::optional<StateValue> value_;
 };
 
-/// A readable and writable observable
-template<typename StateValue>
-class WritableObservable : public Observable<StateValue> {
-public: 
-    void set(const StateValue &new_value) {
-        this->_set(new_value);
-    }
-};
-
 enum class FrequencyStrategy {
     KEEP_LAST,
     INTERPOLATE
@@ -102,36 +93,6 @@ public:
     SubscribedState(const std::string &name): name_(name) {}
     std::string name_; 
 };
-
-/// A writable publishabe, TODO needed ?? I think we need it for perf
-template<typename StateValue>
-class PublishedState : public WritableObservable<StateValue>{
-public:
-    using Base = WritableObservable<StateValue>;
-    using Self = PublishedState<StateValue>;
-
-    static auto create(const std::string &name, std::optional<double> max_frequency) {
-        return std::make_shared<Self>(name, max_frequency);
-    }
-    
-    auto name() const {return name_;}
-    
-    void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
-        auto publish = node_handle->add_publication<StateValue>(name_, max_frequency_);
-        this->on_change([publish](const auto &new_value) {
-            std::cout << "[PublishedState] value changed, publishing .." << std::endl;
-            publish(new_value);
-        });
-    }
-    
-/// TODO make private
-    PublishedState(const std::string &name, std::optional<double> max_frequency): name_(name), 
-        max_frequency_(max_frequency) {}
-  
-    std::string name_;
-    std::optional<double> max_frequency_;
-};
-
 
 /// A publishabe state, read-only
 template<typename StateValue>
@@ -221,15 +182,15 @@ auto create_signal(const std::string &name) {
     /// TODO ASSERT no node
     auto signal = SubscribedState<StateValue>::create(name);
     /// Attach to graph and return vertex
-    //return g_state.graph.add_vertex(signal);
+    g_state.graph.add_vertex(signal);
     return signal;
 }
 
 template<typename StateValue>
 auto create_state(const std::string &name, std::optional<double> max_frequency = std::nullopt) {
     /// TODO ASSERT no node
-    auto state = PublishedState<StateValue>::create(name, max_frequency);
-    
+    auto state = PublishableState<StateValue>::create();
+    state->publish(name, max_frequency);
     g_state.graph.add_vertex(state);
     return state;
 }
@@ -241,11 +202,24 @@ void create_timer(const ROSAdapter::Duration &interval, F cb) {
     g_state.staged_node_attachables.push_back(timer_attachable);
 }
 
+/// Provide a service 
+template<typename F> 
+void create_service(std::string service_name, F cb) {
+    const auto service_attachable = NodeAttachableFunctor([service_name, cb = std::move(cb)](const auto &node_handle) 
+        { node_handle->add_service(service_name, cb); });
+    g_state.staged_node_attachables.push_back(service_attachable);
+}
+
 /// Parents must be of type Observable
 template<typename F, typename... Parents>
-auto compute_based_on(F f, Parents && ... parents) {
+auto compute_based_on(F f, Parents && ... parents) { 
+    /*static_assert(std::is_invocable_v<decltype(f)>, ///TODO does not work 
+                  "The first argument to compute_based_on() must be a callable");
+    static_assert(std::is_invocable_v<decltype(f), parents...>,
+                  "The given function to compute_based_on() must be callable with all the arguments that were given, that are of the same type of the subscribed ROS messages");*/
     using ReturnType = decltype(f(parents->value_.value()...));
-    static_assert(rclcpp::is_ros_compatible_type<ReturnType>::value, "The computation has to return a publishable ROS message (no primitive types are possible)");
+    static_assert(rclcpp::is_ros_compatible_type<ReturnType>::value, "The function has to return a publishable ROS message (no primitive types are possible)");
+
     auto resulting_observable = PublishableState<ReturnType>::create();  /// A result is rhs, i.e. read-only    
 
     const std::vector<size_t> node_parents{parents->index...};

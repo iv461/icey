@@ -23,9 +23,8 @@ ament_auto_add_executable(icey_example_listener
 )
 
 # Add examples 
-ament_auto_add_executable(simple
-  examples/simple.cpp 
-)
+ament_auto_add_executable(simple_example examples/simple.cpp)
+ament_auto_add_executable(service_example examples/service.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE
