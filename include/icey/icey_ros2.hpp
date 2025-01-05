@@ -45,6 +45,7 @@ public:
 
     using _Node = rclcpp::Node; /// Underlying Node type
 
+
     /// A service client interface, that does not produce memory leaks unless the 
     /// user does not forget to call random clean-up functions after calling the service. 
     class Client : public rclcpp::Client {
@@ -64,6 +65,7 @@ public:
         /// TODO now figure out where to get the executor lol ... 
         SyncResponse send_request(SharedRequest request, Duration timeout = Duration(-1)) {
             auto future = client->async_send_request(my_request);
+            /// OR rclcpp::spin_until_future_complete(node, result_future) for global executor
             auto future_result = executor->spin_until_future_complete(future, timeout);
 
             SyncResponse result;
@@ -76,6 +78,45 @@ public:
             }
             return result;
         }
+    };
+
+    
+    struct TFSubscription {
+        TFSubscription(std::shared_ptr<rclcpp::Node> node) {
+            /// This code is a bit tricky. It's about asynchronous programming essentially. The official example is rather incomplete ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html)) .
+            /// I'm following instead this example https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
+            /// See also the follwing discussions: 
+            /// https://answers.ros.org/question/372608/?sort=votes
+            /// https://github.com/ros-navigation/navigation2/issues/1182 
+            /// https://github.com/ros2/geometry2/issues/446
+            tf2_buffer = std::make_unique<tf2_ros::Buffer>(node->get_clock());
+            auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
+                    node->get_node_base_interface(),
+                    node->get_node_timers_interface());
+            tf2_buffer->setCreateTimerInterface(timer_interface);
+            tf2_listener = std::make_unique<tf2_ros::TransformListener>(*tf2_buffer);
+        }
+         
+        std::optional<geometry_msgs::msg::TransformStamped>
+            get_transform(std::string from_frame, std::string to_frame) {
+                geometry_msgs::msg::TransformStamped t;
+                // Look up for the transformation between target_frame and turtle2 frames
+                // and send velocity commands for turtle2 to reach target_frame
+            try {
+                t = tf_buffer->lookupTransform(
+                toFrameRel, fromFrameRel,
+                tf2::TimePointZero);
+                return t;
+            } catch (const tf2::TransformException & ex) {
+                    /*RCLCPP_INFO(
+                    this->get_logger(), "Could not transform %s to %s: %s",
+                        toFrameRel.c_str(), fromFrameRel.c_str(), ex.what());*/
+                return {};
+            }
+        }
+        
+        std::unique_ptr<tf2_ros::Buffer> tf2_buffer;
+        std::unique_ptr<tf2_ros::TransformListener> tf2_listener;
     };
     
     /// A node interface, wrapping to some common functions
@@ -133,9 +174,14 @@ public:
             auto client = create_client(name);
             my_services_clients_.emplace(name, client);
             using Request std::shared_ptr<typename Service::Request>;
+
             const auto call_service = [this](Request request) {
 
             };
+        }
+
+        void add_tf_subscription() {
+
         }
 
         /// TODO add service 

@@ -254,6 +254,7 @@ void spawn(int argc, char **argv,
 
     g_state.node = std::make_shared<ROSAdapter::Node>(concrete_name);
 
+    /// TODO FIRST DO TOPO SORT, FIRST ATTACH PARAMETERS, THEN SUBS, THEN PUBS
     /// First, attach to the ROS node all vertices in the DFG 
     for( auto &vertex : g_state.graph.vertices) {
         vertex.data->attach_to_node(g_state.node); /// Attach
