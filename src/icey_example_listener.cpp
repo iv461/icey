@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
             //return my_string_val;
     },
     my_string);
+    
 
     derived_value->on_change([](const auto &new_computed_value) {
         std::cout << "derived_value changed: " << new_computed_value << std::endl;

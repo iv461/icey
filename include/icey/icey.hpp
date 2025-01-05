@@ -14,6 +14,11 @@
 #include <boost/noncopyable.hpp>
 namespace icey {
 
+// A thing with a name.
+class Nameable {
+public:
+
+};
 
 /// A read-only observable
 template<typename _StateValue>
@@ -33,7 +38,7 @@ public:
 
     auto has_value() const {return value_.has_value(); }
 
-//protected:
+//protected: /// TODO make inaccessible to force correct usage of the API !
     void _set(const StateValue &new_value) {
         std::cout << "[OBservable] set was called " << std::endl;
         value_ = new_value;
@@ -165,7 +170,7 @@ void create_timer(const ROSAdapter::Duration &interval, F cb) {
     g_state.staged_node_attachables.push_back(timer_attachable);
 }
 
-/// Args must be a Observable, i.e. not constants are supported.
+/// Args must be an Observable, i.e. no constants are supported.
 template<typename F, typename... Arguments>
 auto compute_based_on(F f, Arguments && ... args) {
     using ReturnType = decltype(f(args->value_.value()...));
