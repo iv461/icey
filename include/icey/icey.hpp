@@ -84,7 +84,7 @@ public:
         return std::make_shared<Self>(name);
     }
     
-    void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
+    virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
         node_handle->add_subscription<StateValue>(name_, [this](const StateValue &new_value) {
             this->_set(new_value);
         });
@@ -92,6 +92,32 @@ public:
 
     SubscribedState(const std::string &name): name_(name) {}
     std::string name_; 
+};
+
+
+/// A signal for subscribing to /tf and obtaining a transform.
+struct TransformSignal : public Observable<geometry_msgs::msg::TransformStamped> {
+public:
+    using Base = Observable<geometry_msgs::msg::TransformStamped>;
+    using StateValue = Base::StateValue;
+    
+    static auto create(const std::string &frame1, const std::string &frame2) {
+        return std::make_shared<TransformSignal>(frame1, frame2);
+    }
+
+    virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
+        node_handle->add_tf_subscription(frame1_, frame2_, [this](const StateValue &new_value) {
+            this->_set(new_value);
+        });
+    }
+
+    /// TODO make ctor private
+    TransformSignal(const std::string &frame1, const std::string &frame2) : 
+        frame1_(frame1), frame2_(frame2) {}
+
+    std::string frame1_;
+    std::string frame2_;
+  
 };
 
 /// A publishabe state, read-only
@@ -153,16 +179,10 @@ struct Graph {
     std::vector<NodeT> vertices;
 };
 
-/// Global node object adapter, used to conveniently wrap getting the underlying node
-/// TODO  we need smth. to interface the global vairbale like icey::node
-struct GlobNode {
-    std::shared_ptr<ROSAdapter::NodeHandle> node;
-};
-
 /// The ROS node, owning the data-flow graph (DFG) that contains the observables 
 struct ROSNodeWithDFG {
     Graph graph;
-    std::shared_ptr<ROSAdapter::NodeHandle> node;
+    std::shared_ptr<ROSAdapter::Node> node;
 };
 
 /// Global state, used to enable a simple, purely functional API and to notify for mis-use
@@ -177,6 +197,9 @@ struct GState: public ROSNodeWithDFG {
 
 GState g_state;
 
+/// Enable API icey::node
+std::shared_ptr<ROSAdapter::Node> &node = g_state.node;
+
 template<typename StateValue>
 auto create_signal(const std::string &name) {
     /// TODO ASSERT no node
@@ -186,6 +209,15 @@ auto create_signal(const std::string &name) {
     return signal;
 }
 
+auto create_transform_signal(const std::string &frame1, const std::string &frame2) {
+    /// TODO ASSERT no node
+    auto tf_signal = TransformSignal::create(frame1, frame2);
+    /// Attach to graph and return vertex
+    g_state.graph.add_vertex(tf_signal);
+    return tf_signal;
+}
+
+/// A writable signal, i.e. publisher
 template<typename StateValue>
 auto create_state(const std::string &name, std::optional<double> max_frequency = std::nullopt) {
     /// TODO ASSERT no node
@@ -194,6 +226,7 @@ auto create_state(const std::string &name, std::optional<double> max_frequency =
     g_state.graph.add_vertex(state);
     return state;
 }
+
 
 template<typename F> 
 void create_timer(const ROSAdapter::Duration &interval, F cb) {
@@ -247,7 +280,7 @@ auto compute_based_on(F f, Parents && ... parents) {
 }
 
 /// This initializes a node with a name and attaches everything to it. It initializes everything in a pre-defined order.
-std::shared_ptr<ROSAdapter::NodeHandle> create_node(std::optional<std::string> node_name = std::nullopt) {
+std::shared_ptr<ROSAdapter::Node> create_node(std::optional<std::string> node_name = std::nullopt) {
     if(g_state.graph.vertices.empty()) {
         std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
         return {};
@@ -270,10 +303,9 @@ std::shared_ptr<ROSAdapter::NodeHandle> create_node(std::optional<std::string> n
 }
 
 /// Blocking spawn of an existing node
-void spawn(int argc, char **argv, 
-    std::shared_ptr<ROSAdapter::NodeHandle> node) {
+void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(g_state.node);
+    rclcpp::spin(node);
     /// TODO
     //staged_node_attachables.clear();
     rclcpp::shutdown();

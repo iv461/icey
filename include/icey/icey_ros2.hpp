@@ -87,48 +87,107 @@ public:
         }
     };
 
-    
-    /*struct TFSubscription {
-        TFSubscription(std::shared_ptr<rclcpp::Node> node) {
-            /// This code is a bit tricky. It's about asynchronous programming essentially. The official example is rather incomplete ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html)) .
-            /// I'm following instead this example https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
-            /// See also the follwing discussions: 
-            /// https://answers.ros.org/question/372608/?sort=votes
-            /// https://github.com/ros-navigation/navigation2/issues/1182 
-            /// https://github.com/ros2/geometry2/issues/446
-            tf2_buffer = std::make_unique<tf2_ros::Buffer>(node->get_clock());
-            auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-                    node->get_node_base_interface(),
-                    node->get_node_timers_interface());
-            tf2_buffer->setCreateTimerInterface(timer_interface);
-            tf2_listener = std::make_unique<tf2_ros::TransformListener>(*tf2_buffer);
-        }
-         
-        std::optional<geometry_msgs::msg::TransformStamped>
-            get_transform(std::string to_frame, std::string from_frame) {
-                geometry_msgs::msg::TransformStamped t;
-                // Look up for the transformation between target_frame and turtle2 frames
-                // and send velocity commands for turtle2 to reach target_frame
-            try {
-                t = tf2_buffer->lookupTransform(to_frame, from_frame, tf2::TimePointZero);
-                return t;
-            } catch (const tf2::TransformException & ex) {
-                    RCLCPP_INFO(
-                    this->get_logger(), "Could not transform %s to %s: %s",
-                        toFrameRel.c_str(), fromFrameRel.c_str(), ex.what());
-                return {};
-            }
+
+
+    /// A modified listener that can notify when a single transform changes. 
+    /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate spinning thread.
+    /// TODO this simple implementation currently checks every time a new message is receved on /tf for every trnasform we are looking for. 
+    /// If /tf is high-frequency topic, this can become a performance problem. i.e., the more transforms, the more this becomes a search for the needle in the heapstack.
+    /// But without knowing the path in the TF-tree that connects our transforms that we are looking for, we cannot do bettter. And atm
+    /// I cannot easily hack the tf2 library since it is a mature and reliably working code mess.
+    /// TODO look also if tf2_ros::MessageFilter is not an overall better solution. It adheres to the message_filter interface.
+    struct TFListener {
+        using TransformMsg = geometry_msgs::msg::TransformStamped;
+        
+        TFListener(NodePtr node, tf2::BufferCore & buffer) : node_(node), buffer_(buffer) {
+            init(node);
         }
         
-        std::unique_ptr<tf2_ros::Buffer> tf2_buffer;
-        std::unique_ptr<tf2_ros::TransformListener> tf2_listener;
-    };*/
+        /// Add notification for a single transform.
+        template<typename CallbackT>
+        void add_subscription(std::string frame1, std::string frame2, CallbackT && callback) {
+            const auto call_user_cb = [this, frame1, frame2, cb=std::move(callback)](const TransformMsg & transform) {
+                cb(transform);
+            };
+            subscribed_transforms_.emplace_back(std::make_pair(frame1, frame2), std::nullopt, call_user_cb);
+        }
 
-    /// A modified listener that notifies when a transform changed.
-    struct TFListener {
-        explicit TFListener(tf2::BufferCore & buffer) : buffer_(buffer) {}
+    private:
+        using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
+        using NotifyCB = std::function<void(const TransformMsg &)>;
 
+        void on_tf_message(TransformsMsg msg, bool is_static) {
+            store_in_buffer(*msg, is_static);
+            notify_if_any_relevant_transform_was_received();
+        }
+        
+        void notify_if_any_relevant_transform_was_received() {
+            for(const auto &[transform_id, last_received_transform, notify_cb] : subscribed_transforms_) {
+                auto maybe_new_transform = get_maybe_new_transform(transform_id.first, transform_id.second, last_received_transform);
+                if(maybe_new_transform)
+                    notify_cb(*maybe_new_transform);
+
+            }
+        }
+
+        /// This simply looks up the transform in the buffer at the latest stamp and checks if it changed with respect to the previously 
+        /// received one. If the transform has changed, we know we have to notify
+        std::optional<geometry_msgs::msg::TransformStamped> 
+            get_maybe_new_transform(std::string frame1, std::string frame2, 
+            std::optional<geometry_msgs::msg::TransformStamped> last_received_tf) {
+                std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
+                try {
+                    tf_msg = buffer_.lookupTransform(frame1, frame2, tf2::TimePointZero);
+                } catch (tf2::TransformException & e) {
+                    /// Simply ignore. Because we are requesting the latest transform in the buffer, the only exception we can get is that there is no transform available yet.
+                    /// TODO duble-check if there is reallly nothing to do here.
+                }
+                /// Now check if it is the same as the last one, in this case we return nothing since the transform did not change. (Instead, we received on /tf some other, unrelated transforms.)
+                if(last_received_tf && tf_msg && *tf_msg == *last_received_tf)
+                    return {};
+                return tf_msg;
+        }
+
+        /// Store the received transforms in the buffer. 
+        void store_in_buffer(const tf2_msgs::msg::TFMessage &msg_in, bool is_static) {
+            std::string authority = "Authority undetectable";
+            for (size_t i = 0u; i < msg_in.transforms.size(); i++) {
+                try {
+                    buffer_.setTransform(msg_in.transforms[i], authority, is_static);
+                } catch (const tf2::TransformException & ex) {
+                    // /\todo Use error reporting
+                    std::string temp = ex.what();
+                    RCLCPP_ERROR(
+                        node_->get_logger(),
+                        "Failure to set received transform from %s to %s with error: %s\n",
+                        msg_in.transforms[i].child_frame_id.c_str(),
+                        msg_in.transforms[i].header.frame_id.c_str(), temp.c_str());
+                }
+            }
+        }
+
+        void init(NodePtr node) {
+            const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
+            const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
+            message_subscription_tf_ = node->create_subscription<tf2_msgs::msg::TFMessage>("/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
+            message_subscription_tf_static_ = node->create_subscription<tf2_msgs::msg::TFMessage>("/tf_static", static_qos, [this](TransformsMsg msg) { on_tf_message(msg, true); });
+        }
+
+        using TFId = std::pair<std::string, std::string>;
+        /// A tf subctiption, the frames, last received transform, and the notify CB
+        using SubTF = std::tuple < TFId, std::optional<TransformMsg>, NotifyCB >;
+
+
+        NodePtr node_; /// Stored for logging
         tf2::BufferCore & buffer_;
+
+        rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
+        rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
+
+        tf2::TimePoint last_update_;
+        rclcpp::CallbackGroup::SharedPtr callback_group_;
+
+        std::vector< SubTF > subscribed_transforms_;
     };
     
     /// A node interface, wrapping to some common functions
@@ -189,13 +248,40 @@ public:
             return my_client;
         }
 
-        /// TODO impl
-        void add_tf_subscription() {
-
+        
+        /// Subscribe to a transform on tf between two frames
+        template<typename CallbackT>
+        void add_tf_subscription(std::string frame1, std::string frame2, CallbackT && callback) {
+            add_tf_listener_if_needed();
+            tf2_listener_->add_subscription(frame1, frame2, std::move(callback));
         }
 
         /// TODO add action
+
+        std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
+
     private:
+        
+        void add_tf_listener_if_needed() { 
+            if(tf2_listener_) /// We need only one subscription on /tf, but can have multiple transforms on which we listen
+                return;
+            init_tf_buffer();
+            tf2_listener_ = std::make_unique<TFListener>(shared_from_this(), *tf2_buffer_);
+        }
+
+        void init_tf_buffer() {
+            /// This code is a bit tricky. It's about asynchronous programming essentially. The official example is rather incomplete ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html)) .
+            /// I'm following instead this example https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
+            /// See also the follwing discussions: 
+            /// https://answers.ros.org/question/372608/?sort=votes
+            /// https://github.com/ros-navigation/navigation2/issues/1182 
+            /// https://github.com/ros2/geometry2/issues/446
+            tf2_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+            auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
+                    this->get_node_base_interface(),
+                    this->get_node_timers_interface());
+            tf2_buffer_->setCreateTimerInterface(timer_interface);
+        }
 
         std::map<std::string, rclcpp::Time> last_published_time_;
         std::vector<Timer> my_timers_;
@@ -206,7 +292,6 @@ public:
 
 
         /// TF stuff
-        std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
         std::unique_ptr<TFListener> tf2_listener_;
     };
 
