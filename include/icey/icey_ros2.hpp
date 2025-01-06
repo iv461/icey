@@ -11,19 +11,17 @@
 #include <unordered_map>
 #include <any> 
 
+/// TF2 support 
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/create_timer_ros.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/message_filter.h"
 
 #include "rclcpp/rclcpp.hpp"
 
 namespace icey {
 
 /// A ROS adapter, abstracting ROS 1 and ROS 2, so that everything works with both 
-
-
-/// Simplify the arcane QoS complexity in ROS2 : We have only two: reliable and unreliable. The incident with choosing DDS causes everything to belong mostly to the second category anyway.
-enum class SimpleQoS {
-    RELIABLE,
-    UNRELIABLE
-};
 
 class ROS2Adapter {
 public:
@@ -43,13 +41,15 @@ public:
     template<typename Msg>
     using Publisher = typename rclcpp::Publisher<Msg>::SharedPtr;
 
+    using NodePtr = std::shared_ptr<rclcpp::Node>;
     using _Node = rclcpp::Node; /// Underlying Node type
 
 
     /// A service client interface, that does not produce memory leaks unless the 
     /// user does not forget to call random clean-up functions after calling the service. 
-    class Client : public rclcpp::Client {
-        using Base = rclcpp::Client;
+    template<typename Service>
+    class Client : public rclcpp::Client<Service> {
+        using Base = rclcpp::Client<Service>;
         /// Base class type aliases:
         using Request = Base::Request;
         using Response = Base::Response;
@@ -57,21 +57,27 @@ public:
         using SharedResponse = Base::SharedResponse;
         /// rclcpp::FutureReturnCode is either be SUCCESS, INTERRUPTED or TIMEOUT.
         /// (reference: https://docs.ros.org/en/jazzy/p/rclcpp/generated/enum_namespacerclcpp_1a7b4ff5f1e516740d7e11ea97fe6f5532.html#_CPPv4N6rclcpp16FutureReturnCodeE)
-        using SyncResponse = std::pair<std::optional<SharedResponse>, rclcpp::FutureReturnCode>
+        /// The return type of a synchronous call
+        using SyncResponse = std::pair<std::optional<SharedResponse>, rclcpp::FutureReturnCode>;
 
-        /// A blocking (synchronous) call to the service. It maybe returns the response 
+        explicit Client(const Base &base) : Base(base) {} /// Constructor from base 
+
+        /// A blocking (synchronous) call to the service. Never call this from a callback ! It returns an optional response and the return code of the future
         /// It calls the async_send_request() and adds the boilerplate code from the examples/documentation.
-        /// The second argument is the timeout, by default no timeout is given
-        /// TODO now figure out where to get the executor lol ... 
-        SyncResponse send_request(SharedRequest request, Duration timeout = Duration(-1)) {
-            auto future = client->async_send_request(my_request);
-            /// OR rclcpp::spin_until_future_complete(node, result_future) for global executor
-            auto future_result = executor->spin_until_future_complete(future, timeout);
+        /// The second argument is the timeout, by default no timeout is given.
+        //// See:
+        /// https://github.com/ros2/ros2_documentation/issues/901
+        /// https://github.com/ros2/ros2_documentation/issues/901#issuecomment-726767782
+        /// https://github.com/ros2/rclcpp/issues/1533
 
+        SyncResponse send_request(NodePtr node_ptr, SharedRequest request, Duration timeout = Duration(-1)) {
+            auto future = this->async_send_request(request);
+            /// TODO custom executor, i.e. executor->spin_until_future_complete(future, timeout) ? This launches a new executor I guesss: https://docs.ros.org/en/jazzy/p/rclcpp/generated/program_listing_file_include_rclcpp_executors.hpp.html
+            auto future_result = rclcpp::spin_until_future_complete(node_ptr, future, timeout);
             SyncResponse result;
             result.second = future_result;
             if (future_result == rclcpp::FutureReturnCode::TIMEOUT) {
-                client->remove_pending_request(future);
+                this->remove_pending_request(future);
             } 
             if(future_result == rclcpp::FutureReturnCode::SUCCESS) {
                 result.first = future.get();
@@ -98,14 +104,12 @@ public:
         }
          
         std::optional<geometry_msgs::msg::TransformStamped>
-            get_transform(std::string from_frame, std::string to_frame) {
+            get_transform(std::string to_frame, std::string from_frame) {
                 geometry_msgs::msg::TransformStamped t;
                 // Look up for the transformation between target_frame and turtle2 frames
                 // and send velocity commands for turtle2 to reach target_frame
             try {
-                t = tf_buffer->lookupTransform(
-                toFrameRel, fromFrameRel,
-                tf2::TimePointZero);
+                t = tf2_buffer->lookupTransform(to_frame, from_frame, tf2::TimePointZero);
                 return t;
             } catch (const tf2::TransformException & ex) {
                     /*RCLCPP_INFO(
@@ -164,27 +168,24 @@ public:
             my_timers_.emplace_back(create_wall_timer(time_interval, cb));
         }
 
-        template<typename F>
-        void add_service(std::string name, F cb) {
-            my_services_.emplace(name, create_service(name, cb));
+        template<typename CallbackT>
+        void add_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS & qos = rclcpp::ServicesQoS()) {
+            my_services_.emplace(service_name, create_service(service_name, callback));
         }
 
         template<typename Service>
-        auto add_client(std::string name) {
-            auto client = create_client(name);
-            my_services_clients_.emplace(name, client);
-            using Request std::shared_ptr<typename Service::Request>;
-
-            const auto call_service = [this](Request request) {
-
-            };
+        auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+            auto client = create_client<Service>(service_name, qos);
+            auto my_client = Client(*client);
+            my_services_clients_.emplace(service_name, my_client);
+            return my_client;
         }
 
+        /// TODO impl
         void add_tf_subscription() {
 
         }
 
-        /// TODO add service 
         /// TODO add action
     private:
         std::map<std::string, rclcpp::Time> last_published_time_;

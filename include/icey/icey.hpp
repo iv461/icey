@@ -198,16 +198,24 @@ auto create_state(const std::string &name, std::optional<double> max_frequency =
 template<typename F> 
 void create_timer(const ROSAdapter::Duration &interval, F cb) {
     const auto timer_attachable = NodeAttachableFunctor([interval, cb = std::move(cb)](const auto &node_handle) 
-        { node_handle->add_timer(interval, cb); });
+        { node_handle->add_timer(interval, std::move(cb)); });
     g_state.staged_node_attachables.push_back(timer_attachable);
 }
 
 /// Provide a service 
-template<typename F> 
-void create_service(std::string service_name, F cb) {
-    const auto service_attachable = NodeAttachableFunctor([service_name, cb = std::move(cb)](const auto &node_handle) 
-        { node_handle->add_service(service_name, cb); });
+template<typename CallbackT> 
+void create_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    const auto service_attachable = NodeAttachableFunctor([service_name, callback = std::move(callback), qos](const auto &node_handle) 
+        { node_handle->add_service(service_name, std::move(callback), qos); });
     g_state.staged_node_attachables.push_back(service_attachable);
+}
+
+/// Add a service client
+template<typename Service> 
+void create_client(const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    const auto client_attachable = NodeAttachableFunctor([service_name, qos](const auto &node_handle) 
+        { node_handle->template add_client<Service>(service_name, qos); });
+    g_state.staged_node_attachables.push_back(client_attachable);
 }
 
 /// Parents must be of type Observable
