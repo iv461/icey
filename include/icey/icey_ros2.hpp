@@ -16,6 +16,7 @@
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/message_filter.h"
+#include "tf2/buffer_core.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -69,7 +70,8 @@ public:
         /// https://github.com/ros2/ros2_documentation/issues/901
         /// https://github.com/ros2/ros2_documentation/issues/901#issuecomment-726767782
         /// https://github.com/ros2/rclcpp/issues/1533
-
+        /// Very good explaination: https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904
+        /// https://docs.ros.org/en/rolling/How-To-Guides/Sync-Vs-Async.html#synchronous-calls
         SyncResponse send_request(NodePtr node_ptr, SharedRequest request, Duration timeout = Duration(-1)) {
             auto future = this->async_send_request(request);
             /// TODO custom executor, i.e. executor->spin_until_future_complete(future, timeout) ? This launches a new executor I guesss: https://docs.ros.org/en/jazzy/p/rclcpp/generated/program_listing_file_include_rclcpp_executors.hpp.html
@@ -87,7 +89,7 @@ public:
     };
 
     
-    struct TFSubscription {
+    /*struct TFSubscription {
         TFSubscription(std::shared_ptr<rclcpp::Node> node) {
             /// This code is a bit tricky. It's about asynchronous programming essentially. The official example is rather incomplete ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html)) .
             /// I'm following instead this example https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
@@ -112,15 +114,21 @@ public:
                 t = tf2_buffer->lookupTransform(to_frame, from_frame, tf2::TimePointZero);
                 return t;
             } catch (const tf2::TransformException & ex) {
-                    /*RCLCPP_INFO(
+                    RCLCPP_INFO(
                     this->get_logger(), "Could not transform %s to %s: %s",
-                        toFrameRel.c_str(), fromFrameRel.c_str(), ex.what());*/
+                        toFrameRel.c_str(), fromFrameRel.c_str(), ex.what());
                 return {};
             }
         }
         
         std::unique_ptr<tf2_ros::Buffer> tf2_buffer;
         std::unique_ptr<tf2_ros::TransformListener> tf2_listener;
+    };*/
+
+    /// A modified listener that notifies when a transform changed.
+    struct TFListener {
+        struct TFListener(tf2::BufferCore & buffer,
+
     };
     
     /// A node interface, wrapping to some common functions

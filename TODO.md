@@ -21,14 +21,11 @@
 
 ### Must-have  for 0.1
 
-- Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
-- Correct sequence: FIRST create all subscribers, then all publishers !!
-- TF Buffer 
-- Services
-- Wait on service
-- Sometimes we want to use the values of parameters to initialize the other stuff, i.e. frames of tf (topics should not be needed). So we need to somehow first get the parameters and then update sub/pub 
-- message_filter::Subscriber must be usable (or maybe replace with own filter)
-- Support Image Transport subscriber -> otherwise people cannot subscribe to their compressed video feeds, port https://github.com/ros-perception/image_transport_tutorials
+- [] Correct sequence: FIRST create all subscribers, then all publishers !!
+- [] TF Buffer 
+- [x] Services
+- [] Publishing multiple outputs, i.e. single input, multiple output
+- [x] Wait on service (wont fix)
 - Private topic publishing -> maybe like python: if ~ in front of the topic name, then its private
 - `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)
 - Allow accessing the node: For logging and for all other objects
@@ -38,21 +35,25 @@
 * A strategy chooses between "last message" or interpolate
 * in case of interpolate, the queue must be long, in case of last message, the queue can be 1
 - Pass timer to the callback to be able to implement one-off-timer (https://github.com/ros2/demos/blob/rolling/demo_nodes_cpp/src/timers/one_off_timer.cpp)
-- Actions
+
+- Sometimes we want to use the values of parameters to initialize the other stuff, i.e. frames of tf (topics should not be needed). So we need to somehow first get the parameters and then update sub/pub 
+- message_filter::Subscriber must be usable (or maybe replace with own filter)
+- Support Image Transport subscriber -> otherwise people cannot subscribe to their compressed video feeds, port https://github.com/ros-perception/image_transport_tutorials
 
 - Scout ROS 2 demos for missing features: https://github.com/ros2/demos
+- Scout https://github.com/orgs/ros-perception/
+- [] Actions
 
 ### Nice-to-have
 
+- Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
 - Timer signal: like a signal, but a timer ! Basis for every signal-generator AND and the same time can be used as a timer. Commonly, one wants to publish something periodically.
 - "Waiting currently on" verbose printing to see what's happening
 - Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL OR even better, reference-track every thing internally in the staged list until the node is created, then attach everything to the node (!). And then simply return a weak reference (const T &) to the underlying objects
 - A way to enable/disable the node 
-- Maybe `RemindingPublishedState` that publishes regardless of whether the message changed or not
 - Maybe Simulink-style blocks, i.e. constant, step, function etc.
-
+- tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
 - Lifecycle Nodes ?
-
 
 ### Code 
 
