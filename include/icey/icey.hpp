@@ -246,21 +246,16 @@ auto compute_based_on(F f, Parents && ... parents) {
     return resulting_observable;
 }
 
-/// Blocking spawn of a node
-void spawn(int argc, char **argv, 
-    std::optional<std::string> node_name = std::nullopt) {
-
+/// This initializes a node with a name and attaches everything to it. It initializes everything in a pre-defined order.
+std::shared_ptr<ROSAdapter::NodeHandle> create_node(std::optional<std::string> node_name = std::nullopt) {
     if(g_state.graph.vertices.empty()) {
         std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
-        return;
+        return {};
     }
-
-    rclcpp::init(argc, argv);
-
     /// TODO [Feature] spawn anonymous node
     auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
 
-    g_state.node = std::make_shared<ROSAdapter::Node>(concrete_name);
+    auto node = std::make_shared<ROSAdapter::Node>(concrete_name);
 
     /// TODO FIRST DO TOPO SORT, FIRST ATTACH PARAMETERS, THEN SUBS, THEN PUBS
     /// First, attach to the ROS node all vertices in the DFG 
@@ -271,13 +266,25 @@ void spawn(int argc, char **argv,
     for( auto &attachable : g_state.staged_node_attachables) {
         attachable.attach_to_node(g_state.node); /// Attach
     }
-    
+    return node;
+}
 
+/// Blocking spawn of an existing node
+void spawn(int argc, char **argv, 
+    std::shared_ptr<ROSAdapter::NodeHandle> node) {
+    rclcpp::init(argc, argv);
     rclcpp::spin(g_state.node);
-
     /// TODO
     //staged_node_attachables.clear();
     rclcpp::shutdown();
+}
+
+/// Blocking spawn of a node using the global state
+void spawn(int argc, char **argv, 
+    std::optional<std::string> node_name = std::nullopt) {
+    g_state.node = create_node(node_name);
+    if(g_state.node)
+        spawn(argc, argv, g_state.node);
 }
 
 /// Non-blocking spawn of nodes. TODO [Feature] implement this using MultiThreadedExecutor

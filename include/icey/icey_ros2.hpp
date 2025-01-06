@@ -16,7 +16,6 @@
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/message_filter.h"
-#include "tf2/buffer_core.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -127,8 +126,9 @@ public:
 
     /// A modified listener that notifies when a transform changed.
     struct TFListener {
-        struct TFListener(tf2::BufferCore & buffer,
+        explicit TFListener(tf2::BufferCore & buffer) : buffer_(buffer) {}
 
+        tf2::BufferCore & buffer_;
     };
     
     /// A node interface, wrapping to some common functions
@@ -196,12 +196,18 @@ public:
 
         /// TODO add action
     private:
+
         std::map<std::string, rclcpp::Time> last_published_time_;
         std::vector<Timer> my_timers_;
         std::map<std::string, std::any> my_subscribers_;
         std::map<std::string, std::any> my_publishers_;
         std::map<std::string, std::any> my_services_;
         std::map<std::string, std::any> my_services_clients_;
+
+
+        /// TF stuff
+        std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
+        std::unique_ptr<TFListener> tf2_listener_;
     };
 
     using NodeHandle = Node;
