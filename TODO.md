@@ -22,6 +22,7 @@
 ### Must-have  for 0.1
 
 - [] Correct sequence: FIRST create all subscribers, then all publishers !!
+- [] Full-featured parameters !
 - [] TF Buffer 
 - [x] Services
 - [] Publishing multiple outputs, i.e. single input, multiple output
@@ -54,13 +55,15 @@
 - Maybe Simulink-style blocks, i.e. constant, step, function etc.
 - tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
 - Lifecycle Nodes ?
+- Dynamic reconfigure without code-gen using boost hana (it can serialize structs)
 
 ### Code 
 
 - Use Result https://github.com/bitwizeshift/result
 - Use fplus 
 - More FP
-
+- Use boost hana instead fo rolling our own bag of meta-programming tricks
+- Look at https://github.com/xhawk18/promise-cpp
 
 ## Documentation 
 

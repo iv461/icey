@@ -15,6 +15,30 @@
 
 namespace icey {
 
+template<typename T>
+struct is_tuple : std::false_type {};
+
+template<typename... Args>
+struct is_tuple<std::tuple<Args...>> : std::true_type {};
+
+
+template<typename T>
+constexpr bool is_tuple_v = is_tuple<T>::value;
+
+// Step 2: Function to unpack and call
+template<typename Func, typename Tuple>
+auto call_if_tuple(Func&& func, Tuple&& tuple) {
+    if constexpr (is_tuple_v<std::decay_t<Tuple>>) {
+        // Tuple detected, unpack and call the function
+        return std::apply(std::forward<Func>(func), std::forward<Tuple>(tuple));
+    } else {
+        // Not a tuple, just call the function directly
+        return func(std::forward<Tuple>(tuple));
+    }
+}
+
+
+
 struct NodeAttachable {
     virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &) {}
 };
@@ -30,11 +54,13 @@ struct NodeAttachableFunctor : NodeAttachable {
 };
 
 /// TODO do we need this ? Only used for graph. A read-only observable, with no value. Atatchnbel to ROS-node 
+/// TODO everything that captures this in a lambda should be noncopyable. Currently there are only the subscribers. 
+/// But how do we achive transparently copying around only references ?
 struct ObservableBase : public NodeAttachable, private boost::noncopyable {
     size_t index{0}; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here becasue
 };
 
-/// An observable holding a value
+/// An observable holding a value. Similar to a promise in JS.
 template<typename _StateValue>
 class Observable : public ObservableBase {
 public:
@@ -42,9 +68,15 @@ public:
     using Cb = std::function<void(const StateValue&)>;
 
     /// Register to be notified when smth. changes
-    void on_change(Cb cb) {
-        notify_list_.push_back(cb);
+    void on_change(Cb && cb) {
+        notify_list_.emplace_back(cb); /// TODO rename to children ?
     }
+
+    /// Create another promise as a child. (this is very similar to JavaScript's .then() )
+    /*template<typename F>
+    auto then(F && f) {
+        then(*this, f);
+    }*/
 
     /// Notify all subcribers about the new value
     void notify() {
@@ -57,6 +89,7 @@ public:
     static auto create() {
         return std::make_shared< Observable<StateValue> >();
     }
+
     auto has_value() const {return value_.has_value(); }
 
 //protected: /// TODO make inaccessible to force correct usage of the API !
@@ -131,7 +164,10 @@ public:
         return std::make_shared<Self>();
     }
 
+
+    /// TODO: Accept here Qos and other settings the create_publisher normally accepts
     void publish(const std::string &name, std::optional<double> max_frequency = std::nullopt) {
+        //static_assert(rclcpp::is_ros_compatible_type<StateValue>::value, "The function has to return a publishable ROS message (no primitive types are possible)");
         name_ = name;
         max_frequency = max_frequency;
     }
@@ -251,33 +287,46 @@ void create_client(const std::string & service_name, const rclcpp::QoS &qos = rc
     g_state.staged_node_attachables.push_back(client_attachable);
 }
 
+
+/// Here are the filters. First, the most basic filter: fuse. It fuses the inputs and updates the output if any of the inputs change.
 /// Parents must be of type Observable
-template<typename F, typename... Parents>
-auto compute_based_on(F f, Parents && ... parents) { 
-    /*static_assert(std::is_invocable_v<decltype(f)>, ///TODO does not work 
-                  "The first argument to compute_based_on() must be a callable");
-    static_assert(std::is_invocable_v<decltype(f), parents...>,
-                  "The given function to compute_based_on() must be callable with all the arguments that were given, that are of the same type of the subscribed ROS messages");*/
-    using ReturnType = decltype(f(parents->value_.value()...));
-    static_assert(rclcpp::is_ros_compatible_type<ReturnType>::value, "The function has to return a publishable ROS message (no primitive types are possible)");
+template<typename... Parents>
+auto fuse(Parents && ... parents) { 
+    /// Remote shared_ptr TODO write proper type trait for this
+    using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
+    auto resulting_observable = PublishableState<ReturnType>::create();  /// A result is rhs, i.e. read-only
 
-    auto resulting_observable = PublishableState<ReturnType>::create();  /// A result is rhs, i.e. read-only    
-
+    /// Add to global graph
     const std::vector<size_t> node_parents{parents->index...};
     g_state.graph.add_vertex_with_parents(resulting_observable, node_parents); /// And add to the graph
 
      ([&]{ 
-        const auto f_continued = [resulting_observable, f](auto&&... parents) {
-            auto all_argunments_arrived = (parents && ... && true);
+        const auto f_continued = [resulting_observable](auto&&... parents) {
+            auto all_argunments_arrived = (parents->value_ && ... && true);
             if(all_argunments_arrived) {
-                auto result = f(parents->value_.value()...);
+                auto result = std::make_tuple(parents->value_.value()...);
                 resulting_observable->_set(result);
             }
         };
+        /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
         parents->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
      }(), ...);
+     return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
+}
+
+template<typename Parent, typename F>
+auto then(Parent &parent, F && f) {
+    using ReturnType = decltype(f(parent->value_.value()));
+    auto resulting_observable = PublishableState<ReturnType>::create();
+    g_state.graph.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
+
+    parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
+        auto result = f(new_value);
+        resulting_observable->_set(result);  
+    });
     return resulting_observable;
 }
+
 
 /// This initializes a node with a name and attaches everything to it. It initializes everything in a pre-defined order.
 std::shared_ptr<ROSAdapter::Node> create_node(std::optional<std::string> node_name = std::nullopt) {
@@ -318,16 +367,5 @@ void spawn(int argc, char **argv,
     if(g_state.node)
         spawn(argc, argv, g_state.node);
 }
-
-/// Non-blocking spawn of nodes. TODO [Feature] implement this using MultiThreadedExecutor
-/*auto spawn_async(int argc, char **argv, 
-    std::optional<std::string> node_name = std::nullopt) {
-    rclcpp::init(argc, argv);
-    auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
-
-    g_state.node_ = rclcpp::Node::make_shared(concrete_name);
-    rclcpp::spin(g_state.node_);
-    rclcpp::shutdown();
-}*/
 
 }

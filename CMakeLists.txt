@@ -14,17 +14,14 @@ include_directories(
     include
 )
 
-ament_auto_add_executable(icey_example_talker
-  src/icey_example_talker.cpp 
-)
-
-ament_auto_add_executable(icey_example_listener
-  src/icey_example_listener.cpp 
-)
-
 # Add examples 
 ament_auto_add_executable(simple_example examples/simple.cpp)
+ament_auto_add_executable(listener_example examples/listener.cpp)
+ament_auto_add_executable(talker_example examples/talker.cpp)
 ament_auto_add_executable(service_example examples/service.cpp)
+ament_auto_add_executable(piping_example examples/piping.cpp)
+ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
+
 
 ament_auto_package(
   INSTALL_TO_SHARE
