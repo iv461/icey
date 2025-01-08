@@ -8,8 +8,8 @@ using StringMsg = std_msgs::msg::String;
 
 class MyNode : public icey::Node {
 public:
-
-    MyNode(std::string name) : icey::Node(name) {
+    using Base =  icey::Node;
+    MyNode(std::string name) : Base(name) {
 
         auto my_string = create_signal<StringMsg>("my_string");
 
@@ -33,7 +33,10 @@ public:
 
 
 int main(int argc, char **argv) {
+   rclcpp::init(argc, argv);
+
    auto node = std::make_shared<MyNode>("class_based_node_example");
+   
    icey::spawn(argc, argv, node);
    return 0;           
 }

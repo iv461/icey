@@ -16,5 +16,5 @@ int main(int argc, char **argv) {
 
     result->publish("new_velocity");
 
-    icey::spawn(argc, argv, "tf_listener_tf"); /// Create and start node
+    icey::spawn(argc, argv, "tf_listener_example"); /// Create and start node
 }

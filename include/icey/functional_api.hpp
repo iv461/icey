@@ -7,7 +7,7 @@ struct GState {
     std::shared_ptr<ROSNodeWithDFG> node;
 
     /// Create the global state node and flush the staged icey-observables from the global state
-    void create_node(std::string name) {
+    void create_node(const std::string &name) {
         node = std::make_shared<ROSNodeWithDFG>(name);
         /// TODO maybe copy base
         node->icey_dfg_graph_ = staged_context.icey_dfg_graph_;
@@ -63,6 +63,7 @@ auto then(Parent &parent, F && f) {
 
 /// Blocking spawn of a node using the global state
 void spawn(int argc, char **argv, std::string node_name) {
+    rclcpp::init(argc, argv);
     g_state.create_node(node_name);
     spawn(argc, argv, g_state.node);
 }

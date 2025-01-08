@@ -131,8 +131,9 @@ public:
     size_t attach_priority() const override { return 3; }
 
     SubscribedState(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {}
-    ROSAdapter::QoS qos_;
+
     std::string name_; 
+    ROSAdapter::QoS qos_;
 };
 
 
@@ -363,9 +364,10 @@ public:
     }
 };
 
-/// Blocking spawn of an existing node
+/// Blocking spawn of an existing node. must call rclcpp::init() before this !
+/// Does decide which executor to call and creates the callback groups depending on the depencies in the DFG
 void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
-    rclcpp::init(argc, argv);
+
     rclcpp::spin(node);
     rclcpp::shutdown();
 }
