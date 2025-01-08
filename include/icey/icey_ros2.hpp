@@ -191,13 +191,16 @@ public:
         }
 
         template<typename CallbackT>
-        void add_timer(const Duration &time_interval, CallbackT &&cb) {
-            my_timers_.emplace_back(create_wall_timer(time_interval, std::move(cb)));
+        void add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&cb) {
+            if(use_wall_time) 
+                my_timers_.emplace_back(create_wall_timer(time_interval, std::move(cb)));
+            else 
+                my_timers_.emplace_back(this->create_wall_timer(time_interval, std::move(cb)));
         }
 
         template<typename ServiceT, typename CallbackT>
         void add_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS & qos = rclcpp::ServicesQoS()) {
-            auto service = create_service<ServiceT>(service_name, std::move(callback)); /// TODO In humble, we cannot pass QoS, only in Jazzy (the API wasn't ready yet, it needs rmw_*-stuff)
+            auto service = this->create_service<ServiceT>(service_name, std::move(callback)); /// TODO In humble, we cannot pass QoS, only in Jazzy (the API wasn't ready yet, it needs rmw_*-stuff)
             my_services_.emplace(service_name, service);
         }
 
@@ -205,7 +208,7 @@ public:
         /// TODO cb groups !!
         template<typename Service>
         auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-            auto client = create_client<Service>(service_name, qos);
+            auto client = this->create_client<Service>(service_name, qos);
             my_services_clients_.emplace(service_name, client);
             return client;
         }
@@ -246,7 +249,7 @@ public:
 
         /// Do not force the user to do the bookkeeping itself: Do it instead automatically 
         std::map<std::string, rclcpp::Time> last_published_time_;
-        std::vector<Timer> my_timers_;
+        std::vector<rclcpp::TimerBase::SharedPtr> my_timers_;
         std::map<std::string, std::any> my_subscribers_;
         std::map<std::string, std::any> my_publishers_;
         std::map<std::string, std::any> my_services_;

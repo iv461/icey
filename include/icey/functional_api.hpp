@@ -40,9 +40,8 @@ auto create_state(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Ada
     return g_state.staged_context.create_state<StateValue>(name, qos, max_frequency);
 }
 
-template<typename CallbackT> 
-void create_timer(const ROSAdapter::Duration &interval, CallbackT && callback) {
-    g_state.staged_context.create_timer(interval, std::move(callback));
+auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false) {
+    return g_state.staged_context.create_timer(interval, use_wall_time);
 }
 
 template<typename ServiceT, typename CallbackT> 

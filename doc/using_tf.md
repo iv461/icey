@@ -16,7 +16,7 @@ void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
 So, we are usually always interested in getting the transform for a time of another topic: We are therefore **synchronizing** the transform with another topic.
 
 
-Other variants of this pattern, that are rather anti-patterns are:
+Other variants of this pattern, that are rather anti-patterns, are:
 
 1. Assuming the latest transform in the buffer is approximately the same as the stamp (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main//nav2_costmap_2d/plugins/costmap_filters/keepout_filter.cpp#L177) ):
 ```cpp

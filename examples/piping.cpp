@@ -36,5 +36,5 @@ int main(int argc, char **argv) {
     //int_result.publish("int_result");
     //float_result.publish("float_result");
 
-    icey::spawn(argc, argv, "tf_listener_tf"); /// Create and start node
+    icey::spawn(argc, argv, "piping_example"); /// Create and start node
 }

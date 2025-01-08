@@ -38,15 +38,18 @@
 - We need a way to stop the data-flow: Specialize Observable for std::optional<T>  and simply check if there is a value. This is needed to support stooping pipeline, i.e. received invalid values, or conditional publishing.
 
 - `beforeInit()` and `afterInit` functions to be able to use the icey::node API for stuff that is not implemented. 
-- Allow accessing the node: For logging and for all other objects
-- Different Sync-policies, first implement latest
+- [X] Allow accessing the node: For logging and for all other objects
+- [] Different Sync-policies, first implement latest
 -  Synch-policies ?
 * Every input may provide a frequency interpolator 
 * A strategy chooses between "last message" or interpolate
 * in case of interpolate, the queue must be long, in case of last message, the queue can be 1
+
 - Pass timer to the callback to be able to implement one-off-timer (https://github.com/ros2/demos/blob/rolling/demo_nodes_cpp/src/timers/one_off_timer.cpp)
 
-- [] Service client using timer and different callback groups: https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html
+- Rename to subscriber and publisher
+- create_publisher accepting input as argument, consistent with service client API 
+- [] Service client accepting input as argument using timer and different callback groups: https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html
 
 - [] For service client: then().except().finally() syntax to be notified when the service is not available (and nice promise syntax)
 
@@ -77,10 +80,14 @@
 
 ### Nice-to-have
 
-- Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
-- Timer signal: like a signal, but a timer ! Basis for every signal-generator AND and the same time can be used as a timer. Commonly, one wants to publish something periodically.
-- "Waiting currently on" verbose printing to see what's happening
-- Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL OR even better, reference-track every thing internally in the staged list until the node is created, then attach everything to the node (!). And then simply return a weak reference (const T &) to the underlying objects
+- [x] Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
+
+- [] Timer signal: like a signal, but a timer ! Basis for every signal-generator AND and the same time can be used as a timer. Commonly, one wants to publish something periodically.
+
+- [] "Waiting currently on" verbose printing for filters to see what's happening
+
+- [] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
+
 - A way to enable/disable the node 
 - Maybe Simulink-style blocks, i.e. constant, step, function etc.
 - tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer

@@ -68,7 +68,7 @@ struct NodeAttachableFunctor : public NodeAttachable {
 /// TODO everything that captures this in a lambda should be noncopyable. Currently there are only the subscribers. 
 /// But how do we achive transparently copying around only references ?
 struct ObservableBase : public NodeAttachable, private boost::noncopyable {
-    size_t index{0}; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here becasue
+    size_t index{0}; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here because of cyclic dependency
 };
 
 /// An observable holding a value. Similar to a promise in JS.
@@ -163,6 +163,27 @@ public:
     std::string frame1_;
     std::string frame2_;
   
+};
+
+/// Timer signal, saves the number of ticks as the value
+struct TimerSignal: public Observable<size_t> {
+    static auto create(const ROSAdapter::Duration &interval, bool use_wall_time) {
+        return std::make_shared<TimerSignal>(interval, use_wall_time);
+    }
+    size_t attach_priority() const override { return 5; } /// TODO dup
+
+    
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) {        
+        node_handle.add_timer(interval_, use_wall_time_, [this] () {
+            size_t new_value = value_ ? (*value_ + 1) : 0;
+            this->_set(new_value);
+        });
+    }
+
+    TimerSignal(const ROSAdapter::Duration &interval, bool use_wall_time) : interval_(interval), use_wall_time_(use_wall_time) {}
+
+    ROSAdapter::Duration interval_;
+    bool use_wall_time_{false};
 };
 
 /// A publishabe state, read-only
@@ -266,14 +287,11 @@ struct Context {
         return state;
     }
 
-
-    template<typename CallbackT> 
-    void create_timer(const ROSAdapter::Duration &interval, CallbackT && callback) {
+    auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false) {
         assert_icey_was_not_initialized();
-        const size_t attach_priority = 5;
-        const auto timer_attachable = std::make_shared<NodeAttachableFunctor>([interval, cb = std::move(callback)](auto &node_handle) 
-            { node_handle.add_timer(interval, std::move(cb)); }, attach_priority);
-        icey_node_attachables_.push_back(timer_attachable);
+        auto observable = TimerSignal::create(interval, use_wall_time);
+        icey_dfg_graph_.add_vertex(observable);
+        return observable;
     }
 
     /// Provide a service 
@@ -325,14 +343,20 @@ struct Context {
     template<typename Parent, typename F>
     auto then(Parent &parent, F && f) {
         using ReturnType = decltype(f(parent->value_.value()));
-        auto resulting_observable = PublishableState<ReturnType>::create();
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
+        if constexpr (std::is_void_v<ReturnType>) {
+            parent->on_change([f=std::move(f)](const auto &new_value) {
+                f(new_value);
+            });
+        } else {
+            auto resulting_observable = PublishableState<ReturnType>::create();
+            icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
 
-        parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
-            auto result = f(new_value);
-            resulting_observable->_set(result);  
-        });
-        return resulting_observable;
+            parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
+                auto result = f(new_value);
+                resulting_observable->_set(result);  
+            });
+            return resulting_observable;
+        }
     }
 };
 
@@ -367,7 +391,6 @@ public:
 /// Blocking spawn of an existing node. must call rclcpp::init() before this !
 /// Does decide which executor to call and creates the callback groups depending on the depencies in the DFG
 void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
-
     rclcpp::spin(node);
     rclcpp::shutdown();
 }
