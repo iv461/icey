@@ -1,7 +1,7 @@
 #include <icey/icey_ros2.hpp>
 
 /// TODO add serv file
-/*
+
 #include "example_interfaces/srv/add_two_ints.hpp"
 int main(int argc, char **argv) {
 
@@ -17,4 +17,3 @@ int main(int argc, char **argv) {
 
     icey::spawn(argc, argv, "add_two_ints_server"); /// Create and start node
 }
-*/

@@ -193,7 +193,7 @@ public:
             return; /// Do not do anything if we should not publish.
         }
 
-        auto publish = node_handle.add_publication<StateValue>(name_, max_frequency_);
+        auto publish = node_handle.add_publication<StateValue>(name_, qos_, max_frequency_);
         this->on_change([publish](const auto &new_value) {
             std::cout << "[PublishableState] value changed, publishing .." << std::endl;
             publish(new_value);
@@ -204,7 +204,7 @@ public:
     size_t attach_priority() const override { return 1; } 
 
     std::string name_;
-    ROSAdapter::QoS qos_;
+    ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
     std::optional<double> max_frequency_;
 };
 
@@ -383,12 +383,12 @@ public:
     /// Now simlarly, declare the filters as a member function since they need to create new observables which instead require to be stored somewhere, namely in the context 
     template<typename... Parents>
     auto fuse(Parents && ... parents) { 
-        return fuse(*this, std::forward<Parents>(parents)...);
+        return ::icey::fuse(*this, std::forward<Parents>(parents)...);
     }
     
     template<typename Parent, typename F>
     auto then(Parent &parent, F && f) {
-        return then(*this, parent, std::move(f));
+        return ::icey::then(*this, parent, std::move(f));
     }
 
     /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
