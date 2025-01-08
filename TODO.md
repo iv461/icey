@@ -24,12 +24,14 @@
 - [] Unit-tests testing the node
 - [] Doxygen parsable comments 
 
-- [] Correct sequence: FIRST create all subscribers, then all publishers !!
+- [] TOPO SORT DFG 
+- [] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock !
+- [] Correct initialization sequence: FIRST create all subscribers, then all publishers !!
 - [] Full-featured parameters !
 - [X] TF Buffer 
 - [] .catch() promise for tF buffer would be useful to print the lookup error
-
-- [] Class-based API since OOP is popular and required of components 
+- [] .then() as member
+- [x] Class-based API since OOP is popular and required of components 
 
 - [x] Services
 - [] Publishing multiple outputs, i.e. single input, multiple output
@@ -82,7 +84,7 @@
 
 - [x] Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
 
-- [] Timer signal: like a signal, but a timer ! Basis for every signal-generator AND and the same time can be used as a timer. Commonly, one wants to publish something periodically.
+- [X] Timer signal: like a signal, but a timer ! Basis for every signal-generator AND and the same time can be used as a timer. Commonly, one wants to publish something periodically.
 
 - [] "Waiting currently on" verbose printing for filters to see what's happening
 
@@ -94,7 +96,7 @@
 - Lifecycle Nodes ?
 - Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> Look at PickNicks code-gen solution 
 
-- How to implement RCLCPP_COMPONENTS_REGISTER_NODE ? We need a custom type that does all what what required
+- [x] How to implement RCLCPP_COMPONENTS_REGISTER_NODE ? -> solved by class-based API
 
 ### Code 
 
@@ -110,7 +112,7 @@
 
 ## Bugs 
 
-- [] Fix segfault on termination, cleanup properly
+- [] Fix segfault on termination, cleanup properly 
 
 ## Examples 
 

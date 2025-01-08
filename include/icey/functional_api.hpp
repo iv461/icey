@@ -2,7 +2,8 @@
 #pragma once 
 
 /// Global state, used to enable a simple, purely functional API and to notify for misuse. 
-/// It simply stages all operations that are to be performed before the node is created and then flushes them once icey::spawn is called.
+/// It simply stages all operations that are to be performed before the node is created. 
+// Then, once icey::spawn is called, it creates a node and flushes the operations.
 struct GState {
     std::shared_ptr<ROSNodeWithDFG> node;
 
