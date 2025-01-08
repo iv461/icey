@@ -27,9 +27,10 @@
 - [] Correct sequence: FIRST create all subscribers, then all publishers !!
 - [] Full-featured parameters !
 - [] TF Buffer 
+- [] Class-based API since OOP is popular and required of components 
+
 - [x] Services
 - [] Publishing multiple outputs, i.e. single input, multiple output
-- [x] Wait on service (wont fix)
 - Private topic publishing -> maybe like python: if ~ in front of the topic name, then its private
 - `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)
 - We need a way to stop the data-flow: Specialize Observable for std::optional<T>  and simply check if there is a value. This is needed to support stooping pipeline, i.e. received invalid values, or conditional publishing.
@@ -42,6 +43,10 @@
 * A strategy chooses between "last message" or interpolate
 * in case of interpolate, the queue must be long, in case of last message, the queue can be 1
 - Pass timer to the callback to be able to implement one-off-timer (https://github.com/ros2/demos/blob/rolling/demo_nodes_cpp/src/timers/one_off_timer.cpp)
+
+- [] Service client using timer and different callback groups: https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html
+
+- [] For service client: then().except().finally() syntax to be notified when the service is not available (and nice promise syntax)
 
 - Sometimes we want to use the values of parameters to initialize the other stuff, i.e. frames of tf (topics should not be needed). So we need to somehow first get the parameters and then update sub/pub 
 - message_filter::Subscriber must be usable (or maybe replace with own filter)
@@ -107,5 +112,5 @@ Add examples for common applications:
 - Controller like PPC, gets position and velocity, etc. 
 
 # Missing features
-In this early version, some things are missing: 
+
 - Mutli-threading executor is not supported, everything is single-threaded. Therefore, not Callback-groups

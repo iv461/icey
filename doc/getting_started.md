@@ -50,6 +50,12 @@ struct LoadParameters
 };
 ```
 
+# Subscribers 
+
+TODO 
+A note to the message type: In ICEY, you always receive in the callback a regular C++ reference. 
+Under the hood, ICEY always receives to allow for zero-overhead message passing when using intra-process communication, it simply dereferences the shared pointer before passing it to the user callback. 
+
 
 # Managing resources 
 
@@ -73,20 +79,15 @@ icey::spawn(argc, argv, "onnx_node").cleanup([]() {
 auto my_timer = icey::create_timer(100ms, "my_timer1");
 ```
 
-# Context-based API 
-
-If you need to spawn multiple nodes or do not want to use global variables to store internals, there is always a context that you can use: 
-
-TODO 
-
-```cpp
-auto my_timer = icey::create_timer(100ms, "my_timer1");
-```
 
 # Using classes
 
-In ICEY, it is still possible to organize nodes in an object-oriented way with classes. This is discouraged for very simple nodes, since ICEY 
+TODO 
+In ICEY, it is still possible to organize nodes in an object-oriented way with classes. This is discouraged for very simple nodes, since the functional style can do the same with fewer lines. 
+But ICEY still offers a functional API which is needed for example for components. 
 
+
+Other use cases for this API are if you need to spawn multiple nodes or do not want to use to have global variables (neded by ICEY for the context).
 
 # Timers 
 

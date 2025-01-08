@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(icey)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -25,5 +25,4 @@ ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE
-  
 )

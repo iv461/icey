@@ -1,19 +1,17 @@
 #include <icey/icey_ros2.hpp>
 
-/// TODO add serv file
+#include "std_srvs/srv/set_bool.hpp"
 
-#include "example_interfaces/srv/add_two_ints.hpp"
+using ExampleService = std_srvs::srv::SetBool;
+
 int main(int argc, char **argv) {
-
-    const auto cb = [](const std::shared_ptr<example_interfaces::srv::AddTwoInts::Request> request,
-            std::shared_ptr<example_interfaces::srv::AddTwoInts::Response> response) {
-            response->sum = request->a + request->b;
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Incoming request\na: %ld" " b: %ld",
-                            request->a, request->b);
-            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "sending back response: [%ld]", (long int)response->sum);
+    const auto cb = [](const std::shared_ptr<ExampleService::Request> request,
+            std::shared_ptr<ExampleService::Response> response) {
+            response->success = request->data;
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Got request");
     };
+    icey::create_service<ExampleService>("add_two_ints", 
+        cb);
 
-    icey::create_service<std_msgs::msg::Float32>("add_two_ints", cb);
-
-    icey::spawn(argc, argv, "add_two_ints_server"); /// Create and start node
+    icey::spawn(argc, argv, "icey_example_service"); /// Create and start node
 }

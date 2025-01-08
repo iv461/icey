@@ -48,50 +48,6 @@ public:
     using DefaultQos = rclcpp::SystemDefaultsQoS;
     using ServiceQoS = rclcpp::ServicesQoS;
 
-    /// A service client interface, that does not produce memory leaks unless the 
-    /// user does not forget to call random clean-up functions after calling the service. 
-    template<typename Service>
-    class Client : public rclcpp::Client<Service> {
-        using Base = rclcpp::Client<Service>;
-        /// Base class type aliases:
-        using Request = Base::Request;
-        using Response = Base::Response;
-        using SharedRequest = Base::SharedRequest;
-        using SharedResponse = Base::SharedResponse;
-        /// rclcpp::FutureReturnCode is either be SUCCESS, INTERRUPTED or TIMEOUT.
-        /// (reference: https://docs.ros.org/en/jazzy/p/rclcpp/generated/enum_namespacerclcpp_1a7b4ff5f1e516740d7e11ea97fe6f5532.html#_CPPv4N6rclcpp16FutureReturnCodeE)
-        /// The return type of a synchronous call
-        using SyncResponse = std::pair<std::optional<SharedResponse>, rclcpp::FutureReturnCode>;
-
-        explicit Client(const Base &base) : Base(base) {} /// Constructor from base 
-
-        /// A blocking (synchronous) call to the service. Never call this from a callback ! It returns an optional response and the return code of the future
-        /// It calls the async_send_request() and adds the boilerplate code from the examples/documentation.
-        /// The second argument is the timeout, by default no timeout is given.
-        //// See:
-        /// https://github.com/ros2/ros2_documentation/issues/901
-        /// https://github.com/ros2/ros2_documentation/issues/901#issuecomment-726767782
-        /// https://github.com/ros2/rclcpp/issues/1533
-        /// Very good explaination: https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904
-        /// https://docs.ros.org/en/rolling/How-To-Guides/Sync-Vs-Async.html#synchronous-calls
-        SyncResponse send_request(NodePtr node_ptr, SharedRequest request, Duration timeout = Duration(-1)) {
-            auto future = this->async_send_request(request);
-            /// TODO custom executor, i.e. executor->spin_until_future_complete(future, timeout) ? This launches a new executor I guesss: https://docs.ros.org/en/jazzy/p/rclcpp/generated/program_listing_file_include_rclcpp_executors.hpp.html
-            auto future_result = rclcpp::spin_until_future_complete(node_ptr, future, timeout);
-            SyncResponse result;
-            result.second = future_result;
-            if (future_result == rclcpp::FutureReturnCode::TIMEOUT) {
-                this->remove_pending_request(future);
-            } 
-            if(future_result == rclcpp::FutureReturnCode::SUCCESS) {
-                result.first = future.get();
-            }
-            return result;
-        }
-    };
-
-
-
     /// A modified listener that can notify when a single transform changes. 
     /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate spinning thread.
     /// TODO this simple implementation currently checks every time a new message is receved on /tf for every trnasform we are looking for. 
@@ -238,17 +194,19 @@ public:
             my_timers_.emplace_back(create_wall_timer(time_interval, std::move(cb)));
         }
 
-        template<typename CallbackT>
+        template<typename ServiceT, typename CallbackT>
         void add_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS & qos = rclcpp::ServicesQoS()) {
-            my_services_.emplace(service_name, create_service(service_name, std::move(callback)));
+            auto service = create_service<ServiceT>(service_name, std::move(callback)); /// TODO In humble, we cannot pass QoS, only in Jazzy (the API wasn't ready yet, it needs rmw_*-stuff)
+            my_services_.emplace(service_name, service);
         }
 
+
+        /// TODO cb groups !!
         template<typename Service>
         auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
             auto client = create_client<Service>(service_name, qos);
-            auto my_client = Client(*client);
-            my_services_clients_.emplace(service_name, my_client);
-            return my_client;
+            my_services_clients_.emplace(service_name, client);
+            return client;
         }
 
         
@@ -259,7 +217,7 @@ public:
             tf2_listener_->add_subscription(frame1, frame2, std::move(callback));
         }
 
-        /// TODO add action
+        
         std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
 
     private:
@@ -293,6 +251,7 @@ public:
         std::map<std::string, std::any> my_services_;
         std::map<std::string, std::any> my_services_clients_;
 
+        std::vector<rclcpp::CallbackGroup::SharedPtr> my_callback_groups_;
 
         /// TF stuff
         std::unique_ptr<TFListener> tf2_listener_;

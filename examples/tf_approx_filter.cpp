@@ -5,9 +5,11 @@ int main(int argc, char **argv) {
 
     auto map_base_link_tf = icey::create_transform_signal("map", "base_link");
 
-    auto result = icey::then(map_base_link_tf, [](auto new_msg) {
+    auto result = icey::then(map_base_link_tf, [](const geometry_msgs::msg::TransformStamped &new_transform) {
             std_msgs::msg::Float32 out_msg;
-            
+            /// TODO get yaw
+            auto cos_theta_half = new_transform.transform.rotation.z;
+            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Received a new transform, cos_theta_half was: " << cos_theta_half);
             return out_msg;
         }
         );
