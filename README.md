@@ -74,6 +74,16 @@ auto slip_angle_state = icey::create_state<float>("/states/slip_angle");
 slip_angle_state.set(0.01f) /// This will get published
 ```
 
+# Why should I use ICEY: 
+
+TODO mor convincing 
+
+If the examples did not yet convince you: 
+
+- Because ICEY removes unccesesary boolerplate code
+- It automatically computes the data-flow synchronously to the data it depents on: No more `received_x`-flags and asynchronously spinning in timers, waiting to something to arrive 
+- 
+
 # Robustness 
 
 This library is designed to be robust against common usage mistakes: It will detect problems like cyclic dependencies that would cause infinite update cycles. It enforces this by creating a Directed Acyclic Graph (DAG) and using topological sorting to ensure a well-defined order of updates. 

@@ -44,6 +44,9 @@ public:
     using NodePtr = std::shared_ptr<rclcpp::Node>;
     using _Node = rclcpp::Node; /// Underlying Node type
 
+    using QoS = rclcpp::QoS;
+    using DefaultQos = rclcpp::SystemDefaultsQoS;
+    using ServiceQoS = rclcpp::ServicesQoS;
 
     /// A service client interface, that does not produce memory leaks unless the 
     /// user does not forget to call random clean-up functions after calling the service. 
@@ -198,25 +201,25 @@ public:
         Node(const std::string &name) : Base(name) {}
 
         template<typename Msg, typename F>
-        void add_subscription(std::string topic, F cb) {
+        void add_subscription(const std::string &topic, F && cb, const rclcpp::QoS & qos = DefaultQos()) {
             if(my_subscribers_.count(topic) != 0) {
                 /// TODO throw topic already exists
             }
             if(my_publishers_.count(topic) != 0) {
                 /// TODO throw cannot subscribe on a topic that is being published at the same time
             }
-            my_subscribers_[topic] = create_subscription<Msg>(topic, 1, cb);
+            my_subscribers_[topic] = create_subscription<Msg>(topic, qos, cb);
         }
 
         template<typename Msg>
-        auto add_publication(std::string topic, std::optional<double> max_frequency) {
+        auto add_publication(const std::string &topic, const QoS &qos= DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
             if(my_publishers_.count(topic) != 0) {
                 /// TODO throw topic already exists
             }
             if(my_subscribers_.count(topic) != 0) {
                 /// TODO throw cannot publish on a topic that is being subscribed at the same time
             }
-            auto publisher = create_publisher<Msg>(topic, 1);
+            auto publisher = create_publisher<Msg>(topic, qos);
             my_publishers_[topic] = publisher;
             auto const publish = [this, publisher, topic, max_frequency](const Msg &msg) {
                 auto curr_time = this->get_clock()->now();
@@ -230,14 +233,14 @@ public:
             return publish;
         }
 
-        template<typename F>
-        void add_timer(Duration time_interval, F cb) {
-            my_timers_.emplace_back(create_wall_timer(time_interval, cb));
+        template<typename CallbackT>
+        void add_timer(const Duration &time_interval, CallbackT &&cb) {
+            my_timers_.emplace_back(create_wall_timer(time_interval, std::move(cb)));
         }
 
         template<typename CallbackT>
         void add_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS & qos = rclcpp::ServicesQoS()) {
-            my_services_.emplace(service_name, create_service(service_name, callback));
+            my_services_.emplace(service_name, create_service(service_name, std::move(callback)));
         }
 
         template<typename Service>
@@ -257,7 +260,6 @@ public:
         }
 
         /// TODO add action
-
         std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
 
     private:
@@ -283,6 +285,7 @@ public:
             tf2_buffer_->setCreateTimerInterface(timer_interface);
         }
 
+        /// Do not force the user to do the bookkeeping itself: Do it instead automatically 
         std::map<std::string, rclcpp::Time> last_published_time_;
         std::vector<Timer> my_timers_;
         std::map<std::string, std::any> my_subscribers_;

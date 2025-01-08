@@ -1,3 +1,56 @@
+# Subscribing and publishing 
+TODO 
+
+# Parameters 
+
+## Declare and use parameters 
+
+Parameters are declared with:
+
+```cpp
+auto offset_param = icey::parameter<float>("offset", 0., true);
+```
+
+Where the argument `0.` is the default value and the argument `true` indicates this parameter is dynamic, i.e. it can be changed at runtime.
+
+If we cannot decide on meaningful default values for the parameters and instead require the user to always give the node this parameter, 
+
+
+We can also constrain the values of each parameter: 
+
+```cpp
+auto offset_param = icey::parameter<float>("offset", 0., true, icey::Interval(0, 1));
+```
+
+We can also constraint it to a set of values: 
+
+```cpp
+auto offset_param = icey::parameter<float>("offset", 0., true, icey::Set(0, 0.5, 1));
+```
+
+### Using parameters: 
+
+Parameters can be used
+
+
+Do you commonly use a pareters struct that contains all your algorithm parameters ? 
+
+(https://github.com/ros-navigation/navigation2/blob/main/nav2_map_server/include/nav2_map_server/map_io.hpp#L31)
+
+```cpp
+struct LoadParameters
+{
+  std::string image_file_name;
+  double resolution{0};
+  std::vector<double> origin{0, 0, 0};
+  double free_thresh;
+  double occupied_thresh;
+  MapMode mode;
+  bool negate;
+};
+```
+
+
 # Managing resources 
 
 In ICEY, everything that you spawsn is managed internally, you do not have to store subscribers, publishers, timers etc. internally as class field like you have to in ROS. 
@@ -86,6 +139,8 @@ In the following, more advanced signal routing strategies are explained.
 
 ## Single input, multiple output 
 
+TODO 
+
 If you need to publish multiple times
 
 ```cpp
@@ -99,3 +154,8 @@ icey::create_timer(period_time, "sine_generator").then([&](const rclcpp::Timer &
     std::make_tuple()
 }).publish("sine_generator");
 ```
+
+
+### Conditional publishing 
+
+TODO it is important we support conditional publishing, for example debug publishers based on a parameter.

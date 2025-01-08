@@ -21,7 +21,7 @@ ament_auto_add_executable(talker_example examples/talker.cpp)
 ament_auto_add_executable(service_example examples/service.cpp)
 ament_auto_add_executable(piping_example examples/piping.cpp)
 ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
-
+ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE

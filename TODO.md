@@ -21,6 +21,9 @@
 
 ### Must-have  for 0.1
 
+- [] Unit-tests testing the node
+- [] Doxygen parsable comments 
+
 - [] Correct sequence: FIRST create all subscribers, then all publishers !!
 - [] Full-featured parameters !
 - [] TF Buffer 
@@ -29,6 +32,9 @@
 - [x] Wait on service (wont fix)
 - Private topic publishing -> maybe like python: if ~ in front of the topic name, then its private
 - `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)
+- We need a way to stop the data-flow: Specialize Observable for std::optional<T>  and simply check if there is a value. This is needed to support stooping pipeline, i.e. received invalid values, or conditional publishing.
+
+- `beforeInit()` and `afterInit` functions to be able to use the icey::node API for stuff that is not implemented. 
 - Allow accessing the node: For logging and for all other objects
 - Different Sync-policies, first implement latest
 -  Synch-policies ?
@@ -43,7 +49,24 @@
 
 - Scout ROS 2 demos for missing features: https://github.com/ros2/demos
 - Scout https://github.com/orgs/ros-perception/
-- [] Actions
+
+- Look at https://github.com/ros-controls/control_toolbox
+- Look at https://github.com/PickNikRobotics/RSL, maybe for monad, or for https://github.com/PickNikRobotics/RSL/blob/main/include/rsl/parameter_validators.hpp
+- Look at https://control.ros.org/rolling/index.html how to write controllers
+
+- Look at https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble, maybe some ideas, but unlikely 
+
+- Maybe create a sequence diagram with websequencediagrams.com
+
+- [] Actions ? See https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble
+
+- There are other filter libraries like https://github.com/ros/filters/tree/ros2, but not really used and only for simplistic tasks
+
+- Nice Gui: https://github.com/christophfroehlich/rqt_lifecycle_manager
+
+- Other ROS2 support libraries. 
+
+- Logging with FMT: https://github.com/facontidavide/ros2_logging_fmt?tab=readme-ov-file
 
 ### Nice-to-have
 
@@ -55,7 +78,9 @@
 - Maybe Simulink-style blocks, i.e. constant, step, function etc.
 - tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
 - Lifecycle Nodes ?
-- Dynamic reconfigure without code-gen using boost hana (it can serialize structs)
+- Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> Look at PickNicks code-gen solution 
+
+- How to implement RCLCPP_COMPONENTS_REGISTER_NODE ? We need a custom type that does all what what required
 
 ### Code 
 

@@ -37,20 +37,31 @@ auto call_if_tuple(Func&& func, Tuple&& tuple) {
     }
 }
 
-
-
 struct NodeAttachable {
-    virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &) {}
+    virtual void attach_to_node(ROSAdapter::NodeHandle &) {}
+    /// Priority at which to attach this, needed to implement an order of initialization:
+    // 0: parameters
+    // 1: publishers
+    // 2: services
+    // 3: subscribers   
+    // 4: clients 
+    // 5: timers
+    virtual size_t attach_priority() const { return 0; } 
 };
 
-/// Just a helper for timers etc. TODO solve more elegantly
-struct NodeAttachableFunctor : NodeAttachable {
-    using F = std::function<void(const std::shared_ptr<ROSAdapter::NodeHandle> &)>;
-    explicit NodeAttachableFunctor(F f): f(f) {}
-    void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {   
-        f(node_handle);
+/// Just a helper for timers etc. 
+/// TODO solve more elegantly
+struct NodeAttachableFunctor : public NodeAttachable {
+    using F = std::function<void(ROSAdapter::NodeHandle &)>;
+
+    NodeAttachableFunctor(F && f, size_t attach_priority): f_(std::move(f)), attach_priority_(attach_priority) {}
+
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) {   
+        f_(node_handle);
     }
-    F f;
+    size_t attach_priority() const override { return attach_priority_; } 
+    F f_;
+    size_t attach_priority_{0};
 };
 
 /// TODO do we need this ? Only used for graph. A read-only observable, with no value. Atatchnbel to ROS-node 
@@ -113,22 +124,26 @@ public:
     using Base = Observable<StateValue>;
     using Self = SubscribedState<StateValue>;
 
-    static auto create(const std::string &name) {
-        return std::make_shared<Self>(name);
+    static auto create(const std::string &name, const ROSAdapter::QoS &qos) {
+        return std::make_shared<Self>(name, qos);
     }
     
-    virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
-        node_handle->add_subscription<StateValue>(name_, [this](const StateValue &new_value) {
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
+        node_handle.add_subscription<StateValue>(name_, [this](const StateValue &new_value) {
             this->_set(new_value);
-        });
+        }, qos_);
     }
 
-    SubscribedState(const std::string &name): name_(name) {}
+    size_t attach_priority() const override { return 3; }
+
+    SubscribedState(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {}
+    ROSAdapter::QoS qos_;
     std::string name_; 
 };
 
 
 /// A signal for subscribing to /tf and obtaining a transform.
+/// TODO consider deriving from SubscribedObs
 struct TransformSignal : public Observable<geometry_msgs::msg::TransformStamped> {
 public:
     using Base = Observable<geometry_msgs::msg::TransformStamped>;
@@ -138,11 +153,13 @@ public:
         return std::make_shared<TransformSignal>(frame1, frame2);
     }
 
-    virtual void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
-        node_handle->add_tf_subscription(frame1_, frame2_, [this](const StateValue &new_value) {
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
+        node_handle.add_tf_subscription(frame1_, frame2_, [this](const StateValue &new_value) {
             this->_set(new_value);
         });
     }
+
+    size_t attach_priority() const override { return 3; } /// TODO dup
 
     /// TODO make ctor private
     TransformSignal(const std::string &frame1, const std::string &frame2) : 
@@ -164,141 +181,82 @@ public:
         return std::make_shared<Self>();
     }
 
-
-    /// TODO: Accept here Qos and other settings the create_publisher normally accepts
-    void publish(const std::string &name, std::optional<double> max_frequency = std::nullopt) {
+    void publish(const std::string &name, const ROSAdapter::QoS qos=  ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
         //static_assert(rclcpp::is_ros_compatible_type<StateValue>::value, "The function has to return a publishable ROS message (no primitive types are possible)");
         name_ = name;
-        max_frequency = max_frequency;
+        qos_ = qos;
+        max_frequency_ = max_frequency;
     }
 
-    void attach_to_node(const std::shared_ptr<ROSAdapter::NodeHandle> &node_handle) {
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(name_ == "") {
             return; /// Do not do anything if we should not publish.
         }
 
-        auto publish = node_handle->add_publication<StateValue>(name_, max_frequency_);
+        auto publish = node_handle.add_publication<StateValue>(name_, max_frequency_);
         this->on_change([publish](const auto &new_value) {
             std::cout << "[PublishableState] value changed, publishing .." << std::endl;
             publish(new_value);
         });
+    
     }
 
-    std::string name_;
-    std::optional<double> max_frequency_;
-};
+    size_t attach_priority() const override { return 1; } 
 
-/// A node in the data-flow graph.
-template<typename Data>
-struct Node {
-    explicit Node(const Data &_data): data(_data) {}
-    Data data;
-    std::vector<size_t> in_edges;
-    std::vector<size_t> out_edges;
+    std::string name_;
+    ROSAdapter::QoS qos_;
+    std::optional<double> max_frequency_;
 };
 
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
 struct Graph {
     using NodeData = std::shared_ptr<ObservableBase>;
-    using NodeT = Node<NodeData>;
+    struct Node {
+        explicit Node(const NodeData &_data): data(_data) {}
+        NodeData data;
+        std::vector<size_t> in_edges;
+        std::vector<size_t> out_edges;
+    };
+
     /// Create a new node from data
-    NodeT& add_vertex(const NodeData &node_data) {
+    Node& add_vertex(const NodeData &node_data) {
         node_data->index = vertices.size(); /// TODO very ugly, but Obs needs to know the index
         vertices.emplace_back(node_data);
         return vertices.back();
     }
-    NodeT& add_vertex_with_parents(const NodeData &node_data, const std::vector<size_t> &parents) {
+    Node& add_vertex_with_parents(const NodeData &node_data, const std::vector<size_t> &parents) {
         auto &new_node = add_vertex(node_data);
         new_node.in_edges = parents;
         return new_node;
     }
-    std::vector<NodeT> vertices;
+    std::vector<Node> vertices;
 };
 
-/// The ROS node, owning the data-flow graph (DFG) that contains the observables 
-struct ROSNodeWithDFG {
-    Graph graph;
-    std::shared_ptr<ROSAdapter::Node> node;
-};
+/// A context, used to enable a functional API using a global state, as well as a class-based API.
+struct Context {
+    /// These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
+    Graph icey_dfg_graph_;
+    std::vector<std::shared_ptr<NodeAttachable>> icey_node_attachables_; /// TODO Other node attachables that actually also should be in the graph
+    bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
-/// Global state, used to enable a simple, purely functional API and to notify for mis-use
-struct GState: public ROSNodeWithDFG {
-    std::vector<NodeAttachable> staged_node_attachables; /// Other attachables that do not require storing in the node
-    ~GState() {
-        if(!graph.vertices.empty() && !node) {
-            std::cout << "WARNING: You created some signals/states/timers, but no node was created, did you forget to call icey::spawn() ?" << std::endl;
-        }
+    void assert_icey_was_not_initialized() {
+        if(icey_was_initialized_) 
+            throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
     }
 };
-
-GState g_state;
-
-/// Enable API icey::node
-std::shared_ptr<ROSAdapter::Node> &node = g_state.node;
-
-template<typename StateValue>
-auto create_signal(const std::string &name) {
-    /// TODO ASSERT no node
-    auto signal = SubscribedState<StateValue>::create(name);
-    /// Attach to graph and return vertex
-    g_state.graph.add_vertex(signal);
-    return signal;
-}
-
-auto create_transform_signal(const std::string &frame1, const std::string &frame2) {
-    /// TODO ASSERT no node
-    auto tf_signal = TransformSignal::create(frame1, frame2);
-    /// Attach to graph and return vertex
-    g_state.graph.add_vertex(tf_signal);
-    return tf_signal;
-}
-
-/// A writable signal, i.e. publisher
-template<typename StateValue>
-auto create_state(const std::string &name, std::optional<double> max_frequency = std::nullopt) {
-    /// TODO ASSERT no node
-    auto state = PublishableState<StateValue>::create();
-    state->publish(name, max_frequency);
-    g_state.graph.add_vertex(state);
-    return state;
-}
-
-
-template<typename F> 
-void create_timer(const ROSAdapter::Duration &interval, F cb) {
-    const auto timer_attachable = NodeAttachableFunctor([interval, cb = std::move(cb)](const auto &node_handle) 
-        { node_handle->add_timer(interval, std::move(cb)); });
-    g_state.staged_node_attachables.push_back(timer_attachable);
-}
-
-/// Provide a service 
-template<typename CallbackT> 
-void create_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    const auto service_attachable = NodeAttachableFunctor([service_name, callback = std::move(callback), qos](const auto &node_handle) 
-        { node_handle->add_service(service_name, std::move(callback), qos); });
-    g_state.staged_node_attachables.push_back(service_attachable);
-}
-
-/// Add a service client
-template<typename Service> 
-void create_client(const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    const auto client_attachable = NodeAttachableFunctor([service_name, qos](const auto &node_handle) 
-        { node_handle->template add_client<Service>(service_name, qos); });
-    g_state.staged_node_attachables.push_back(client_attachable);
-}
 
 
 /// Here are the filters. First, the most basic filter: fuse. It fuses the inputs and updates the output if any of the inputs change.
 /// Parents must be of type Observable
 template<typename... Parents>
-auto fuse(Parents && ... parents) { 
+auto fuse(Context &ctx, Parents && ... parents) { 
     /// Remote shared_ptr TODO write proper type trait for this
     using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
     auto resulting_observable = PublishableState<ReturnType>::create();  /// A result is rhs, i.e. read-only
 
     /// Add to global graph
     const std::vector<size_t> node_parents{parents->index...};
-    g_state.graph.add_vertex_with_parents(resulting_observable, node_parents); /// And add to the graph
+    ctx.icey_dfg_graph_.add_vertex_with_parents(resulting_observable, node_parents); /// And add to the graph
 
      ([&]{ 
         const auto f_continued = [resulting_observable](auto&&... parents) {
@@ -315,10 +273,10 @@ auto fuse(Parents && ... parents) {
 }
 
 template<typename Parent, typename F>
-auto then(Parent &parent, F && f) {
+auto then(Context &ctx, Parent &parent, F && f) {
     using ReturnType = decltype(f(parent->value_.value()));
     auto resulting_observable = PublishableState<ReturnType>::create();
-    g_state.graph.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
+    ctx.icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
 
     parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
         auto result = f(new_value);
@@ -328,44 +286,210 @@ auto then(Parent &parent, F && f) {
 }
 
 
-/// This initializes a node with a name and attaches everything to it. It initializes everything in a pre-defined order.
-std::shared_ptr<ROSAdapter::Node> create_node(std::optional<std::string> node_name = std::nullopt) {
-    if(g_state.graph.vertices.empty()) {
-        std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
-        return {};
+/// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables 
+class ROSNodeWithDFG : public ROSAdapter::Node, public Context {
+public:
+    using NodeBase = ROSAdapter::Node;
+    using NodeBase::NodeBase;
+    using Self = ROSNodeWithDFG;
+    
+    template<typename StateValue>
+    static auto create_signal(Context &ctx, const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+        ctx.assert_icey_was_not_initialized();
+        auto signal = SubscribedState<StateValue>::create(name, qos);
+        /// Attach to graph and return vertex
+        ctx.icey_dfg_graph_.add_vertex(signal);
+        return signal;
     }
-    /// TODO [Feature] spawn anonymous node
-    auto concrete_name = node_name.has_value() ? node_name.value() : std::string("jighe385");
 
-    auto node = std::make_shared<ROSAdapter::Node>(concrete_name);
+    static auto create_transform_signal(Context &ctx, const std::string &frame1, const std::string &frame2) {
+        ctx.assert_icey_was_not_initialized();
+        auto tf_signal = TransformSignal::create(frame1, frame2);
+        /// Attach to graph and return vertex
+        ctx.icey_dfg_graph_.add_vertex(tf_signal);
+        return tf_signal;
+    }
 
-    /// TODO FIRST DO TOPO SORT, FIRST ATTACH PARAMETERS, THEN SUBS, THEN PUBS
-    /// First, attach to the ROS node all vertices in the DFG 
-    for( auto &vertex : g_state.graph.vertices) {
-        vertex.data->attach_to_node(g_state.node); /// Attach
+    /// A writable signal, i.e. publisher
+    template<typename StateValue>
+    static auto create_state(Context &ctx, const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
+        ctx.assert_icey_was_not_initialized();
+        auto state = PublishableState<StateValue>::create();
+        state->publish(name, qos, max_frequency);
+        ctx.icey_dfg_graph_.add_vertex(state);
+        return state;
     }
-    /// Then, add all other misc 
-    for( auto &attachable : g_state.staged_node_attachables) {
-        attachable.attach_to_node(g_state.node); /// Attach
+
+
+    template<typename CallbackT> 
+    static void create_timer(Context &ctx, const ROSAdapter::Duration &interval, CallbackT && callback) {
+        ctx.assert_icey_was_not_initialized();
+        const size_t attach_priority = 2;
+        const auto timer_attachable = std::make_shared<NodeAttachableFunctor>([interval, cb = std::move(callback)](auto &node_handle) 
+            { node_handle.add_timer(interval, std::move(cb)); }, attach_priority);
+        ctx.icey_node_attachables_.push_back(timer_attachable);
     }
-    return node;
+
+    /// Provide a service 
+    template<typename CallbackT> 
+    static void create_service(Context &ctx, const std::string &service_name, CallbackT && callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+        ctx.assert_icey_was_not_initialized();
+        const auto service_attachable = std::make_shared<NodeAttachableFunctor>([service_name, callback = std::move(callback), qos](auto &node_handle) 
+            { node_handle.add_service(service_name, std::move(callback), qos); });
+        ctx.icey_node_attachables_.push_back(service_attachable);
+    }
+
+    /// Add a service client
+    template<typename Service> 
+    static void create_client(Context &ctx, const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+        ctx.assert_icey_was_not_initialized();
+        const size_t attach_priority = 4;
+        const auto client_attachable = std::make_shared<NodeAttachableFunctor>([service_name, qos](auto &node_handle) 
+            { node_handle.template add_client<Service>(service_name, qos); }, attach_priority);
+        ctx.icey_node_attachables_.push_back(client_attachable);
+    }
+
+    /// Now all the same functions but as a member function 
+    template<typename StateValue>
+    auto create_signal(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+        return Self::create_signal<StateValue>(*this, name, qos);
+    }
+
+    auto create_transform_signal(const std::string &frame1, const std::string &frame2) {
+        return Self::create_transform_signal(*this, frame1, frame2);
+    }
+
+    template<typename StateValue>
+    auto create_state(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
+        return Self::create_state<StateValue>(*this, name, qos, max_frequency);
+    }
+
+    template<typename CallbackT> 
+    void create_timer(const ROSAdapter::Duration &interval, CallbackT && callback) {
+        Self::create_timer(*this, interval, std::move(callback));
+    }
+
+
+    template<typename CallbackT> 
+    void create_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+        Self::create_service(*this, service_name, std::move(callback), qos);
+    }
+
+    template<typename Service> 
+    void create_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+        Self::create_client<Service>(*this, service_name, qos);
+    }
+
+    /// Now simlarly, declare the filters as a member function since they need to create new observables which instead require to be stored somewhere, namely in the context 
+    template<typename... Parents>
+    auto fuse(Parents && ... parents) { 
+        return fuse(*this, std::forward<Parents>(parents)...);
+    }
+    
+    template<typename Parent, typename F>
+    auto then(Parent &parent, F && f) {
+        return then(*this, parent, std::move(f));
+    }
+
+    /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
+    void icey_initialize() {
+        if(icey_dfg_graph_.vertices.empty()) {
+            std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
+            return;
+        }
+        /// TODO bin-sort by prio !
+        
+        /// First, attach to the ROS node all vertices in the DFG 
+        for(auto &vertex : icey_dfg_graph_.vertices) {
+            vertex.data->attach_to_node(*this); /// Attach
+        }
+        /// Then, add all other misc 
+        for(auto &attachable : icey_node_attachables_) {
+            attachable->attach_to_node(*this); /// Attach
+        }
+        icey_was_initialized_ = true;
+    }
+
+};
+
+/// Global state, used to enable a simple, purely functional API and to notify for misuse. 
+/// It simply stages all operations that are to be performed before the node is created and then flushes them once icey::spawn is called.
+struct GState {
+    std::shared_ptr<ROSNodeWithDFG> node;
+
+    /// Create the global state node and flush the staged icey-observables from the global state
+    void create_node(std::string name) {
+        node = std::make_shared<ROSNodeWithDFG>(name);
+        /// TODO maybe copy base
+        node->icey_dfg_graph_ = staged_context.icey_dfg_graph_;
+        node->icey_node_attachables_ = staged_context.icey_node_attachables_;
+        node->icey_initialize();
+    }
+
+    Context staged_context;
+    
+    ~GState() {
+        if(!staged_context.icey_dfg_graph_.vertices.empty() && !node) {
+            std::cout << "WARNING: You created some signals/states/timers, but no node was created, did you forget to call icey::spawn() ?" << std::endl;
+        }
+    }
+};
+
+GState g_state;
+
+template<typename StateValue>
+auto create_signal(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
+    return ROSNodeWithDFG::create_signal<StateValue>(g_state.staged_context, name, qos); 
+};
+
+auto create_transform_signal(const std::string &frame1, const std::string &frame2) {
+    return ROSNodeWithDFG::create_transform_signal(g_state.staged_context, frame1, frame2);
+}
+
+template<typename StateValue>
+auto create_state(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
+    return ROSNodeWithDFG::create_state<StateValue>(g_state.staged_context, name, qos, max_frequency);
+}
+
+template<typename CallbackT> 
+void create_timer(const ROSAdapter::Duration &interval, CallbackT && callback) {
+    return ROSNodeWithDFG::create_timer(g_state.staged_context, interval, std::move(callback));
+}
+
+template<typename CallbackT> 
+void create_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    ROSNodeWithDFG::create_service(g_state.staged_context, std::move(callback), qos);
+}
+
+
+ /// Now the filters
+template<typename... Parents>
+auto fuse(Parents && ... parents) { 
+    return fuse(g_state.staged_context, std::forward<Parents>(parents)...);
+}
+
+template<typename Parent, typename F>
+auto then(Parent &parent, F && f) {
+    return then(g_state.staged_context, parent, std::move(f));
 }
 
 /// Blocking spawn of an existing node
 void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
     rclcpp::init(argc, argv);
     rclcpp::spin(node);
-    /// TODO
-    //staged_node_attachables.clear();
     rclcpp::shutdown();
 }
 
 /// Blocking spawn of a node using the global state
-void spawn(int argc, char **argv, 
-    std::optional<std::string> node_name = std::nullopt) {
-    g_state.node = create_node(node_name);
-    if(g_state.node)
-        spawn(argc, argv, g_state.node);
+void spawn(int argc, char **argv, std::string node_name) {
+    g_state.create_node(node_name);
+    spawn(argc, argv, g_state.node);
 }
+
+/// API aliases 
+using Node = ROSNodeWithDFG;
+
+/// Enable API icey::node
+std::shared_ptr<ROSNodeWithDFG> &node = g_state.node;
 
 }
