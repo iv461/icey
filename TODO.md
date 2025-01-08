@@ -26,7 +26,9 @@
 
 - [] Correct sequence: FIRST create all subscribers, then all publishers !!
 - [] Full-featured parameters !
-- [] TF Buffer 
+- [X] TF Buffer 
+- [] .catch() promise for tF buffer would be useful to print the lookup error
+
 - [] Class-based API since OOP is popular and required of components 
 
 - [x] Services

@@ -83,9 +83,9 @@ public:
         void notify_if_any_relevant_transform_was_received() {
             for(const auto &[transform_id, last_received_transform, notify_cb] : subscribed_transforms_) {
                 auto maybe_new_transform = get_maybe_new_transform(transform_id.first, transform_id.second, last_received_transform);
-                if(maybe_new_transform)
+                if(maybe_new_transform) {
                     notify_cb(*maybe_new_transform);
-
+                }
             }
         }
 
@@ -100,6 +100,7 @@ public:
                 } catch (tf2::TransformException & e) {
                     /// Simply ignore. Because we are requesting the latest transform in the buffer, the only exception we can get is that there is no transform available yet.
                     /// TODO duble-check if there is reallly nothing to do here.
+                    // std::cout << "Lookup failed: " << e.what() << std::endl;
                 }
                 /// Now check if it is the same as the last one, in this case we return nothing since the transform did not change. (Instead, we received on /tf some other, unrelated transforms.)
                 if(last_received_tf && tf_msg && *tf_msg == *last_received_tf)
