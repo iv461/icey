@@ -12,5 +12,12 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
     });
 
+    /// Add another computation for the timer
+    icey::then(timer_signal, [](size_t ticks) {
+        std_msgs::msg::Float32 float_val;
+        float_val.data = std::sin(ticks / 10.);
+        return float_val;
+    })->publish("sine_generator");
+
     icey::spawn(argc, argv, "signal_generator_example"); 
 }
