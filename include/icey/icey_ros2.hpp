@@ -134,16 +134,12 @@ public:
         using TFId = std::pair<std::string, std::string>;
         /// A tf subctiption, the frames, last received transform, and the notify CB
         using SubTF = std::tuple < TFId, std::optional<TransformMsg>, NotifyCB >;
-
-
+        
         NodePtr node_; /// Stored for logging
         tf2::BufferCore & buffer_;
 
         rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
         rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
-
-        tf2::TimePoint last_update_;
-        rclcpp::CallbackGroup::SharedPtr callback_group_;
 
         std::vector< SubTF > subscribed_transforms_;
     };

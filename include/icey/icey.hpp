@@ -445,7 +445,7 @@ protected:
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
         std::sort(icey_dfg_graph_.vertices.begin(), icey_dfg_graph_.vertices.end(), 
             [](const auto &attachable1, const auto &attachable2) { return attachable1.data->attach_priority() 
-                < attachable1.data->attach_priority();});
+                < attachable2.data->attach_priority();});
 
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
         for(auto &vertex : icey_dfg_graph_.vertices) {
