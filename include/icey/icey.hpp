@@ -12,6 +12,7 @@
 #include <any> 
 
 #include <boost/noncopyable.hpp>
+#include <boost/hana.hpp>
 
 namespace icey {
 
@@ -94,8 +95,6 @@ protected:
 
     /// Notify all subcribers about the new value
     void notify() {
-        if(icey_debug_print)
-            std::cout << "[OBservable] notifying .." << std::endl;
         for(auto cb: notify_list_) {
             cb(value_.value());
         }
@@ -130,26 +129,25 @@ public:
         this->attach_priority_ = 0;
     }
 
-    /// Parameters are initialized always at the beginning, so it's we can provide getters for the value
+    /// Parameters are initialized always at the beginning, so we can provide getters for the value. Note that has_value() must be checked beforehand since if no default value was provided, this function will throw std::bad_optional_access()
     const Value &get() const {
-            return *this->value_;
+            return this->value_.value();
     }
 
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         if(icey_debug_print)
             std::cout << "[ParameterObservable] attach_to_node()" << std::endl;
-    
+        /// Declare on change handler
         node_handle.declare_parameter<Value>(parameter_name_, default_value_, 
             [this](const rclcpp::Parameter &new_param) {
                 this->_set(new_param.get_value<Value>());
         }, parameter_descriptor_, ignore_override_);
-        Value initial_value;
-        if(default_value_)
+        /// Set default value
+        if(default_value_) {
+            Value initial_value;
             node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-        else 
-            node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-        this->_set(initial_value);
-    
+            this->_set(initial_value);
+        }
     }
 
     std::string parameter_name_;
