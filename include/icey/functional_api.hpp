@@ -12,8 +12,8 @@ struct GState {
         node = std::make_shared<ROSNodeWithDFG>(name);
         /// TODO maybe copy base
         node->icey_dfg_graph_ = staged_context.icey_dfg_graph_;
-        node->icey_node_attachables_ = staged_context.icey_node_attachables_;
         node->icey_initialize();
+        staged_context.icey_dfg_graph_.vertices.clear();
     }
 
     Context staged_context;
@@ -47,9 +47,15 @@ auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = fal
     return g_state.staged_context.create_timer(interval, use_wall_time);
 }
 
-template<typename ServiceT, typename CallbackT> 
-void create_service(const std::string &service_name, CallbackT && callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    g_state.staged_context.create_service<ServiceT>(service_name, std::move(callback), qos);
+template<typename ServiceT> 
+auto create_service(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    return g_state.staged_context.create_service<ServiceT>(service_name, qos);
+}
+
+template<typename Service> 
+auto create_client(typename ClientObs<Service>::Parent parent, 
+         const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+            return g_state.staged_context.create_client<Service>(parent, service_name, qos);
 }
 
  /// Now the filters

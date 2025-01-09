@@ -2,13 +2,25 @@
 
 #include "std_srvs/srv/set_bool.hpp"
 
+using namespace std::chrono_literals;
+
 using ExampleService = std_srvs::srv::SetBool;
 
 int main(int argc, char **argv) {
-    /*
-    auto timer_trigger = icey__
-    auto client = icey::create_client("add_two_ints", timer_trigger);
-    //icey::create_service<std_msgs::msg::Float32>("add_two_ints", cb);
-    icey::spawn(argc, argv, "add_two_ints_server"); /// Create and start node
-    */
+
+    auto timer_signal = icey::create_timer(1s);
+
+    auto timed_request = icey::then(timer_signal, [](size_t ticks) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Preparing request... ");
+        auto request = std::make_shared<ExampleService::Request>();
+        request->data = 1;
+        return request;
+    });
+
+    auto service_response = icey::create_client(timed_request, "set_bool_service");
+    icey::then(service_response, [](std::shared_ptr<ExampleService::Response> response) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response: " << response->success);
+    });
+    
+    icey::spawn(argc, argv, "client_example"); 
 }

@@ -167,7 +167,8 @@ public:
         }
 
         template<typename Msg>
-        auto add_publication(const std::string &topic, const QoS &qos= DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
+        auto add_publication(const std::string &topic, const QoS &qos= DefaultQos(), 
+            std::optional<double> max_frequency = std::nullopt) {
             if(my_publishers_.count(topic) != 0) {
                 /// TODO throw topic already exists
             }
@@ -177,13 +178,7 @@ public:
             auto publisher = create_publisher<Msg>(topic, qos);
             my_publishers_[topic] = publisher;
             auto const publish = [this, publisher, topic, max_frequency](const Msg &msg) {
-                auto curr_time = this->get_clock()->now();
-                if(!max_frequency || !last_published_time_.count(topic) || 
-                       (curr_time - last_published_time_.at(topic)).seconds() > (1. / max_frequency.value()) ) {
-
-                    publisher->publish(msg);
-                    last_published_time_[topic] = curr_time;
-                }
+                publisher->publish(msg);   
             };
             return publish;
         }
@@ -246,7 +241,7 @@ public:
         }
 
         /// Do not force the user to do the bookkeeping itself: Do it instead automatically 
-        std::map<std::string, rclcpp::Time> last_published_time_;
+        
         std::vector<rclcpp::TimerBase::SharedPtr> my_timers_;
         std::map<std::string, std::any> my_subscribers_;
         std::map<std::string, std::any> my_publishers_;
