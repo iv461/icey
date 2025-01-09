@@ -9,19 +9,14 @@ int main(int argc, char **argv) {
     auto my_string = icey::create_subscription<StringMsg>("my_string");
 
     auto derived_value = icey::then(my_string, [](const StringMsg &my_string_val) {
-            std::cout << "Computing .. " << std::endl;
-            StringMsg result;
-            result.data = my_string_val.data;
-            result.data.data()[0] = std::toupper(result.data.data()[0]);
-            return result;
+        std::cout << "Computing .. " << std::endl;
+        return my_string_val.data;
     });
 
-
-    derived_value->on_change([](const StringMsg &new_computed_value) {
-        std::cout << "derived_value changed: " << new_computed_value.data << std::endl;
+    icey::then(derived_value, [](const std::string &derived_string) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got value: " << derived_string);
     });
 
-    icey::spawn(argc, argv, "listener");
-
+    icey::spawn(argc, argv, "listener_example");
     return 0;           
 }

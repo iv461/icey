@@ -34,7 +34,7 @@ struct GState {
         auto node = nodes.nodes.at(name);
         static_cast<Context&>(*node) = staged_context;
         /// After committing the changes, clear them so that another node can be spawned
-        staged_context.icey_dfg_graph_.vertices.clear();
+        staged_context.clear();
         node->icey_initialize();
         return node;
     }
@@ -42,7 +42,7 @@ struct GState {
     Context staged_context;
     
     ~GState() {
-        if(!staged_context.icey_dfg_graph_.vertices.empty() && nodes.nodes.empty()) {
+        if(!staged_context.empty() && nodes.nodes.empty()) {
             std::cout << "WARNING: You created some signals/states/timers, but no node was created, did you forget to call icey::spawn() ?" << std::endl;
         }
     }
