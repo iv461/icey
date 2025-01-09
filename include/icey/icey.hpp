@@ -327,18 +327,12 @@ struct Context {
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
         auto resulting_observable = PublishableState<ReturnType>::create();  /// A result is rhs, i.e. read-only
-
-        /// Add to global graph
-        const std::vector<size_t> node_parents{parents->index...};
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, node_parents); /// And add to the graph
-
+        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index...}); /// And add to the graph
         ([&]{ 
             const auto f_continued = [resulting_observable](auto&&... parents) {
                 auto all_argunments_arrived = (parents->value_ && ... && true);
-                if(all_argunments_arrived) {
-                    auto result = std::make_tuple(parents->value_.value()...);
-                    resulting_observable->_set(result);
-                }
+                if(all_argunments_arrived) 
+                    resulting_observable->_set(std::make_tuple(parents->value_.value()...));                
             };
             /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
             parents->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
@@ -350,16 +344,13 @@ struct Context {
     auto then(Parent &parent, F && f) {
         using ReturnType = decltype(f(parent->value_.value()));
         if constexpr (std::is_void_v<ReturnType>) {
-            parent->on_change([f=std::move(f)](const auto &new_value) {
-                f(new_value);
-            });
+            parent->on_change(std::move(f));
         } else {
             auto resulting_observable = PublishableState<ReturnType>::create();
             icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
 
             parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
-                auto result = f(new_value);
-                resulting_observable->_set(result);  
+                resulting_observable->_set(f(new_value));
             });
             return resulting_observable;
         }

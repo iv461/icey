@@ -3,28 +3,30 @@
 #include <icey/icey_ros2.hpp>
 
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 using StringMsg = std_msgs::msg::String;
+
+using namespace std::chrono_literals;
+
 
 class MyNode : public icey::Node {
 public:
     using Base =  icey::Node;
     MyNode(std::string name) : Base(name) {
 
-        auto my_string = icey().create_subscription<StringMsg>("my_string");
+       auto timer_signal = icey().create_timer(500ms);
 
-        auto derived_value = then(my_string, [](const StringMsg &my_string_val) {
-                std::cout << "Computing .. " << std::endl;
-                StringMsg result;
-                result.data = my_string_val.data;
-                result.data.data()[0] = std::toupper(result.data.data()[0]);
-                return result;
+        then(timer_signal, [this](size_t ticks) {
+            RCLCPP_INFO_STREAM(get_logger(), "Timer ticked: " << ticks);
         });
 
-
-        derived_value->on_change([](const StringMsg &new_computed_value) {
-            std::cout << "derived_value changed: " << new_computed_value.data << std::endl;
-        });
+        /// Add another computation for the timer
+        then(timer_signal, [](size_t ticks) {
+            std_msgs::msg::Float32 float_val;
+            float_val.data = std::sin(ticks / 10.);
+            return float_val;
+        })->publish("sine_generator");
 
         /// Finally, create all the needed subsciptions, publications etc. for the ICEY-observables we just declared.
         icey_initialize();
