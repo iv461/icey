@@ -32,8 +32,9 @@
 - [] .catch() promise for tF buffer would be useful to print the lookup error
 - [] .then() as member
 - [x] Class-based API since OOP is popular and required of components 
-
+- [] Ensure soundness of our promises, see e.g. the rules for monads: https://stackoverflow.com/a/48553568
 - [x] Services
+- [] Service client clean-up https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [] Publishing multiple outputs, i.e. single input, multiple output
 - Private topic publishing -> maybe like python: if ~ in front of the topic name, then its private
 - `onCleanup` function to be able to call cleanup of external libraries, e.g. ONNX runtime (that would normally be the Node's destructor)

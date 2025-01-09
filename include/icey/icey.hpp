@@ -23,12 +23,20 @@ struct is_tuple<std::tuple<Args...>> : std::true_type {};
 
 
 template<typename T>
+struct is_pair : std::false_type {};
+
+template<typename... Args>
+struct is_pair<std::pair<Args...>> : std::true_type {};
+
+template<typename T>
 constexpr bool is_tuple_v = is_tuple<T>::value;
 
-// Step 2: Function to unpack and call
+template<typename T>
+constexpr bool is_pair_v = is_pair<T>::value;
+
 template<typename Func, typename Tuple>
 auto call_if_tuple(Func&& func, Tuple&& tuple) {
-    if constexpr (is_tuple_v<std::decay_t<Tuple>>) {
+    if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {
         // Tuple detected, unpack and call the function
         return std::apply(std::forward<Func>(func), std::forward<Tuple>(tuple));
     } else {
@@ -100,6 +108,27 @@ public:
     std::vector<OnResolve> notify_list_;
     std::vector<OnReject> reject_cbs_;
     std::optional<StateValue> value_;
+};
+
+template<typename Value>
+class ParameterObs : public Observable<Value> {
+public:
+    using MaybeValue = std::optional<Value>;
+    ParameterObs(const std::string &parameter_name, const MaybeValue &default_value
+        ) : parameter_name_(parameter_name), default_value_(default_value) {
+        //attach_priority_ = 0;
+    }
+
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
+        /*
+        node_handle.declare_parameter<StateValue>(parameter_name_, [this](std::shared_ptr<StateValue> new_value) {
+            this->_set(*new_value);
+        }, qos_);
+        */
+    }
+
+    std::string parameter_name_;
+    MaybeValue default_value_;
 };
 
 template<typename StateValue>
@@ -184,10 +213,8 @@ public:
 template<typename _ServiceT>
 struct ServiceObs : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>, 
     std::shared_ptr<typename _ServiceT::Response>>> {
-    using Request = typename _ServiceT::Request;
-    using Response = typename _ServiceT::Request;
-    using Base = Observable<std::pair<typename _ServiceT::Request, typename _ServiceT::Response>>;
-    using StateValue = typename Base::StateValue;
+    using Request = std::shared_ptr<typename _ServiceT::Request>;
+    using Response = std::shared_ptr<typename _ServiceT::Response>;
 
     ServiceObs(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
         service_name_(service_name), qos_(qos) { 
@@ -195,9 +222,8 @@ struct ServiceObs : public Observable<std::pair<std::shared_ptr<typename _Servic
             }
 
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
-         node_handle.add_service<_ServiceT>(service_name_, [this](std::shared_ptr<Request> request,
-            std::shared_ptr<Response> response) {
-            this->set(std::make_pair(request, response));
+         node_handle.add_service<_ServiceT>(service_name_, [this](Request request, Response response) {
+            this->_set(std::make_pair(request, response));
          }, qos_);
     }
     std::string service_name_;
@@ -257,6 +283,7 @@ struct Graph {
 struct Context {
     /// These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
     Graph icey_dfg_graph_;
+
     bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
     void assert_icey_was_not_initialized() {
@@ -268,7 +295,11 @@ struct Context {
     auto declare_parameter(const std::string &name, const ParameterT &default_value, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
             bool ignore_override = false) {
-
+        assert_icey_was_not_initialized();
+        /// TODO 
+        auto param_obs = std::make_shared<ParameterObs<ParameterT>>(name, default_value);
+        icey_dfg_graph_.add_vertex(param_obs);
+        return param_obs;
     }
 
     template<typename StateValue>
@@ -290,9 +321,9 @@ struct Context {
 
     /// A writable signal, i.e. publisher
     template<typename StateValue>
-    auto create_publisher(std::shared_ptr<Observable<StateValue>> parent, const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    auto create_publisher(std::shared_ptr<Observable<StateValue>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
-        auto state = std::make_shared<PublishableState<StateValue>>(parent, name, qos);
+        auto state = std::make_shared<PublishableState<StateValue>>(parent, topic_name, qos);
         icey_dfg_graph_.add_vertex(state);
         return state;
     }
@@ -345,15 +376,17 @@ struct Context {
 
     template<typename Parent, typename F>
     auto then(Parent &parent, F && f) {
-        using ReturnType = decltype(f(parent->value_.value()));
+        using ReturnType = decltype(call_if_tuple(f, parent->value_.value()));
         if constexpr (std::is_void_v<ReturnType>) {
-            parent->on_change(std::move(f));
+            parent->on_change([f=std::move(f)](const auto &new_value) {
+                call_if_tuple(f, new_value);
+            });
         } else {
-            auto resulting_observable = PublishableState<ReturnType>::create();
+            auto resulting_observable = std::make_shared<Observable<ReturnType>>();
             icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
 
             parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
-                resulting_observable->_set(f(new_value));
+                resulting_observable->_set(call_if_tuple(f, new_value));
             });
             return resulting_observable;
         }
@@ -367,16 +400,25 @@ public:
     using NodeBase::NodeBase;
     
     Context &icey() { return *this; } /// Upcast to disambiguate calls 
-    
+
+    /// TODO 
+    void analyze_graph() {
+        /// do_topological_sort_on_dfg_graph()
+        // assert_dfg_graph_is_acyclic() 
+    }    
     /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
     void icey_initialize() {
         if(icey_dfg_graph_.vertices.empty()) {
             std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
             return;
         }
-        /// TODO bin-sort by prio !
-        
-        /// First, attach to the ROS node all vertices in the DFG 
+        /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
+        /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
+        std::sort(icey_dfg_graph_.vertices.begin(), icey_dfg_graph_.vertices.end(), 
+            [](const auto &attachable1, const auto &attachable2) { return attachable1.data->attach_priority() 
+                < attachable1.data->attach_priority();});
+
+        /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
         for(auto &vertex : icey_dfg_graph_.vertices) {
             vertex.data->attach_to_node(*this); /// Attach
         }
@@ -387,14 +429,32 @@ public:
 
 /// Blocking spawn of an existing node. must call rclcpp::init() before this !
 /// Does decide which executor to call and creates the callback groups depending on the depencies in the DFG
-void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
-    rclcpp::spin(node);
+void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node, bool use_mt=true) {
+    if(use_mt) {
+        rclcpp::executors::MultiThreadedExecutor executor;
+        executor.add_node(node);
+        executor.spin();
+    } else {
+        rclcpp::spin(node);
+    }
     rclcpp::shutdown();
+}
+
+/// A non-blocking spawn of a node in its own executor. Returns a future that waits in it's destructor until the executor is done.
+auto spawn_async(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
+    /// TODO call shutdown
+    return 1;
+    /*
+    return std::async(std::launch::async, [executor = rclcpp::executors::MultiThreadedExecutor(), node]() mutable {
+        executor.add_node(node);    
+        executor.spin();
+    });
+    */
 }
 
 /// API aliases 
 using Node = ROSNodeWithDFG;
 
-#include <icey/functional_api.hpp>
-
 }
+
+#include <icey/functional_api.hpp>

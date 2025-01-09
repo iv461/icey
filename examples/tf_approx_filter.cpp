@@ -12,9 +12,9 @@ int main(int argc, char **argv) {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "Received a new transform, cos_theta_half was: " << cos_theta_half);
             return out_msg;
         }
-        );
-
-    result->publish("new_velocity");
+        );    
+        
+    icey::create_publisher(result, "new_velocity");
 
     icey::spawn(argc, argv, "tf_listener_example"); /// Create and start node
 }

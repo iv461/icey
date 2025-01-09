@@ -22,7 +22,8 @@ int main(int argc, char **argv) {
         },
         current_velocity);
 
-    result->publish("new_velocity");
+    icey::create_publisher(result, "new_velocity"),
+
 
     icey::spawn(argc, argv, "ppc_controller_node"); /// Create and start node
 }

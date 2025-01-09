@@ -13,11 +13,13 @@ int main(int argc, char **argv) {
     });
 
     /// Add another computation for the timer
-    icey::then(timer_signal, [](size_t ticks) {
+    auto sine_signal = icey::then(timer_signal, [](size_t ticks) {
         std_msgs::msg::Float32 float_val;
         float_val.data = std::sin(ticks / 10.);
         return float_val;
-    })->publish("sine_generator");
+    });
+
+    icey::create_publisher(sine_signal, "sine_generator");
 
     icey::spawn(argc, argv, "signal_generator_example"); 
 }
