@@ -33,9 +33,9 @@ struct GState {
         nodes.nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));
         auto node = nodes.nodes.at(name);
         static_cast<Context&>(*node) = staged_context;
-        node->icey_initialize();
         /// After committing the changes, clear them so that another node can be spawned
         staged_context.icey_dfg_graph_.vertices.clear();
+        node->icey_initialize();
         return node;
     }
 
@@ -53,18 +53,18 @@ GState g_state;
 /// Enable API icey::node
 auto &node = g_state.nodes;
 
-template<typename StateValue>
+template<typename MessageT>
 auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
-    return g_state.staged_context.create_subscription<StateValue>(topic_name, qos); 
+    return g_state.staged_context.create_subscription<MessageT>(topic_name, qos); 
 };
 
 auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
     return g_state.staged_context.create_transform_subscription(target_frame, source_frame);
 }
 
-template<typename StateValue>
-auto create_publisher(std::shared_ptr<Observable<StateValue>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    return g_state.staged_context.create_publisher<StateValue>(parent, topic_name, qos);
+template<typename MessageT>
+auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    return g_state.staged_context.create_publisher<MessageT>(parent, topic_name, qos);
 }
 
 auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false) {
@@ -76,10 +76,10 @@ auto create_service(const std::string &service_name, const rclcpp::QoS &qos = rc
     return g_state.staged_context.create_service<ServiceT>(service_name, qos);
 }
 
-template<typename Service> 
-auto create_client(typename ClientObs<Service>::Parent parent, 
+template<typename ServiceT> 
+auto create_client(typename ClientObs<ServiceT>::Parent parent, 
          const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-            return g_state.staged_context.create_client<Service>(parent, service_name, qos);
+            return g_state.staged_context.create_client<ServiceT>(parent, service_name, qos);
 }
 
  /// Now the filters

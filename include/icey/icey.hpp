@@ -302,10 +302,10 @@ struct Context {
         return param_obs;
     }
 
-    template<typename StateValue>
+    template<typename MessageT>
     auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
-        auto signal = std::make_shared<SubscribedState<StateValue>>(name, qos);
+        auto signal = std::make_shared<SubscribedState<MessageT>>(name, qos);
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(signal);
         return signal;
@@ -320,10 +320,10 @@ struct Context {
     }
 
     /// A writable signal, i.e. publisher
-    template<typename StateValue>
-    auto create_publisher(std::shared_ptr<Observable<StateValue>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    template<typename MessageT>
+    auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
-        auto state = std::make_shared<PublishableState<StateValue>>(parent, topic_name, qos);
+        auto state = std::make_shared<PublishableState<MessageT>>(parent, topic_name, qos);
         icey_dfg_graph_.add_vertex(state);
         return state;
     }
@@ -345,11 +345,11 @@ struct Context {
     }
 
     /// Add a service client
-    template<typename Service> 
-    auto create_client(typename ClientObs<Service>::Parent parent, 
+    template<typename ServiceT> 
+    auto create_client(typename ClientObs<ServiceT>::Parent parent, 
          const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
         assert_icey_was_not_initialized();
-        const auto client_attachable = std::make_shared<ClientObs<Service>>(parent, service_name, qos);
+        const auto client_attachable = std::make_shared<ClientObs<ServiceT>>(parent, service_name, qos);
         icey_dfg_graph_.add_vertex(client_attachable);
         return client_attachable;
     }
