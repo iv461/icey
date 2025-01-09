@@ -442,14 +442,19 @@ void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node, bool u
 
 /// A non-blocking spawn of a node in its own executor. Returns a future that waits in it's destructor until the executor is done.
 auto spawn_async(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
-    /// TODO call shutdown
-    return 1;
-    /*
-    return std::async(std::launch::async, [executor = rclcpp::executors::MultiThreadedExecutor(), node]() mutable {
+    /// TODO 
+    return std::async(std::launch::async, [node]() {
+        rclcpp::executors::MultiThreadedExecutor executor;
         executor.add_node(node);    
         executor.spin();
     });
-    */
+    
+}
+
+template<typename ... Futures>
+void spin_nodes(Futures && ...f) {
+    ([&]{ f.wait(); }(), ...);
+    rclcpp::shutdown();
 }
 
 /// API aliases 

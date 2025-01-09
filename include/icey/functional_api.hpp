@@ -56,8 +56,8 @@ GState g_state;
 auto &node = g_state.nodes;
 
 template<typename StateValue>
-auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
-    return g_state.staged_context.create_subscription<StateValue>(name, qos); 
+auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
+    return g_state.staged_context.create_subscription<StateValue>(topic_name, qos); 
 };
 
 auto create_transform_subscription(const std::string &frame1, const std::string &source_frame) {
@@ -103,7 +103,7 @@ void spawn(int argc, char **argv, std::string node_name) {
 
 /// non-blocking spawn of a node using the global state
 auto spawn_async(int argc, char **argv, std::string node_name) {
-    if(!rclcpp::contexts::get_global_default_context()) /// Create a context if it is the first spawn
+    if(!rclcpp::contexts::get_global_default_context()->is_valid()) /// Create a context if it is the first spawn
         rclcpp::init(argc, argv);
     return spawn_async(argc, argv, g_state.create_node(node_name));
 }

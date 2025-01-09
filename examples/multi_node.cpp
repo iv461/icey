@@ -19,16 +19,19 @@ int main(int argc, char **argv) {
         float_val.data = std::sin(ticks / 10.);
         return float_val;
     });
-    icey::create_publisher(sine_signal, "sine_generator"),
+    icey::create_publisher(sine_signal, "sine_generator");
 
 
     auto generator_node = icey::spawn_async(argc, argv, "generator_node"); 
 
-    auto received_sine_signal = icey::create_subscription("sine_generator");
+    auto received_sine_signal = icey::create_subscription<std_msgs::msg::Float32>("sine_generator");
 
     icey::then(received_sine_signal, [](const auto signal_value) {
         RCLCPP_INFO_STREAM(icey::node("receiver_node")->get_logger(), "Received the sine signal: " << signal_value.data);
     });
 
     auto receiver_node = icey::spawn_async(argc, argv, "receiver_node");
+
+
+    icey::spin_nodes(generator_node, receiver_node);
 }
