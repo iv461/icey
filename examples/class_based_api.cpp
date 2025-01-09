@@ -11,7 +11,7 @@ public:
     using Base =  icey::Node;
     MyNode(std::string name) : Base(name) {
 
-        auto my_string = create_signal<StringMsg>("my_string");
+        auto my_string = icey().create_subscription<StringMsg>("my_string");
 
         auto derived_value = then(my_string, [](const StringMsg &my_string_val) {
                 std::cout << "Computing .. " << std::endl;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
    rclcpp::init(argc, argv);
 
    auto node = std::make_shared<MyNode>("class_based_node_example");
-   
+
    icey::spawn(argc, argv, node);
    return 0;           
 }

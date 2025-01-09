@@ -64,11 +64,9 @@ public:
         
         /// Add notification for a single transform.
         template<typename CallbackT>
-        void add_subscription(std::string frame1, std::string frame2, CallbackT && callback) {
-            const auto call_user_cb = [this, frame1, frame2, cb=std::move(callback)](const TransformMsg & transform) {
-                cb(transform);
-            };
-            subscribed_transforms_.emplace_back(std::make_pair(frame1, frame2), std::nullopt, call_user_cb);
+        void add_subscription(std::string target_frame, std::string source_frame, CallbackT && callback) {
+            subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), 
+                std::nullopt, std::move(callback));
         }
 
     private:
@@ -92,11 +90,11 @@ public:
         /// This simply looks up the transform in the buffer at the latest stamp and checks if it changed with respect to the previously 
         /// received one. If the transform has changed, we know we have to notify
         std::optional<geometry_msgs::msg::TransformStamped> 
-            get_maybe_new_transform(std::string frame1, std::string frame2, 
+            get_maybe_new_transform(std::string target_frame, std::string source_frame, 
             std::optional<geometry_msgs::msg::TransformStamped> last_received_tf) {
                 std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
                 try {
-                    tf_msg = buffer_.lookupTransform(frame1, frame2, tf2::TimePointZero);
+                    tf_msg = buffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
                 } catch (tf2::TransformException & e) {
                     /// Simply ignore. Because we are requesting the latest transform in the buffer, the only exception we can get is that there is no transform available yet.
                     /// TODO duble-check if there is reallly nothing to do here.
@@ -216,9 +214,9 @@ public:
         
         /// Subscribe to a transform on tf between two frames
         template<typename CallbackT>
-        void add_tf_subscription(std::string frame1, std::string frame2, CallbackT && callback) {
+        void add_tf_subscription(std::string target_frame, std::string source_frame, CallbackT && callback) {
             add_tf_listener_if_needed();
-            tf2_listener_->add_subscription(frame1, frame2, std::move(callback));
+            tf2_listener_->add_subscription(target_frame, source_frame, std::move(callback));
         }
 
         

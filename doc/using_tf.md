@@ -55,8 +55,8 @@ But how do we interpolate the transforms in the buffer to get the transform for 
 This is where we use the `SynchExactTime` filter, which always outputs something since the transform signal can be interpolated: 
 
 ```cpp
-auto camera_feed = icey::create_signal("camera_front");
-auto cam_to_map_transfom = icey::create_transform_signal("camera_frame", "map");
+auto camera_feed = icey::create_subscription("camera_front");
+auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
 
 icey::SyncExactTime(camera_feed, cam_to_map_signal).then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map) {
 
@@ -95,8 +95,8 @@ Therefore, this limitation of having to know the frame names on subscription is 
 You can also use the TF-buffer directly inside callbacks since it offers useful transform-functions: 
 
 ```cpp
-auto camera_feed = icey::create_signal("camera_front");
-auto cam_to_map_transfom = icey::create_transform_signal("camera_frame", "map");
+auto camera_feed = icey::create_subscription("camera_front");
+auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
 
 icey::SyncExactTime(camera_feed, cam_to_map_transfom).then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map_tf) {
 

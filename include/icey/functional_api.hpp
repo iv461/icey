@@ -26,19 +26,21 @@ struct GState {
 };
 
 GState g_state;
+/// Enable API icey::node
+std::shared_ptr<Node> &node = g_state.node;
 
 template<typename StateValue>
-auto create_signal(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
-    return g_state.staged_context.create_signal<StateValue>(name, qos); 
+auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
+    return g_state.staged_context.create_subscription<StateValue>(name, qos); 
 };
 
-auto create_transform_signal(const std::string &frame1, const std::string &frame2) {
-    return g_state.staged_context.create_transform_signal(frame1, frame2);
+auto create_transform_subscription(const std::string &frame1, const std::string &source_frame) {
+    return g_state.staged_context.create_transform_subscription(frame1, source_frame);
 }
 
 template<typename StateValue>
-auto create_state(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
-    return g_state.staged_context.create_state<StateValue>(name, qos, max_frequency);
+auto create_publisher(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
+    return g_state.staged_context.create_publisher<StateValue>(name, qos, max_frequency);
 }
 
 auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false) {
@@ -67,6 +69,3 @@ void spawn(int argc, char **argv, std::string node_name) {
     g_state.create_node(node_name);
     spawn(argc, argv, g_state.node);
 }
-
-/// Enable API icey::node
-std::shared_ptr<Node> &node = g_state.node;

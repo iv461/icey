@@ -124,4 +124,6 @@ Add examples for common applications:
 
 # Missing features
 
-- Mutli-threading executor is not supported, everything is single-threaded. Therefore, not Callback-groups
+- Code is not thread-safe ! So using only mutually exclusive callback groups is mandatory. 
+- Memory strategy is not implemented, but could be easily, simply add the arguments everywhere 
+- LifecycleNodes are currently not supported. Please open an issue if this is a blocker for you.

@@ -1,13 +1,10 @@
 # ICEY 
 
-A new, simple interface library for the Robot Operating System (ROS). 
-In Icey, you can rapidly prototype Nodes in data-flow oriented manner: 
+A new, simple data-driven interface library for the Robot Operating System (ROS). 
+In Icey, you can rapidly prototype Nodes in data-flow oriented manner.
 
 # Features 
 
-The core idea is that in common robotics applications, almost everything published is either a state or a signal: The pose of the robot is a state, similar to the state of algorithms (i.e. "initialized"). Sensors on the other hand yield signals: Cameras, yaw rates etc.
-
-In Icey, signals roughly correspond to subscribers and states to publishers.
 The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
 
 [Example1](examples/simple.cpp)
@@ -16,7 +13,7 @@ The real power in ICEY is that you can declare computations, that will  be publi
 #include "std_msgs/msg/float32.hpp"
 
 int main(int argc, char **argv) {
-    auto current_velocity = icey::create_signal<std_msgs::msg::Float32>("current_velocity");
+    auto current_velocity = icey::create_subscription<std_msgs::msg::Float32>("current_velocity");
 
     auto result = icey::compute_based_on([](std_msgs::msg::Float32 new_velocity) {
             std_msgs::msg::Float32 out_msg;
@@ -31,7 +28,13 @@ int main(int argc, char **argv) {
 }
 ```
 
-You can build your own data-driven pipeline of computations.
+You can build your own data-driven pipeline of computations:
+
+
+The key in ICEY is to describe the data-flow declaratively and then 
+This not only simplifies the code, but prevents dead-lock bugs. ICEY automatically analyzes the data-flow graph and performs topological sorting, asserts no loops are present, and determines how many callback-groups are needed.
+
+
 
 TODO more 
 

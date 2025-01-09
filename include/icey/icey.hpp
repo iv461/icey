@@ -72,15 +72,19 @@ struct ObservableBase : public NodeAttachable, private boost::noncopyable {
 };
 
 /// An observable holding a value. Similar to a promise in JS.
-template<typename _StateValue>
+template<typename _StateValue, typename _ErrorValue = std::string>
 class Observable : public ObservableBase {
 public:
     using StateValue = _StateValue;
-    using Cb = std::function<void(const StateValue&)>;
+    using ErrorValue = _ErrorValue;
+    using Self = Observable<_StateValue, _ErrorValue>;
+
+    using OnResolve = std::function<void(const StateValue&)>;
+    using OnReject = std::function<void(const ErrorValue&)>;
 
     /// Register to be notified when smth. changes
-    void on_change(Cb && cb) {
-        notify_list_.emplace_back(cb); /// TODO rename to children ?
+    void on_change(OnResolve && cb) {
+        notify_list_.emplace_back(std::move(cb)); /// TODO rename to children ?
     }
 
     /// Notify all subcribers about the new value
@@ -103,25 +107,23 @@ public:
         value_ = new_value;
         notify();
     }
-    std::vector<Cb> notify_list_;
-    std::optional<StateValue> value_;
-};
 
-enum class FrequencyStrategy {
-    KEEP_LAST,
-    INTERPOLATE
+    void _reject(const ErrorValue &error) {
+        std::cout << "[OBservable] reject " << std::endl;
+        for(auto cb: reject_cbs_) cb(error);
+    }
+
+    std::vector<OnResolve> notify_list_;
+    std::vector<OnReject> reject_cbs_;
+
+    std::optional<StateValue> value_;
 };
 
 template<typename StateValue>
 class SubscribedState : public Observable<StateValue> {
 public:
-    using Base = Observable<StateValue>;
-    using Self = SubscribedState<StateValue>;
+    SubscribedState(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {}
 
-    static auto create(const std::string &name, const ROSAdapter::QoS &qos) {
-        return std::make_shared<Self>(name, qos);
-    }
-    
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         node_handle.add_subscription<StateValue>(name_, [this](std::shared_ptr<StateValue> new_value) {
             this->_set(*new_value);
@@ -129,8 +131,6 @@ public:
     }
 
     size_t attach_priority() const override { return 3; }
-
-    SubscribedState(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {}
 
     std::string name_; 
     ROSAdapter::QoS qos_;
@@ -141,27 +141,26 @@ public:
 /// TODO consider deriving from SubscribedObs
 struct TransformSignal : public Observable<geometry_msgs::msg::TransformStamped> {
 public:
-    using Base = Observable<geometry_msgs::msg::TransformStamped>;
-    using StateValue = Base::StateValue;
-    
-    static auto create(const std::string &frame1, const std::string &frame2) {
-        return std::make_shared<TransformSignal>(frame1, frame2);
+    static auto create(const std::string &target_frame, const std::string &source_frame) {
+        return std::make_shared<TransformSignal>(target_frame, source_frame);
     }
 
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
-        node_handle.add_tf_subscription(frame1_, frame2_, [this](const StateValue &new_value) {
+        node_handle.add_tf_subscription(target_frame_, source_frame_, [this](const 
+            geometry_msgs::msg::TransformStamped &new_value) {
             this->_set(new_value);
-        });
+        }
+        );
     }
 
     size_t attach_priority() const override { return 3; } /// TODO dup
 
     /// TODO make ctor private
-    TransformSignal(const std::string &frame1, const std::string &frame2) : 
-        frame1_(frame1), frame2_(frame2) {}
+    TransformSignal(const std::string &target_frame, const std::string &source_frame) : 
+        target_frame_(target_frame), source_frame_(source_frame) {}
 
-    std::string frame1_;
-    std::string frame2_;
+    std::string target_frame_;
+    std::string source_frame_;
   
 };
 
@@ -260,18 +259,25 @@ struct Context {
             throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
     }
 
+    template<typename ParameterT>
+    auto declare_parameter(const std::string &name, const ParameterT &default_value, 
+        const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
+            bool ignore_override = false) {
+
+    }
+
     template<typename StateValue>
-    auto create_signal(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
-        auto signal = SubscribedState<StateValue>::create(name, qos);
+        auto signal = std::make_shared<SubscribedState<StateValue>>(name, qos);
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(signal);
         return signal;
     }
 
-     auto create_transform_signal(const std::string &frame1, const std::string &frame2) {
+     auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
         assert_icey_was_not_initialized();
-        auto tf_signal = TransformSignal::create(frame1, frame2);
+        auto tf_signal = TransformSignal::create(target_frame, source_frame);
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(tf_signal);
         return tf_signal;
@@ -279,7 +285,7 @@ struct Context {
 
     /// A writable signal, i.e. publisher
     template<typename StateValue>
-    auto create_state(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
+    auto create_publisher(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(), std::optional<double> max_frequency = std::nullopt) {
         assert_icey_was_not_initialized();
         auto state = PublishableState<StateValue>::create();
         state->publish(name, qos, max_frequency);
@@ -367,7 +373,8 @@ public:
     using NodeBase::NodeBase;
     using Self = ROSNodeWithDFG;
 
-
+    Context &icey() { return *this; }
+    const Context &icey() const { return *this; }
     /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
     void icey_initialize() {
         if(icey_dfg_graph_.vertices.empty()) {

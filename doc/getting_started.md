@@ -5,6 +5,7 @@ TODO
 
 ## Declare and use parameters 
 
+ICEY tries as to make using parameters, as everything else, as simple as possible.
 Parameters are declared with:
 
 ```cpp
@@ -27,6 +28,18 @@ We can also constraint it to a set of values:
 ```cpp
 auto offset_param = icey::parameter<float>("offset", 0., true, icey::Set(0, 0.5, 1));
 ```
+
+The issue that parameters in ROS require much unnecessary boilerplate code is 
+widely known [1], and a couple of different solution were proposed.
+
+Some noteworthy are: 
+- [PickNick’s code-generation solution based on YAML files](https://github.com/PickNikRobotics/generate_parameter_library)
+- [AutoWare's JSON schemas](https://github.com/orgs/autowarefoundation/discussions/3433)
+
+These approaches alleviate in my opinion the problem greatly and are well scalable. 
+If there is interest in integrating any of these great libraries into ICEY, please open an GitHub issue.
+
+ICEY implements a simpler approch, not based on external files, more akin to the great `dynamic_reconfigure` package that was present in ROS 1. We will see in the future how the official ROS 2 API will evolve and which approach will eventually become the standard way.
 
 ### Using parameters: 
 
@@ -160,3 +173,8 @@ icey::create_timer(period_time, "sine_generator").then([&](const rclcpp::Timer &
 ### Conditional publishing 
 
 TODO it is important we support conditional publishing, for example debug publishers based on a parameter.
+
+
+# References 
+
+- [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
