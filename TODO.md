@@ -1,6 +1,6 @@
 # TODO 
 
-### Must-have  for 0.1
+## Must-have  for 0.1
 
 Sorted by decreasing priority. 
 
@@ -15,8 +15,12 @@ Sorted by decreasing priority.
 
 - [] Unit-tests testing the node
 
+## Error-handling 
+
 - [ ] Forbid subscribing to the same topic that is published by the same node 
 - [ ] Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
+
+## Other nice-to-have features
 
 - [ ] .catch() promise fo TF buffer, would be useful to print the lookup error
 - [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport
@@ -34,6 +38,7 @@ Sorted by decreasing priority.
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs)
 - [ ] .then() as member
 - [ ] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
+- SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
 
 ## Documentation 
 

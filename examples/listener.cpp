@@ -6,7 +6,7 @@ using StringMsg = std_msgs::msg::String;
 
 int main(int argc, char **argv) {
 
-    auto my_string = icey::create_subscription<StringMsg>("my_string");
+    auto my_string = icey::create_subscription<StringMsg>("my_string", 1);
 
     auto derived_value = icey::then(my_string, [](const StringMsg &my_string_val) {
         std::cout << "Computing .. " << std::endl;

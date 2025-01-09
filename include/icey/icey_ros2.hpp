@@ -134,7 +134,7 @@ public:
         using TFId = std::pair<std::string, std::string>;
         /// A tf subctiption, the frames, last received transform, and the notify CB
         using SubTF = std::tuple < TFId, std::optional<TransformMsg>, NotifyCB >;
-        
+
         NodePtr node_; /// Stored for logging
         tf2::BufferCore & buffer_;
 
@@ -148,8 +148,26 @@ public:
     class Node : public rclcpp::Node {
     public:
         using Base = rclcpp::Node;
+        using ParameterUpdateCB = std::function<void(const rclcpp::Parameter&)>;
         
         Node(const std::string &name) : Base(name) {}
+
+        template<typename ParameterT, class CallbackT>
+        auto declare_parameter(const std::string &name, const std::optional<ParameterT> &default_value, 
+        CallbackT &&update_callback, const 
+            rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor 
+                = rcl_interfaces::msg::ParameterDescriptor(), 
+                    bool ignore_override = false) {
+            rclcpp::ParameterValue v = default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
+
+            auto param=
+                static_cast<Base&>(*this).declare_parameter
+                    (name, v, parameter_descriptor, ignore_override);
+            auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(this);
+            auto cb_handle = param_subscriber->add_parameter_callback(name, std::move(update_callback));
+            my_parameters_stuff_.emplace(name, std::make_pair(param_subscriber, cb_handle));
+            return param;
+        }
 
         template<typename Msg, typename F>
         void add_subscription(const std::string &topic, F && cb, const rclcpp::QoS & qos = DefaultQos()) {
@@ -239,7 +257,9 @@ public:
         }
 
         /// Do not force the user to do the bookkeeping itself: Do it instead automatically 
-        
+        std::map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>, 
+                std::shared_ptr<rclcpp::ParameterCallbackHandle>>> my_parameters_stuff_;
+
         std::vector<rclcpp::TimerBase::SharedPtr> my_timers_;
         std::map<std::string, std::any> my_subscribers_;
         std::map<std::string, std::any> my_publishers_;

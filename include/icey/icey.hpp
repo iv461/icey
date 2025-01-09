@@ -120,23 +120,42 @@ template<typename Value>
 class ParameterObservable : public Observable<Value> {
 public:
     using MaybeValue = std::optional<Value>;
-    ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value
-        ) : parameter_name_(parameter_name), default_value_(default_value) {
+    /// TODO FIX ARG DUP, capture hana sequence maybe in cb maybe
+    ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value,
+        const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor 
+                = rcl_interfaces::msg::ParameterDescriptor(), 
+                    bool ignore_override = false
+        ) : parameter_name_(parameter_name), default_value_(default_value), 
+            parameter_descriptor_(parameter_descriptor), ignore_override_(ignore_override) {
         this->attach_priority_ = 0;
+    }
+
+    /// Parameters are initialized always at the beginning, so it's we can provide getters for the value
+    const Value &get() const {
+            return *this->value_;
     }
 
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         if(icey_debug_print)
             std::cout << "[ParameterObservable] attach_to_node()" << std::endl;
-        /*
-        node_handle.declare_parameter<StateValue>(parameter_name_, [this](std::shared_ptr<StateValue> new_value) {
-            this->_set(*new_value);
-        }, qos_);
-        */
+    
+        node_handle.declare_parameter<Value>(parameter_name_, default_value_, 
+            [this](const rclcpp::Parameter &new_param) {
+                this->_set(new_param.get_value<Value>());
+        }, parameter_descriptor_, ignore_override_);
+        Value initial_value;
+        if(default_value_)
+            node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
+        else 
+            node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
+        this->_set(initial_value);
+    
     }
 
     std::string parameter_name_;
     MaybeValue default_value_;
+    rcl_interfaces::msg::ParameterDescriptor parameter_descriptor_;
+    bool ignore_override_;
 };
 
 template<typename StateValue>
@@ -298,12 +317,11 @@ struct Graph {
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
 struct Context {
     template<typename ParameterT>
-    auto declare_parameter(const std::string &name, const ParameterT &default_value, 
+    auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
             bool ignore_override = false) {
         assert_icey_was_not_initialized();
-        /// TODO 
-        auto param_obs = std::make_shared<ParameterObservable<ParameterT>>(name, default_value);
+        auto param_obs = std::make_shared<ParameterObservable<ParameterT>>(name, maybe_default_value, parameter_descriptor, ignore_override);
         icey_dfg_graph_.add_vertex(param_obs);
         return param_obs;
     }

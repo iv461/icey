@@ -53,6 +53,12 @@ GState g_state;
 /// Enable API icey::node
 auto &node = g_state.nodes;
 
+template<typename ParameterT>
+    auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
+        const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
+            bool ignore_override = false) {
+    return g_state.staged_context.declare_parameter<ParameterT>(name, maybe_default_value, parameter_descriptor, ignore_override);
+}
 template<typename MessageT>
 auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
     return g_state.staged_context.create_subscription<MessageT>(topic_name, qos); 
