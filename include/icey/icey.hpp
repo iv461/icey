@@ -401,17 +401,21 @@ public:
     
     Context &icey() { return *this; } /// Upcast to disambiguate calls 
 
-    /// TODO 
-    void analyze_graph() {
-        /// do_topological_sort_on_dfg_graph()
-        // assert_dfg_graph_is_acyclic() 
-    }    
+    size_t number_of_threads_required() const { return number_of_threads_required_; }
+
     /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
     void icey_initialize() {
         if(icey_dfg_graph_.vertices.empty()) {
             std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
             return;
         }
+        analyze_dfg();
+        attach_everything_to_node();
+        icey_was_initialized_ = true;
+    }
+
+protected:
+    void attach_everything_to_node() {
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
         std::sort(icey_dfg_graph_.vertices.begin(), icey_dfg_graph_.vertices.end(), 
@@ -422,14 +426,19 @@ public:
         for(auto &vertex : icey_dfg_graph_.vertices) {
             vertex.data->attach_to_node(*this); /// Attach
         }
-        
-        icey_was_initialized_ = true;
     }
+
+    /// TODO 
+    void analyze_dfg() {
+        /// do_topological_sort_on_dfg_graph()
+        // assert_dfg_graph_is_acyclic() 
+        /// analyze_dependencies() -> computes the number of threads needed
+    }    
+    size_t number_of_threads_required_{1}; /// The number of threads this needs so that it cannot deadlock. Depends on the number of sleepy vertices in the DFG.
 };
 
-/// Blocking spawn of an existing node. must call rclcpp::init() before this !
-/// Does decide which executor to call and creates the callback groups depending on the depencies in the DFG
-void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node, bool use_mt=true) {
+/// Blocking spawn of an existing node. 
+void spawn(std::shared_ptr<ROSAdapter::Node> node, bool use_mt=true) {
     if(use_mt) {
         rclcpp::executors::MultiThreadedExecutor executor;
         executor.add_node(node);
@@ -440,20 +449,14 @@ void spawn(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node, bool u
     rclcpp::shutdown();
 }
 
-/// A non-blocking spawn of a node in its own executor. Returns a future that waits in it's destructor until the executor is done.
-auto spawn_async(int argc, char **argv, std::shared_ptr<ROSAdapter::Node> node) {
-    /// TODO 
-    return std::async(std::launch::async, [node]() {
-        rclcpp::executors::MultiThreadedExecutor executor;
-        executor.add_node(node);    
-        executor.spin();
-    });
-    
-}
-
-template<typename ... Futures>
-void spin_nodes(Futures && ...f) {
-    ([&]{ f.wait(); }(), ...);
+void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
+    size_t sum_threads = 0;
+    for(const auto &node : nodes) sum_threads += node->number_of_threads_required();
+    /// This is how nodes should be composed according to ROS maintainer wjwwood: https://robotics.stackexchange.com/a/89767
+    /// He references https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), sum_threads);
+    for(const auto &node : nodes)  executor.add_node(node);
+    executor.spin();
     rclcpp::shutdown();
 }
 

@@ -27,7 +27,7 @@ public:
             float_val.data = std::sin(ticks / 10.);
             return float_val;
         });
-        
+
         icey::create_publisher(sine_signal, "sine_generator");
 
         /// Finally, create all the needed subsciptions, publications etc. for the ICEY-observables we just declared.
@@ -41,6 +41,6 @@ int main(int argc, char **argv) {
 
    auto node = std::make_shared<MyNode>("class_based_node_example");
 
-   icey::spawn(argc, argv, node);
+   icey::spawn(node);
    return 0;           
 }

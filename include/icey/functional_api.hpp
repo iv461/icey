@@ -7,16 +7,16 @@ struct MultiNodeWrap {
     std::unordered_map<std::string, std::shared_ptr<ROSNodeWithDFG>> nodes;
     std::shared_ptr<ROSNodeWithDFG> operator()(const std::string &node_name) {
         if (!nodes.count(node_name)) {
-            throw std::runtime_error("There is no node called '" + node_name + "'");
+            throw std::runtime_error("There is no node called '" + node_name + "', do you have a typo or did you forget to first call icey::spawn() ?");
         }
         return nodes.at(node_name);
     }
     Node *operator->() {
         //// Get the first node, assuming there is only one
         if(nodes.empty()) {
-            throw std::runtime_error("There were no nodes spawned");
+            throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
         } else if (nodes.size() != 1) {
-            throw std::runtime_error("More than one node was spawned, so you need to use icey::node(name) when accessing the node!");
+            throw std::runtime_error("More than one node was spawned, you need to use icey::node(name) when accessing the node");
         }
         return nodes.begin()->second.get();
     }
@@ -32,11 +32,9 @@ struct GState {
     auto create_node(const std::string &name) {
         nodes.nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));
         auto node = nodes.nodes.at(name);
-        /// TODO maybe copy base
-        node->icey_dfg_graph_ = staged_context.icey_dfg_graph_;
+        static_cast<Context&>(*node) = staged_context;
         node->icey_initialize();
-
-        /// After committing the changes, 
+        /// After committing the changes, clear them so that another node can be spawned
         staged_context.icey_dfg_graph_.vertices.clear();
         return node;
     }
@@ -60,8 +58,8 @@ auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &
     return g_state.staged_context.create_subscription<StateValue>(topic_name, qos); 
 };
 
-auto create_transform_subscription(const std::string &frame1, const std::string &source_frame) {
-    return g_state.staged_context.create_transform_subscription(frame1, source_frame);
+auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
+    return g_state.staged_context.create_transform_subscription(target_frame, source_frame);
 }
 
 template<typename StateValue>
@@ -97,15 +95,16 @@ auto then(Parent &parent, F && f) {
 
 /// Blocking spawn of a node using the global state
 void spawn(int argc, char **argv, std::string node_name) {
-    rclcpp::init(argc, argv);
-    return spawn(argc, argv, g_state.create_node(node_name));
-}
-
-/// non-blocking spawn of a node using the global state
-auto spawn_async(int argc, char **argv, std::string node_name) {
     if(!rclcpp::contexts::get_global_default_context()->is_valid()) /// Create a context if it is the first spawn
         rclcpp::init(argc, argv);
-    return spawn_async(argc, argv, g_state.create_node(node_name));
+    spawn(g_state.create_node(node_name));
+}
+
+/// Create a node from the staged global state. Clears the global state so that multiple nodes can be created
+auto create_node(int argc, char **argv, std::string node_name) {
+    if(!rclcpp::contexts::get_global_default_context()->is_valid()) /// Create a context if it is the first spawn
+        rclcpp::init(argc, argv);
+    return g_state.create_node(node_name); 
 }
 
 }

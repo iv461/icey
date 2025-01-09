@@ -21,8 +21,7 @@ int main(int argc, char **argv) {
     });
     icey::create_publisher(sine_signal, "sine_generator");
 
-
-    auto generator_node = icey::spawn_async(argc, argv, "generator_node"); 
+    auto generator_node = icey::create_node(argc, argv, "generator_node"); 
 
     auto received_sine_signal = icey::create_subscription<std_msgs::msg::Float32>("sine_generator");
 
@@ -30,8 +29,7 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node("receiver_node")->get_logger(), "Received the sine signal: " << signal_value.data);
     });
 
-    auto receiver_node = icey::spawn_async(argc, argv, "receiver_node");
+    auto receiver_node = icey::create_node(argc, argv, "receiver_node");
 
-
-    icey::spin_nodes(generator_node, receiver_node);
+    icey::spin_nodes({generator_node, receiver_node});
 }
