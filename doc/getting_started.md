@@ -89,7 +89,7 @@ icey::spawn(argc, argv, "onnx_node").cleanup([]() {
 ```
 
 ```cpp
-auto my_timer = icey::create_timer(100ms, "my_timer1");
+auto my_timer = icey::create_timer(100ms);
 ```
 
 
@@ -107,17 +107,17 @@ Other use cases for this API are if you need to spawn multiple nodes or do not w
 Timers are also signals:
 
 ```cpp
-auto my_timer = icey::create_timer(100ms, "my_timer1");
+auto my_timer = icey::create_timer(100ms);
 ```
 
 You can think of them as sources similar to subscribers but with no information, publishing periodically. 
 We can easily register a callback and use the timer like you usually would: 
 
 ```cpp
-auto my_timer = icey::create_timer(100ms, "my_timer1");
+auto my_timer = icey::create_timer(100ms);
 
-my_timer.then([](const rclcpp::Timer &timer) {
-    /// Do work, implement one-off timer by cancelling it here with timer.cancel() etc.
+icey::then(my_timer, [](size_t ticks) {
+    /// Do work
 });
 ```
 
@@ -125,21 +125,32 @@ my_timer.then([](const rclcpp::Timer &timer) {
 
 The power in ICEY comes from the fact that timers can be used as signal generators. For example, you can easily implement your own sine signal generator and publish it: 
 
-TODO check formula, polish API, publish message etc.
 
 ```cpp
-
 auto period_time = 100ms;
-double frequency = 10;
+double frequency = 10; // Hz, i.e. 1/s
 double amplitude = 2.;
-size_t period_counter = 0;
-icey::create_timer(period_time, "sine_generator").then([&](const rclcpp::Timer &timer) {
-    double y = amplitude * std::sin((period_time * period_counter) / frequency * 2 * M_PI);
-    period_counter++;
-    return y;
-}).publish("sine_generator");
+
+auto timer_signal = icey::create_timer(period_time);
+
+/// The timer can drive multiple callbacks, first a simple print:
+icey::then(timer_signal, [](size_t ticks) {
+    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
+});
+
+/// And another computation for the timer
+auto sine_signal = icey::then(timer_signal, [&](size_t ticks) {
+    std_msgs::msg::Float32 float_val;
+    double period_time_s = std::chrono::duration_cast<std::chrono::seconds>(period_time).count();
+    double y = amplitude * std::sin((period_time_s * ticks) / frequency * 2 * M_PI);
+    float_val.data = y;
+    return float_val;
+});
+
+icey::create_publisher(sine_signal, "sine_generator");
 ```
 
+The signature of `create_timer` is `icey::create_timer(period_time, <use_wall_time>, <is_one_off_timer>)`, one-off timers can be implemented therefore as well.
 
 ## Using timers as reference signal for synchronization 
 

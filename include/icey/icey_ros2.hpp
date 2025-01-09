@@ -184,11 +184,13 @@ public:
         }
 
         template<typename CallbackT>
-        void add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&cb) {
-            if(use_wall_time) 
-                my_timers_.emplace_back(create_wall_timer(time_interval, std::move(cb)));
-            else 
-                my_timers_.emplace_back(this->create_wall_timer(time_interval, std::move(cb)));
+        auto add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&cb) {
+            rclcpp::TimerBase::SharedPtr timer = 
+                use_wall_time ? create_wall_timer(time_interval, std::move(cb)) : 
+                                create_wall_timer(time_interval, std::move(cb)); /// TODO no normal timer in humble
+            
+            my_timers_.push_back(timer);        
+            return timer;
         }
 
         template<typename ServiceT, typename CallbackT>

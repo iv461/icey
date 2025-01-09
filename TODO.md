@@ -7,7 +7,7 @@
 - Forbid and detect creating new states in callback
 - Forbid subscribing to the same topic that is published by the same node 
 - Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
-- Prevent getting the value from an observable, i.e. from the object SubscribedState,  it is read-only
+- Prevent getting the value from an observable, i.e. from the object SubscriptionObservable,  it is read-only
 - Disallow graph change after node is created. Detect it. Provide instead "Node enable" functionality if someone wants to disable a publisher/subscriber
 - After we have a DAG, we may add topological sorting. But at first we need a useEffect hook that translates to a timer, otherwise we are not able to make the programm run w/o external events 
 - Really think about memory leaks, they should not be possible !
@@ -48,7 +48,7 @@
 * A strategy chooses between "last message" or interpolate
 * in case of interpolate, the queue must be long, in case of last message, the queue can be 1
 
-- Pass timer to the callback to be able to implement one-off-timer (https://github.com/ros2/demos/blob/rolling/demo_nodes_cpp/src/timers/one_off_timer.cpp)
+- [x] Pass timer to the callback to be able to implement one-off-timer (https://github.com/ros2/demos/blob/rolling/demo_nodes_cpp/src/timers/one_off_timer.cpp)
 
 - Rename to subscriber and publisher
 - create_publisher accepting input as argument, consistent with service client API 

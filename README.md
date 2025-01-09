@@ -60,7 +60,7 @@ You can always listen on changes of a state, like a subscriber callback:
 
 ```cpp
 
-auto max_velocity_parameter = icey::SubscribedState<float>("maximum_velocity");
+auto max_velocity_parameter = icey::SubscriptionObservable<float>("maximum_velocity");
 max_velocity_parameter.on_change([](const auto &new_value) {
     ...
 });

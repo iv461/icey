@@ -67,8 +67,8 @@ auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::s
     return g_state.staged_context.create_publisher<MessageT>(parent, topic_name, qos);
 }
 
-auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false) {
-    return g_state.staged_context.create_timer(interval, use_wall_time);
+auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
+    return g_state.staged_context.create_timer(interval, use_wall_time, is_one_off_timer);
 }
 
 template<typename ServiceT> 
@@ -77,7 +77,7 @@ auto create_service(const std::string &service_name, const rclcpp::QoS &qos = rc
 }
 
 template<typename ServiceT> 
-auto create_client(typename ClientObs<ServiceT>::Parent parent, 
+auto create_client(typename ClientObservable<ServiceT>::Parent parent, 
          const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
             return g_state.staged_context.create_client<ServiceT>(parent, service_name, qos);
 }

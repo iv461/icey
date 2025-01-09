@@ -50,7 +50,7 @@ class ProxiedMsg(MutableState):
         ... 
 
 
-class SubscribedState(ReadableState):
+class SubscriptionObservable(ReadableState):
     # State that is stored somewhere else in a node
     def __init__(self, name: str, state_content: type):
         super(ReadableState).__init__()
@@ -104,7 +104,7 @@ def compute_based_on(F, *args):
 def example1():
 
     # allow for plumbing: 
-    current_pose = SubscribedState("car_pose", states.TF) # subscribes automatically on /tf 
+    current_pose = SubscriptionObservable("car_pose", states.TF) # subscribes automatically on /tf 
 
     #target_vel = 100 if (current_pose.x - 100) < 100 else 0
     current_velocity = PrivateState("current_velocity", float)

@@ -44,10 +44,17 @@ These patterns are found everywhere in the Nav2 stack for example when searching
 In ICEY, you subscribe to a transform between two frames and use this as a signal:
 
 ```cpp
-auto cam_to_map_signal = icey::create_transform("camera_frame", "map");
-cam_to_map.then([](const geometry_msgs::TransfromStamped&cam_to_map) {
-    /// Process updated transform
-});
+auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
+auto result = icey::then(map_base_link_tf, [](const geometry_msgs::msg::TransformStamped &new_transform) {
+        std_msgs::msg::Float32 out_msg;
+        /// TODO get yaw
+        auto cos_theta_half = new_transform.transform.rotation.z;
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Received a new transform, cos_theta_half was: " << cos_theta_half);
+        return out_msg;
+    }
+    );    
+    
+icey::create_publisher(result, "new_velocity");
 ```
 
 But how do we interpolate the transforms in the buffer to get the transform for a given time ? 

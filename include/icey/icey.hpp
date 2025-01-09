@@ -111,10 +111,10 @@ public:
 };
 
 template<typename Value>
-class ParameterObs : public Observable<Value> {
+class ParameterObservable : public Observable<Value> {
 public:
     using MaybeValue = std::optional<Value>;
-    ParameterObs(const std::string &parameter_name, const MaybeValue &default_value
+    ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value
         ) : parameter_name_(parameter_name), default_value_(default_value) {
         //attach_priority_ = 0;
     }
@@ -132,9 +132,9 @@ public:
 };
 
 template<typename StateValue>
-class SubscribedState : public Observable<StateValue> {
+class SubscriptionObservable : public Observable<StateValue> {
 public:
-    SubscribedState(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {
+    SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {
         //attach_priority_ = 3;
     }
 
@@ -149,10 +149,10 @@ public:
 };
 
 
-/// A signal for subscribing to /tf and obtaining a transform.
-struct TransformSignal : public Observable<geometry_msgs::msg::TransformStamped> {
+/// A subscription for single transforms 
+struct TransformSubscriptionObservable : public Observable<geometry_msgs::msg::TransformStamped> {
 public:
-    TransformSignal(const std::string &target_frame, const std::string &source_frame) : 
+    TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) : 
          target_frame_(target_frame), source_frame_(source_frame) { 
             //attach_priority_ = 3;
             }
@@ -167,30 +167,33 @@ public:
     std::string source_frame_;
 };
 
-/// Timer signal, saves the number of ticks as the value
-struct TimerSignal: public Observable<size_t> {
-    TimerSignal(const ROSAdapter::Duration &interval, bool use_wall_time) : 
-        interval_(interval), use_wall_time_(use_wall_time) { 
+/// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to the callback
+struct TimerObservable: public Observable<size_t> {
+    TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) : 
+        interval_(interval), use_wall_time_(use_wall_time), is_one_off_timer_(is_one_off_timer) { 
             //attach_priority_ = 5;
             }
     
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {        
-        node_handle.add_timer(interval_, use_wall_time_, [this] () {
+        ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this] () {
             this->_set(value_ ? (*value_ + 1) : 0);
+            if(is_one_off_timer_)
+                ros_timer_->cancel();
         });
     }
-
+    rclcpp::TimerBase::SharedPtr ros_timer_;
     ROSAdapter::Duration interval_;
     bool use_wall_time_{false};
+    bool is_one_off_timer_{false};
 };
 
 /// A publishabe state, read-only
 template<typename StateValue>
-class PublishableState : public Observable<StateValue> {
+class PublisherObservable : public Observable<StateValue> {
 public:
     static_assert(rclcpp::is_ros_compatible_type<StateValue>::value, "A publisher must use a publishable ROS message (no primitive types are possible)");
 
-    PublishableState(std::shared_ptr<Observable<StateValue>> parent, const std::string &name, const ROSAdapter::QoS qos=ROS2Adapter::DefaultQos()) : 
+    PublisherObservable(std::shared_ptr<Observable<StateValue>> parent, const std::string &name, const ROSAdapter::QoS qos=ROS2Adapter::DefaultQos()) : 
         parent_(parent), name_(name), qos_(qos) { 
             //attach_priority_ = 1; 
         }
@@ -211,12 +214,12 @@ public:
 
 /// A service observable, storing 
 template<typename _ServiceT>
-struct ServiceObs : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>, 
+struct ServiceObservable : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>, 
     std::shared_ptr<typename _ServiceT::Response>>> {
     using Request = std::shared_ptr<typename _ServiceT::Request>;
     using Response = std::shared_ptr<typename _ServiceT::Response>;
 
-    ServiceObs(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
+    ServiceObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
         service_name_(service_name), qos_(qos) { 
             //attach_priority_ = 2; 
             }
@@ -231,12 +234,12 @@ struct ServiceObs : public Observable<std::pair<std::shared_ptr<typename _Servic
 };
 
 template<typename _ServiceT>
-struct ClientObs : public Observable<typename _ServiceT::Response> {
+struct ClientObservable : public Observable<typename _ServiceT::Response> {
     using Request = typename _ServiceT::Request;
     using Response = typename _ServiceT::Request;
     using Parent = std::shared_ptr<Observable<  std::shared_ptr<Request> >>;
 
-    ClientObs(Parent parent, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
+    ClientObservable(Parent parent, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
         parent_(parent), service_name_(service_name), qos_(qos) { 
             //attach_priority_ = 4; 
             }
@@ -297,7 +300,7 @@ struct Context {
             bool ignore_override = false) {
         assert_icey_was_not_initialized();
         /// TODO 
-        auto param_obs = std::make_shared<ParameterObs<ParameterT>>(name, default_value);
+        auto param_obs = std::make_shared<ParameterObservable<ParameterT>>(name, default_value);
         icey_dfg_graph_.add_vertex(param_obs);
         return param_obs;
     }
@@ -305,7 +308,7 @@ struct Context {
     template<typename MessageT>
     auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
-        auto signal = std::make_shared<SubscribedState<MessageT>>(name, qos);
+        auto signal = std::make_shared<SubscriptionObservable<MessageT>>(name, qos);
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(signal);
         return signal;
@@ -313,7 +316,7 @@ struct Context {
 
      auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
         assert_icey_was_not_initialized();
-        auto tf_signal = std::make_shared<TransformSignal>(target_frame, source_frame);
+        auto tf_signal = std::make_shared<TransformSubscriptionObservable>(target_frame, source_frame);
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(tf_signal);
         return tf_signal;
@@ -323,14 +326,14 @@ struct Context {
     template<typename MessageT>
     auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
-        auto state = std::make_shared<PublishableState<MessageT>>(parent, topic_name, qos);
+        auto state = std::make_shared<PublisherObservable<MessageT>>(parent, topic_name, qos);
         icey_dfg_graph_.add_vertex(state);
         return state;
     }
 
-    auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false) {
+    auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
         assert_icey_was_not_initialized();
-        auto observable = std::make_shared<TimerSignal>(interval, use_wall_time);
+        auto observable = std::make_shared<TimerObservable>(interval, use_wall_time, is_one_off_timer);
         icey_dfg_graph_.add_vertex(observable);
         return observable;
     }
@@ -339,17 +342,17 @@ struct Context {
     template<typename ServiceT> 
     auto create_service(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
         assert_icey_was_not_initialized();
-        const auto service_attachable = std::make_shared<ServiceObs<ServiceT>>(service_name, qos);
+        const auto service_attachable = std::make_shared<ServiceObservable<ServiceT>>(service_name, qos);
         icey_dfg_graph_.add_vertex(service_attachable);
         return service_attachable;
     }
 
     /// Add a service client
     template<typename ServiceT> 
-    auto create_client(typename ClientObs<ServiceT>::Parent parent, 
+    auto create_client(typename ClientObservable<ServiceT>::Parent parent, 
          const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
         assert_icey_was_not_initialized();
-        const auto client_attachable = std::make_shared<ClientObs<ServiceT>>(parent, service_name, qos);
+        const auto client_attachable = std::make_shared<ClientObservable<ServiceT>>(parent, service_name, qos);
         icey_dfg_graph_.add_vertex(client_attachable);
         return client_attachable;
     }
@@ -360,7 +363,7 @@ struct Context {
     auto fuse(Parents && ... parents) { 
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
-        auto resulting_observable = std::make_shared<PublishableState<ReturnType>>;  /// A result is rhs, i.e. read-only
+        auto resulting_observable = std::make_shared<PublisherObservable<ReturnType>>;  /// A result is rhs, i.e. read-only
         icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index...}); /// And add to the graph
         ([&]{ 
             const auto f_continued = [resulting_observable](auto&&... parents) {
@@ -451,11 +454,13 @@ void spawn(std::shared_ptr<ROSAdapter::Node> node, bool use_mt=true) {
 
 void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
     size_t sum_threads = 0;
-    for(const auto &node : nodes) sum_threads += node->number_of_threads_required();
+    for(const auto &node : nodes) 
+        sum_threads += node->number_of_threads_required();
     /// This is how nodes should be composed according to ROS maintainer wjwwood: https://robotics.stackexchange.com/a/89767
     /// He references https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
     rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), sum_threads);
-    for(const auto &node : nodes)  executor.add_node(node);
+    for(const auto &node : nodes)  
+        executor.add_node(node);
     executor.spin();
     rclcpp::shutdown();
 }
