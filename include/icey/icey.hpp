@@ -54,7 +54,10 @@ struct remove_optional { using type = T;};
 template<class T>
 struct remove_optional<std::optional<T>> { using type = T; };
 
-
+template<typename Head, typename...Tail>
+constexpr bool all_same(const std::tuple<Head,Tail...>&){
+    return (std::is_same_v<Head,Tail> && ...);
+}
 
 template<typename Func, typename Tuple>
 auto call_if_tuple(Func&& func, Tuple&& tuple) {
@@ -416,6 +419,26 @@ struct Context {
         }(), ...);
         return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
+
+    /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
+    template<typename... Parents>
+    auto serialize(Parents && ... parents) { 
+        /// DODO all types are the same
+        /// Remote shared_ptr TODO write proper remove_shared_ptr type trait for this
+        using FirstType = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
+        using ReturnType = typename std::remove_reference_t<FirstType>::StateValue;
+        auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
+        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index...}); /// And add to the graph
+        ([&]{ 
+            const auto cb = [resulting_observable](const auto &new_val) {
+                resulting_observable->_set(new_val);
+            };
+            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
+            parents->on_change(cb);
+        }(), ...);
+        return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
+    }
+
 
     /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
     /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters

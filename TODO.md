@@ -11,6 +11,7 @@ Sorted by decreasing priority.
 - [X] Publishing multiple outputs, i.e. single input, multiple output -> solvable with multiple thens
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
+- [X] Multiple-input single output-> serialize filter for modeling calling publisher from multiple places
 - [ ] Promise-API: .catch(), finally mostly important for timeout detection of service call 
 
 - [] Unit-tests testing the node
@@ -24,7 +25,7 @@ Sorted by decreasing priority.
 ## Other nice-to-have features
 
 - [ ] .catch() promise fo TF buffer, would be useful to print the lookup error
-- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport
+- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 - [ ] Support Single reference synchronozation (like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers)
 - [ ] Support ApproxTime synchronization
 - [ ] [functional API] `onCleanup`, `beforeInit()` and `afterInit` function to be able to call cleanup of external libraries , e.g. ONNX runtime (that would normally be the Node's destructor)

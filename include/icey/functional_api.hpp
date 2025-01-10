@@ -94,6 +94,11 @@ auto fuse(Parents && ... parents) {
     return g_state.staged_context.fuse(std::forward<Parents>(parents)...);
 }
 
+template<typename... Parents>
+auto serialize(Parents && ... parents) { 
+    return g_state.staged_context.serialize(std::forward<Parents>(parents)...);
+}
+
 template<typename Parent, typename F>
 auto then(Parent &parent, F && f) {
     return g_state.staged_context.then(parent, std::move(f));
