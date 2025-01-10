@@ -161,6 +161,7 @@ public:
         return this->value_.value();
     }
 
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         if(icey_debug_print)
             std::cout << "[ParameterObservable] attach_to_node()" << std::endl;
@@ -176,8 +177,6 @@ public:
             this->_set(initial_value);
         }
     }
-
-private:
     std::string parameter_name_;
     MaybeValue default_value_;
     rcl_interfaces::msg::ParameterDescriptor parameter_descriptor_;
@@ -191,6 +190,7 @@ public:
         this->attach_priority_ = 3;
     }
 
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         if(icey_debug_print)
             std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
@@ -212,6 +212,7 @@ public:
             this->attach_priority_ = 3;
             }
 
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
@@ -231,6 +232,7 @@ struct TimerObservable: public Observable<size_t> {
             this->attach_priority_ = 5;
             }
     
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {      
         if(icey_debug_print)
             std::cout << "[TimerObservable] attach_to_node()" << std::endl;  
@@ -256,6 +258,7 @@ public:
         this->attach_priority_ = 1; 
     }
 
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
@@ -263,13 +266,13 @@ public:
         this->on_change([publish](const auto &new_value) { publish(new_value); });
     }
 
-private:    
     std::string topic_name_;
     ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
 };
 
 // A transform broadcaster observable 
 struct TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
@@ -289,6 +292,7 @@ struct ServiceObservable : public Observable<std::pair<std::shared_ptr<typename 
         service_name_(service_name), qos_(qos) {  this->attach_priority_ = 2; 
     }
 
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[ServiceObservable] attach_to_node()" << std::endl;
@@ -296,8 +300,6 @@ struct ServiceObservable : public Observable<std::pair<std::shared_ptr<typename 
             this->_set(std::make_pair(request, response));
          }, qos_);
     }
-
-private:
     std::string service_name_;
     ROSAdapter::QoS qos_;
 };
