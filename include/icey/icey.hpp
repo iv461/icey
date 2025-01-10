@@ -90,7 +90,7 @@ public:
 /// But how do we achive transparently copying around only references ?
 class ObservableBase : public NodeAttachable, private boost::noncopyable {
 public:
-    size_t index{0}; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here because of cyclic dependency
+    std::optional<size_t> index; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here because of cyclic dependency. None if this observable was not attached to the graph yet.
 };
 
 class Context;
@@ -153,7 +153,12 @@ public:
 
     /// Parameters are initialized always at the beginning, so we can provide getters for the value. Note that has_value() must be checked beforehand since if no default value was provided, this function will throw std::bad_optional_access()
     const Value &get() const {
-            return this->value_.value();
+        /// TODO implement cleaner, improve error message
+        /// TODO do we want to allow this if the user provided a default value ? I think not, since it adds inconcistency to the otherwise inaccessible Promises
+        if(!this->value_.has_value()) { /// First, check if this observable was accessed before spawning. This is needed to provide a nice  error message since confusing syncronous code will likely happen for users.
+            throw std::runtime_error("[parameter '" + parameter_name_ + "']You cannot access the parameters before spawning the node, you can only access them inside callbacks (which are triggered after calling icey::spawn())");
+        }
+        return this->value_.value();
     }
 
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
@@ -172,6 +177,7 @@ public:
         }
     }
 
+private:
     std::string parameter_name_;
     MaybeValue default_value_;
     rcl_interfaces::msg::ParameterDescriptor parameter_descriptor_;
@@ -378,7 +384,7 @@ struct Context {
     auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
         auto publisher_observable = std::make_shared<PublisherObservable<MessageT>>(topic_name, qos);
-        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index});
+        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
         icey_connect(parent, publisher_observable);
         return publisher_observable;
     }
@@ -386,7 +392,7 @@ struct Context {
     auto create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
         assert_icey_was_not_initialized();
         auto publisher_observable = std::make_shared<TransformPublisherObservable>();
-        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index});
+        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
         icey_connect(parent, publisher_observable); /// This would be done by publish
         return publisher_observable;
     }
@@ -413,7 +419,7 @@ struct Context {
          const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
         assert_icey_was_not_initialized();
         const auto client_attachable = std::make_shared<ClientObservable<ServiceT>>(service_name, qos);
-        icey_dfg_graph_.add_vertex_with_parents(client_attachable, {parent->index});
+        icey_dfg_graph_.add_vertex_with_parents(client_attachable, {parent->index.value()});
         icey_connect(parent, client_attachable); /// Connect parent with child so that when the parent changes, the new value is propagated to the child
         return client_attachable;
     }
@@ -425,7 +431,7 @@ struct Context {
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index...}); /// And add to the graph
+        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
         ([&]{ 
             const auto f_continued = [resulting_observable](auto&&... parents) {
                 auto all_argunments_arrived = (parents->value_ && ... && true);
@@ -446,7 +452,7 @@ struct Context {
         using FirstType = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ReturnType = typename std::remove_reference_t<FirstType>::StateValue;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index...}); /// And add to the graph
+        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
         ([&]{ 
             const auto cb = [resulting_observable](const auto &new_val) {
                 resulting_observable->_set(new_val);
@@ -463,7 +469,7 @@ struct Context {
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<Reference, typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {reference, parents->index...}); /// And add to the graph
+        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {reference, parents->index.value()...}); /// And add to the graph
         const auto f_continued = [resulting_observable, reference](auto&&... parents) {
             auto all_argunments_arrived = (parents->value_ && ... && true);
             if(all_argunments_arrived) 
@@ -487,7 +493,7 @@ struct Context {
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
             auto resulting_observable = std::make_shared<Observable<ObsValue>>();
-            icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
+            icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index.value()}); /// And add to the graph
 
             parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
                 auto ret = call_if_tuple(f, new_value);
