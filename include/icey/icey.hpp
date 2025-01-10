@@ -37,6 +37,25 @@ constexpr bool is_tuple_v = is_tuple<T>::value;
 template<typename T>
 constexpr bool is_pair_v = is_pair<T>::value;
 
+
+template<class T>
+struct is_optional : std::false_type {};
+
+template<class T>
+struct is_optional<std::optional<T>> : std::true_type {};
+
+template<class T>
+constexpr bool is_optional_v = is_optional<T>::value;
+
+
+template<class T>
+struct remove_optional { using type = T;};
+
+template<class T>
+struct remove_optional<std::optional<T>> { using type = T; };
+
+
+
 template<typename Func, typename Tuple>
 auto call_if_tuple(Func&& func, Tuple&& tuple) {
     if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {
@@ -406,11 +425,19 @@ struct Context {
                 call_if_tuple(f, new_value);
             });
         } else {
-            auto resulting_observable = std::make_shared<Observable<ReturnType>>();
+            using ObsValue = typename remove_optional<ReturnType>::type;
+            auto resulting_observable = std::make_shared<Observable<ObsValue>>();
             icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index}); /// And add to the graph
 
             parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
-                resulting_observable->_set(call_if_tuple(f, new_value));
+                auto ret = call_if_tuple(f, new_value);
+                if constexpr (is_optional_v<ReturnType>) {
+                    if(ret) {
+                        resulting_observable->_set(*ret);
+                    }
+                } else {
+                    resulting_observable->_set(ret);
+                }
             });
             return resulting_observable;
         }

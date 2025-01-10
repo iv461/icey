@@ -13,23 +13,35 @@ int main(int argc, char **argv) {
     auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
     auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
 
+    /// Receive parameter updates
     icey::then(amplitude, [](double new_value) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
     });
 
     auto timer_signal = icey::create_timer(period_time);
 
+    /// Receive timer updates
     icey::then(timer_signal, [](size_t ticks) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
     });
+
+    /// Optional publishing
+    auto rectangle_sig = icey::then(timer_signal, [](size_t ticks) { 
+        std::optional<std_msgs::msg::Float32> result; 
+        if(ticks % 10 == 0) { /// Publish with 1/10th of the frequency
+            result = std_msgs::msg::Float32();
+            result->data = (ticks % 20 == 0) ? 1.f : 0.f;
+        }
+        
+        return result;        
+    });
+    icey::create_publisher(rectangle_sig, "rectangle_signal");
 
     /// Add another computation for the timer
     auto sine_signal = icey::then(timer_signal, [&](size_t ticks) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
-        /// We can .get() parameters since they are always initialized first, so at this point they are alreay there
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Frequency is: " << frequency->get());
-        
+        /// We can .get() parameters since they are always initialized first, so at this point they are alreay there        
         double y = amplitude->get() * std::sin((period_time_s * ticks) / frequency->get() * 2 * M_PI);
         float_val.data = y;
         return float_val;

@@ -3,6 +3,7 @@ TODO
 
 # Parameters 
 
+TODO update 
 ## Declare and use parameters 
 
 ICEY tries as to make using parameters, as everything else, as simple as possible.
@@ -77,21 +78,6 @@ In ICEY, everything that you spawsn is managed internally, you do not have to st
 # Managing state 
 
 We understand that in robotics applications, we need to keep state somewhere: initialized algorithm libraries etc. Generally, you should try to use only state that is necessary, and pay attention to not store state redundantly. With that said, in ICEY the callbacks can always access variables from the outside, they do not need to be pure functions. This means, you simply capture your state in the lambda variable:
-
-## Cleaning up the node 
-
-In ICEY, you can declare a clean-up function that is executed when the node is destruced, very similar to a custom destructor: 
-
-```cpp
-icey::spawn(argc, argv, "onnx_node").cleanup([]() {
-        /// Cleanup ONNX
-}); /// Create and start node
-```
-
-```cpp
-auto my_timer = icey::create_timer(100ms);
-```
-
 
 # Using classes
 
@@ -176,10 +162,46 @@ icey::create_timer(period_time, "sine_generator").then([&](const rclcpp::Timer &
 ```
 
 
-### Conditional publishing 
+# Stopping the data flow: optional return
 
-TODO it is important we support conditional publishing, for example debug publishers based on a parameter.
+One common control flow is to return early in a callback:
 
+```cpp
+void VelocitySmoother::inputCommandCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
+{
+  // If message contains NaN or Inf, ignore
+  if (!nav2_util::validateTwist(*msg)) {
+    RCLCPP_ERROR(get_logger(), "Velocity message contains NaNs or Infs! Ignoring as invalid!");
+    return;
+  }
+  
+  /// Otherwise, continue to do stuff
+  double result = doCalculation(msg);
+}
+```
+
+In ICEY, we can achieve the exact same by returning an `std::optional<T>`: If there is value, it is propagated further. If not, then the next stage won't be called.
+
+```cpp
+auto twist_signal = icey::create_subscription<geometry_msgs::msg::Twist>("twist_input");
+
+auto twist_calculation_result = icey::then(twist_signal, [] (const geometry_msgs::msg::Twist::SharedPtr msg) {
+  std::optional<double> maybe_result;
+  // If message contains NaN or Inf, ignore
+  if (!nav2_util::validateTwist(*msg)) {
+    RCLCPP_ERROR(get_logger(), "Velocity message contains NaNs or Infs! Ignoring as invalid!");
+    return maybe_result;
+  }
+  
+  /// Otherwise, continue to do stuff
+  maybe_result = doCalculation(msg);
+  return maybe_result;
+});
+
+icey::then(twist_calculation_result, [](double result) {
+    /// This will only be called if the previous call returned something.
+});
+```
 
 # References 
 
