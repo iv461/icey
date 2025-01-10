@@ -312,7 +312,8 @@ struct ClientObservable : public Observable<typename _ServiceT::Response> {
 
     ClientObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
         service_name_(service_name), qos_(qos) { this->attach_priority_ = 4; }
-
+    
+protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[ClientObservable] attach_to_node()" << std::endl;
