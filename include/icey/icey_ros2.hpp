@@ -15,6 +15,7 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/transform_listener.h"
+#include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/message_filter.h"
 
 #include "rclcpp/rclcpp.hpp"
@@ -230,8 +231,16 @@ public:
             tf2_listener_->add_subscription(target_frame, source_frame, std::move(callback));
         }
 
+        auto add_tf_broadcaster_if_needed() {
+            if(!tf_broadcaster_)
+                  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+            const auto publish = [this](const geometry_msgs::msg::TransformStamped &msg) {
+                tf_broadcaster_->sendTransform(msg);
+            };
+            return publish;
+        }
         
-        std::unique_ptr<tf2_ros::Buffer> tf2_buffer_;
+        std::unique_ptr<tf2_ros::Buffer> tf2_buffer_; /// Public for using other functions
 
     private:
         
@@ -270,6 +279,9 @@ public:
 
         /// TF stuff
         std::unique_ptr<TFListener> tf2_listener_;
+        /// This is a simple wrapper around a publisher, there is really nothing intereseting under the hood of tf2_ros::TransformBroadcaster
+        std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+          
     };
 
     using NodeHandle = Node;

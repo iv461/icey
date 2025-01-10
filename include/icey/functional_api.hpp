@@ -82,6 +82,10 @@ auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::s
     return g_state.get_context().create_publisher<MessageT>(parent, topic_name, qos);
 }
 
+auto create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent){
+    return g_state.get_context().create_transform_publisher(parent);
+}
+
 auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
     return g_state.get_context().create_timer(interval, use_wall_time, is_one_off_timer);
 }

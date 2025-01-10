@@ -8,7 +8,7 @@ Sorted by decreasing priority.
 - [ ] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
 - [X] Allow returning `None` to emulate early return control-flow, otherwise we cannot stop data-pipeline. This is very common, i.e. checking message validity
 - [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless !
-- [ ] TF Broadcaster, incl. support for static
+- [X] TF Broadcaster
 - [X] Publishing multiple outputs, i.e. single input, multiple output -> solvable with multiple thens
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling)
@@ -38,6 +38,7 @@ Sorted by decreasing priority.
 - [ ] A way to enable/disable the node 
 - [ ] Maybe Simulink-style blocks, i.e. constant, step, function etc.
 - [ ] tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
+- [ ] `StaticTransformBroadcaster` -> low prio since even the official do mentions you should use the executable instead of writing this code yourself: https://docs.ros.org/en/foxy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Static-Broadcaster-Cpp.html#the-proper-way-to-publish-static-transforms
 
 ## API elegance/clarity
 

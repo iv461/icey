@@ -262,6 +262,16 @@ private:
     ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
 };
 
+// A transform broadcaster observable 
+struct TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+    void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
+        if(icey_debug_print)
+            std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
+        auto publish = node_handle.add_tf_broadcaster_if_needed();
+        this->on_change([publish](const auto &new_value) { publish(new_value); });
+    }
+};
+
 /// A service observable, storing 
 template<typename _ServiceT>
 struct ServiceObservable : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>, 
@@ -372,7 +382,15 @@ struct Context {
         icey_connect(parent, publisher_observable);
         return publisher_observable;
     }
-
+    
+    auto create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
+        assert_icey_was_not_initialized();
+        auto publisher_observable = std::make_shared<TransformPublisherObservable>();
+        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index});
+        icey_connect(parent, publisher_observable); /// This would be done by publish
+        return publisher_observable;
+    }
+    
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<TimerObservable>(interval, use_wall_time, is_one_off_timer);
@@ -558,6 +576,8 @@ public:
 
 protected:
     void attach_everything_to_node() {
+        if(icey_debug_print)
+            std::cout << "[icey::Context] attach_everything_to_node() start" << std::endl;
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
         std::sort(icey_dfg_graph_.vertices.begin(), icey_dfg_graph_.vertices.end(), 
@@ -567,22 +587,31 @@ protected:
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
         /// Now, allow for attaching additional nodes after we got the parameters. After attaching, parameters immediatelly have their values. 
         /// For this, first attach only the parameters (prio 0)
+        if(icey_debug_print)
+            std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
         for(; i_vertex < icey_dfg_graph_.vertices.size(); i_vertex++) {
             auto &vertex = icey_dfg_graph_.vertices.at(i_vertex);
             if(vertex.data->attach_priority() == 1) /// Stop after attachning all parameters
                 break;
             vertex.data->attach_to_node(*this); /// Attach
         }
-
+        if(icey_debug_print)
+            std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
         after_parameter_initialization(); /// Call user callback. Here, more vertices may be added 
 
+        if(icey_debug_print)
+            std::cout << "[icey::Context] Analyzing data flow graph ... " << std::endl;
         analyze_dfg(); /// Now analyze the graph before attaching everything to detect cycles as soon as possible, especially before the node is started and everything crashes
 
+        if(icey_debug_print)
+            std::cout << "[icey::Context] Maybe new vertices... " << std::endl;
         /// If additional vertices have been added to the DFG, attach it as well
         for(; i_vertex < icey_dfg_graph_.vertices.size(); i_vertex++) {
             auto &vertex = icey_dfg_graph_.vertices.at(i_vertex);
             vertex.data->attach_to_node(*this); /// Attach
         }
+        if(icey_debug_print)
+            std::cout << "[icey::Context] attach_everything_to_node() finished. " << std::endl;
     }
 
     /// TODO 
