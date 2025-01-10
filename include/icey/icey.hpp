@@ -439,6 +439,23 @@ struct Context {
         return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
 
+    /// When reference updates, we pass all others parents, 
+    template<class Reference, class... Parents>
+    auto sync_with_reference(Reference && reference, Parents && ... parents) { 
+        /// Remote shared_ptr TODO write proper type trait for this
+        using ReturnType = std::tuple<Reference, typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
+        auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
+        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {reference, parents->index...}); /// And add to the graph
+        const auto f_continued = [resulting_observable, reference](auto&&... parents) {
+            auto all_argunments_arrived = (parents->value_ && ... && true);
+            if(all_argunments_arrived) 
+                resulting_observable->_set(std::make_tuple(reference, parents->value_.value()...));
+        };
+        /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
+        reference->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
+        return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
+    }
+
 
     /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
     /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters
@@ -480,11 +497,36 @@ struct Context {
 
     bool empty() const { return icey_dfg_graph_.vertices.empty(); }
     void clear() { icey_dfg_graph_.vertices.clear(); }
+
+    /// Register callback to be called after all parameters have been attached
+
+    /// For the class-based API, to enable override
+    virtual void after_parameter_initialization() {
+        if(after_parameter_initialization_cb_)
+            after_parameter_initialization_cb_();
+    }
+    /// Called in the destructor
+    virtual void on_node_destruction_cb() {
+        if(on_node_destruction_cb_)
+            on_node_destruction_cb_();
+    }
+
+    /// For the functional API
+    void register_after_parameter_initialization_cb(std::function<void()> cb) {
+        after_parameter_initialization_cb_ = cb;
+    }
+    
+    void register_on_node_destruction_cb(std::function<void()> cb) {
+        on_node_destruction_cb_ = cb;
+    }
 protected:
     /// These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
     Graph icey_dfg_graph_;
     bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
+    std::function<void()> after_parameter_initialization_cb_;
+    std::function<void()> on_node_destruction_cb_;
+    
     void assert_icey_was_not_initialized() {
         if(icey_was_initialized_) 
             throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
@@ -504,15 +546,12 @@ public:
     
     Context &icey() { return *this; } /// Upcast to disambiguate calls 
 
-    size_t number_of_threads_required() const { return number_of_threads_required_; }
-
     /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
     void icey_initialize() {
         if(icey_dfg_graph_.vertices.empty()) {
             std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
             return;
         }
-        analyze_dfg();
         attach_everything_to_node();
         icey_was_initialized_ = true;
     }
@@ -524,9 +563,24 @@ protected:
         std::sort(icey_dfg_graph_.vertices.begin(), icey_dfg_graph_.vertices.end(), 
             [](const auto &attachable1, const auto &attachable2) { return attachable1.data->attach_priority() 
                 < attachable2.data->attach_priority();});
-
+        size_t i_vertex = 0;
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
-        for(auto &vertex : icey_dfg_graph_.vertices) {
+        /// Now, allow for attaching additional nodes after we got the parameters. After attaching, parameters immediatelly have their values. 
+        /// For this, first attach only the parameters (prio 0)
+        for(; i_vertex < icey_dfg_graph_.vertices.size(); i_vertex++) {
+            auto &vertex = icey_dfg_graph_.vertices.at(i_vertex);
+            if(vertex.data->attach_priority() == 1) /// Stop after attachning all parameters
+                break;
+            vertex.data->attach_to_node(*this); /// Attach
+        }
+
+        after_parameter_initialization(); /// Call user callback. Here, more vertices may be added 
+
+        analyze_dfg(); /// Now analyze the graph before attaching everything to detect cycles as soon as possible, especially before the node is started and everything crashes
+
+        /// If additional vertices have been added to the DFG, attach it as well
+        for(; i_vertex < icey_dfg_graph_.vertices.size(); i_vertex++) {
+            auto &vertex = icey_dfg_graph_.vertices.at(i_vertex);
             vertex.data->attach_to_node(*this); /// Attach
         }
     }
@@ -536,8 +590,7 @@ protected:
         /// do_topological_sort_on_dfg_graph()
         // assert_dfg_graph_is_acyclic() 
         /// analyze_dependencies() -> computes the number of threads needed
-    }    
-    size_t number_of_threads_required_{1}; /// The number of threads this needs so that it cannot deadlock. Depends on the number of sleepy vertices in the DFG.
+    }
 };
 
 /// Blocking spawn of an existing node. 
@@ -553,12 +606,10 @@ void spawn(std::shared_ptr<ROSAdapter::Node> node, bool use_mt=true) {
 }
 
 void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
-    size_t sum_threads = 0;
-    for(const auto &node : nodes) 
-        sum_threads += node->number_of_threads_required();
+    auto num_threads = 2; /// TODO how many do we need ?
     /// This is how nodes should be composed according to ROS maintainer wjwwood: https://robotics.stackexchange.com/a/89767
     /// He references https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), sum_threads);
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
     for(const auto &node : nodes)  
         executor.add_node(node);
     executor.spin();
