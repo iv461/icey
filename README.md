@@ -35,6 +35,7 @@ You can build your own data-driven pipeline of computations:
 The key in ICEY is to describe the data-flow declaratively and then 
 This not only simplifies the code, but prevents dead-lock bugs. ICEY automatically analyzes the data-flow graph and performs topological sorting, asserts no loops are present, and determines how many callback-groups are needed.
 
+ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anything or use private implementation details.
 
 
 TODO more 
