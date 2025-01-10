@@ -6,20 +6,19 @@
 
 int main(int argc, char **argv) {
 
-    /*
+    
     auto float_sig = icey::create_subscription<std_msgs::msg::Float32>("my_float");
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
     auto float_tfed = icey::fuse(float_sig, map_base_link_tf);
 
     auto pipe1 = icey::then(float_tfed,
-        [](const auto vals) -> float {
-            const auto [float_val, tf_val] = vals;
+        [](std_msgs::msg::Float32 float_val, const geometry_msgs::msg::TransformStamped &tf_val) -> float {
             return float(float_val.data * tf_val.transform.rotation.z);
         });
 
-    /// Currently this has type Observable<std::tuple<int, float>> :(
-    auto int_result_float_result = icey::then(pipe1, 
+    /// this has type Observable<std::tuple<int, float>> 
+    auto two_results = icey::then(pipe1, 
         [](const float val) {
             std_msgs::msg::Int32 int_val;
             int_val.data = int(val * 10) % 5;
@@ -31,10 +30,9 @@ int main(int argc, char **argv) {
 
             return std::make_tuple(int_val, float_val);
         });
-    */
-
-    //int_result.publish("int_result");
-    //float_result.publish("float_result");
+    
+    icey::create_publisher(icey::get_nth<0>(two_results), "int_result");
+    icey::create_publisher(icey::get_nth<1>(two_results), "float_result");
 
     icey::spawn(argc, argv, "piping_example"); /// Create and start node
 }

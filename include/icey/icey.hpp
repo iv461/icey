@@ -403,13 +403,13 @@ struct Context {
     auto fuse(Parents && ... parents) { 
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
-        auto resulting_observable = std::make_shared<PublisherObservable<ReturnType>>;  /// A result is rhs, i.e. read-only
+        auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
         icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index...}); /// And add to the graph
         ([&]{ 
             const auto f_continued = [resulting_observable](auto&&... parents) {
                 auto all_argunments_arrived = (parents->value_ && ... && true);
                 if(all_argunments_arrived) 
-                    resulting_observable->_set(std::make_tuple(parents->value_.value()...));                
+                    resulting_observable->_set(std::make_tuple(parents->value_.value()...));
             };
             /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
             parents->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
@@ -417,6 +417,8 @@ struct Context {
         return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
 
+    /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
+    /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters
     template<typename Parent, typename F>
     auto then(Parent &parent, F && f) {
         using ReturnType = decltype(call_if_tuple(f, parent->value_.value()));
@@ -441,6 +443,16 @@ struct Context {
             });
             return resulting_observable;
         }
+    }
+
+    /// Now we can construct higher-order filters.
+
+    /// For a tuple-observable, get it's N'th element
+    template<int index, class Parent>
+    auto get_nth(Parent & parent) { 
+        return then(parent, [](const auto &... args) { /// Need to take variadic because then() automatically unpacks tuples
+            return std::get<index>(std::forward_as_tuple(args...)); /// So we need to pack this again in a tuple
+        });
     }
 
     bool empty() const { return icey_dfg_graph_.vertices.empty(); }

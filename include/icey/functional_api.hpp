@@ -99,6 +99,11 @@ auto then(Parent &parent, F && f) {
     return g_state.staged_context.then(parent, std::move(f));
 }
 
+template<int index, class Parent>
+auto get_nth(Parent & parent) { 
+    return g_state.staged_context.get_nth<index, Parent>(parent);
+}
+
 /// Blocking spawn of a node using the global state
 void spawn(int argc, char **argv, std::string node_name) {
     if(!rclcpp::contexts::get_global_default_context()->is_valid()) /// Create a context if it is the first spawn

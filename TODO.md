@@ -4,13 +4,13 @@
 
 Sorted by decreasing priority. 
 
-- [X] Full-featured parameters
-- [ ] TOPOLOGICAL SORT DFG 
-- [ ] Allow returning `None` to emulate early return control-flow, otherwise we cannot stop data-pipeline. This is very common, i.e. checking message validity
+- [X] Fully featured parameters
+- [ ] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
+- [X] Allow returning `None` to emulate early return control-flow, otherwise we cannot stop data-pipeline. This is very common, i.e. checking message validity
 - [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless !
-- [ ] Publishing multiple outputs, i.e. single input, multiple output
+- [X] Publishing multiple outputs, i.e. single input, multiple output -> solvable with multiple thens
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
-- [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service)
+- [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 - [ ] Promise-API: .catch(), finally mostly important for timeout detection of service call 
 
 - [] Unit-tests testing the node
@@ -19,6 +19,7 @@ Sorted by decreasing priority.
 
 - [ ] Forbid subscribing to the same topic that is published by the same node 
 - [ ] Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
+- [ ] Check callback has the right type, compiler messages are hard to understand 
 
 ## Other nice-to-have features
 
