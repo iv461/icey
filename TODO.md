@@ -27,6 +27,15 @@ Sorted by decreasing priority.
 
 - [ ] port a small autoware or nav2 node to find out how many line of code we save
 
+## Other
+- [] some autoware node needs dynamic parameter update callback to be set after algorithm has been initialized: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L153 (does not make any sense to me)
+- [] add custom loggers in the node: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L161
+- [] publish if subscribed (unnecessary imo)
+- [] be able to publish a tuple of optional values where some are set and some not. We need a way to directly publish some things and some not. for this, refactor connect using then, for this refactor then to receive a parent of the right type
+- [] Automatic synchronizer: idea is that it would be nice if there is only one icey::Sync method iIinterpolates if some signals are interpolatable, otherwise use approx time. If using approx time, exact time matches if the stamps match exactly. If the message type has no stamp, take receive time automatically. The idea is that the user should not specify which filter should be used, since we can infer this.
+- [] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals)
+- [] Vector publisher: timings etc, vector_publish(sig1, sig2, ... , topic1, topic2 ...)
+
 ## Other nice-to-have features, not for 0.1
 
 - [ ] .catch() promise fo TF buffer, would be useful to print the lookup error

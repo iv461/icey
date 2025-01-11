@@ -96,7 +96,7 @@ This library is designed to be robust against common usage mistakes: It will det
 # Similar projects 
 
 Some similar projects exist, but not quite close:
-
+- Autoware's `autoware::component_interface_utils::NodeAdaptor` is a simplified API as well 
 - [SMACC] https://github.com/robosoft-ai/SMACC
 - [RXROS] https://github.com/rosin-project/rxros2
 

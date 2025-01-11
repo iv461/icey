@@ -59,6 +59,8 @@ constexpr bool all_same(const std::tuple<Head,Tail...>&){
     return (std::is_same_v<Head,Tail> && ...);
 }
 
+using Time = ROS2Adapter::Time;
+
 template<typename Func, typename Tuple>
 auto call_if_tuple(Func&& func, Tuple&& tuple) {
     if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {
@@ -100,6 +102,7 @@ class Observable : public ObservableBase {
     friend class Context; /// The context needs to set the value, but to guard against misuse, the value must be inaccessible
 public:
     using StateValue = _StateValue;
+    using MaybeValue = std::optional<StateValue>; 
     using ErrorValue = _ErrorValue;
     using Self = Observable<_StateValue, _ErrorValue>;
 
@@ -123,7 +126,7 @@ protected:
     }
 
 
-    void _set(const StateValue &new_value) {
+    virtual void _set(const StateValue &new_value) {
         value_ = new_value;
         notify();
     }
@@ -135,6 +138,20 @@ protected:
     std::vector<OnResolve> notify_list_;
     std::vector<OnReject> reject_cbs_;
     std::optional<StateValue> value_;
+};
+
+/// An interpolatable observable is one that buffers the incoming values using a circular buffer and allows to query the message at a given point, optionally using interpolation.
+/// It is an essential for using lookupTransform with TF.
+/// It is used by synchronizers to synchronize a topic exactly at a given time point. 
+template<typename Value>
+struct InterpolateableObservable : public Observable<Value> {
+    using Base = Observable<Value>;
+    using Self = InterpolateableObservable<Value>;
+    using MaybeValue = typename Base::MaybeValue;
+
+    /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or an extrapolation would be required.
+    virtual MaybeValue get_at_time(const Time &time_point) const = 0;
+    //std::map<Time, Value> buffer_;
 };
 
 template<typename Value>
@@ -203,9 +220,8 @@ protected:
     ROSAdapter::QoS qos_;
 };
 
-
-/// A subscription for single transforms 
-struct TransformSubscriptionObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+/// A subscription for single transforms. It implements InterpolateableObservable but by using lookupTransform, not an own buffer 
+struct TransformSubscriptionObservable : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
 public:
     TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) : 
          target_frame_(target_frame), source_frame_(source_frame) { 
@@ -213,14 +229,28 @@ public:
             }
 
 protected:
+    MaybeValue get_at_time(const Time &time_point) const override {
+        std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
+        try {
+            // Note that this call does not wait, the transform must already be arrived. This works because get_at_time()
+            // is called by the synchronizer as 
+            tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time_point);
+        } catch (tf2::TransformException & e) {
+
+        }
+        return tf_msg;
+    }
+
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
-        node_handle.add_tf_subscription(target_frame_, source_frame_, [this](const geometry_msgs::msg::TransformStamped &new_value) {
+        tf2_listener_ = node_handle.add_tf_subscription(target_frame_, source_frame_, 
+            [this](const geometry_msgs::msg::TransformStamped &new_value) {
             this->_set(new_value);
         });
     }
     
+    std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
     std::string target_frame_;
     std::string source_frame_;
 };
@@ -384,20 +414,19 @@ struct Context {
 
     /// A writable signal, i.e. publisher
     template<typename MessageT>
-    auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
         auto publisher_observable = std::make_shared<PublisherObservable<MessageT>>(topic_name, qos);
         icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
         icey_connect(parent, publisher_observable);
-        return publisher_observable;
+        /// DO not return it to disallow loops
     }
     
-    auto create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
+    void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
         assert_icey_was_not_initialized();
         auto publisher_observable = std::make_shared<TransformPublisherObservable>();
         icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
-        icey_connect(parent, publisher_observable); /// This would be done by publish
-        return publisher_observable;
+        icey_connect(parent, publisher_observable); /// This would be done by publish        
     }
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
@@ -429,6 +458,7 @@ struct Context {
 
     /// Here are the filters. First, the most basic filter: fuse. It fuses the inputs and updates the output if any of the inputs change.
     /// Parents must be of type Observable
+    /// TODO Think this filter through, it is like Promise.any but it requres that all were received at least once etc.
     template<typename... Parents>
     auto fuse(Parents && ... parents) { 
         /// Remote shared_ptr TODO write proper type trait for this

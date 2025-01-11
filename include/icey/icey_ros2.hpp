@@ -50,12 +50,11 @@ public:
     using ServiceQoS = rclcpp::ServicesQoS;
 
     /// A modified listener that can notify when a single transform changes. 
-    /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate spinning thread.
+    /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate node. 
     /// TODO this simple implementation currently checks every time a new message is receved on /tf for every trnasform we are looking for. 
     /// If /tf is high-frequency topic, this can become a performance problem. i.e., the more transforms, the more this becomes a search for the needle in the heapstack.
-    /// But without knowing the path in the TF-tree that connects our transforms that we are looking for, we cannot do bettter. And atm
-    /// I cannot easily hack the tf2 library since it is a mature and reliably working code mess.
-    /// TODO look also if tf2_ros::MessageFilter is not an overall better solution. It adheres to the message_filter interface.
+    /// But without knowing the path in the TF-tree that connects our transforms that we are looking for, we cannot do bettter. 
+    /// Update: We could obtain the path with tf2::BufferCore::_chainAsVector however, I need to look into it
     struct TFListener {
         using TransformMsg = geometry_msgs::msg::TransformStamped;
         
@@ -69,6 +68,8 @@ public:
             subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), 
                 std::nullopt, std::move(callback));
         }
+
+        tf2::BufferCore & buffer_;
 
     private:
         using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
@@ -137,7 +138,7 @@ public:
         using SubTF = std::tuple < TFId, std::optional<TransformMsg>, NotifyCB >;
 
         NodePtr node_; /// Stored for logging
-        tf2::BufferCore & buffer_;
+;
 
         rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
         rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
@@ -226,14 +227,15 @@ public:
         
         /// Subscribe to a transform on tf between two frames
         template<typename CallbackT>
-        void add_tf_subscription(std::string target_frame, std::string source_frame, CallbackT && callback) {
+        auto add_tf_subscription(std::string target_frame, std::string source_frame, CallbackT && callback) {
             add_tf_listener_if_needed();
             tf2_listener_->add_subscription(target_frame, source_frame, std::move(callback));
+            return tf2_listener_;
         }
 
         auto add_tf_broadcaster_if_needed() {
             if(!tf_broadcaster_)
-                  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+                  tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
             const auto publish = [this](const geometry_msgs::msg::TransformStamped &msg) {
                 tf_broadcaster_->sendTransform(msg);
             };
@@ -248,7 +250,7 @@ public:
             if(tf2_listener_) /// We need only one subscription on /tf, but can have multiple transforms on which we listen
                 return;
             init_tf_buffer();
-            tf2_listener_ = std::make_unique<TFListener>(shared_from_this(), *tf2_buffer_);
+            tf2_listener_ = std::make_shared<TFListener>(shared_from_this(), *tf2_buffer_);
         }
 
         void init_tf_buffer() {
@@ -278,9 +280,9 @@ public:
         std::vector<rclcpp::CallbackGroup::SharedPtr> my_callback_groups_;
 
         /// TF stuff
-        std::unique_ptr<TFListener> tf2_listener_;
+        std::shared_ptr<TFListener> tf2_listener_;
         /// This is a simple wrapper around a publisher, there is really nothing intereseting under the hood of tf2_ros::TransformBroadcaster
-        std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+        std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
           
     };
 

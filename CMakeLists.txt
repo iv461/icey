@@ -25,6 +25,7 @@ ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
 ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
 ament_auto_add_executable(multi_node_example examples/multi_node.cpp)
 ament_auto_add_executable(parameter_based_initialization_example examples/parameter_based_initialization.cpp)
+ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE

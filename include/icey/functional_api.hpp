@@ -16,16 +16,10 @@ struct GlobalState {
     }
 
     /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
-    Node *operator->() {
-        if(nodes.empty()) {
-            throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
-        } else if (nodes.size() != 1) {
-            throw std::runtime_error("More than one node was spawned, you need to use icey::node(<name>) when accessing the node.");
-        }
-        //// Get the first node after having checked there is only one
-        return nodes.begin()->second.get();
-    }
+    Node *operator->() { return get_node(); }
     
+    /// Allow using this node in a context where a rclrpp::Node is needed, mind that ROSNodeWithDFG derives from rclrpp::Node
+    operator ROSNodeWithDFG*() { return get_node();; }
 
     auto create_new_node(const std::string &name) {
         nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));    
@@ -52,6 +46,17 @@ struct GlobalState {
     }
 
 private:
+    // Access the node, in case only one was spawned
+    ROSNodeWithDFG *get_node() {
+        if(nodes.empty()) {
+            throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
+        } else if (nodes.size() != 1) {
+            throw std::runtime_error("More than one node was spawned, you need to use icey::node(<name>) when accessing the node.");
+        }
+        //// Get the first node after having checked there is only one
+        return nodes.begin()->second.get();
+    }
+
     std::unordered_map<std::string, std::shared_ptr<ROSNodeWithDFG>> nodes;
     Context staged_context;
     std::shared_ptr<ROSNodeWithDFG> currently_initializing_node_; /// The node that is currently in the initialization phase after the ROS-parameters have been obtained but adding stuff to the graph is still possible.
@@ -78,12 +83,12 @@ auto create_transform_subscription(const std::string &target_frame, const std::s
 }
 
 template<typename MessageT>
-auto create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    return g_state.get_context().create_publisher<MessageT>(parent, topic_name, qos);
+void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    g_state.get_context().create_publisher<MessageT>(parent, topic_name, qos);
 }
 
-auto create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent){
-    return g_state.get_context().create_transform_publisher(parent);
+void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent){
+    g_state.get_context().create_transform_publisher(parent);
 }
 
 auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
