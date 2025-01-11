@@ -11,6 +11,10 @@ Sorted by decreasing priority.
 - [ ] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 
+- [ ] Code clean-up and dup: Wrap API in tuples, create graph afterwards
+- [ ] Code clean up: take shared_ptr by value everywhere
+- [ ] publish shared ptr should be supported 
+- { } Writable publiser 
 - [ ] Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
 - [ ] Forbid subscribing to the same topic that is published by the same node 
 
@@ -18,7 +22,7 @@ Sorted by decreasing priority.
 - [ ] Promise-API: .catch(), finally mostly important for timeout detection of service call 
 - [ ] If we do not drive the event loop, we need to make the Observable::set_value() method publish, otherwise we cannot write camera drivers for example (that are callback-based)
 - [] Unit-tests testing the node
-
+- [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
 ## Error-handling 
 
 - [ ] Check callback has the right type, compiler messages are hard to understand 

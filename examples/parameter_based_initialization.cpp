@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     /// Note that it does not matter where we call this, since here we are still in the declaration phase.
     icey::after_parameter_initialization([&] () {
 
-        load_neural_network_model(nn_model_filename_param->get());
+        load_neural_network_model(nn_model_filename_param->value());
 
         /// Add additional subscribers  TODO 
         auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         });
 
         /// Now conditionally create a publisher based on the parameters:
-        if(publish_debug_markers_param->get()) {
+        if(publish_debug_markers_param->value()) {
             icey::create_publisher(rectangle_sig, "debug_marker");
         }
     });

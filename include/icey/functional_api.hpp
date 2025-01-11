@@ -17,7 +17,6 @@ struct GlobalState {
 
     /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
     Node *operator->() { return get_node(); }
-    
     /// Allow using this node in a context where a rclrpp::Node is needed, mind that ROSNodeWithDFG derives from rclrpp::Node
     operator ROSNodeWithDFG*() { return get_node();; }
 
@@ -74,8 +73,9 @@ auto declare_parameter(const std::string &name, const std::optional<ParameterT> 
     return g_state.get_context().declare_parameter<ParameterT>(name, maybe_default_value, parameter_descriptor, ignore_override);
 }
 template<typename MessageT>
-auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) { 
-    return g_state.get_context().create_subscription<MessageT>(topic_name, qos); 
+auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(),
+        const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) { 
+    return g_state.get_context().create_subscription<MessageT>(topic_name, qos, options); 
 };
 
 auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
@@ -117,11 +117,17 @@ void on_node_destruction(std::function<void()> cb) {
     return g_state.get_context().register_on_node_destruction_cb(cb);
 }
 
- /// Now the filters
+
+/// Now the filters
 template<typename... Parents>
+auto synchronize(Parents && ... parents) { 
+    return g_state.get_context().synchronize(std::forward<Parents>(parents)...);
+}
+
+/*template<typename... Parents>
 auto fuse(Parents && ... parents) { 
     return g_state.get_context().fuse(std::forward<Parents>(parents)...);
-}
+}*/
 
 template<typename... Parents>
 auto serialize(Parents && ... parents) { 

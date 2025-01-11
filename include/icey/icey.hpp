@@ -14,6 +14,10 @@
 #include <boost/noncopyable.hpp>
 #include <boost/hana.hpp>
 
+#include "std_msgs/msg/float32.hpp"
+#include "std_msgs/msg/int32.hpp"
+
+
 namespace icey {
 
 bool icey_debug_print = false;
@@ -37,7 +41,6 @@ constexpr bool is_tuple_v = is_tuple<T>::value;
 template<typename T>
 constexpr bool is_pair_v = is_pair<T>::value;
 
-
 template<class T>
 struct is_optional : std::false_type {};
 
@@ -47,12 +50,22 @@ struct is_optional<std::optional<T>> : std::true_type {};
 template<class T>
 constexpr bool is_optional_v = is_optional<T>::value;
 
-
 template<class T>
 struct remove_optional { using type = T;};
 
 template<class T>
 struct remove_optional<std::optional<T>> { using type = T; };
+
+
+template<class T>
+struct remove_shared_ptr { using type = T;};
+
+template<class T>
+struct remove_shared_ptr<std::shared_ptr<T>> { using type = T; };
+
+template<class T>
+using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
+
 
 template<typename Head, typename...Tail>
 constexpr bool all_same(const std::tuple<Head,Tail...>&){
@@ -62,7 +75,7 @@ constexpr bool all_same(const std::tuple<Head,Tail...>&){
 using Time = ROS2Adapter::Time;
 
 template<typename Func, typename Tuple>
-auto call_if_tuple(Func&& func, Tuple&& tuple) {
+auto apply_if_tuple(Func&& func, Tuple&& tuple) {
     if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {
         // Tuple detected, unpack and call the function
         return std::apply(std::forward<Func>(func), std::forward<Tuple>(tuple));
@@ -96,21 +109,19 @@ public:
 };
 
 class Context;
-/// An observable holding a value. Similar to a promise in JS.
-template<typename _StateValue, typename _ErrorValue = std::string>
+
+/// An observable. Similar to a promise in JS.
+template<typename _Value, typename _ErrorValue = std::string>
 class Observable : public ObservableBase {
-    friend class Context; /// The context needs to set the value, but to guard against misuse, the value must be inaccessible
+    friend class Context; /// To prevent misuse, only the Context is allowed to register on_change callbacks
 public:
-    using StateValue = _StateValue;
-    using MaybeValue = std::optional<StateValue>; 
+    using Value = _Value;
+    using MaybeValue = std::optional<Value>; 
     using ErrorValue = _ErrorValue;
-    using Self = Observable<_StateValue, _ErrorValue>;
+    using Self = Observable<_Value, _ErrorValue>;
 
-    using OnResolve = std::function<void(const StateValue&)>;
+    using OnResolve = std::function<void(const Value&)>;
     using OnReject = std::function<void(const ErrorValue&)>;
-
-    auto has_value() const {return value_.has_value(); }
-
 
 protected:
     /// Register to be notified when smth. changes
@@ -118,17 +129,10 @@ protected:
         notify_list_.emplace_back(std::move(cb)); /// TODO rename to children ?
     }
 
-    /// Notify all subcribers about the new value
-    void notify() {
-        for(auto cb: notify_list_) {
-            cb(value_.value());
-        }
-    }
-
-
-    virtual void _set(const StateValue &new_value) {
-        value_ = new_value;
-        notify();
+    /// set and notify all observers about the new value
+    virtual void _set(const Value &new_value) {
+        for(auto cb: notify_list_) cb(new_value);
+        
     }
 
     void _reject(const ErrorValue &error) {
@@ -137,15 +141,15 @@ protected:
 
     std::vector<OnResolve> notify_list_;
     std::vector<OnReject> reject_cbs_;
-    std::optional<StateValue> value_;
 };
 
 /// An interpolatable observable is one that buffers the incoming values using a circular buffer and allows to query the message at a given point, optionally using interpolation.
 /// It is an essential for using lookupTransform with TF.
 /// It is used by synchronizers to synchronize a topic exactly at a given time point. 
-template<typename Value>
-struct InterpolateableObservable : public Observable<Value> {
-    using Base = Observable<Value>;
+template<typename _Value>
+struct InterpolateableObservable : public Observable<_Value> {
+    using Value = _Value;
+    using Base = Observable<_Value>;
     using Self = InterpolateableObservable<Value>;
     using MaybeValue = typename Base::MaybeValue;
 
@@ -154,9 +158,11 @@ struct InterpolateableObservable : public Observable<Value> {
     //std::map<Time, Value> buffer_;
 };
 
-template<typename Value>
-class ParameterObservable : public Observable<Value> {
+/// An observable that holds the last received value. Fires initially an event if a default_value is set
+template<typename _Value>
+class ParameterObservable : public Observable<_Value> {
 public:
+    using Value = _Value;
     using MaybeValue = std::optional<Value>;
     /// TODO FIX ARG DUP, capture hana sequence maybe in cb maybe
     ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value,
@@ -168,10 +174,11 @@ public:
         this->attach_priority_ = 0;
     }
 
+    auto has_value() const {return value_.has_value(); }
+    
     /// Parameters are initialized always at the beginning, so we can provide getters for the value. Note that has_value() must be checked beforehand since if no default value was provided, this function will throw std::bad_optional_access()
-    const Value &get() const {
-        /// TODO implement cleaner, improve error message
-        /// TODO do we want to allow this if the user provided a default value ? I think not, since it adds inconcistency to the otherwise inaccessible Promises
+    const Value &value() const {
+        /// TODO do we want to allow this if the user provided a default value ? I think not, since it adds conceptual inconcistency to the otherwise inaccessible Observables
         if(!this->value_.has_value()) { /// First, check if this observable was accessed before spawning. This is needed to provide a nice  error message since confusing syncronous code will likely happen for users.
             throw std::runtime_error("[parameter '" + parameter_name_ + "']You cannot access the parameters before spawning the node, you can only access them inside callbacks (which are triggered after calling icey::spawn())");
         }
@@ -185,7 +192,9 @@ protected:
         /// Declare on change handler
         node_handle.declare_parameter<Value>(parameter_name_, default_value_, 
             [this](const rclcpp::Parameter &new_param) {
-                this->_set(new_param.get_value<Value>());
+                auto new_value = new_param.get_value<Value>();
+                value_ = new_value; /// Store value
+                this->_set(new_value); /// notify
         }, parameter_descriptor_, ignore_override_);
         /// Set default value
         if(default_value_) {
@@ -198,12 +207,16 @@ protected:
     MaybeValue default_value_;
     rcl_interfaces::msg::ParameterDescriptor parameter_descriptor_;
     bool ignore_override_;
+    /// The last received value.
+    MaybeValue value_;
 };
 
-template<typename StateValue>
-class SubscriptionObservable : public Observable<StateValue> {
+template<typename _Value>
+class SubscriptionObservable : public Observable<_Value> {
 public:
-    SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos): name_(name), qos_(qos) {
+    using Value = _Value;
+    SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos, 
+        const rclcpp::SubscriptionOptions &options): name_(name), qos_(qos), options_(options) {
         this->attach_priority_ = 3;
     }
 
@@ -211,13 +224,14 @@ protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         if(icey_debug_print)
             std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
-        node_handle.add_subscription<StateValue>(name_, [this](std::shared_ptr<StateValue> new_value) {
+        node_handle.add_subscription<Value>(name_, [this](std::shared_ptr<Value> new_value) {
             this->_set(*new_value);
-        }, qos_);
+        }, qos_, options_);
     }
 
     std::string name_;
     ROSAdapter::QoS qos_;
+    const rclcpp::SubscriptionOptions options_;
 };
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using lookupTransform, not an own buffer 
@@ -257,6 +271,7 @@ protected:
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to the callback
 struct TimerObservable: public Observable<size_t> {
+    using Value = size_t;
     TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) : 
         interval_(interval), use_wall_time_(use_wall_time), is_one_off_timer_(is_one_off_timer) { 
             this->attach_priority_ = 5;
@@ -267,7 +282,7 @@ protected:
         if(icey_debug_print)
             std::cout << "[TimerObservable] attach_to_node()" << std::endl;  
         ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this] () {
-            this->_set(value_ ? (*value_ + 1) : 0);
+            this->_set(ticks_counter_++);
             if(is_one_off_timer_)
                 ros_timer_->cancel();
         });
@@ -276,13 +291,15 @@ protected:
     ROSAdapter::Duration interval_;
     bool use_wall_time_{false};
     bool is_one_off_timer_{false};
+    Value ticks_counter_{0};
 };
 
 /// A publishabe state, read-only
-template<typename StateValue>
-class PublisherObservable : public Observable<StateValue> {
+template<typename _Value>
+class PublisherObservable : public Observable<_Value> {
 public:
-    static_assert(rclcpp::is_ros_compatible_type<StateValue>::value, "A publisher must use a publishable ROS message (no primitive types are possible)");
+    using Value = _Value;
+    static_assert(rclcpp::is_ros_compatible_type<Value>::value, "A publisher must use a publishable ROS message (no primitive types are possible)");
 
     PublisherObservable(const std::string &topic_name, const ROSAdapter::QoS qos=ROS2Adapter::DefaultQos()) : topic_name_(topic_name), qos_(qos) {
         this->attach_priority_ = 1; 
@@ -292,7 +309,7 @@ protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
             std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
-        auto publish = node_handle.add_publication<StateValue>(topic_name_, qos_);
+        auto publish = node_handle.add_publication<Value>(topic_name_, qos_);
         this->on_change([publish](const auto &new_value) { publish(new_value); });
     }
 
@@ -300,8 +317,76 @@ protected:
     ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
 };
 
+/// A publishabe state, can be written. Needed where we need to publish by reacting on external events 
+// that are not in control of ROS. This is needed for hardware drivers for example
+template<typename _Value>
+class WritablePublisherObservable : public PublisherObservable<_Value> {
+public:
+    using Value = _Value;
+    void publish(const Value &message) {
+        this->_set(message);
+    }
+};
+
+/// Wrap the message filters package 
+/// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
+/// TODO adapt queue size automatically if we detect very different frequencies so that synchronization still works. 
+/// I would guess it works if the lowest frequency topic has a frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
+template<typename... Messages>
+class SynchronizerObservable : public Observable< std::tuple<const Messages...> > { 
+    /// An adapter, adapting the message_filters::SimpleFilter to our Observable (two different implementations of almost the same concept).
+    /// Does nothing else than what message_filters::Subscriber does:
+    /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
+    template<typename Value>
+    struct SimpleFilterAdapter : public Observable<Value>, public message_filters::SimpleFilter<Value> {
+        SimpleFilterAdapter() {
+            this->on_change([this](const Value &msg) {
+                using Event = message_filters::MessageEvent<const Value>;
+                /// TODO HACK, fix properly, do not deref in sub
+                auto msg_ptr = std::make_shared<Value>(msg);
+                this->signalMessage(Event(msg_ptr));
+            });
+        }
+    };    
+public:
+    using Value = std::tuple<const Messages...>;
+    /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the `TImeSynchronizer` uses by default ExactTime
+    using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
+    using Sync = message_filters::Synchronizer<Policy>;
+    using Inputs = std::tuple< std::shared_ptr<SimpleFilterAdapter<Messages>>... >;
+    SynchronizerObservable(uint32_t queue_size) :
+         inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...), 
+         queue_size_(queue_size) {
+            
+        synchronizer_ = std::make_shared<Sync>(Policy(queue_size_));
+    
+        std::apply([this](auto &... input_filters) {
+                synchronizer_->connectInput(*input_filters...);
+         }, 
+         inputs_);
+        
+        /// synchronizer_->setAgePenalty(0.50); not sure why this is needed
+        // synchronizer_->registerCallback([this](std::shared_ptr<const Messages> ... messages) {
+        /*synchronizer_->registerCallback([this](std::shared_ptr<const std_msgs::msg::Float32> m1, 
+        std::shared_ptr<const geometry_msgs::msg::TransformStamped> m2) {
+            //this->_set(std::forward_as_tuple(*messages...));
+        });*/
+
+    }
+
+    const auto &inputs() const { return inputs_; }
+private:
+    /// The input filters
+    uint32_t queue_size_{10};
+    
+    Inputs inputs_;
+    std::shared_ptr<Sync> synchronizer_;
+    
+};
 // A transform broadcaster observable 
-struct TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+public:
+    using Value = geometry_msgs::msg::TransformStamped;
 protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
         if(icey_debug_print)
@@ -317,6 +402,7 @@ struct ServiceObservable : public Observable<std::pair<std::shared_ptr<typename 
     std::shared_ptr<typename _ServiceT::Response>>> {
     using Request = std::shared_ptr<typename _ServiceT::Request>;
     using Response = std::shared_ptr<typename _ServiceT::Response>;
+    using Value = std::pair<Request, Response>;
 
     ServiceObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
         service_name_(service_name), qos_(qos) {  this->attach_priority_ = 2; 
@@ -338,7 +424,9 @@ template<typename _ServiceT>
 struct ClientObservable : public Observable<typename _ServiceT::Response> {
     using Request = typename _ServiceT::Request;
     using Response = typename _ServiceT::Request;
-    using Parent = std::shared_ptr<Observable<  std::shared_ptr<Request> >>;
+    using Value = Response;
+    /// The type of the required input
+    using Parent = std::shared_ptr< Observable<  std::shared_ptr<Request> > >;
 
     ClientObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
         service_name_(service_name), qos_(qos) { this->attach_priority_ = 4; }
@@ -396,9 +484,10 @@ struct Context {
     }
 
     template<typename MessageT>
-    auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(),
+        const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
         assert_icey_was_not_initialized();
-        auto signal = std::make_shared<SubscriptionObservable<MessageT>>(name, qos);
+        auto signal = std::make_shared<SubscriptionObservable<MessageT>>(name, qos, options);
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(signal);
         return signal;
@@ -455,14 +544,28 @@ struct Context {
         icey_connect(parent, client_attachable); /// Connect parent with child so that when the parent changes, the new value is propagated to the child
         return client_attachable;
     }
+    
+    /// Synchronize observables using approximate time
+    template<typename... Parents>
+    auto synchronize(Parents ... parents) { 
+        uint32_t queue_size = 10; // TODO update automatically 
+        assert_icey_was_not_initialized();        
+        auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
+
+        /// Connect the inputs of the synchronizer to the parents
+        std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
+
+        icey_dfg_graph_.add_vertex_with_parents(sync, {parents->index.value() ...});
+        return sync;
+    }
 
     /// Here are the filters. First, the most basic filter: fuse. It fuses the inputs and updates the output if any of the inputs change.
     /// Parents must be of type Observable
     /// TODO Think this filter through, it is like Promise.any but it requres that all were received at least once etc.
-    template<typename... Parents>
+    /*template<typename... Parents>
     auto fuse(Parents && ... parents) { 
         /// Remote shared_ptr TODO write proper type trait for this
-        using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
+        using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::Value...>;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
         icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
         ([&]{ 
@@ -475,15 +578,16 @@ struct Context {
             parents->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
         }(), ...);
         return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
-    }
+    }*/
 
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
+    /// TODO rename any
     template<typename... Parents>
     auto serialize(Parents && ... parents) { 
-        /// DODO all types are the same
+        /// TODO assert all types are the same
         /// Remote shared_ptr TODO write proper remove_shared_ptr type trait for this
         using FirstType = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
-        using ReturnType = typename std::remove_reference_t<FirstType>::StateValue;
+        using ReturnType = typename std::remove_reference_t<FirstType>::Value;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
         icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
         ([&]{ 
@@ -497,10 +601,13 @@ struct Context {
     }
 
     /// When reference updates, we pass all others parents, 
+    /// TODO need BufferedObservable for this, but using this filter is discouraged
+
+    /*
     template<class Reference, class... Parents>
     auto sync_with_reference(Reference && reference, Parents && ... parents) { 
         /// Remote shared_ptr TODO write proper type trait for this
-        using ReturnType = std::tuple<Reference, typename std::remove_reference_t<decltype(*parents)>::StateValue...>;
+        using ReturnType = std::tuple<Reference, typename std::remove_reference_t<decltype(*parents)>::Value...>;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
         icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {reference, parents->index.value()...}); /// And add to the graph
         const auto f_continued = [resulting_observable, reference](auto&&... parents) {
@@ -512,24 +619,30 @@ struct Context {
         reference->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
         return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
+    */
 
 
     /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
     /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters
+    /// TODO then does not satify monad algebra, because it unpacks the tuple. It should not unpack the tuple but
+    /// instad an observable that has value type tuple can be defined to call the notify callback with unpacking
     template<typename Parent, typename F>
     auto then(Parent &parent, F && f) {
-        using ReturnType = decltype(call_if_tuple(f, parent->value_.value()));
+        using ParentValue = typename remove_shared_ptr_t<Parent>::Value;
+        /// The Observeble unpacks the arguments if its value is a tuple, so we have to do here the same
+        //using ReturnType = std::invoke_result_t<apply_if_tuple, F, ParentValue>;
+        using ReturnType = decltype( apply_if_tuple(f, std::declval<ParentValue>()) );
         if constexpr (std::is_void_v<ReturnType>) {
             parent->on_change([f=std::move(f)](const auto &new_value) {
-                call_if_tuple(f, new_value);
+                apply_if_tuple(f, new_value);
             });
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
             auto resulting_observable = std::make_shared<Observable<ObsValue>>();
             icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index.value()}); /// And add to the graph
 
-            parent->on_change([resulting_observable, f=std::move(f)](const auto &new_value) {
-                auto ret = call_if_tuple(f, new_value);
+            const auto f_continued = [resulting_observable, f=std::move(f)](const auto &new_value) {
+                auto ret = apply_if_tuple(f, new_value);
                 if constexpr (is_optional_v<ReturnType>) {
                     if(ret) {
                         resulting_observable->_set(*ret);
@@ -537,7 +650,8 @@ struct Context {
                 } else {
                     resulting_observable->_set(ret);
                 }
-            });
+            };
+            parent->on_change(f_continued);
             return resulting_observable;
         }
     }

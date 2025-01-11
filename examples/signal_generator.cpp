@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
     auto sine_signal = icey::then(timer_signal, [&](size_t ticks) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
-        /// We can access parameters in callbacks using .get() because parameters are always initialized first.
-        double y = amplitude->get() * std::sin((period_time_s * ticks) / frequency->get() * 2 * M_PI);
+        /// We can access parameters in callbacks using .value() because parameters are always initialized first.
+        double y = amplitude->value() * std::sin((period_time_s * ticks) / frequency->value() * 2 * M_PI);
         float_val.data = y;
         return float_val;
     });

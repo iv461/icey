@@ -20,6 +20,11 @@
 
 #include "rclcpp/rclcpp.hpp"
 
+// .h so that this works with humble as well
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
 namespace icey {
 
 /// A ROS adapter, abstracting ROS 1 and ROS 2, so that everything works with both 
@@ -138,7 +143,7 @@ public:
         using SubTF = std::tuple < TFId, std::optional<TransformMsg>, NotifyCB >;
 
         NodePtr node_; /// Stored for logging
-;
+
 
         rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
         rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
@@ -172,14 +177,14 @@ public:
         }
 
         template<typename Msg, typename F>
-        void add_subscription(const std::string &topic, F && cb, const rclcpp::QoS & qos = DefaultQos()) {
+        void add_subscription(const std::string &topic, F && cb, const rclcpp::QoS & qos, const rclcpp::SubscriptionOptions &options) {
             if(my_subscribers_.count(topic) != 0) {
                 /// TODO throw topic already exists
             }
             if(my_publishers_.count(topic) != 0) {
                 /// TODO throw cannot subscribe on a topic that is being published at the same time
             }
-            my_subscribers_[topic] = create_subscription<Msg>(topic, qos, cb);
+            my_subscribers_[topic] = create_subscription<Msg>(topic, qos, cb, options);
         }
 
         template<typename Msg>

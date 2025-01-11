@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     auto float_sig = icey::create_subscription<std_msgs::msg::Float32>("my_float");
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
-    auto float_tfed = icey::fuse(float_sig, map_base_link_tf);
+    auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);
 
     auto pipe1 = icey::then(float_tfed,
         [](std_msgs::msg::Float32 float_val, const geometry_msgs::msg::TransformStamped &tf_val) -> float {
