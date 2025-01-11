@@ -17,9 +17,14 @@ int main(int argc, char **argv) {
     // std::cout << "parameter  frequency is:: " << frequency->get() << std::endl;
 
     /// Receive parameter updates
+    amplitude->then([](double new_value) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
+    });
+    /*
     icey::then(amplitude, [](double new_value) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
     });
+    */
 
     auto timer_signal = icey::create_timer(period_time);
 

@@ -62,17 +62,53 @@ public:
     using OnResolve = std::function<void(const Value&)>;
     using OnReject = std::function<void(const ErrorValue&)>;
 
-protected:
+    /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
+    /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters
+    /// TODO then does not satify monad algebra, because it unpacks the tuple. It should not unpack the tuple but
+    /// instad an observable that has value type tuple can be defined to call the notify callback with unpacking
+    template<typename F>
+    auto then(F && f) {
+        //using ParentValue = typename remove_shared_ptr_t<Parent>::Value;
+        /// The Observeble unpacks the arguments if its value is a tuple, so we have to do here the same
+        //using ReturnType = std::invoke_result_t<apply_if_tuple, F, ParentValue>;
+        using ReturnType = decltype( apply_if_tuple(f, std::declval<Value>()) );
+        if constexpr (std::is_void_v<ReturnType>) {
+            this->on_change([f=std::move(f)](const auto &new_value) {
+                apply_if_tuple(f, new_value);
+            });
+        } else {
+            using ObsValue = typename remove_optional<ReturnType>::type;
+            auto resulting_observable = std::make_shared<Observable<ObsValue>>();
+            resulting_observable->context = this->context;
+            this->context.lock()->icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {this->index.value()}); /// And add to the graph
+
+            const auto f_continued = [resulting_observable, f=std::move(f)](const auto &new_value) {
+                auto ret = apply_if_tuple(f, new_value);
+                if constexpr (is_optional_v<ReturnType>) {
+                    if(ret) {
+                        resulting_observable->_set(*ret);
+                    }
+                } else {
+                    resulting_observable->_set(ret);
+                }
+            };
+            this->on_change(f_continued);
+            return resulting_observable;
+        }
+    }
+
     /// Register to be notified when smth. changes
     void on_change(OnResolve && cb) {
         notify_list_.emplace_back(std::move(cb)); /// TODO rename to children ?
     }
+    /// TODO protect
 
     /// set and notify all observers about the new value
     virtual void _set(const Value &new_value) {
         for(auto cb: notify_list_) cb(new_value);
         
     }
+protected:
 
     void _reject(const ErrorValue &error) {
         for(auto cb: reject_cbs_) cb(error);
@@ -425,7 +461,7 @@ struct Graph {
 };
 
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
-struct Context {
+struct Context : public std::enable_shared_from_this<Context> {
     template<typename ParameterT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
@@ -441,6 +477,7 @@ struct Context {
         const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
         assert_icey_was_not_initialized();
         auto signal = std::make_shared<SubscriptionObservable<MessageT>>(name, qos, options);
+        signal->context = shared_from_this();
         /// Attach to graph and return vertex
         icey_dfg_graph_.add_vertex(signal);
         return signal;
@@ -459,6 +496,7 @@ struct Context {
     void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         assert_icey_was_not_initialized();
         auto publisher_observable = std::make_shared<PublisherObservable<MessageT>>(topic_name, qos);
+        publisher_observable->context = shared_from_this();
         icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
         icey_connect(parent, publisher_observable);
         /// DO not return it to disallow loops
@@ -467,6 +505,7 @@ struct Context {
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
         assert_icey_was_not_initialized();
         auto publisher_observable = std::make_shared<TransformPublisherObservable>();
+        publisher_observable->context = shared_from_this();
         icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
         icey_connect(parent, publisher_observable); /// This would be done by publish        
     }
@@ -474,6 +513,7 @@ struct Context {
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<TimerObservable>(interval, use_wall_time, is_one_off_timer);
+        observable->context = shared_from_this();
         icey_dfg_graph_.add_vertex(observable);
         return observable;
     }
@@ -574,41 +614,10 @@ struct Context {
     }
     */
 
-
-    /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
-    /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters
-    /// TODO then does not satify monad algebra, because it unpacks the tuple. It should not unpack the tuple but
-    /// instad an observable that has value type tuple can be defined to call the notify callback with unpacking
     template<typename Parent, typename F>
     auto then(Parent &parent, F && f) {
-        using ParentValue = typename remove_shared_ptr_t<Parent>::Value;
-        /// The Observeble unpacks the arguments if its value is a tuple, so we have to do here the same
-        //using ReturnType = std::invoke_result_t<apply_if_tuple, F, ParentValue>;
-        using ReturnType = decltype( apply_if_tuple(f, std::declval<ParentValue>()) );
-        if constexpr (std::is_void_v<ReturnType>) {
-            parent->on_change([f=std::move(f)](const auto &new_value) {
-                apply_if_tuple(f, new_value);
-            });
-        } else {
-            using ObsValue = typename remove_optional<ReturnType>::type;
-            auto resulting_observable = std::make_shared<Observable<ObsValue>>();
-            icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index.value()}); /// And add to the graph
-
-            const auto f_continued = [resulting_observable, f=std::move(f)](const auto &new_value) {
-                auto ret = apply_if_tuple(f, new_value);
-                if constexpr (is_optional_v<ReturnType>) {
-                    if(ret) {
-                        resulting_observable->_set(*ret);
-                    }
-                } else {
-                    resulting_observable->_set(ret);
-                }
-            };
-            parent->on_change(f_continued);
-            return resulting_observable;
-        }
+        return parent->then(std::move(f));
     }
-
     /// Now we can construct higher-order filters.
 
     /// For a tuple-observable, get it's N'th element
@@ -643,7 +652,7 @@ struct Context {
     void register_on_node_destruction_cb(std::function<void()> cb) {
         on_node_destruction_cb_ = cb;
     }
-protected:
+//protected:
     /// These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
     Graph icey_dfg_graph_;
     bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
