@@ -12,9 +12,11 @@ int main(int argc, char **argv) {
 
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);
 
+    /// std_msgs::msg::Float32::ConstPtr
     auto pipe1 = icey::then(float_tfed,
-        [](std_msgs::msg::Float32 float_val, const geometry_msgs::msg::TransformStamped &tf_val) -> float {
-            return float(float_val.data * tf_val.transform.rotation.z);
+        [](std_msgs::msg::Float32::ConstPtr float_val, 
+            geometry_msgs::msg::TransformStamped::ConstPtr tf_val) -> float {
+            return float(float_val->data * tf_val->transform.rotation.z);
         });
 
     /// this has type Observable<std::tuple<int, float>> 

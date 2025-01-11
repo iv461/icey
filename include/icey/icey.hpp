@@ -66,13 +66,10 @@ struct remove_shared_ptr<std::shared_ptr<T>> { using type = T; };
 template<class T>
 using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
 
-
 template<typename Head, typename...Tail>
-constexpr bool all_same(const std::tuple<Head,Tail...>&){
+constexpr bool all_same(const std::tuple<Head, Tail...>&){
     return (std::is_same_v<Head,Tail> && ...);
 }
-
-using Time = ROS2Adapter::Time;
 
 template<typename Func, typename Tuple>
 auto apply_if_tuple(Func&& func, Tuple&& tuple) {
@@ -84,6 +81,8 @@ auto apply_if_tuple(Func&& func, Tuple&& tuple) {
         return func(std::forward<Tuple>(tuple));
     }
 }
+
+using Time = ROS2Adapter::Time;
 
 class NodeAttachable {
 public:
@@ -328,54 +327,52 @@ public:
     }
 };
 
+/// An adapter, adapting the message_filters::SimpleFilter to our Observable (two different implementations of almost the same concept).
+/// Does nothing else than what message_filters::Subscriber does:
+/// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
+template<typename _Value>
+struct SimpleFilterAdapter : public Observable<_Value>, public message_filters::SimpleFilter<_Value> {
+    using Value = _Value;
+    SimpleFilterAdapter() {
+        this->on_change([this](const Value &msg) {
+            using Event = message_filters::MessageEvent<const Value>;
+            /// TODO HACK, fix properly, do not deref in sub
+            auto msg_ptr = std::make_shared<Value>(msg);
+            this->signalMessage(Event(msg_ptr));
+        });
+    }
+};
+
 /// Wrap the message filters package 
 /// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
 /// TODO adapt queue size automatically if we detect very different frequencies so that synchronization still works. 
 /// I would guess it works if the lowest frequency topic has a frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
 template<typename... Messages>
-class SynchronizerObservable : public Observable< std::tuple<const Messages...> > { 
-    /// An adapter, adapting the message_filters::SimpleFilter to our Observable (two different implementations of almost the same concept).
-    /// Does nothing else than what message_filters::Subscriber does:
-    /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
-    template<typename Value>
-    struct SimpleFilterAdapter : public Observable<Value>, public message_filters::SimpleFilter<Value> {
-        SimpleFilterAdapter() {
-            this->on_change([this](const Value &msg) {
-                using Event = message_filters::MessageEvent<const Value>;
-                /// TODO HACK, fix properly, do not deref in sub
-                auto msg_ptr = std::make_shared<Value>(msg);
-                this->signalMessage(Event(msg_ptr));
-            });
-        }
-    };    
+class SynchronizerObservable : public Observable< std::tuple<const typename Messages::ConstPtr ...> > { 
 public:
-    using Value = std::tuple<const Messages...>;
+    using Self = SynchronizerObservable<Messages...>;
+    using Value = std::tuple<const typename Messages::ConstPtr ...>;
     /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the `TImeSynchronizer` uses by default ExactTime
     using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
     using Sync = message_filters::Synchronizer<Policy>;
     using Inputs = std::tuple< std::shared_ptr<SimpleFilterAdapter<Messages>>... >;
     SynchronizerObservable(uint32_t queue_size) :
-         inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...), 
+         inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...), /// They are dynamically allocated as is every other Observable
          queue_size_(queue_size) {
             
         synchronizer_ = std::make_shared<Sync>(Policy(queue_size_));
-    
-        std::apply([this](auto &... input_filters) {
-                synchronizer_->connectInput(*input_filters...);
-         }, 
-         inputs_);
-        
-        /// synchronizer_->setAgePenalty(0.50); not sure why this is needed
-        // synchronizer_->registerCallback([this](std::shared_ptr<const Messages> ... messages) {
-        /*synchronizer_->registerCallback([this](std::shared_ptr<const std_msgs::msg::Float32> m1, 
-        std::shared_ptr<const geometry_msgs::msg::TransformStamped> m2) {
-            //this->_set(std::forward_as_tuple(*messages...));
-        });*/
-
+        /// Connect with the input observables
+        std::apply([this](auto &... input_filters) { synchronizer_->connectInput(*input_filters...);},inputs_);
+        synchronizer_->setAgePenalty(0.50); /// TODO not sure why this is needed, present in example code
+        synchronizer_->registerCallback(&Self::sync_callback, this); /// That is the only overload that we can use here that works with the legacy pre-variadic template code
     }
 
     const auto &inputs() const { return inputs_; }
 private:
+    void sync_callback(typename Messages::ConstPtr... messages) {
+        this->_set(std::forward_as_tuple(messages...));
+    }
+
     /// The input filters
     uint32_t queue_size_{10};
     

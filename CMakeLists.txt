@@ -26,6 +26,7 @@ ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp
 ament_auto_add_executable(multi_node_example examples/multi_node.cpp)
 ament_auto_add_executable(parameter_based_initialization_example examples/parameter_based_initialization.cpp)
 ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
+ament_auto_add_executable(message_filters_interoperability_example examples/message_filters_interoperability.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE
