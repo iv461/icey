@@ -10,9 +10,10 @@ int main(int argc, char **argv) {
     auto float_sig = icey::create_subscription<std_msgs::msg::Float32>("my_float");
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
+    /// Synchronize, uses approx time
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);
 
-    /// std_msgs::msg::Float32::ConstPtr
+    /// We always have to take a ConstPtr to the message:
     auto pipe1 = icey::then(float_tfed,
         [](std_msgs::msg::Float32::ConstPtr float_val, 
             geometry_msgs::msg::TransformStamped::ConstPtr tf_val) -> float {

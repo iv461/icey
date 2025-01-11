@@ -12,79 +12,26 @@
 #include <any> 
 
 #include <boost/noncopyable.hpp>
-#include <boost/hana.hpp>
-
-#include "std_msgs/msg/float32.hpp"
-#include "std_msgs/msg/int32.hpp"
-
+#include <icey/bag_of_metaprogramming_tricks.hpp>
 
 namespace icey {
 
 bool icey_debug_print = false;
 
-template<typename T>
-struct is_tuple : std::false_type {};
-
-template<typename... Args>
-struct is_tuple<std::tuple<Args...>> : std::true_type {};
-
-
-template<typename T>
-struct is_pair : std::false_type {};
-
-template<typename... Args>
-struct is_pair<std::pair<Args...>> : std::true_type {};
-
-template<typename T>
-constexpr bool is_tuple_v = is_tuple<T>::value;
-
-template<typename T>
-constexpr bool is_pair_v = is_pair<T>::value;
-
-template<class T>
-struct is_optional : std::false_type {};
-
-template<class T>
-struct is_optional<std::optional<T>> : std::true_type {};
-
-template<class T>
-constexpr bool is_optional_v = is_optional<T>::value;
-
-template<class T>
-struct remove_optional { using type = T;};
-
-template<class T>
-struct remove_optional<std::optional<T>> { using type = T; };
-
-
-template<class T>
-struct remove_shared_ptr { using type = T;};
-
-template<class T>
-struct remove_shared_ptr<std::shared_ptr<T>> { using type = T; };
-
-template<class T>
-using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
-
-template<typename Head, typename...Tail>
-constexpr bool all_same(const std::tuple<Head, Tail...>&){
-    return (std::is_same_v<Head,Tail> && ...);
-}
-
-template<typename Func, typename Tuple>
-auto apply_if_tuple(Func&& func, Tuple&& tuple) {
-    if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {
-        // Tuple detected, unpack and call the function
-        return std::apply(std::forward<Func>(func), std::forward<Tuple>(tuple));
-    } else {
-        // Not a tuple, just call the function directly
-        return func(std::forward<Tuple>(tuple));
-    }
-}
-
 using Time = ROS2Adapter::Time;
 
-class NodeAttachable {
+class Context;
+
+/// A node in the DFG-graph, corresponds to a node-attachable
+class DFGNode {
+public:
+    /// We bould the node starting from the root, to allow a context-free graph creation, we refer to the parents
+    std::weak_ptr<Context> context;
+    std::optional<size_t> index; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here because of cyclic dependency. None if this observable was not attached to the graph yet.
+};
+
+/// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber etc.
+class NodeAttachable : private boost::noncopyable {
 public:
     virtual void attach_to_node(ROSAdapter::NodeHandle &) {}
     /// Priority at which to attach this, needed to implement an order of initialization:
@@ -95,23 +42,16 @@ public:
     // 4: clients 
     // 5: timers
     virtual size_t attach_priority() const { return attach_priority_; } 
-
     size_t attach_priority_{0};
 };
 
-/// TODO do we need this ? Only used for graph. A read-only observable, with no value. Atatchnbel to ROS-node 
-/// TODO everything that captures this in a lambda should be noncopyable. Currently there are only the subscribers. 
-/// But how do we achive transparently copying around only references ?
-class ObservableBase : public NodeAttachable, private boost::noncopyable {
-public:
-    std::optional<size_t> index; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here because of cyclic dependency. None if this observable was not attached to the graph yet.
+struct AttachableNode  : public DFGNode, public NodeAttachable {
+
 };
-
-class Context;
-
 /// An observable. Similar to a promise in JS.
+/// TODO consider CRTP
 template<typename _Value, typename _ErrorValue = std::string>
-class Observable : public ObservableBase {
+class Observable : public AttachableNode {
     friend class Context; /// To prevent misuse, only the Context is allowed to register on_change callbacks
 public:
     using Value = _Value;
@@ -142,27 +82,40 @@ protected:
     std::vector<OnReject> reject_cbs_;
 };
 
+/// An observable storing the last received value
+template<typename _Value>
+struct BufferedObservable : public Observable<_Value> {
+    using Value = _Value;
+    using MaybeValue = std::optional<Value>;
+
+    virtual bool has_value() const {return value_.has_value(); }
+    virtual const Value &value() const { value_.value(); }
+protected:
+    /// The last received value.
+    MaybeValue value_;
+};
+
 /// An interpolatable observable is one that buffers the incoming values using a circular buffer and allows to query the message at a given point, optionally using interpolation.
 /// It is an essential for using lookupTransform with TF.
 /// It is used by synchronizers to synchronize a topic exactly at a given time point. 
 template<typename _Value>
-struct InterpolateableObservable : public Observable<_Value> {
+struct InterpolateableObservable : public BufferedObservable<_Value> {
     using Value = _Value;
     using Base = Observable<_Value>;
     using Self = InterpolateableObservable<Value>;
     using MaybeValue = typename Base::MaybeValue;
-
     /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or an extrapolation would be required.
     virtual MaybeValue get_at_time(const Time &time_point) const = 0;
-    //std::map<Time, Value> buffer_;
 };
 
 /// An observable that holds the last received value. Fires initially an event if a default_value is set
 template<typename _Value>
-class ParameterObservable : public Observable<_Value> {
+class ParameterObservable : public BufferedObservable<_Value> {
 public:
     using Value = _Value;
-    using MaybeValue = std::optional<Value>;
+    using Base = BufferedObservable<_Value>;
+    using MaybeValue = typename Base::MaybeValue;
+
     /// TODO FIX ARG DUP, capture hana sequence maybe in cb maybe
     ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value,
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor 
@@ -173,10 +126,8 @@ public:
         this->attach_priority_ = 0;
     }
 
-    auto has_value() const {return value_.has_value(); }
-    
     /// Parameters are initialized always at the beginning, so we can provide getters for the value. Note that has_value() must be checked beforehand since if no default value was provided, this function will throw std::bad_optional_access()
-    const Value &value() const {
+    const Value &value() const override {
         /// TODO do we want to allow this if the user provided a default value ? I think not, since it adds conceptual inconcistency to the otherwise inaccessible Observables
         if(!this->value_.has_value()) { /// First, check if this observable was accessed before spawning. This is needed to provide a nice  error message since confusing syncronous code will likely happen for users.
             throw std::runtime_error("[parameter '" + parameter_name_ + "']You cannot access the parameters before spawning the node, you can only access them inside callbacks (which are triggered after calling icey::spawn())");
@@ -192,7 +143,7 @@ protected:
         node_handle.declare_parameter<Value>(parameter_name_, default_value_, 
             [this](const rclcpp::Parameter &new_param) {
                 auto new_value = new_param.get_value<Value>();
-                value_ = new_value; /// Store value
+                this->value_ = new_value; /// Store value
                 this->_set(new_value); /// notify
         }, parameter_descriptor_, ignore_override_);
         /// Set default value
@@ -206,8 +157,6 @@ protected:
     MaybeValue default_value_;
     rcl_interfaces::msg::ParameterDescriptor parameter_descriptor_;
     bool ignore_override_;
-    /// The last received value.
-    MaybeValue value_;
 };
 
 template<typename _Value>
@@ -241,6 +190,10 @@ public:
             this->attach_priority_ = 3;
             }
 
+    /// TODO override: Is TF buffer empty ? -> Needed to distinguitsh TF errors
+    virtual bool has_value() const { return 
+        this->value_.has_value(); 
+    }
 protected:
     MaybeValue get_at_time(const Time &time_point) const override {
         std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
@@ -330,8 +283,9 @@ public:
 /// An adapter, adapting the message_filters::SimpleFilter to our Observable (two different implementations of almost the same concept).
 /// Does nothing else than what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
-template<typename _Value>
-struct SimpleFilterAdapter : public Observable<_Value>, public message_filters::SimpleFilter<_Value> {
+// We neeed the base to be able to recognize interpolatable nodes for example
+template<typename _Value, class Base = Observable<_Value> >
+struct SimpleFilterAdapter : public Base, public message_filters::SimpleFilter<_Value> {
     using Value = _Value;
     SimpleFilterAdapter() {
         this->on_change([this](const Value &msg) {
@@ -375,11 +329,12 @@ private:
 
     /// The input filters
     uint32_t queue_size_{10};
-    
+
     Inputs inputs_;
     std::shared_ptr<Sync> synchronizer_;
     
 };
+
 // A transform broadcaster observable 
 class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
 public:
@@ -446,7 +401,8 @@ protected:
 
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
 struct Graph {
-    using NodeData = std::shared_ptr<ObservableBase>;
+    /// TODO we want to put every observable in the graph, but not everything is a node attachable
+    using NodeData = std::shared_ptr<AttachableNode>;
     struct Node {
         explicit Node(const NodeData &_data): data(_data) {}
         NodeData data;
