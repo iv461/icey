@@ -445,11 +445,6 @@ struct DataFlowGraph {
 
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
-    template<class O, typename... Args>
-    std::shared_ptr<O> create_observable(Args &&... args) {
-        return create_observable_with_parent<O>(std::nullopt, std::forward<Args>(args)...);
-    }
-    
     template<typename ParameterT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
@@ -531,8 +526,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
     template<typename... Parents>
     auto serialize(Parents ... parents) { 
-        /// TODO assert all types are the same
-        /// Remote shared_ptr TODO write proper remove_shared_ptr type trait for this
+        /// TODO assert all types are the same -> cannot take variable number of same type arguments
         using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ParentValue = typename std::remove_reference_t<Parent>::Value;
         /// First, create a new observable
@@ -545,7 +539,7 @@ struct Context : public std::enable_shared_from_this<Context> {
             /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
             parents->on_change(cb);
         }(), ...);
-        return child; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
+        return child; /// Return the underlying pointer. We can do this, since internally everything is stored reference-counted.
     }
     /*
     template<class ParentValue>
@@ -645,8 +639,18 @@ struct Context : public std::enable_shared_from_this<Context> {
         on_node_destruction_cb_ = cb;
     }
 
+    /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
+    void initialize(ROSAdapter::NodeHandle &node) {
+        if(empty()) {
+            std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
+            return;
+        }
+        attach_everything_to_node(node);
+        icey_was_initialized_ = true;
+    }
+
 protected:
-    /// These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
+    /// TODO not true anymore These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
     DataFlowGraph icey_dfg_graph_;
     bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
@@ -664,7 +668,13 @@ protected:
         parent->on_change([child](const auto &new_value) { child->_set(new_value); });
     }
 
-    /// Overload for a single parent, pr
+    /// Overload for source observables, ones that have no parents
+    template<class O, typename... Args>
+    std::shared_ptr<O> create_observable(Args &&... args) {
+        return create_observable_with_parent<O>(std::nullopt, std::forward<Args>(args)...);
+    }
+    
+    /// Overload for a single parent
     template<class O, typename... Args>
     std::shared_ptr<O> create_observable_with_parent(std::optional<size_t> maybe_parent_id, Args &&... args) {
         std::vector<size_t> parent_ids;
@@ -673,9 +683,9 @@ protected:
         }
         return create_observable_with_parents<O>(parent_ids, std::forward<Args>(args)...);
     }
-    /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph. 
-    /// It does not connect the observables together
-    
+
+    /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph for which only the vertex id's are needed .
+    /// It does not connect the observables together, meaning they cannot communicate after calling this but instead icey_connect must be called
     template<class O, typename... Args>
     std::shared_ptr<O> create_observable_with_parents(const std::vector<size_t> &parent_ids, Args &&... args) {
         assert_icey_was_not_initialized();
@@ -684,28 +694,8 @@ protected:
         icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
         return observable;
     }
-};
-
-/// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables 
-class ROSNodeWithDFG : public ROSAdapter::Node, public Context {
-public:
-    using NodeBase = ROSAdapter::Node;
-    using NodeBase::NodeBase;
     
-    Context &icey() { return *this; } /// Upcast to disambiguate calls 
-
-    /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
-    void icey_initialize() {
-        if(icey_dfg_graph_.empty()) {
-            std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
-            return;
-        }
-        attach_everything_to_node();
-        icey_was_initialized_ = true;
-    }
-
-protected:
-    void attach_everything_to_node() {
+    void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
         if(icey_debug_print)
             std::cout << "[icey::Context] attach_everything_to_node() start" << std::endl;
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
@@ -728,7 +718,7 @@ protected:
             const auto &attachable = icey_dfg_graph_.graph_[i_vertex];
             if(attachable->attach_priority() == 1) /// Stop after attachning all parameters
                 break;
-            attachable->attach_to_node(*this); /// Attach
+            attachable->attach_to_node(node); /// Attach
         }
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
@@ -743,7 +733,7 @@ protected:
         /// If additional vertices have been added to the DFG, attach it as well 
         for(; i_vertex < num_vertices(icey_dfg_graph_.graph_); i_vertex++) {
             const auto &attachable = icey_dfg_graph_.graph_[i_vertex];
-            attachable->attach_to_node(*this); /// Attach
+            attachable->attach_to_node(node); /// Attach
         }
         if(icey_debug_print)
             std::cout << "[icey::Context] attach_everything_to_node() finished. " << std::endl;
@@ -756,6 +746,20 @@ protected:
         // assert_dfg_graph_is_acyclic() 
         /// analyze_dependencies() -> computes the number of threads needed
     }
+
+};
+
+/// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables. 
+/// This class is needed to ensure that the context lives for as long as the node lives.
+class ROSNodeWithDFG : public ROSAdapter::Node {
+public:
+    using Base = ROSAdapter::Node;
+    using Base::Base; // Take over all base class constructors
+    void icey_initialize() {
+        icey().initialize(*this);
+    }
+    Context &icey() { return *this->icey_context_; } 
+    std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
 };
 
 /// Blocking spawn of an existing node. 

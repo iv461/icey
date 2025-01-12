@@ -24,9 +24,9 @@ struct GlobalState {
         nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));    
         auto node = nodes.at(name); 
         currently_initializing_node_ = node; /// Assign so that adding new vertices in icey_initialize() uses the existing context
-        static_cast<Context&>(*node) = staged_context;
-        /// After committing the changes, clear them so that another node can be spawned
-        staged_context.clear();
+        node->icey_context_ = staged_context;
+        /// After committing the context to the new node, create a new empty context so that another node can be spawned later
+        staged_context = std::make_shared<Context>();
         node->icey_initialize();
         currently_initializing_node_ = {}; // We are done with initializing
         return node;
@@ -34,12 +34,12 @@ struct GlobalState {
 
     Context& get_context() {
         if(currently_initializing_node_) /// If we are configuring the graph in the after_parameters() callback
-            return *currently_initializing_node_;
-        return staged_context;
+            return *currently_initializing_node_->icey_context_;
+        return *staged_context;
     }
 
     ~GlobalState() {
-        if(!staged_context.empty()) {
+        if(!staged_context->empty()) {
             std::cout << "WARNING: You created some signals/states/timers, but no node was created, did you forget to call icey::spawn() ?" << std::endl;
         }
     }
@@ -57,7 +57,7 @@ private:
     }
 
     std::unordered_map<std::string, std::shared_ptr<ROSNodeWithDFG>> nodes;
-    Context staged_context;
+    std::shared_ptr<Context> staged_context{std::make_shared<Context>()}; /// Must be a shared_ptr because of observables reference it
     std::shared_ptr<ROSNodeWithDFG> currently_initializing_node_; /// The node that is currently in the initialization phase after the ROS-parameters have been obtained but adding stuff to the graph is still possible.
 };
 
