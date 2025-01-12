@@ -423,15 +423,10 @@ struct DataFlowGraph {
 
     /// Create a new node from data
     /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
-    void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data,
-        const std::optional< std::vector<size_t> > &maybe_parents = std::nullopt) {
-
+    void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data, const std::vector<size_t> &parents) {
         vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
-        if(maybe_parents) {
-            for(const auto &parent : *maybe_parents) {
-                
-                add_edge(parent, vertex_data->index.value(), EdgeData{}, graph_);
-            }
+        for(const auto &parent : parents) {   
+            add_edge(parent, vertex_data->index.value(), EdgeData{}, graph_);
         }
     }
     /// Returns an iterable of all the vertices
@@ -452,7 +447,7 @@ struct DataFlowGraph {
 struct Context : public std::enable_shared_from_this<Context> {
     template<class O, typename... Args>
     std::shared_ptr<O> create_observable(Args &&... args) {
-        return create_observable_with_parent<O, O>(std::shared_ptr<O>{}, std::forward<Args>(args)...);
+        return create_observable_with_parent<O>(std::nullopt, std::forward<Args>(args)...);
     }
     
     template<typename ParameterT>
@@ -474,11 +469,11 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<typename MessageT>
     void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-        create_observable_with_parent<PublisherObservable<MessageT>>(parent, topic_name, qos);
+        create_observable_with_parent<PublisherObservable<MessageT>>(parent->index.value(), topic_name, qos);
     }
     
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
-        create_observable_with_parent<TransformPublisherObservable>(parent);
+        create_observable_with_parent<TransformPublisherObservable>(parent->index.value());
     }
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
@@ -541,7 +536,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ParentValue = typename std::remove_reference_t<Parent>::Value;
         /// First, create a new observable
-        auto child = create_observable_with_parents<Observable<ParentValue>>(std::forward_as_tuple(parents...));
+        auto child = create_observable_with_parents<Observable<ParentValue>>({parents->index.value()...});
         /// Now connect each parent with the child with the idendity function
         ([&]{ 
             const auto cb = [child](const auto &new_val) {
@@ -598,7 +593,7 @@ struct Context : public std::enable_shared_from_this<Context> {
             });
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
-            auto child = parent->context.lock()->template create_observable_with_parent<Observable<ObsValue>>(parent);
+            auto child = parent->context.lock()->template create_observable_with_parent<Observable<ObsValue>>(parent->index.value());
 
             const auto f_continued = [child, f=std::move(f)](const auto &new_value) {
                 auto ret = apply_if_tuple(f, new_value);
@@ -670,34 +665,23 @@ protected:
     }
 
     /// Overload for a single parent, pr
-    template<class O, class ParentValue, typename... Args>
-    std::shared_ptr<O> create_observable_with_parent(std::shared_ptr<ParentValue> parent, Args &&... args) {
-        std::tuple<std::shared_ptr<ParentValue>> parents(parent);
-        return create_observable_with_parents<O>(parents, std::forward<Args>(args)...);
+    template<class O, typename... Args>
+    std::shared_ptr<O> create_observable_with_parent(std::optional<size_t> maybe_parent_id, Args &&... args) {
+        std::vector<size_t> parent_ids;
+        if(maybe_parent_id) {
+            parent_ids.push_back(*maybe_parent_id);
+        }
+        return create_observable_with_parents<O>(parent_ids, std::forward<Args>(args)...);
     }
     /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph. 
     /// It does not connect the observables together
-    template<class O, typename... ParentValues, typename... Args>
-    std::shared_ptr<O> create_observable_with_parents(const std::tuple<std::shared_ptr<ParentValues>...> &parents, Args &&... args) {
+    
+    template<class O, typename... Args>
+    std::shared_ptr<O> create_observable_with_parents(const std::vector<size_t> &parent_ids, Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         observable->context = shared_from_this();
-        if constexpr(sizeof...(ParentValues) == 1)  {
-            /// If there is only one parent, we check also for nullptr, not because we 
-            /// assume there may be a nullptr but because we handle here the additional create_observable overload that does not take any parents.
-            const auto &parent = std::get<0>(parents);
-            if(parent != nullptr) {
-                /// TODO solve better, std::vector has no single element constructor
-                std::vector<size_t> parent_ids;
-                parent_ids.push_back(parent->index.value());
-                icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
-            } else {
-                icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
-            }
-        } else {
-            auto parents_ids = std::apply([](const auto &...parents) { return std::vector<size_t>(parents->index.value()...); }, parents);
-            icey_dfg_graph_.add_vertex_with_parents(observable, parents_ids);
-        }
+        icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
         return observable;
     }
 };
