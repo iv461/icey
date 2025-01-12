@@ -95,12 +95,17 @@ protected:
 /// An observable storing the last received value
 template<typename _Value>
 struct BufferedObservable : public Observable<_Value> {
+    using Base = Observable<_Value>;
     using Value = _Value;
     using MaybeValue = std::optional<Value>;
-
     virtual bool has_value() const {return value_.has_value(); }
     virtual const Value &value() const { value_.value(); }
 protected:
+    /// Buffers the value and calls the base method
+    void _set(const Value &new_value) override {
+        value_ = new_value;
+        Base::_set(new_value);
+    }
     /// The last received value.
     MaybeValue value_;
 };
@@ -139,7 +144,7 @@ public:
     const Value &value() const override {
         /// TODO do we want to allow this if the user provided a default value ? I think not, since it adds conceptual inconcistency to the otherwise inaccessible Observables
         if(!this->value_.has_value()) { /// First, check if this observable was accessed before spawning. This is needed to provide a nice  error message since confusing syncronous code will likely happen for users.
-            throw std::runtime_error("[parameter '" + parameter_name_ + "']You cannot access the parameters before spawning the node, you can only access them inside callbacks (which are triggered after calling icey::spawn())");
+            throw std::runtime_error("[parameter '" + parameter_name_ + "'] You cannot access the parameters before spawning the node, you can only access them inside callbacks (which are triggered after calling icey::spawn())");
         }
         return this->value_.value();
     }
@@ -147,11 +152,11 @@ public:
 protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) override {
         if(icey_debug_print)
-            std::cout << "[ParameterObservable] attach_to_node()" << std::endl;
+            std::cout << "[ParameterObservable] attaching parameter '" + parameter_name_ + "' to node ..." << std::endl;
         /// Declare on change handler
         node_handle.declare_parameter<Value>(parameter_name_, default_value_, 
             [this](const rclcpp::Parameter &new_param) {
-                auto new_value = new_param.get_value<Value>();
+                Value new_value = new_param.get_value<Value>();
                 this->value_ = new_value; /// Store value
                 this->_set(new_value); /// notify
         }, parameter_descriptor_, ignore_override_);
