@@ -7,44 +7,46 @@ Sorted by decreasing priority.
 - [ ] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
 - [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless !
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
-- [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
-- [ ] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
+- [ ] Writable publiser, otherwise no hardware drivers possible !
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 
-- [ ] Code clean-up and dup: Wrap API in tuples, create graph afterwards
+- [X] Code clean-up and dup: Wrap API in tuples, create graph afterwards
 - [ ] Code clean up: take shared_ptr by value everywhere
 - [ ] publish shared ptr should be supported 
-- { } Writable publiser 
 - [ ] Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
+- [X] Support ApproxTime synchronization
 - [ ] Forbid subscribing to the same topic that is published by the same node 
+- [ ] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
 
-- [ ] Message converters to subscribe directly to https://github.com/ros2/examples/blob/rolling/rclcpp/topics/minimal_publisher/member_function_with_type_adapter.cpp
 - [ ] Promise-API: .catch(), finally mostly important for timeout detection of service call 
-- [ ] If we do not drive the event loop, we need to make the Observable::set_value() method publish, otherwise we cannot write camera drivers for example (that are callback-based)
-- [] Unit-tests testing the node
-- [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
-## Error-handling 
 
-- [ ] Check callback has the right type, compiler messages are hard to understand 
+- [] Unit-tests testing the node
+
+- [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
+## Error-handling 
 
 ## Examples 
 
 - [ ] port a small autoware or nav2 node to find out how many line of code we save
+- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
 ## Other
+
 - [] some autoware node needs dynamic parameter update callback to be set after algorithm has been initialized: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L153 (does not make any sense to me)
 - [] add custom loggers in the node: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L161
 - [] publish if subscribed (unnecessary imo)
 - [] be able to publish a tuple of optional values where some are set and some not. We need a way to directly publish some things and some not. for this, refactor connect using then, for this refactor then to receive a parent of the right type
 - [] Automatic synchronizer: idea is that it would be nice if there is only one icey::Sync method iIinterpolates if some signals are interpolatable, otherwise use approx time. If using approx time, exact time matches if the stamps match exactly. If the message type has no stamp, take receive time automatically. The idea is that the user should not specify which filter should be used, since we can infer this.
-- [] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals)
+- X] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals)
 - [] Vector publisher: timings etc, vector_publish(sig1, sig2, ... , topic1, topic2 ...)
 
 ## Other nice-to-have features, not for 0.1
 
+- [ ] Message converters to subscribe directly to https://github.com/ros2/examples/blob/rolling/rclcpp/topics/minimal_publisher/member_function_with_type_adapter.cpp
+- [ ] Check callback has the right type, compiler messages are hard to understand 
+- [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
 - [ ] .catch() promise fo TF buffer, would be useful to print the lookup error
 - [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
-- [ ] Support ApproxTime synchronization
     Sometimes we want to use the values of parameters to initialize the other stuff, i.e. frames of tf (topics should not be needed). So we need to somehow first get the parameters and then update sub/pub 
 - [ ] A way to enable/disable the node 
 - [ ] Maybe Simulink-style blocks, i.e. constant, step, function etc.
@@ -54,7 +56,7 @@ Sorted by decreasing priority.
 ## API elegance/clarity
 
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs)
-- [ ] .then() as member
+- [X] .then() as member
 - [ ] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
 - SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
 - [ ] Search for code that fixes the most common issues like setting int to an double param should be allowed

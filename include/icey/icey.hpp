@@ -11,7 +11,11 @@
 #include <unordered_map>
 #include <any> 
 
+/// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a dependecy of one 
 #include <boost/noncopyable.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/topological_sort.hpp>
+
 #include <icey/bag_of_metaprogramming_tricks.hpp>
 
 namespace icey {
@@ -408,52 +412,51 @@ protected:
     ROSAdapter::QoS qos_;
 };
 
+/// A dev/null observable, i.e. a observable that cannot have children (you realize now that there are much worse names for this, right ?).
+struct DevNullObservable {
+
+};
+
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
-struct Graph {
+struct DataFlowGraph {
+    /// TODO store the computation 
+    struct EdgeData {};
     /// TODO we want to put every observable in the graph, but not everything is a node attachable
-    using NodeData = std::shared_ptr<AttachableNode>;
-    struct Node {
-        explicit Node(const NodeData &_data): data(_data) {}
-        NodeData data;
-        std::vector<size_t> in_edges;
-        std::vector<size_t> out_edges;
-    };
+    using VertexData = std::shared_ptr<AttachableNode>;
+
+    using Graph = boost::adjacency_list<boost::listS,       // OutEdgeList: Use listS for edges (dynamic and efficient for insertion/deletion)
+        boost::listS,       // VertexList: Use listS for vertices (dynamic and efficient for insertion/deletion)
+        boost::directedS,   // Directedness: Use directedS for a directed graph since we are building a DAG
+        VertexData         // VertexProperties: Custom vertex data
+    >;
 
     /// Create a new node from data
-    Node& add_vertex(const NodeData &node_data) {
-        node_data->index = vertices.size(); /// TODO very ugly, but Obs needs to know the index
-        vertices.emplace_back(node_data);
-        return vertices.back();
+    void add_vertex_with_parents(VertexData &vertex_data, 
+        const std::optional< std::vector<size_t> > &maybe_parents = std::nullopt) {
+        vertex_data->index = num_vertices(graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
+        add_vertex(vertex_data, graph_);
+        if(maybe_parents) {
+            for(const auto &parent : *maybe_parents) {
+
+            }
+        }
     }
-    Node& add_vertex_with_parents(const NodeData &node_data, const std::vector<size_t> &parents) {
-        auto &new_node = add_vertex(node_data);
-        new_node.in_edges = parents;
-        return new_node;
+  
+    void topo_sort() {
+        std::vector< VertexData > c;
+        topological_sort(graph_, std::back_inserter(c));
     }
-    std::vector<Node> vertices;
+
+    Graph graph_;
 };
 
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
-    /// Creates a new observable of type O using the args and adds it to the graph.
     template<class O, typename... Args>
-    auto create_observable(Args ... args) {
-        assert_icey_was_not_initialized();
-        auto observable = std::make_shared<O>(args...);
-        observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex(observable);
-        return observable;
-    }
-    template<class O, class Value, typename... Args>
-    auto create_observable_with_parent(std::shared_ptr<Observable<Value>> parent, Args ... args) {
-        assert_icey_was_not_initialized();
-        auto observable = std::make_shared<O>(args...);
-        observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex_with_parents(observable, {parent->index.value()});
-        return observable;
+    void create_observable(Args &&... args) {
+        create_observable_with_parent<O, O>(std::nullopt, std::forward<Args>(args)...);
     }
     
-
     template<typename ParameterT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
@@ -473,11 +476,11 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<typename MessageT>
     void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-        create_observable_with_parent<PublisherObservable<MessageT>>(parent, topic_name, qos);
+        create_observable_with_parent<PublisherObservable<MessageT>>(parent->index.value(), topic_name, qos);
     }
     
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
-        create_observable_with_parent<TransformPublisherObservable>(parent);
+        create_observable_with_parent<TransformPublisherObservable>(parent->index.value());
     }
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
@@ -638,9 +641,10 @@ struct Context : public std::enable_shared_from_this<Context> {
     void register_on_node_destruction_cb(std::function<void()> cb) {
         on_node_destruction_cb_ = cb;
     }
-//protected:
+
+protected:
     /// These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
-    Graph icey_dfg_graph_;
+    DataFlowGraph icey_dfg_graph_;
     bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
     std::function<void()> after_parameter_initialization_cb_;
@@ -650,10 +654,23 @@ struct Context : public std::enable_shared_from_this<Context> {
         if(icey_was_initialized_) 
             throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
     }
-
+    /// Connects the parent with it's child. TODO we should not allow different Value types, we currently only need this for the service that receives a request and stores 
+    /// *both* the request and the respose. After fixing the service, this should be "icey_connect(Obs<Value> parent, Obs<Value> child)"
     template<class Value1, class Value2>
     void icey_connect(Value1 parent, Value2 child) {
         parent->on_change([child](const auto &new_value) { child->_set(new_value); });
+    }
+    /// Creates a new observable of type O using the args and adds it to the graph.
+    template<class O, class Parent, typename... Args>
+    auto create_observable_with_parent(std::optional<Parent> parent, Args &&... args) {
+        assert_icey_was_not_initialized();
+        auto observable = std::make_shared<O>(std::forward<Args>(args)...);
+        observable->context = shared_from_this();
+        if(parent_index) /// TODO 
+            icey_dfg_graph_.add_vertex_with_parents(observable, {*parent});
+        else
+            icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
+        return observable;
     }
 };
 
