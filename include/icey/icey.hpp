@@ -49,13 +49,12 @@ struct AttachableNode  : public DFGNode, public NodeAttachable {
 
 };
 /// An observable. Similar to a promise in JS.
-/// TODO consider CRTP
+/// TODO consider CRTP, would also be beneficial for PIMPL 
 template<typename _Value, typename _ErrorValue = std::string>
-class Observable : public AttachableNode {
+class Observable : public AttachableNode, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
     friend class Context; /// To prevent misuse, only the Context is allowed to register on_change callbacks
 public:
     using Value = _Value;
-    using MaybeValue = std::optional<Value>; 
     using ErrorValue = _ErrorValue;
     using Self = Observable<_Value, _ErrorValue>;
 
@@ -63,39 +62,15 @@ public:
     using OnReject = std::function<void(const ErrorValue&)>;
 
     /// Creates a new Observable that changes it's value to y every time the value x of the parent observable changes, where y = f(x).
-    /// TODO maybe use another observable that does not store the value, but instead simply passes it through ? For efficiency of higher-order filters
-    /// TODO then does not satify monad algebra, because it unpacks the tuple. It should not unpack the tuple but
-    /// instad an observable that has value type tuple can be defined to call the notify callback with unpacking
     template<typename F>
-    auto then(F && f) {
-        //using ParentValue = typename remove_shared_ptr_t<Parent>::Value;
-        /// The Observeble unpacks the arguments if its value is a tuple, so we have to do here the same
-        //using ReturnType = std::invoke_result_t<apply_if_tuple, F, ParentValue>;
-        using ReturnType = decltype( apply_if_tuple(f, std::declval<Value>()) );
-        if constexpr (std::is_void_v<ReturnType>) {
-            this->on_change([f=std::move(f)](const auto &new_value) {
-                apply_if_tuple(f, new_value);
-            });
-        } else {
-            using ObsValue = typename remove_optional<ReturnType>::type;
-            auto resulting_observable = std::make_shared<Observable<ObsValue>>();
-            resulting_observable->context = this->context;
-            this->context.lock()->icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {this->index.value()}); /// And add to the graph
+    auto then(F && f) { return this->context.lock()->then(this->shared_from_this(), f); }
 
-            const auto f_continued = [resulting_observable, f=std::move(f)](const auto &new_value) {
-                auto ret = apply_if_tuple(f, new_value);
-                if constexpr (is_optional_v<ReturnType>) {
-                    if(ret) {
-                        resulting_observable->_set(*ret);
-                    }
-                } else {
-                    resulting_observable->_set(ret);
-                }
-            };
-            this->on_change(f_continued);
-            return resulting_observable;
-        }
+    /// Create a ROS publisher for this observable.
+    template<typename MessageT>
+    void publish(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+        return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
     }
+protected:
 
     /// Register to be notified when smth. changes
     void on_change(OnResolve && cb) {
@@ -108,7 +83,6 @@ public:
         for(auto cb: notify_list_) cb(new_value);
         
     }
-protected:
 
     void _reject(const ErrorValue &error) {
         for(auto cb: reject_cbs_) cb(error);
@@ -137,8 +111,7 @@ protected:
 template<typename _Value>
 struct InterpolateableObservable : public BufferedObservable<_Value> {
     using Value = _Value;
-    using Base = Observable<_Value>;
-    using Self = InterpolateableObservable<Value>;
+    using Base = BufferedObservable<_Value>;    
     using MaybeValue = typename Base::MaybeValue;
     /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or an extrapolation would be required.
     virtual MaybeValue get_at_time(const Time &time_point) const = 0;
@@ -615,8 +588,34 @@ struct Context : public std::enable_shared_from_this<Context> {
     */
 
     template<typename Parent, typename F>
-    auto then(Parent &parent, F && f) {
-        return parent->then(std::move(f));
+    auto then(Parent parent, F && f) {
+        //using ParentValue = typename remove_shared_ptr_t<Parent>::Value;
+        /// The Observeble unpacks the arguments if its value is a tuple, so we have to do here the same
+        //using ReturnType = std::invoke_result_t<apply_if_tuple, F, ParentValue>;
+        using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()) );
+        if constexpr (std::is_void_v<ReturnType>) {
+            parent->on_change([f=std::move(f)](const auto &new_value) {
+                apply_if_tuple(f, new_value);
+            });
+        } else {
+            using ObsValue = typename remove_optional<ReturnType>::type;
+            auto resulting_observable = std::make_shared<Observable<ObsValue>>();
+            resulting_observable->context = parent->context;
+            parent->context.lock()->icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index.value()}); /// And add to the graph
+
+            const auto f_continued = [resulting_observable, f=std::move(f)](const auto &new_value) {
+                auto ret = apply_if_tuple(f, new_value);
+                if constexpr (is_optional_v<ReturnType>) {
+                    if(ret) {
+                        resulting_observable->_set(*ret);
+                    }
+                } else {
+                    resulting_observable->_set(ret);
+                }
+            };
+            parent->on_change(f_continued);
+            return resulting_observable;
+        }
     }
     /// Now we can construct higher-order filters.
 
