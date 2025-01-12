@@ -538,6 +538,23 @@ struct Context : public std::enable_shared_from_this<Context> {
     }*/
 
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
+    template<typename... Parents>
+    auto serialize(Parents && ... parents) { 
+        /// TODO assert all types are the same
+        /// Remote shared_ptr TODO write proper remove_shared_ptr type trait for this
+        using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
+        using ParentValue = typename std::remove_reference_t<Parent>::Value;
+        auto child = create_observable_with_parents<Observable<ParentValue>>(std::forward_as_tuple(parents...));
+        ([&]{ 
+            const auto cb = [child](const auto &new_val) {
+                child->_set(new_val);
+            };
+            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
+            parents->on_change(cb);
+        }(), ...);
+        return child; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
+    }
+    /*
     template<class ParentValue>
     auto serialize(std::shared_ptr<ParentValue> ... parents) { 
         auto child = create_observable_with_parents<Observable<ParentValue>>(std::forward_as_tuple(parents...));
@@ -550,6 +567,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         }(), ...);
         return child; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
+    */
 
     /// When reference updates, we pass all others parents, 
     /// TODO need BufferedObservable for this, but using this filter is discouraged
@@ -656,8 +674,8 @@ protected:
     /// Overload for a single parent, pr
     template<class O, class ParentValue, typename... Args>
     std::shared_ptr<O> create_observable_with_parent(std::shared_ptr<ParentValue> parent, Args &&... args) {
-        return 
-        create_observable_with_parents<O>(std::tuple<ParentValue>(parent), std::forward<Args>(args)...);
+        std::tuple<std::shared_ptr<ParentValue>> parents(parent);
+        return create_observable_with_parents<O>(parents, std::forward<Args>(args)...);
     }
     /// Creates a new observable of type O using the args and adds it to the graph.
     template<class O, typename... ParentValues, typename... Args>
@@ -673,12 +691,14 @@ protected:
                 std::vector<size_t> parent_ids;
                 parent_ids.push_back(parents->index.value());
                 icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
-                icey_connect(parent, observable);
+                icey_connect(parents, observable);
             } else {
-            i   icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
+                icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
             }
         } else {
-            icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...});
+            auto parents_ids = std::apply([](const auto &...parents) { return std::vector<size_t>(parents->index.value()...); }, parents);
+            icey_dfg_graph_.add_vertex_with_parents(observable, parents_ids);
+            /// TODO icey_connect(parents, observable)...;
         }
         return observable;
     }
