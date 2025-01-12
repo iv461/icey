@@ -413,10 +413,9 @@ protected:
     ROSAdapter::QoS qos_;
 };
 
+struct Nothing {};
 /// A dev/null observable, i.e. a observable that cannot have children (you realize now that there are much worse names for this, right ?).
-struct DevNullObservable {
-
-};
+struct DevNullObservable : public Observable<Nothing> { };
 
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
 struct DataFlowGraph {
@@ -503,7 +502,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         sync->context = shared_from_this();
         /// Connect the inputs of the synchronizer to the parents
         std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
-        icey_dfg_graph_.add_vertex_with_parents(sync, std::vector<size_t>(parents->index.value() ...));
+        data_flow_graph_.add_vertex_with_parents(sync, std::vector<size_t>(parents->index.value() ...));
         return sync;
     }
 
@@ -515,7 +514,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::Value...>;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
+        data_flow_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
         ([&]{ 
             const auto f_continued = [resulting_observable](auto&&... parents) {
                 auto all_argunments_arrived = (parents->value_ && ... && true);
@@ -570,7 +569,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         /// Remote shared_ptr TODO write proper type trait for this
         using ReturnType = std::tuple<Reference, typename std::remove_reference_t<decltype(*parents)>::Value...>;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {reference, parents->index.value()...}); /// And add to the graph
+        data_flow_graph_.add_vertex_with_parents(resulting_observable, {reference, parents->index.value()...}); /// And add to the graph
         const auto f_continued = [resulting_observable, reference](auto&&... parents) {
             auto all_argunments_arrived = (parents->value_ && ... && true);
             if(all_argunments_arrived) 
@@ -582,14 +581,22 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
     */
 
+    template<typename F>
+    auto unpack_if_calling_tuple(F && f) {
+        return [f=std::move(f)](const auto &new_value) {
+                apply_if_tuple(f, new_value);
+        };
+    }
+
     template<typename Parent, typename F>
     auto then(Parent parent, F && f) {     
         // assert parent has index
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()) );
         if constexpr (std::is_void_v<ReturnType>) {
-            parent->on_change([f=std::move(f)](const auto &new_value) {
-                apply_if_tuple(f, new_value);
-            });
+            /// Create a dummy node to be able to add the edge in the graph
+            auto child = create_observable_with_parent<DevNullObservable>(parent->index.value());
+            //connect(parent, child)
+            parent->on_change(unpack_if_calling_tuple(f));
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
             auto child = parent->context.lock()->template create_observable_with_parent<Observable<ObsValue>>(parent->index.value());
@@ -619,8 +626,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
 
     // TODO maybe rem, derive from graph
-    bool empty() const { return icey_dfg_graph_.empty(); }
-    void clear() { icey_dfg_graph_.clear(); }
+    bool empty() const { return data_flow_graph_.empty(); }
+    void clear() { data_flow_graph_.clear(); }
 
     /// Register callback to be called after all parameters have been attached
 
@@ -651,28 +658,15 @@ struct Context : public std::enable_shared_from_this<Context> {
             return;
         }
         attach_everything_to_node(node);
-        icey_was_initialized_ = true;
+        was_initialized_ = true;
     }
 
-protected:
-    /// TODO not true anymore These are prepended with ICEY because with derive from rclcpp::Node and have to avoid name collisions
-    DataFlowGraph icey_dfg_graph_;
-    bool icey_was_initialized_{false}; /// Indicates whether icey_initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
-
-    std::function<void()> after_parameter_initialization_cb_;
-    std::function<void()> on_node_destruction_cb_;
-    
+protected:    
     void assert_icey_was_not_initialized() {
-        if(icey_was_initialized_) 
+        if(was_initialized_) 
             throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
     }
-    /// Connects the parent with it's child. TODO we should not allow different Value types, we currently only need this for the service that receives a request and stores 
-    /// *both* the request and the respose. After fixing the service, this should be "icey_connect(Obs<Value> parent, Obs<Value> child)"
-    template<class Value1, class Value2>
-    void icey_connect(Value1 parent, Value2 child) {
-        parent->on_change([child](const auto &new_value) { child->_set(new_value); });
-    }
-
+    
     /// Overload for source observables, ones that have no parents
     template<class O, typename... Args>
     std::shared_ptr<O> create_observable(Args &&... args) {
@@ -696,22 +690,34 @@ protected:
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
+        data_flow_graph_.add_vertex_with_parents(observable, parent_ids);
         return observable;
     }
     
+    /// Connects the parent with it's child. TODO we should not allow different Value types, we currently only need this for the service that receives a request and stores 
+    /// *both* the request and the respose. After fixing the service, this should be "icey_connect(Obs<Value> parent, Obs<Value> child)"
+    template<class Value1, class Value2>
+    void icey_connect(Value1 parent, Value2 child) {
+        parent->on_change([child](const auto &new_value) { child->_set(new_value); });
+    }
+
+    template<class Value1, class Value2>
+    void create_connection(Value1 parent, Value2 child) {
+        parent->on_change([child](const auto &new_value) { child->_set(new_value); });
+    }
+
     void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
         if(icey_debug_print)
             std::cout << "[icey::Context] attach_everything_to_node() start" << std::endl;
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
 
-        auto vertex_index_range = icey_dfg_graph_.get_vertices_index_range();
+        auto vertex_index_range = data_flow_graph_.get_vertices_index_range();
         std::vector<int> vertex_index_range_copy(vertex_index_range.begin(), vertex_index_range.end());
-        
+        /// TODO WE NEED TO SORT AGAIN BELOW
         std::sort(vertex_index_range_copy.begin(), vertex_index_range_copy.end(), 
-            [this](const auto &v1, const auto &v2) { return icey_dfg_graph_.graph_[v1]->attach_priority() 
-                < icey_dfg_graph_.graph_[v2]->attach_priority();});
+            [this](const auto &v1, const auto &v2) { return data_flow_graph_.graph_[v1]->attach_priority() 
+                < data_flow_graph_.graph_[v2]->attach_priority();});
 
         size_t i_vertex = 0;
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
@@ -719,8 +725,8 @@ protected:
         /// For this, first attach only the parameters (prio 0)
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
-        for(; i_vertex < num_vertices(icey_dfg_graph_.graph_); i_vertex++) {
-            const auto &attachable = icey_dfg_graph_.graph_[i_vertex];
+        for(; i_vertex < num_vertices(data_flow_graph_.graph_); i_vertex++) {
+            const auto &attachable = data_flow_graph_.graph_[i_vertex];
             if(attachable->attach_priority() == 1) /// Stop after attachning all parameters
                 break;
             attachable->attach_to_node(node); /// Attach
@@ -735,9 +741,12 @@ protected:
 
         if(icey_debug_print)
             std::cout << "[icey::Context] Maybe new vertices... " << std::endl;
+        /// TODO WE NEED TO SORT AGAIN BELOW
+        // node_attach_priority = binary predicate
+        // get_vertex_in_order(node_attach_priority)
         /// If additional vertices have been added to the DFG, attach it as well 
-        for(; i_vertex < num_vertices(icey_dfg_graph_.graph_); i_vertex++) {
-            const auto &attachable = icey_dfg_graph_.graph_[i_vertex];
+        for(; i_vertex < num_vertices(data_flow_graph_.graph_); i_vertex++) {
+            const auto &attachable = data_flow_graph_.graph_[i_vertex];
             attachable->attach_to_node(node); /// Attach
         }
         if(icey_debug_print)
@@ -746,12 +755,17 @@ protected:
 
     /// TODO 
     void analyze_dfg() {
-        icey_dfg_graph_.topo_sort();
+        data_flow_graph_.topo_sort();
         /// do_topological_sort_on_dfg_graph()
         // assert_dfg_graph_is_acyclic() 
         /// analyze_dependencies() -> computes the number of threads needed
     }
+    
+    DataFlowGraph data_flow_graph_;
+    bool was_initialized_{false}; /// Indicates whether initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
+    std::function<void()> after_parameter_initialization_cb_;
+    std::function<void()> on_node_destruction_cb_;
 };
 
 /// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables. 
