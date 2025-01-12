@@ -421,27 +421,26 @@ struct DevNullObservable {
 struct DataFlowGraph {
     /// TODO store the computation 
     struct EdgeData {};
-    /// TODO we want to put every observable in the graph, but not everything is a node attachable
     using VertexData = std::shared_ptr<AttachableNode>;
-
-    using Graph = boost::adjacency_list<boost::listS,       // OutEdgeList: Use listS for edges (dynamic and efficient for insertion/deletion)
-        boost::listS,       // VertexList: Use listS for vertices (dynamic and efficient for insertion/deletion)
-        boost::directedS,   // Directedness: Use directedS for a directed graph since we are building a DAG
-        VertexData         // VertexProperties: Custom vertex data
-    >;
+    /// vecS needed so that the vertex id's are consecutive integers
+    using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
 
     /// Create a new node from data
-    void add_vertex_with_parents(VertexData &vertex_data, 
-        const std::optional< std::vector<size_t> > &maybe_parents = std::nullopt) {
-        vertex_data->index = num_vertices(graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
-        add_vertex(vertex_data, graph_);
+    void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data,
+        const std::optional< std::vector<std::shared_ptr<AttachableNode>> > &maybe_parents = std::nullopt) {
+
+        vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
         if(maybe_parents) {
             for(const auto &parent : *maybe_parents) {
-
+                // assert (parent->index.has_value(), "Observable was not yet added to the graph")
+                add_edge(parent->index.value(), vertex_data->index.value(), EdgeData{}, graph_);
             }
         }
     }
-  
+    
+    bool empty() const { return num_vertices(graph_) == 0; }
+    void clear() { graph_.clear(); }
+
     void topo_sort() {
         std::vector< VertexData > c;
         topological_sort(graph_, std::back_inserter(c));
@@ -454,7 +453,7 @@ struct DataFlowGraph {
 struct Context : public std::enable_shared_from_this<Context> {
     template<class O, typename... Args>
     void create_observable(Args &&... args) {
-        create_observable_with_parent<O, O>(std::nullopt, std::forward<Args>(args)...);
+        create_observable_with_parent<O, O>(O{}, std::forward<Args>(args)...);
     }
     
     template<typename ParameterT>
@@ -476,11 +475,11 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<typename MessageT>
     void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-        create_observable_with_parent<PublisherObservable<MessageT>>(parent->index.value(), topic_name, qos);
+        create_observable_with_parent<PublisherObservable<MessageT>>(parent, topic_name, qos);
     }
     
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
-        create_observable_with_parent<TransformPublisherObservable>(parent->index.value());
+        create_observable_with_parent<TransformPublisherObservable>(parent);
     }
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
@@ -617,8 +616,9 @@ struct Context : public std::enable_shared_from_this<Context> {
         });
     }
 
-    bool empty() const { return icey_dfg_graph_.vertices.empty(); }
-    void clear() { icey_dfg_graph_.vertices.clear(); }
+    // TODO maybe rem, derive from graph
+    bool empty() const { return icey_dfg_graph_.empty(); }
+    void clear() { icey_dfg_graph_.clear(); }
 
     /// Register callback to be called after all parameters have been attached
 
@@ -662,12 +662,12 @@ protected:
     }
     /// Creates a new observable of type O using the args and adds it to the graph.
     template<class O, class Parent, typename... Args>
-    auto create_observable_with_parent(std::optional<Parent> parent, Args &&... args) {
+    std::shared_ptr<O> create_observable_with_parent(Parent parent, Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         observable->context = shared_from_this();
-        if(parent_index) /// TODO 
-            icey_dfg_graph_.add_vertex_with_parents(observable, {*parent});
+        if(parent) /// TODO 
+            icey_dfg_graph_.add_vertex_with_parents(observable, {parent});
         else
             icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
         return observable;
