@@ -435,80 +435,66 @@ struct Graph {
 
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
+    /// Creates a new observable of type O using the args and adds it to the graph.
+    template<class O, typename... Args>
+    auto create_observable(Args ... args) {
+        assert_icey_was_not_initialized();
+        auto observable = std::make_shared<O>(args...);
+        observable->context = shared_from_this();
+        icey_dfg_graph_.add_vertex(observable);
+        return observable;
+    }
+    template<class O, class Value, typename... Args>
+    auto create_observable_with_parent(std::shared_ptr<Observable<Value>> parent, Args ... args) {
+        assert_icey_was_not_initialized();
+        auto observable = std::make_shared<O>(args...);
+        observable->context = shared_from_this();
+        icey_dfg_graph_.add_vertex_with_parents(observable, {parent->index.value()});
+        return observable;
+    }
+    
+
     template<typename ParameterT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
             bool ignore_override = false) {
-        assert_icey_was_not_initialized();
-        auto param_obs = std::make_shared<ParameterObservable<ParameterT>>(name, maybe_default_value, parameter_descriptor, ignore_override);
-        icey_dfg_graph_.add_vertex(param_obs);
-        return param_obs;
+        return create_observable<ParameterObservable<ParameterT>>(name, maybe_default_value, parameter_descriptor, ignore_override);
     }
 
     template<typename MessageT>
     auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(),
         const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-        assert_icey_was_not_initialized();
-        auto signal = std::make_shared<SubscriptionObservable<MessageT>>(name, qos, options);
-        signal->context = shared_from_this();
-        /// Attach to graph and return vertex
-        icey_dfg_graph_.add_vertex(signal);
-        return signal;
+        return create_observable< SubscriptionObservable<MessageT> >(name, qos, options);
     }
 
      auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
-        assert_icey_was_not_initialized();
-        auto tf_signal = std::make_shared<TransformSubscriptionObservable>(target_frame, source_frame);
-        /// Attach to graph and return vertex
-        icey_dfg_graph_.add_vertex(tf_signal);
-        return tf_signal;
+        return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
     }
 
-    /// A writable signal, i.e. publisher
     template<typename MessageT>
     void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-        assert_icey_was_not_initialized();
-        auto publisher_observable = std::make_shared<PublisherObservable<MessageT>>(topic_name, qos);
-        publisher_observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
-        icey_connect(parent, publisher_observable);
-        /// DO not return it to disallow loops
+        create_observable_with_parent<PublisherObservable<MessageT>>(parent, topic_name, qos);
     }
     
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
-        assert_icey_was_not_initialized();
-        auto publisher_observable = std::make_shared<TransformPublisherObservable>();
-        publisher_observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex_with_parents(publisher_observable, {parent->index.value()});
-        icey_connect(parent, publisher_observable); /// This would be done by publish        
+        create_observable_with_parent<TransformPublisherObservable>(parent);
     }
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
-        assert_icey_was_not_initialized();
-        auto observable = std::make_shared<TimerObservable>(interval, use_wall_time, is_one_off_timer);
-        observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex(observable);
-        return observable;
+        return create_observable<TimerObservable>(interval, use_wall_time, is_one_off_timer);
+        
     }
-
-    /// Provide a service 
+    
     template<typename ServiceT> 
     auto create_service(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-        assert_icey_was_not_initialized();
-        const auto service_attachable = std::make_shared<ServiceObservable<ServiceT>>(service_name, qos);
-        icey_dfg_graph_.add_vertex(service_attachable);
-        return service_attachable;
+        return create_observable<ServiceObservable<ServiceT>>(service_name, qos);
     }
 
     /// Add a service client
     template<typename ServiceT> 
     auto create_client(typename ClientObservable<ServiceT>::Parent parent, 
          const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-        assert_icey_was_not_initialized();
-        const auto client_attachable = std::make_shared<ClientObservable<ServiceT>>(service_name, qos);
-        icey_dfg_graph_.add_vertex_with_parents(client_attachable, {parent->index.value()});
-        icey_connect(parent, client_attachable); /// Connect parent with child so that when the parent changes, the new value is propagated to the child
-        return client_attachable;
+        return create_observable<ClientObservable<ServiceT>>(service_name, qos);
     }
     
     /// Synchronize observables using approximate time
@@ -520,7 +506,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
         /// Connect the inputs of the synchronizer to the parents
         std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
-
+        sync->context = shared_from_this();
         icey_dfg_graph_.add_vertex_with_parents(sync, {parents->index.value() ...});
         return sync;
     }
@@ -555,6 +541,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         using FirstType = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ReturnType = typename std::remove_reference_t<FirstType>::Value;
         auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
+        resulting_observable->context = shared_from_this();
         icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
         ([&]{ 
             const auto cb = [resulting_observable](const auto &new_val) {
