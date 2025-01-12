@@ -41,8 +41,8 @@ int main(int argc, char **argv) {
     auto float2 = icey::create_subscription<std_msgs::msg::Float32>("float2");
     auto float3 = icey::create_subscription<std_msgs::msg::Float32>("float3");
 
-    
-    icey::create_publisher(icey::serialize(float1, float2, float3), "float_serialized");
+    auto serialized = icey::serialize(float1, float2, float3);
+    icey::create_publisher(serialized, "float_serialized");
 
     //// Now multiple-input to single output: Modeling control flow such as 
     icey::spawn(argc, argv, "piping_example"); /// Create and start node

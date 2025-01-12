@@ -9,8 +9,6 @@
 #include <map>
 #include <optional>
 #include <unordered_map>
-#include <any> 
-
 /// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a dependecy of one 
 #include <boost/noncopyable.hpp>
 #include <boost/graph/adjacency_list.hpp>
@@ -21,9 +19,7 @@
 namespace icey {
 
 bool icey_debug_print = false;
-
 using Time = ROS2Adapter::Time;
-
 class Context;
 
 /// A node in the DFG-graph, corresponds to a node-attachable
@@ -445,8 +441,8 @@ struct DataFlowGraph {
     void clear() { graph_.clear(); }
 
     void topo_sort() {
-        std::vector< VertexData > c;
-        topological_sort(graph_, std::back_inserter(c));
+        //std::vector< VertexData > c;
+        //topological_sort(graph_, std::back_inserter(c));
     }
 
     Graph graph_;
@@ -506,13 +502,13 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto synchronize(Parents ... parents) { 
         uint32_t queue_size = 10; // TODO update automatically 
         assert_icey_was_not_initialized();        
-        /// TODO The following is duped with create_observable_with_parent because we need to connect many inputs to many outputs, 
+        /// TODO The following is duped with create_observable_with_parents because we need to connect many inputs to many outputs, 
         /// maybe solve with vector then. 
         auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
         sync->context = shared_from_this();
         /// Connect the inputs of the synchronizer to the parents
         std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
-        icey_dfg_graph_.add_vertex_with_parents(sync, {parents->index.value() ...});
+        icey_dfg_graph_.add_vertex_with_parents(sync, std::vector<size_t>(parents->index.value() ...));
         return sync;
     }
 
@@ -539,12 +535,14 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
     template<typename... Parents>
-    auto serialize(Parents && ... parents) { 
+    auto serialize(Parents ... parents) { 
         /// TODO assert all types are the same
         /// Remote shared_ptr TODO write proper remove_shared_ptr type trait for this
         using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ParentValue = typename std::remove_reference_t<Parent>::Value;
+        /// First, create a new observable
         auto child = create_observable_with_parents<Observable<ParentValue>>(std::forward_as_tuple(parents...));
+        /// Now connect each parent with the child with the idendity function
         ([&]{ 
             const auto cb = [child](const auto &new_val) {
                 child->_set(new_val);
@@ -601,7 +599,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
             auto child = parent->context.lock()->template create_observable_with_parent<Observable<ObsValue>>(parent);
-        
+
             const auto f_continued = [child, f=std::move(f)](const auto &new_value) {
                 auto ret = apply_if_tuple(f, new_value);
                 if constexpr (is_optional_v<ReturnType>) {
@@ -677,28 +675,28 @@ protected:
         std::tuple<std::shared_ptr<ParentValue>> parents(parent);
         return create_observable_with_parents<O>(parents, std::forward<Args>(args)...);
     }
-    /// Creates a new observable of type O using the args and adds it to the graph.
+    /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph. 
+    /// It does not connect the observables together
     template<class O, typename... ParentValues, typename... Args>
-    std::shared_ptr<O> create_observable_with_parents(std::tuple<std::shared_ptr<ParentValues>...> parents, Args &&... args) {
+    std::shared_ptr<O> create_observable_with_parents(const std::tuple<std::shared_ptr<ParentValues>...> &parents, Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         observable->context = shared_from_this();
         if constexpr(sizeof...(ParentValues) == 1)  {
             /// If there is only one parent, we check also for nullptr, not because we 
             /// assume there may be a nullptr but because we handle here the additional create_observable overload that does not take any parents.
-            if(parents != nullptr) {
+            const auto &parent = std::get<0>(parents);
+            if(parent != nullptr) {
                 /// TODO solve better, std::vector has no single element constructor
                 std::vector<size_t> parent_ids;
-                parent_ids.push_back(parents->index.value());
+                parent_ids.push_back(parent->index.value());
                 icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
-                icey_connect(parents, observable);
             } else {
                 icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
             }
         } else {
             auto parents_ids = std::apply([](const auto &...parents) { return std::vector<size_t>(parents->index.value()...); }, parents);
             icey_dfg_graph_.add_vertex_with_parents(observable, parents_ids);
-            /// TODO icey_connect(parents, observable)...;
         }
         return observable;
     }

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   #add_compile_options(-Wall -Wno-unused-parameter -Wno-reorder])
-  add_compile_options(-fmax-errors=1)
+  add_compile_options(-fmax-errors=1 -w)
    
 endif()
 
