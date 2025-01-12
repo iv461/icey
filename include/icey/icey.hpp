@@ -426,18 +426,21 @@ struct DataFlowGraph {
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
 
     /// Create a new node from data
+    /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
     void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data,
-        const std::optional< std::vector<std::shared_ptr<AttachableNode>> > &maybe_parents = std::nullopt) {
+        const std::optional< std::vector<size_t> > &maybe_parents = std::nullopt) {
 
         vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
         if(maybe_parents) {
             for(const auto &parent : *maybe_parents) {
-                // assert (parent->index.has_value(), "Observable was not yet added to the graph")
-                add_edge(parent->index.value(), vertex_data->index.value(), EdgeData{}, graph_);
+                
+                add_edge(parent, vertex_data->index.value(), EdgeData{}, graph_);
             }
         }
     }
-    
+    /// Returns an iterable of all the vertices
+    auto get_vertices_index_range() { return boost::make_iterator_range(vertices(graph_)); }
+
     bool empty() const { return num_vertices(graph_) == 0; }
     void clear() { graph_.clear(); }
 
@@ -452,8 +455,8 @@ struct DataFlowGraph {
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
     template<class O, typename... Args>
-    void create_observable(Args &&... args) {
-        create_observable_with_parent<O, O>(O{}, std::forward<Args>(args)...);
+    std::shared_ptr<O> create_observable(Args &&... args) {
+        return create_observable_with_parent<O, O>(std::shared_ptr<O>{}, std::forward<Args>(args)...);
     }
     
     template<typename ParameterT>
@@ -469,7 +472,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         return create_observable< SubscriptionObservable<MessageT> >(name, qos, options);
     }
 
-     auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
+    auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
         return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
     }
 
@@ -484,7 +487,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
         return create_observable<TimerObservable>(interval, use_wall_time, is_one_off_timer);
-        
     }
     
     template<typename ServiceT> 
@@ -504,11 +506,12 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto synchronize(Parents ... parents) { 
         uint32_t queue_size = 10; // TODO update automatically 
         assert_icey_was_not_initialized();        
+        /// TODO The following is duped with create_observable_with_parent because we need to connect many inputs to many outputs, 
+        /// maybe solve with vector then. 
         auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
-
+        sync->context = shared_from_this();
         /// Connect the inputs of the synchronizer to the parents
         std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
-        sync->context = shared_from_this();
         icey_dfg_graph_.add_vertex_with_parents(sync, {parents->index.value() ...});
         return sync;
     }
@@ -535,24 +538,17 @@ struct Context : public std::enable_shared_from_this<Context> {
     }*/
 
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
-    /// TODO rename any
-    template<typename... Parents>
-    auto serialize(Parents && ... parents) { 
-        /// TODO assert all types are the same
-        /// Remote shared_ptr TODO write proper remove_shared_ptr type trait for this
-        using FirstType = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
-        using ReturnType = typename std::remove_reference_t<FirstType>::Value;
-        auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        resulting_observable->context = shared_from_this();
-        icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
+    template<class ParentValue>
+    auto serialize(std::shared_ptr<ParentValue> ... parents) { 
+        auto child = create_observable_with_parents<Observable<ParentValue>>(std::forward_as_tuple(parents...));
         ([&]{ 
-            const auto cb = [resulting_observable](const auto &new_val) {
-                resulting_observable->_set(new_val);
+            const auto cb = [child](const auto &new_val) {
+                child->_set(new_val);
             };
             /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
             parents->on_change(cb);
         }(), ...);
-        return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
+        return child; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
 
     /// When reference updates, we pass all others parents, 
@@ -577,10 +573,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     */
 
     template<typename Parent, typename F>
-    auto then(Parent parent, F && f) {
-        //using ParentValue = typename remove_shared_ptr_t<Parent>::Value;
-        /// The Observeble unpacks the arguments if its value is a tuple, so we have to do here the same
-        //using ReturnType = std::invoke_result_t<apply_if_tuple, F, ParentValue>;
+    auto then(Parent parent, F && f) {     
+        // assert parent has index
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()) );
         if constexpr (std::is_void_v<ReturnType>) {
             parent->on_change([f=std::move(f)](const auto &new_value) {
@@ -588,22 +582,20 @@ struct Context : public std::enable_shared_from_this<Context> {
             });
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
-            auto resulting_observable = std::make_shared<Observable<ObsValue>>();
-            resulting_observable->context = parent->context;
-            parent->context.lock()->icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parent->index.value()}); /// And add to the graph
-
-            const auto f_continued = [resulting_observable, f=std::move(f)](const auto &new_value) {
+            auto child = parent->context.lock()->template create_observable_with_parent<Observable<ObsValue>>(parent);
+        
+            const auto f_continued = [child, f=std::move(f)](const auto &new_value) {
                 auto ret = apply_if_tuple(f, new_value);
                 if constexpr (is_optional_v<ReturnType>) {
                     if(ret) {
-                        resulting_observable->_set(*ret);
+                        child->_set(*ret);
                     }
                 } else {
-                    resulting_observable->_set(ret);
+                    child->_set(ret);
                 }
             };
             parent->on_change(f_continued);
-            return resulting_observable;
+            return child;
         }
     }
     /// Now we can construct higher-order filters.
@@ -660,16 +652,34 @@ protected:
     void icey_connect(Value1 parent, Value2 child) {
         parent->on_change([child](const auto &new_value) { child->_set(new_value); });
     }
+
+    /// Overload for a single parent, pr
+    template<class O, class ParentValue, typename... Args>
+    std::shared_ptr<O> create_observable_with_parent(std::shared_ptr<ParentValue> parent, Args &&... args) {
+        return 
+        create_observable_with_parents<O>(std::tuple<ParentValue>(parent), std::forward<Args>(args)...);
+    }
     /// Creates a new observable of type O using the args and adds it to the graph.
-    template<class O, class Parent, typename... Args>
-    std::shared_ptr<O> create_observable_with_parent(Parent parent, Args &&... args) {
+    template<class O, typename... ParentValues, typename... Args>
+    std::shared_ptr<O> create_observable_with_parents(std::tuple<std::shared_ptr<ParentValues>...> parents, Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         observable->context = shared_from_this();
-        if(parent) /// TODO 
-            icey_dfg_graph_.add_vertex_with_parents(observable, {parent});
-        else
-            icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
+        if constexpr(sizeof...(ParentValues) == 1)  {
+            /// If there is only one parent, we check also for nullptr, not because we 
+            /// assume there may be a nullptr but because we handle here the additional create_observable overload that does not take any parents.
+            if(parents != nullptr) {
+                /// TODO solve better, std::vector has no single element constructor
+                std::vector<size_t> parent_ids;
+                parent_ids.push_back(parents->index.value());
+                icey_dfg_graph_.add_vertex_with_parents(observable, parent_ids);
+                icey_connect(parent, observable);
+            } else {
+            i   icey_dfg_graph_.add_vertex_with_parents(observable, std::nullopt);
+            }
+        } else {
+            icey_dfg_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...});
+        }
         return observable;
     }
 };
@@ -684,7 +694,7 @@ public:
 
     /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It initializes everything in a pre-defined order.
     void icey_initialize() {
-        if(icey_dfg_graph_.vertices.empty()) {
+        if(icey_dfg_graph_.empty()) {
             std::cout << "WARNING: Nothing to spawn, try first to create some signals/states" << std::endl;
             return;
         }
@@ -698,20 +708,25 @@ protected:
             std::cout << "[icey::Context] attach_everything_to_node() start" << std::endl;
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
-        std::sort(icey_dfg_graph_.vertices.begin(), icey_dfg_graph_.vertices.end(), 
-            [](const auto &attachable1, const auto &attachable2) { return attachable1.data->attach_priority() 
-                < attachable2.data->attach_priority();});
+
+        auto vertex_index_range = icey_dfg_graph_.get_vertices_index_range();
+        std::vector<int> vertex_index_range_copy(vertex_index_range.begin(), vertex_index_range.end());
+        
+        std::sort(vertex_index_range_copy.begin(), vertex_index_range_copy.end(), 
+            [this](const auto &v1, const auto &v2) { return icey_dfg_graph_.graph_[v1]->attach_priority() 
+                < icey_dfg_graph_.graph_[v2]->attach_priority();});
+
         size_t i_vertex = 0;
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
         /// Now, allow for attaching additional nodes after we got the parameters. After attaching, parameters immediatelly have their values. 
         /// For this, first attach only the parameters (prio 0)
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
-        for(; i_vertex < icey_dfg_graph_.vertices.size(); i_vertex++) {
-            auto &vertex = icey_dfg_graph_.vertices.at(i_vertex);
-            if(vertex.data->attach_priority() == 1) /// Stop after attachning all parameters
+        for(; i_vertex < num_vertices(icey_dfg_graph_.graph_); i_vertex++) {
+            const auto &attachable = icey_dfg_graph_.graph_[i_vertex];
+            if(attachable->attach_priority() == 1) /// Stop after attachning all parameters
                 break;
-            vertex.data->attach_to_node(*this); /// Attach
+            attachable->attach_to_node(*this); /// Attach
         }
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
@@ -723,10 +738,10 @@ protected:
 
         if(icey_debug_print)
             std::cout << "[icey::Context] Maybe new vertices... " << std::endl;
-        /// If additional vertices have been added to the DFG, attach it as well
-        for(; i_vertex < icey_dfg_graph_.vertices.size(); i_vertex++) {
-            auto &vertex = icey_dfg_graph_.vertices.at(i_vertex);
-            vertex.data->attach_to_node(*this); /// Attach
+        /// If additional vertices have been added to the DFG, attach it as well 
+        for(; i_vertex < num_vertices(icey_dfg_graph_.graph_); i_vertex++) {
+            const auto &attachable = icey_dfg_graph_.graph_[i_vertex];
+            attachable->attach_to_node(*this); /// Attach
         }
         if(icey_debug_print)
             std::cout << "[icey::Context] attach_everything_to_node() finished. " << std::endl;
@@ -734,6 +749,7 @@ protected:
 
     /// TODO 
     void analyze_dfg() {
+        icey_dfg_graph_.topo_sort();
         /// do_topological_sort_on_dfg_graph()
         // assert_dfg_graph_is_acyclic() 
         /// analyze_dependencies() -> computes the number of threads needed

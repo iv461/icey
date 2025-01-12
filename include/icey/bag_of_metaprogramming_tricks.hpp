@@ -70,4 +70,19 @@ auto apply_if_tuple(Func&& func, Tuple&& tuple) {
     }
 }
 
+template<typename... T>
+struct all_same : std::false_type { };
+
+template<>
+struct all_same<> : std::true_type { };
+
+template<typename T>
+struct all_same<T> : std::true_type { };
+
+template<typename T, typename... Ts>
+struct all_same<T, T, Ts...> : all_same<T, Ts...> { };
+
+template<typename... T>
+constexpr bool all_same_v = all_same<T...>::value;
+
 }
