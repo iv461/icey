@@ -15,6 +15,7 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <boost/graph/strong_components.hpp>
+#include <boost/type_index.hpp>
 
 #include <boost/mp11.hpp> /// For template meta-programming, operation on tuples etc.
 #include <icey/bag_of_metaprogramming_tricks.hpp>
@@ -33,6 +34,8 @@ public:
     /// We bould the node starting from the root, to allow a context-free graph creation, we refer to the parents
     std::weak_ptr<Context> context;
     std::optional<size_t> index; /// The index of this observable in list of vertices in the data-flow graph. We have to store it here because of cyclic dependency. None if this observable was not attached to the graph yet.
+    std::string class_name; // The class name, i.e. the type, for example SubscriberObservable<>
+    std::string name; /// A name to identify it among multiple with the same type, usually the topic or service name
 };
 
 /// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber etc.
@@ -208,6 +211,7 @@ public:
         ) : parameter_name_(parameter_name), default_value_(default_value), 
             parameter_descriptor_(parameter_descriptor), ignore_override_(ignore_override) {
         this->attach_priority_ = 0;
+        this->name = parameter_name_;
     }
 
     /// Parameters are initialized always at the beginning, so we can provide getters for the value. Note that has_value() must be checked beforehand since if no default value was provided, this function will throw std::bad_optional_access()
@@ -251,6 +255,7 @@ public:
     SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos, 
         const rclcpp::SubscriptionOptions &options): name_(name), qos_(qos), options_(options) {
         this->attach_priority_ = 3;
+        this->name = name_;
     }
 
 protected:
@@ -274,7 +279,8 @@ public:
     TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) : 
          target_frame_(target_frame), source_frame_(source_frame) { 
             this->attach_priority_ = 3;
-            }
+            this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
+    }
 
     /// TODO override: Is TF buffer empty ? -> Needed to distinguitsh TF errors
     virtual bool has_value() const { return 
@@ -314,6 +320,7 @@ struct TimerObservable: public Observable<size_t> {
     TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) : 
         interval_(interval), use_wall_time_(use_wall_time), is_one_off_timer_(is_one_off_timer) { 
             this->attach_priority_ = 5;
+            this->name = "timer"; 
             }
     
 protected:
@@ -351,6 +358,7 @@ public:
 
     PublisherObservable(const std::string &topic_name, const ROSAdapter::QoS qos=ROS2Adapter::DefaultQos()) : topic_name_(topic_name), qos_(qos) {
         this->attach_priority_ = 1; 
+        this->name = topic_name; 
     }
 
 protected:
@@ -502,7 +510,7 @@ struct ClientObservable : public Observable<typename _ServiceT::Response> {
     using Parent = std::shared_ptr< Observable<  std::shared_ptr<Request> > >;
 
     ClientObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : 
-        service_name_(service_name), qos_(qos) { this->attach_priority_ = 4; }
+        service_name_(service_name), qos_(qos) { this->attach_priority_ = 4; this->name = service_name_;  }
     
 protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
@@ -592,6 +600,26 @@ struct DataFlowGraph {
         }
     }
 
+    void print() {
+        auto &g = graph_;
+        std::cout << "Vertices:" << std::endl;
+        for (auto v : boost::make_iterator_range(vertices(g))) {
+            std::cout << "Vertex " << v << ": " << g[v]->class_name << ": " << g[v]->name << std::endl;
+        }
+
+        // Print adjacency list
+        std::cout << "\nAdjacency List:" << std::endl;
+        for (auto e : boost::make_iterator_range(edges(g))) {
+            auto source_vertex = source(e, g);
+            auto target_vertex = target(e, g);
+            std::cout << "Edge from Vertex " << source_vertex
+                    << " (" << g[source_vertex]->name << ") to Vertex "
+                    << target_vertex << " (" << g[target_vertex]->name << ")"
+                    << std::endl;
+        }
+
+    }
+
     Graph graph_;
 };
 
@@ -612,7 +640,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     template<typename MessageT>
     auto create_subscription(const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(),
         const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-        return create_observable< SubscriptionObservable<MessageT> >(name, qos, options);
+        auto observable = create_observable< SubscriptionObservable<MessageT> >(name, qos, options);
+        return observable;
     }
 
     auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
@@ -624,7 +653,6 @@ struct Context : public std::enable_shared_from_this<Context> {
         observable_traits<Parent>{}; 
         using MessageT = typename remove_shared_ptr_t<Parent>::Value;
         auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
-        std::cout << "[Context::create_publisher] Created publisher" << std::endl;
         connect_with_identity(child, parent);
     }
     
@@ -812,6 +840,7 @@ protected:
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         data_flow_graph_.add_v(observable); /// Register to graph to obtain an ID
         observable->context = shared_from_this();
+        observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
         return observable;
     }
     
@@ -949,9 +978,10 @@ protected:
         if(icey_debug_print)
             std::cout << "[icey::Context] Analyzing data flow graph ... " << std::endl;
         analyze_dfg(); /// Now analyze the graph before attaching everything to detect cycles as soon as possible, especially before the node is started and everything crashes
+        
 
         if(icey_debug_print)
-            std::cout << "[icey::Context] Maybe new vertices... " << std::endl;
+            std::cout << "[icey::Context] Attaching everything ... " << std::endl;
         /// If additional vertices have been added to the DFG, attach it as well 
         
         for(auto i_vertex : data_flow_graph_.get_vertices_ordered_by(attach_priority_order)) {
@@ -972,6 +1002,8 @@ protected:
             throw std::runtime_error("The graph created is not a directed acyclic graph (DAG), meaning it has loops. Please review the created vertices and remove the loops.");
         }
         topological_order_ = maybe_topological_order.value();
+
+        data_flow_graph_.print();
         
         /// analyze_dependencies() -> computes the number of threads needed
     }
@@ -989,6 +1021,8 @@ protected:
             });
         }
     }
+
+    
 
     void run_graph_mode() {
 
