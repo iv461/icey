@@ -16,7 +16,6 @@ struct is_tuple : std::false_type {};
 template<typename... Args>
 struct is_tuple<std::tuple<Args...>> : std::true_type {};
 
-
 template<typename T>
 struct is_pair : std::false_type {};
 
@@ -37,6 +36,15 @@ struct is_optional<std::optional<T>> : std::true_type {};
 
 template<class T>
 constexpr bool is_optional_v = is_optional<T>::value;
+
+template<class T>
+struct t_is_shared_ptr : std::false_type {};
+
+template<class T>
+struct t_is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+
+template<class T>
+constexpr bool is_shared_ptr = t_is_shared_ptr<T>::value;
 
 template<class T>
 struct remove_optional { using type = T;};

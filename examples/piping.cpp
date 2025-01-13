@@ -6,7 +6,8 @@
 
 int main(int argc, char **argv) {
 
-    
+    icey::g_state.get_context().use_eager_mode_ = true;
+
     auto float_sig = icey::create_subscription<std_msgs::msg::Float32>("my_float");
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 

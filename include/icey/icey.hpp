@@ -64,7 +64,7 @@ protected:
 struct ObservableBase  : public DFGNode, public NodeAttachable {};
 
 template<class T>
-void assert_is_observable() {
+void assert_is_observable()     
     static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable");
 }
 
@@ -90,19 +90,16 @@ public:
     void publish(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
     }
-protected:
 
+protected:
     /// Register to be notified when smth. changes
     void on_change(OnResolve && cb) {
         notify_list_.emplace_back(std::move(cb)); /// TODO rename to children ?
     }
-    /// TODO protect
-
     /// set and notify all observers about the new value
     virtual void _set(const Value &new_value) {
         this->value_ = new_value;
-        for(auto cb: notify_list_) cb(new_value);
-        
+        for(auto cb: notify_list_) cb(new_value);   
     }
 
     void _reject(const ErrorValue &error) {
@@ -495,6 +492,11 @@ struct DataFlowGraph {
 
 /// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
+    virtual ~Context() {
+        if(on_node_destruction_cb_)
+            on_node_destruction_cb_();
+    }
+    
     template<typename ParameterT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value= std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 
@@ -623,30 +625,45 @@ struct Context : public std::enable_shared_from_this<Context> {
         return child; 
     }
 
+    /// Creates a computation for the graph mode. If eager mode is enabled, it additionaly registers the computation so that it is immediatelly run
     template<class Input, class Output, class F>
     AnyComputation create_computation(Input input, Output output, F && f)  {
         assert_is_observable<Input>();
         assert_is_observable<Output>();
         using ReturnType = decltype( apply_if_tuple(f, std::declval< typename remove_shared_ptr_t<Input>::Value >()) );
         AnyComputation computation;
-        if constexpr (std::is_void_v<ReturnType>) {
-            computation.f = [input, f=std::move(f)]() {
-                auto new_value = input->value();
-                apply_if_tuple(f, new_value);
-            };
-        } else {
-            computation.f= [input, output, f=std::move(f)]() {
-                auto new_value = input->value();
-                auto ret = apply_if_tuple(f, new_value);
-                if constexpr (is_optional_v<ReturnType>) {
-                    if(ret) {
-                        output->_set(*ret);
-                    }
-                } else {
-                    output->_set(ret);
+
+        const auto on_new_value = [output, f=std::move(f)](const auto &new_value) {
+            auto ret = apply_if_tuple(f, new_value);
+            if constexpr (is_optional_v<ReturnType>) {
+                if(ret) {
+                    output->_set(*ret);
                 }
-            };
+            } else {
+                output->_set(ret);
+            }
+        };
+        const auto on_new_value_void = [f=std::move(f)](const auto &new_value) {
+            apply_if_tuple(f, new_value);
+        };
+        
+        if constexpr (std::is_void_v<ReturnType>) {
+            /// The computation has no arguments, it obtains the buffered value from the input and calls the function
+            computation.f = [input, f=std::move(on_new_value_void)]() { f(input->value()); };
+            if(this->use_eager_mode_) {
+                input->on_change(on_new_value_void);
+            }
+        } else {
+            computation.f= [input, f=std::move(on_new_value)]() { f(input->value()); };
+            if(this->use_eager_mode_) {
+                input->on_change(on_new_value);
+            }
         }
+        if(!this->use_eager_mode_) {
+            // And register the callback for running the graph_loop if not already done (we have to call smth when the subscriber callback get's called, right)
+            if_needed_register_run_graph_mode(input);
+        }
+
         return computation;
     }
 
@@ -661,6 +678,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         /// Add vertex data, parent id's and edges data
         data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
     }
+
 
     template<class Child, typename... Parents>
     void connect_with_identity(Child child, Parents ... parents) {
@@ -683,16 +701,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         
         /// Add vertex data, parent id's and edges data
         data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
-        
-        /* Old eager-mode code
-        ([&]{ 
-            const auto cb = [child](const auto &new_val) {
-                child->_set(new_val);
-            };
-            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
-            parents->on_change(cb);
-        }(), ...);
-        */
+
     }
 
     /// Connects each of the N inputs with the corresponding N outputs using identity
@@ -751,18 +760,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     void clear() { data_flow_graph_.clear(); }
 
     /// Register callback to be called after all parameters have been attached
-
-    /// For the class-based API, to enable override
-    virtual void after_parameter_initialization() {
-        if(after_parameter_initialization_cb_)
-            after_parameter_initialization_cb_();
-    }
-    /// Called in the destructor
-    virtual void on_node_destruction_cb() {
-        if(on_node_destruction_cb_)
-            on_node_destruction_cb_();
-    }
-
     /// For the functional API
     void register_after_parameter_initialization_cb(std::function<void()> cb) {
         after_parameter_initialization_cb_ = cb;
@@ -781,6 +778,8 @@ struct Context : public std::enable_shared_from_this<Context> {
         attach_everything_to_node(node);
         was_initialized_ = true;
     }
+
+    bool use_eager_mode_{true}; // Use eager mode or graph mode
 
 protected:    
     void assert_icey_was_not_initialized() {
@@ -826,7 +825,8 @@ protected:
         }
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
-        after_parameter_initialization(); /// Call user callback. Here, more vertices may be added 
+        if(after_parameter_initialization_cb_)
+            after_parameter_initialization_cb_(); /// Call user callback. Here, more vertices may be added 
 
         if(icey_debug_print)
             std::cout << "[icey::Context] Analyzing data flow graph ... " << std::endl;
@@ -851,7 +851,23 @@ protected:
         /// analyze_dependencies() -> computes the number of threads needed
     }
     
+    /// Register that on change, this observable will run the graph mode of the context
+    template<class Parent>
+    void if_needed_register_run_graph_mode(Parent parent) {
+        /// In graph mode, no notify callbacks are registered except a single "run-graph-mode". So we just check if the notify list empty
+        if(parent->notify_list_.empty()) {
+            parent->on_change([parent](const auto &) {
+                    parent->context.lock()->run_graph_mode();  // context is actually this, but we avoid capturing this in objects that we do not directly own 
+            });
+        }
+    }
+
+    void run_graph_mode() {
+
+    }
+    
     DataFlowGraph data_flow_graph_;
+
     bool was_initialized_{false}; /// Indicates whether initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
     std::function<void()> after_parameter_initialization_cb_;
