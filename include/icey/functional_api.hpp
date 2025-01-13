@@ -1,4 +1,4 @@
-/// Provides functional API by declaring a global variable
+/// Provides purely functional API to ROS.
 #pragma once 
 
 namespace icey {

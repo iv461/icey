@@ -197,7 +197,8 @@ public:
                 /// TODO throw cannot publish on a topic that is being subscribed at the same time
             }
             auto publisher = create_publisher<Msg>(topic, qos);
-            my_publishers_[topic] = publisher;
+            my_publishers_.emplace(topic, publisher);
+            
             auto const publish = [this, publisher, topic, max_frequency](const Msg &msg) {
                 publisher->publish(msg);   
             };
@@ -278,7 +279,7 @@ public:
 
         std::vector<rclcpp::TimerBase::SharedPtr> my_timers_;
         std::map<std::string, std::any> my_subscribers_;
-        std::map<std::string, std::any> my_publishers_;
+        std::map<std::string, std::shared_ptr<rclcpp::PublisherBase>> my_publishers_;
         std::map<std::string, std::any> my_services_;
         std::map<std::string, std::any> my_services_clients_;
 

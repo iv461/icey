@@ -1,6 +1,5 @@
-/// A bag of template metaprogramming tricks for C++17, detecting types, operating on tuples etc. 
-/// TODO use Boost Hana, it already has all of this
-// #include <boost/hana.hpp>
+/// A bag of template metaprogramming tricks for C++17, detecting types, operating on lists of types etc. 
+/// For some parts of ICEY such as the synchronizer, we have to operate on type lists, but luckily not too much.
 #pragma once 
 
 #include <functional>
@@ -64,6 +63,7 @@ struct remove_shared_ptr<std::shared_ptr<T>> { using type = T; };
 template<class T>
 using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
 
+/// Are all the types of the tuple the same ?
 template<typename Head, typename...Tail>
 constexpr bool all_same(const std::tuple<Head, Tail...>&){
     return (std::is_same_v<Head,Tail> && ...);

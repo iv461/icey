@@ -37,6 +37,7 @@ public:
     }
 
     void after_parameters_are_initialized() {
+        
         /// Initialize here you algorithms, are parameters are already available
     }
     /// Put here your code that you would normally put in the destructor
