@@ -14,7 +14,10 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
 
+#include <boost/mp11.hpp> /// For template meta-programming, operation on tuples etc.
 #include <icey/bag_of_metaprogramming_tricks.hpp>
+
+namespace mp = boost::mp11;
 
 namespace icey {
 
@@ -45,13 +48,26 @@ public:
     size_t attach_priority_{0};
 };
 
+/// An buffer, storing the last received value
+template<typename _Value>
+struct Buffer  {    
+    using Value = _Value;
+    using MaybeValue = std::optional<Value>;
+
+    virtual bool has_value() const {return value_.has_value(); }
+    virtual const Value &value() const { value_.value(); }
+protected:
+    /// The last received value.
+    MaybeValue value_;
+};
+
 struct AttachableNode  : public DFGNode, public NodeAttachable {
 
 };
 /// An observable. Similar to a promise in JS.
 /// TODO consider CRTP, would also be beneficial for PIMPL 
 template<typename _Value, typename _ErrorValue = std::string>
-class Observable : public AttachableNode, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+class Observable : public AttachableNode, public Buffer<_Value>, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
     friend class Context; /// To prevent misuse, only the Context is allowed to register on_change callbacks
 public:
     using Value = _Value;
@@ -80,6 +96,7 @@ protected:
 
     /// set and notify all observers about the new value
     virtual void _set(const Value &new_value) {
+        this->value_ = new_value;
         for(auto cb: notify_list_) cb(new_value);
         
     }
@@ -98,29 +115,24 @@ struct BufferedObservable : public Observable<_Value> {
     using Base = Observable<_Value>;
     using Value = _Value;
     using MaybeValue = std::optional<Value>;
-    virtual bool has_value() const {return value_.has_value(); }
-    virtual const Value &value() const { value_.value(); }
-protected:
-    /// Buffers the value and calls the base method
-    void _set(const Value &new_value) override {
-        value_ = new_value;
-        Base::_set(new_value);
-    }
-    /// The last received value.
-    MaybeValue value_;
+    
 };
 
 /// An interpolatable observable is one that buffers the incoming values using a circular buffer and allows to query the message at a given point, optionally using interpolation.
 /// It is an essential for using lookupTransform with TF.
 /// It is used by synchronizers to synchronize a topic exactly at a given time point. 
+struct InterpolateableObservableBase {};
 template<typename _Value>
-struct InterpolateableObservable : public BufferedObservable<_Value> {
+struct InterpolateableObservable : public InterpolateableObservableBase, public BufferedObservable<_Value> {
     using Value = _Value;
     using Base = BufferedObservable<_Value>;    
     using MaybeValue = typename Base::MaybeValue;
     /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or an extrapolation would be required.
     virtual MaybeValue get_at_time(const Time &time_point) const = 0;
 };
+
+template<class T>
+using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
 
 /// An observable that holds the last received value. Fires initially an event if a default_value is set
 template<typename _Value>
@@ -294,6 +306,16 @@ public:
     }
 };
 
+struct AnyComputation { 
+    std::function<void()> f;
+};
+
+template<class _Input, class _Output>
+struct Computation : public AnyComputation {
+    std::shared_ptr< Observable<_Input> > input;
+    std::shared_ptr< Observable<_Output> > output;
+};  
+
 /// An adapter, adapting the message_filters::SimpleFilter to our Observable (two different implementations of almost the same concept).
 /// Does nothing else than what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
@@ -413,24 +435,29 @@ protected:
     ROSAdapter::QoS qos_;
 };
 
-struct Nothing {};
 /// A dev/null observable, i.e. a observable that cannot have children (you realize now that there are much worse names for this, right ?).
-struct DevNullObservable : public Observable<Nothing> { };
+struct DevNullObservable {
+
+};
 
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
 struct DataFlowGraph {
     /// TODO store the computation 
-    struct EdgeData {};
+    struct EdgeData : public AnyComputation {};
     using VertexData = std::shared_ptr<AttachableNode>;
     /// vecS needed so that the vertex id's are consecutive integers
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
 
     /// Create a new node from data
     /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
-    void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data, const std::vector<size_t> &parents) {
+    void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data, 
+        const std::vector<size_t> &parents,
+        const std::vector<EdgeData> &edges_data) {
         vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
-        for(const auto &parent : parents) {   
-            add_edge(parent, vertex_data->index.value(), EdgeData{}, graph_);
+        for(size_t i = 0; i < parents.size(); i++) {   
+            const auto &parent = parents.at(i);
+            const auto &edge_data = edges_data.at(i);
+            add_edge(parent, vertex_data->index.value(), edge_data, graph_);
         }
     }
     /// Returns an iterable of all the vertices
@@ -491,11 +518,47 @@ struct Context : public std::enable_shared_from_this<Context> {
         return create_observable<ClientObservable<ServiceT>>(service_name, qos);
     }
     
+
+    enum class SynchronizerType { APPROX_TIME, INTERPOLATE };
+
+    template<typename... Parents>
+    SynchronizerType choose_synchronizer_based_in_inputs(Parents ... parents) {
+        using partitioned = mp::mp_partition<std::tuple<remove_shared_ptr_t<Parents>...>, is_interpolatable>;
+        using interpolatables =  mp::mp_first<partitioned>;
+        using non_interpolatables = mp::mp_second<partitioned>;
+        if constexpr(mp::mp_size<non_interpolatables> > 1) { 
+            /// We need the ApproxTime 
+            auto approx_time_output = synchronize_approx_time()
+        } else {
+
+        }
+        //std::array<bool, N> sig_is_interpolateable{std::is_base_of_v<InterpolateableObservableBase, remove_shared_ptr_t<Parents>>...};
+        std::is_base_of_v<InterpolateableObservableBase, remove_shared_ptr_t<Parents>>
+        // num_int = sig_is_interpolateable.
+        
+    }
+
+    template<typename... Parents>
+    auto synchronize_approx_time(Parents ... parents) { 
+        uint32_t queue_size = 10; // TODO update automatically 
+        assert_icey_was_not_initialized();        
+        /// TODO choose_synchronizer_based_in_unputs(parents...)
+        /// TODO The following is duped with create_observable_with_parents because we need to connect many inputs to many outputs, 
+        /// maybe solve with vector then. 
+        auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
+        sync->context = shared_from_this();
+        /// Connect the inputs of the synchronizer to the parents
+        std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
+        data_flow_graph_.add_vertex_with_parents(sync, std::vector<size_t>(parents->index.value() ...));
+        return sync;
+    }
+
     /// Synchronize observables using approximate time
     template<typename... Parents>
     auto synchronize(Parents ... parents) { 
         uint32_t queue_size = 10; // TODO update automatically 
         assert_icey_was_not_initialized();        
+        /// TODO choose_synchronizer_based_in_unputs(parents...)
         /// TODO The following is duped with create_observable_with_parents because we need to connect many inputs to many outputs, 
         /// maybe solve with vector then. 
         auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
@@ -535,7 +598,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         using ParentValue = typename std::remove_reference_t<Parent>::Value;
         /// First, create a new observable
         auto child = create_observable_with_parents<Observable<ParentValue>>({parents->index.value()...});
-        /// Now connect each parent with the child with the idendity function
+        /// Now connect each parent with the child with the identity function
         ([&]{ 
             const auto cb = [child](const auto &new_val) {
                 child->_set(new_val);
@@ -581,25 +644,55 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
     */
 
-    template<typename F>
-    auto unpack_if_calling_tuple(F && f) {
-        return [f=std::move(f)](const auto &new_value) {
+    template<class Input, class Output, class F>
+    AnyComputation create_computation(
+            std::shared_ptr< Observable<Input> > input, 
+            std::shared_ptr< Observable<Output> > output, 
+            F && f)  {
+        using ReturnType = decltype( apply_if_tuple(f, std::declval<Input>()) );
+        AnyComputation computation;
+        if constexpr (std::is_void_v<ReturnType>) {
+            computation.f = [input, f=std::move(f)]() {
+                auto new_value = input.value();
                 apply_if_tuple(f, new_value);
-        };
+            };
+        } else {
+            computation.f= [input, output, f=std::move(f)]() {
+                auto new_value = input.value();
+                auto ret = apply_if_tuple(f, new_value);
+                if constexpr (is_optional_v<ReturnType>) {
+                    if(ret) {
+                        output->_set(*ret);
+                    }
+                } else {
+                    output->_set(ret);
+                }
+            };
+        }
+        return computation;
     }
 
+    template<class Input, class Output>
+    AnyComputation create_identity_computation(
+            std::shared_ptr< Observable<Input> > input, 
+            std::shared_ptr< Observable<Output> > output) {
+        /// TODO Assert Input is not a tuple or return tuple if it is 
+        return create_computation(input, output, [](auto && x) { return std::move(x); });
+    }
+    
     template<typename Parent, typename F>
     auto then(Parent parent, F && f) {     
         // assert parent has index
+#ifdef ICEY_EAGER_MODE
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()) );
         if constexpr (std::is_void_v<ReturnType>) {
             /// Create a dummy node to be able to add the edge in the graph
-            auto child = create_observable_with_parent<DevNullObservable>(parent->index.value());
-            //connect(parent, child)
-            parent->on_change(unpack_if_calling_tuple(f));
+            parent->on_change([f=std::move(f)](const auto &new_value) {
+                apply_if_tuple(f, new_value);
+            });
         } else {
             using ObsValue = typename remove_optional<ReturnType>::type;
-            auto child = parent->context.lock()->template create_observable_with_parent<Observable<ObsValue>>(parent->index.value());
+            auto child = create_observable_with_parent<Observable<ObsValue>>(parent->index.value());
 
             const auto f_continued = [child, f=std::move(f)](const auto &new_value) {
                 auto ret = apply_if_tuple(f, new_value);
@@ -614,6 +707,9 @@ struct Context : public std::enable_shared_from_this<Context> {
             parent->on_change(f_continued);
             return child;
         }
+#else 
+        create_computation
+#endif 
     }
     /// Now we can construct higher-order filters.
 
@@ -694,17 +790,7 @@ protected:
         return observable;
     }
     
-    /// Connects the parent with it's child. TODO we should not allow different Value types, we currently only need this for the service that receives a request and stores 
-    /// *both* the request and the respose. After fixing the service, this should be "icey_connect(Obs<Value> parent, Obs<Value> child)"
-    template<class Value1, class Value2>
-    void icey_connect(Value1 parent, Value2 child) {
-        parent->on_change([child](const auto &new_value) { child->_set(new_value); });
-    }
 
-    template<class Value1, class Value2>
-    void create_connection(Value1 parent, Value2 child) {
-        parent->on_change([child](const auto &new_value) { child->_set(new_value); });
-    }
 
     void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
         if(icey_debug_print)
@@ -714,7 +800,7 @@ protected:
 
         auto vertex_index_range = data_flow_graph_.get_vertices_index_range();
         std::vector<int> vertex_index_range_copy(vertex_index_range.begin(), vertex_index_range.end());
-        /// TODO WE NEED TO SORT AGAIN BELOW
+        
         std::sort(vertex_index_range_copy.begin(), vertex_index_range_copy.end(), 
             [this](const auto &v1, const auto &v2) { return data_flow_graph_.graph_[v1]->attach_priority() 
                 < data_flow_graph_.graph_[v2]->attach_priority();});
@@ -741,9 +827,6 @@ protected:
 
         if(icey_debug_print)
             std::cout << "[icey::Context] Maybe new vertices... " << std::endl;
-        /// TODO WE NEED TO SORT AGAIN BELOW
-        // node_attach_priority = binary predicate
-        // get_vertex_in_order(node_attach_priority)
         /// If additional vertices have been added to the DFG, attach it as well 
         for(; i_vertex < num_vertices(data_flow_graph_.graph_); i_vertex++) {
             const auto &attachable = data_flow_graph_.graph_[i_vertex];
@@ -766,6 +849,10 @@ protected:
 
     std::function<void()> after_parameter_initialization_cb_;
     std::function<void()> on_node_destruction_cb_;
+};
+
+struct GraphEngine {
+
 };
 
 /// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables. 

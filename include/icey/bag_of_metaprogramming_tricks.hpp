@@ -44,6 +44,8 @@ struct remove_optional { using type = T;};
 template<class T>
 struct remove_optional<std::optional<T>> { using type = T; };
 
+template<class T>
+using remove_optional_t = typename remove_optional<T>::type;
 
 template<class T>
 struct remove_shared_ptr { using type = T;};
