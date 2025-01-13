@@ -42,9 +42,9 @@ int main(int argc, char **argv) {
     auto float2 = icey::create_subscription<std_msgs::msg::Float32>("float2");
     auto float3 = icey::create_subscription<std_msgs::msg::Float32>("float3");
 
-    auto serialized = icey::serialize(float1, float2, float3);
-    icey::create_publisher(serialized, "float_serialized");
 
+    icey::serialize(float1, float2, float3)->publish("float_serialized");
+    
     /// Test publishing something that is derived from Observable 
     icey::create_publisher(map_base_link_tf, "map_to_base_link_transform");
     /// Or use member function API:

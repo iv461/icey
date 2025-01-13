@@ -141,6 +141,9 @@ protected:
     /// set and notify all observers about the new value
     virtual void _set(const Value &new_value) {
         this->value_ = new_value;
+        if(icey_debug_print)
+            std::cout << "[Observable]_set(), notify list: " <<  notify_list_.size() << std::endl;
+
         for(auto cb: notify_list_) cb(new_value);   
     }
 
@@ -676,7 +679,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     template<typename Parent, typename F>
     auto then(Parent parent, F && f) {
         observable_traits<Parent>{};
-        // assert parent has index
         /// TODO static_assert here signature for better error messages
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value >()) );
         using ObsValue = typename remove_optional<ReturnType>::type;
@@ -779,15 +781,16 @@ protected:
                 input->on_change(on_new_value);
             }
         }
-        if(!this->use_eager_mode_) {
-            // And register the callback for running the graph_loop if not already done (we have to call smth when the subscriber callback get's called, right)
-            if_needed_register_run_graph_mode(input);
-        }
+        
+        // And register the callback for running the graph_loop if not already done (we have to call smth when the subscriber callback get's called, right)
+        if_needed_register_run_graph_mode(input);
+        
         return computation;
     }
 
     template<class Child, class Parent, class F>
     void connect(Child child, Parent parent, F && f) {
+        // TODO assert parent has index
         std::vector<size_t> parent_ids;
         parent_ids.push_back(parent->index.value());
         
@@ -905,6 +908,9 @@ protected:
     /// Register that on change, this observable will run the graph mode of the context
     template<class Parent>
     void if_needed_register_run_graph_mode(Parent parent) {
+        if(this->use_eager_mode_) {
+            return;
+        }
         /// In graph mode, no notify callbacks are registered except a single "run-graph-mode". So we just check if the notify list empty
         if(parent->notify_list_.empty()) {
             parent->on_change([parent](const auto &) {
