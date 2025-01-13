@@ -5,7 +5,7 @@
 
 /// Here, you could load your neural network model from file, from ONNX, TFLite etc.
 void load_neural_network_model(std::string filename) {
-    
+    std::cout << "Loeaded NN." <<std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -23,19 +23,20 @@ int main(int argc, char **argv) {
         auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
         /// TODO 
-        auto rectangle_sig = icey::then(map_base_link_tf, [](const auto &msg) {
+        auto rectangle_sig = map_base_link_tf->then([](const auto &msg) {
             std::optional<std_msgs::msg::Float32> result;             
             return result;        
         });
 
         /// Now conditionally create a publisher based on the parameters:
         if(publish_debug_markers_param->value()) {
-            icey::create_publisher(rectangle_sig, "debug_marker");
+            rectangle_sig->publish("debug_marker");
         }
     });
 
     /// Register a callback that gets called in the Node's destructor
     icey::on_node_destruction([] {
+        std::cout << "Cleaned  up NN. " << std::endl;
         // clean_up_c_library() 
     });
     icey::spawn(argc, argv, "signal_generator_example"); 

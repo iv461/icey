@@ -111,7 +111,7 @@ constexpr void assert_are_observables() {
 // Assert that all Observables types hold the same value
 template <typename First, typename... Rest>
 constexpr void assert_all_observable_values_are_same() {
-    assert_are_observables<First, Rest...>(); /// Only Observables are expected to have ::Value
+    observable_traits<First, Rest...>{}; /// Only Observables are expected to have ::Value
     // Static assert that each T::Value is the same as First::Value
     static_assert((std::is_same_v<typename remove_shared_ptr_t<First>::Value, typename remove_shared_ptr_t<Rest>::Value> && ...),
                   "The values of all the observables must be the same");
@@ -542,6 +542,13 @@ struct DataFlowGraph {
         }
     }
 
+    std::vector<size_t> get_vertices_ordered_by(std::function<bool(size_t, size_t)> predicate) {
+        auto vertex_index_range = boost::make_iterator_range(vertices(graph_));
+        std::vector<size_t> vertex_index_range_copy(vertex_index_range.begin(), vertex_index_range.end());
+        std::sort(vertex_index_range_copy.begin(), vertex_index_range_copy.end(), predicate);
+        return vertex_index_range_copy;
+    }
+
     /// Returns an iterable of all the vertices
     auto get_vertices_index_range() { return boost::make_iterator_range(vertices(graph_)); }
 
@@ -883,25 +890,25 @@ protected:
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
 
-        auto vertex_index_range = data_flow_graph_.get_vertices_index_range();
-        std::vector<int> vertex_index_range_copy(vertex_index_range.begin(), vertex_index_range.end());
-        
-        std::sort(vertex_index_range_copy.begin(), vertex_index_range_copy.end(), 
-            [this](const auto &v1, const auto &v2) { return data_flow_graph_.graph_[v1]->attach_priority() 
-                < data_flow_graph_.graph_[v2]->attach_priority();});
+    
+        const auto attach_priority_order = [this](size_t v1, size_t v2) {
+            return data_flow_graph_.graph_[v1]->attach_priority() 
+                    < data_flow_graph_.graph_[v2]->attach_priority();
+        };
 
-        size_t i_vertex = 0;
+
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
         /// Now, allow for attaching additional nodes after we got the parameters. After attaching, parameters immediatelly have their values. 
         /// For this, first attach only the parameters (prio 0)
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
-        for(; i_vertex < num_vertices(data_flow_graph_.graph_); i_vertex++) {
+        for(auto i_vertex : data_flow_graph_.get_vertices_ordered_by(attach_priority_order)) {
             const auto &attachable = data_flow_graph_.graph_[i_vertex];
             if(attachable->attach_priority() == 1) /// Stop after attachning all parameters
                 break;
             attachable->attach_to_node(node); /// Attach
         }
+
         if(icey_debug_print)
             std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
         if(after_parameter_initialization_cb_)
@@ -914,8 +921,11 @@ protected:
         if(icey_debug_print)
             std::cout << "[icey::Context] Maybe new vertices... " << std::endl;
         /// If additional vertices have been added to the DFG, attach it as well 
-        for(; i_vertex < num_vertices(data_flow_graph_.graph_); i_vertex++) {
+        
+        for(auto i_vertex : data_flow_graph_.get_vertices_ordered_by(attach_priority_order)) {
             const auto &attachable = data_flow_graph_.graph_[i_vertex];
+            if(attachable->attach_priority() == 0)
+                continue;
             attachable->attach_to_node(node); /// Attach
         }
         if(icey_debug_print)

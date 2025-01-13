@@ -15,15 +15,13 @@ int main(int argc, char **argv) {
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);
     
     /// We always have to take a ConstPtr to the message:
-    auto pipe1 = icey::then(float_tfed,
-        [](std_msgs::msg::Float32::ConstPtr float_val, 
+    auto pipe1 = float_tfed->then([](std_msgs::msg::Float32::ConstPtr float_val, 
             geometry_msgs::msg::TransformStamped::ConstPtr tf_val) -> float {
             return float(float_val->data * tf_val->transform.rotation.z);
         });
 
     /// this has type Observable<std::tuple<int, float>> 
-    auto two_results = icey::then(pipe1, 
-        [](const float val) {
+    auto two_results = pipe1->then([](const float val) {
             std_msgs::msg::Int32 int_val;
             int_val.data = int(val * 10) % 5;
 
@@ -35,8 +33,8 @@ int main(int argc, char **argv) {
             return std::make_tuple(int_val, float_val);
         });
     
-    icey::create_publisher(icey::get_nth<0>(two_results), "int_result");
-    icey::create_publisher(icey::get_nth<1>(two_results), "float_result");
+    icey::get_nth<0>(two_results)->publish("int_result");
+    icey::get_nth<1>(two_results)->publish("float_result");
 
     auto float1 = icey::create_subscription<std_msgs::msg::Float32>("float1");
     auto float2 = icey::create_subscription<std_msgs::msg::Float32>("float2");
@@ -46,9 +44,7 @@ int main(int argc, char **argv) {
     icey::serialize(float1, float2, float3)->publish("float_serialized");
     
     /// Test publishing something that is derived from Observable 
-    icey::create_publisher(map_base_link_tf, "map_to_base_link_transform");
-    /// Or use member function API:
-    map_base_link_tf->publish("map_to_base_link_transform2");
+    map_base_link_tf->publish("map_to_base_link_transform");;
 
     //// Now multiple-input to single output: Modeling control flow such as 
     icey::spawn(argc, argv, "piping_example"); /// Create and start node

@@ -7,8 +7,8 @@ using ExampleService = std_srvs::srv::SetBool;
 int main(int argc, char **argv) {
     
     auto service = icey::create_service<ExampleService>("set_bool_service");
-    icey::then(service, 
-        [](std::shared_ptr<ExampleService::Request> request,
+
+    service->then([](std::shared_ptr<ExampleService::Request> request,
             std::shared_ptr<ExampleService::Response> response) {
             response->success = !request->data;
 

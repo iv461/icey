@@ -21,21 +21,16 @@ int main(int argc, char **argv) {
     amplitude->then([](double new_value) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
     });
-    /*
-    icey::then(amplitude, [](double new_value) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
-    });
-    */
 
     auto timer_signal = icey::create_timer(period_time);
 
     /// Receive timer updates
-    icey::then(timer_signal, [](size_t ticks) {
+    timer_signal->then([](size_t ticks) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
     });
 
     /// Optional publishing
-    auto rectangle_sig = icey::then(timer_signal, [](size_t ticks) { 
+    auto rectangle_sig = timer_signal->then([](size_t ticks) { 
         std::optional<std_msgs::msg::Float32> result; 
         if(ticks % 10 == 0) { /// Publish with 1/10th of the frequency
             result = std_msgs::msg::Float32();
@@ -44,10 +39,10 @@ int main(int argc, char **argv) {
         
         return result;        
     });
-    icey::create_publisher(rectangle_sig, "rectangle_signal");
+    rectangle_sig->publish("rectangle_signal");
 
     /// Add another computation for the timer
-    auto sine_signal = icey::then(timer_signal, [&](size_t ticks) {
+    auto sine_signal = timer_signal->then([&](size_t ticks) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
@@ -56,7 +51,7 @@ int main(int argc, char **argv) {
         return float_val;
     });
 
-    icey::create_publisher(sine_signal, "sine_generator");
+    sine_signal->publish("sine_generator");
 
     icey::spawn(argc, argv, "signal_generator_example"); 
 }

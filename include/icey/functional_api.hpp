@@ -18,7 +18,7 @@ struct GlobalState {
     /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
     Node *operator->() { return get_node(); }
     /// Allow using this node in a context where a rclrpp::Node is needed, mind that ROSNodeWithDFG derives from rclrpp::Node
-    operator ROSNodeWithDFG*() { return get_node();; }
+    operator ROSNodeWithDFG*() { return get_node(); }
 
     auto create_new_node(const std::string &name) {
         nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));    
@@ -57,6 +57,7 @@ private:
     }
 
     std::unordered_map<std::string, std::shared_ptr<ROSNodeWithDFG>> nodes;
+    /// The context that saves all the observables before the node is created, i.e. the observables are staged
     std::shared_ptr<Context> staged_context{std::make_shared<Context>()}; /// Must be a shared_ptr because of observables reference it
     std::shared_ptr<ROSNodeWithDFG> currently_initializing_node_; /// The node that is currently in the initialization phase after the ROS-parameters have been obtained but adding stuff to the graph is still possible.
 };
@@ -80,11 +81,6 @@ auto create_subscription(const std::string &topic_name, const ROS2Adapter::QoS &
 
 auto create_transform_subscription(const std::string &target_frame, const std::string &source_frame) {
     return g_state.get_context().create_transform_subscription(target_frame, source_frame);
-}
-
-template<class Parent>
-void create_publisher(Parent && parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    g_state.get_context().create_publisher(std::move(parent), topic_name, qos);
 }
 
 template<typename MessageT>
@@ -111,17 +107,14 @@ auto create_client(Parent parent, const std::string & service_name, const rclcpp
     return g_state.get_context().create_client<ServiceT>(parent, service_name, qos);
 }
 
-/// Now some extra events 
-
 /// Register something that is called immediatelly after we received all paramters from ROS
 void after_parameter_initialization(std::function<void()> cb) {
     return g_state.get_context().register_after_parameter_initialization_cb(cb);
 }
-
+/// Register a callback when the node is going to be destructor, i.e. when the destructor is called.
 void on_node_destruction(std::function<void()> cb) {
     return g_state.get_context().register_on_node_destruction_cb(cb);
 }
-
 
 /// Now the filters
 template<typename... Parents>
@@ -129,19 +122,9 @@ auto synchronize(Parents... parents) {
     return g_state.get_context().synchronize(parents...);
 }
 
-/*template<typename... Parents>
-auto fuse(Parents && ... parents) { 
-    return g_state.get_context().fuse(std::forward<Parents>(parents)...);
-}*/
-
 template<typename... Parents>
 auto serialize(Parents... parents) { 
     return g_state.get_context().serialize(parents...);
-}
-
-template<typename Parent, typename F>
-auto then(Parent &parent, F && f) {
-    return g_state.get_context().then(parent, std::move(f));
 }
 
 template<int index, class Parent>

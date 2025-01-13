@@ -45,7 +45,7 @@ In ICEY, you subscribe to a transform between two frames and use this as a signa
 
 ```cpp
 auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
-auto result = icey::then(map_base_link_tf, [](const geometry_msgs::msg::TransformStamped &new_transform) {
+auto result = map_base_link_tf->then([](const geometry_msgs::msg::TransformStamped &new_transform) {
         std_msgs::msg::Float32 out_msg;
         /// TODO get yaw
         auto cos_theta_half = new_transform.transform.rotation.z;
@@ -54,7 +54,7 @@ auto result = icey::then(map_base_link_tf, [](const geometry_msgs::msg::Transfor
     }
     );    
     
-icey::create_publisher(result, "new_velocity");
+result->publish("new_velocity");
 ```
 
 But how do we interpolate the transforms in the buffer to get the transform for a given time ? 
@@ -65,7 +65,7 @@ This is where we use the `SynchExactTime` filter, which always outputs something
 auto camera_feed = icey::create_subscription("camera_front");
 auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
 
-icey::SyncExactTime(camera_feed, cam_to_map_signal).then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map) {
+icey::SyncExactTime(camera_feed, cam_to_map_signal)->then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map) {
 
 });
 
@@ -105,7 +105,7 @@ You can also use the TF-buffer directly inside callbacks since it offers useful 
 auto camera_feed = icey::create_subscription("camera_front");
 auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
 
-icey::SyncExactTime(camera_feed, cam_to_map_transfom).then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map_tf) {
+icey::SyncExactTime(camera_feed, cam_to_map_transfom)->then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map_tf) {
 
     icey::node->tf_buffer_->transform(...);
 });

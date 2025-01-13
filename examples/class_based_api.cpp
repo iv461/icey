@@ -17,24 +17,20 @@ public:
 
        auto timer_signal = icey().create_timer(500ms);
 
-        then(timer_signal, [this](size_t ticks) {
+        timer_signal->then([this](size_t ticks) {
             RCLCPP_INFO_STREAM(get_logger(), "Timer ticked: " << ticks);
         });
-
-        /// Add another computation for the timer
-        auto sine_signal = then(timer_signal, [](size_t ticks) {
+        
+        timer_signal->then([](size_t ticks) {
             std_msgs::msg::Float32 float_val;
             float_val.data = std::sin(ticks / 10.);
             return float_val;
-        });
-
-        icey::create_publisher(sine_signal, "sine_generator");
+        })->publish("sine_generator");
 
         /// Register callbacks
         icey().register_after_parameter_initialization_cb([this](){after_parameters_are_initialized(); });
         /// Register callback when this node is destructed (this is still valid at this point)
         icey().register_on_node_destruction_cb([this](){ on_destruction(); });
-    
 
         /// Finally, create all the needed subsciptions, publications etc. for the ICEY-observables we just declared.
         icey_initialize();

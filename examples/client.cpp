@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
 
     auto timer_signal = icey::create_timer(1s);
 
-    auto timed_request = icey::then(timer_signal, [](size_t ticks) {
+    auto timed_request = timer_signal->then([](size_t ticks) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Preparing request... ");
         auto request = std::make_shared<ExampleService::Request>();
         request->data = 1;
@@ -18,7 +18,8 @@ int main(int argc, char **argv) {
     });
 
     auto service_response = icey::create_client(timed_request, "set_bool_service");
-    icey::then(service_response, [](std::shared_ptr<ExampleService::Response> response) {
+
+    service_response->then([](std::shared_ptr<ExampleService::Response> response) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response: " << response->success);
     });
     

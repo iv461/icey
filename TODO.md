@@ -56,7 +56,7 @@ Sorted by decreasing priority.
 ## API elegance/clarity
 
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs)
-- [X] .then() as member
+- [X] ->then() as member
 - [ ] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
 - SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
 - [ ] Search for code that fixes the most common issues like setting int to an double param should be allowed
