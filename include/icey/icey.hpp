@@ -490,8 +490,12 @@ struct DataFlowGraph {
     using VertexData = std::shared_ptr<ObservableBase>;
     /// vecS needed so that the vertex id's are consecutive integers
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
+    
+    void add_v(VertexData vertex_data) {
+        vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
+    }
 
-    /// Create a new node from data
+    /// Create a new node from data with edges to parent nodes. Parent nodes must have been inserted already
     /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
     void add_vertex_with_parents(std::shared_ptr<ObservableBase> vertex_data, 
         const std::vector<size_t> &parents,
@@ -729,6 +733,7 @@ protected:
     std::shared_ptr<O> create_observable(Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
+        data_flow_graph_.add_v(observable); /// Register to graph to obtain an ID
         observable->context = shared_from_this();
         return observable;
     }
