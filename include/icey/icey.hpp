@@ -9,10 +9,12 @@
 #include <map>
 #include <optional>
 #include <unordered_map>
+
 /// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a dependecy of one of our deps. It's not rclcpp and not message_filters.
 #include <boost/noncopyable.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
+#include <boost/graph/strong_components.hpp>
 
 #include <boost/mp11.hpp> /// For template meta-programming, operation on tuples etc.
 #include <icey/bag_of_metaprogramming_tricks.hpp>
@@ -555,9 +557,39 @@ struct DataFlowGraph {
     bool empty() const { return num_vertices(graph_) == 0; }
     void clear() { graph_.clear(); }
 
-    void topo_sort() {
-        //std::vector< VertexData > c;
-        //topological_sort(graph_, std::back_inserter(c));
+    // In case the graph is not a DAG, we compute the strong components to display to the user the vertices that form loops
+    void compute_strong_components()  {
+        // Compute strongly connected components
+        auto &g = graph_;
+        std::vector<int> component(num_vertices(g)); // Component indices
+        int num_scc = boost::strong_components(g, &component[0]);
+
+        // Map each component to its vertices
+        std::vector<std::set<int>> components(num_scc);
+        for (size_t v = 0; v < component.size(); ++v) {
+            components[component[v]].insert(v);
+        }
+
+        // Identify and print vertices in cycles
+        std::cout << "Vertices in cycles (including self-loops):" << std::endl;
+        for (const auto& comp : components) {
+            if (comp.size() > 1 || (comp.size() == 1 && boost::edge(*comp.begin(), *comp.begin(), g).second)) {
+                for (int v : comp) {
+                    std::cout << v << " ";
+                }
+                std::cout << std::endl;
+            }
+        }
+    }
+
+    std::optional< std::vector<size_t> > try_topological_sorting() {
+        std::vector<size_t> topological_order;
+        try {
+            topological_sort(graph_, std::back_inserter(topological_order));
+            return topological_order;
+        } catch (const boost::not_a_dag&) {
+            return {};
+        }
     }
 
     Graph graph_;
@@ -934,9 +966,13 @@ protected:
 
     /// TODO 
     void analyze_dfg() {
-        data_flow_graph_.topo_sort();
-        /// do_topological_sort_on_dfg_graph()
-        // assert_dfg_graph_is_acyclic() 
+        auto maybe_topological_order = data_flow_graph_.try_topological_sorting();
+        if(!maybe_topological_order) {
+            data_flow_graph_.compute_strong_components();
+            throw std::runtime_error("The graph created is not a directed acyclic graph (DAG), meaning it has loops. Please review the created vertices and remove the loops.");
+        }
+        topological_order_ = maybe_topological_order.value();
+        
         /// analyze_dependencies() -> computes the number of threads needed
     }
     
@@ -959,6 +995,8 @@ protected:
     }
     
     DataFlowGraph data_flow_graph_;
+
+    std::vector <size_t> topological_order_;
 
     bool was_initialized_{false}; /// Indicates whether initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.
 
