@@ -36,7 +36,12 @@ public:
 /// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber etc.
 class NodeAttachable : private boost::noncopyable {
 public:
-    virtual void attach_to_node(ROSAdapter::NodeHandle &) {}
+    virtual void attach_to_node(ROSAdapter::NodeHandle &) {
+            if(this->was_attached_)
+                throw std::invalid_argument("NodeAttachable was already attached");
+            was_attached_ = true;
+                
+    }
     /// Priority at which to attach this, needed to implement an order of initialization:
     // 0: parameters
     // 1: publishers
@@ -46,6 +51,7 @@ public:
     // 5: timers
     virtual size_t attach_priority() const { return attach_priority_; } 
     size_t attach_priority_{0};
+    bool was_attached_{false};
 };
 
 /// An buffer, storing the last received value
@@ -135,7 +141,7 @@ public:
 
 protected:
     /// Register to be notified when smth. changes
-    void on_change(OnResolve && cb) {
+    virtual void on_change(OnResolve && cb) {
         notify_list_.emplace_back(std::move(cb)); /// TODO rename to children ?
     }
     /// set and notify all observers about the new value
@@ -155,7 +161,7 @@ protected:
     std::vector<OnReject> reject_cbs_;
 };
 
-/// An observable storing the last received value
+/// An observable storing the last received value TODO rem
 template<typename _Value>
 struct BufferedObservable : public Observable<_Value> {
     using Base = Observable<_Value>;
@@ -237,6 +243,7 @@ protected:
 
 template<typename _Value>
 class SubscriptionObservable : public Observable<_Value> {
+     friend class Context;
 public:
     using Value = _Value;
     SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos, 
@@ -260,6 +267,7 @@ protected:
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using lookupTransform, not an own buffer 
 struct TransformSubscriptionObservable : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
+     friend class Context;
 public:
     TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) : 
          target_frame_(target_frame), source_frame_(source_frame) { 
@@ -299,6 +307,7 @@ protected:
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to the callback
 struct TimerObservable: public Observable<size_t> {
+     friend class Context;
     using Value = size_t;
     TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) : 
         interval_(interval), use_wall_time_(use_wall_time), is_one_off_timer_(is_one_off_timer) { 
@@ -315,6 +324,13 @@ protected:
                 ros_timer_->cancel();
         });
     }
+
+    virtual void _set(const Value &new_value) { /// TODO DBG
+        if(icey_debug_print)
+            std::cout << "[TimerObservable] _set() called, notify_list_.size(): " <<  this->notify_list_.size() << std::endl;
+        Observable<size_t>::_set(new_value);
+    }
+
     rclcpp::TimerBase::SharedPtr ros_timer_;
     ROSAdapter::Duration interval_;
     bool use_wall_time_{false};
@@ -325,10 +341,10 @@ protected:
 /// A publishabe state, read-only
 template<typename _Value>
 class PublisherObservable : public Observable<_Value> {
+     friend class Context;
 public:
     using Value = _Value;
     using Base = Observable<_Value>;
-    using Base::publish;
     static_assert(rclcpp::is_ros_compatible_type<Value>::value, "A publisher must use a publishable ROS message (no primitive types are possible)");
 
     PublisherObservable(const std::string &topic_name, const ROSAdapter::QoS qos=ROS2Adapter::DefaultQos()) : topic_name_(topic_name), qos_(qos) {
@@ -337,12 +353,24 @@ public:
 
 protected:
     void attach_to_node(ROSAdapter::NodeHandle & node_handle) {
+    
         if(icey_debug_print)
             std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
         auto publish = node_handle.add_publication<Value>(topic_name_, qos_);
         this->on_change([publish](const auto &new_value) { publish(new_value); });
     }
 
+    virtual void on_change(typename Base::OnResolve && cb) override {
+        if(icey_debug_print)
+            std::cout << "[PublisherObservable on " + topic_name_ + "] on_change()  " << std::endl;
+        Base::on_change(std::move(cb));
+    }
+
+    virtual void _set(const Value &new_value) { /// TODO DBG
+        if(icey_debug_print)
+            std::cout << "[PublisherObservable] _set() called, notify_list_.size(): " <<  this->notify_list_.size() << std::endl;
+        Base::_set(new_value);
+    }
     std::string topic_name_;
     ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
 };
@@ -499,21 +527,21 @@ struct DataFlowGraph {
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
     
     void add_v(VertexData vertex_data) {
-        vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
+        if(vertex_data->index.has_value())
+            throw std::invalid_argument("[DataFlowGraph::add_v] This vertex was already added to the graph, since it's index was set. Observables must be added only once to the graph");
+        vertex_data->index = add_vertex(vertex_data, graph_); /// TODO Obs needs to know the index so we can connect them here, can we do better ? 
     }
 
-    /// Create a new node from data with edges to parent nodes. Parent nodes must have been inserted already
+    /// Create new edges from a child node to multiple parent nodes. Parent nodes must have been inserted already
     /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
-    void add_vertex_with_parents(std::shared_ptr<ObservableBase> vertex_data, 
-        const std::vector<size_t> &parents,
-        const std::vector<EdgeData> &edges_data) {
-        vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
-        for(size_t i = 0; i < parents.size(); i++) {   
-            const auto &parent = parents.at(i);
+    void add_edges(size_t child_id, const std::vector<size_t> &parent_ids, const std::vector<EdgeData> &edges_data) {
+        for(size_t i = 0; i < parent_ids.size(); i++) {   
+            const auto &parent_id = parent_ids.at(i);
             const auto &edge_data = edges_data.at(i);
-            add_edge(parent, vertex_data->index.value(), edge_data, graph_);
+            add_edge(parent_id, child_id, edge_data, graph_);
         }
     }
+
     /// Returns an iterable of all the vertices
     auto get_vertices_index_range() { return boost::make_iterator_range(vertices(graph_)); }
 
@@ -557,6 +585,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         observable_traits<Parent>{}; 
         using MessageT = typename remove_shared_ptr_t<Parent>::Value;
         auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
+        std::cout << "[Context::create_publisher] Created publisher" << std::endl;
         connect_with_identity(child, parent);
     }
     
@@ -628,7 +657,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         /// Add vertex data, parent id's and edges data
         /// We add it manually to the graph since we want to represent the topology that is required for the 
         // dependency analysis. The synchronizer is a single node, altough it has N input observables 
-        data_flow_graph_.add_vertex_with_parents(synchronizer, parent_ids, edges_data);
+        data_flow_graph_.add_edges(synchronizer->index.value(), parent_ids, edges_data);
         return synchronizer;
     }
 
@@ -750,8 +779,7 @@ protected:
      /// Creates a computation for the graph mode. If eager mode is enabled, it additionaly registers the computation so that it is immediatelly run
     template<class Input, class Output, class F>
     AnyComputation create_computation(Input input, Output output, F && f)  {
-        assert_is_observable<Input>();
-        assert_is_observable<Output>();
+        observable_traits<Input, Output>{}; 
         using ReturnType = decltype( apply_if_tuple(f, std::declval< typename remove_shared_ptr_t<Input>::Value >()) );
         AnyComputation computation;
 
@@ -797,8 +825,8 @@ protected:
         std::vector<AnyComputation> edges_data;
         auto computation = create_computation(parent, child, std::move(f));
         edges_data.push_back(computation);
-        /// Add vertex data, parent id's and edges data
-        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
+        /// Add connections to the graph
+        data_flow_graph_.add_edges(child->index.value(), parent_ids, edges_data);
     }
 
 
@@ -820,9 +848,7 @@ protected:
             auto f = create_identity_computation(parents, child);
             edges_data.push_back(f);
         }(), ...);
-        
-        /// Add vertex data, parent id's and edges data
-        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
+        data_flow_graph_.add_edges(child->index.value(), parent_ids, edges_data);
 
     }
 
@@ -846,8 +872,7 @@ protected:
 
     template<class Input, class Output>
     AnyComputation create_identity_computation(Input input, Output output) {
-        assert_is_observable<Input>();
-        assert_is_observable<Output>();
+        observable_traits<Input, Output>{}; 
         /// TODO Assert Input is not a tuple or return tuple if it is 
         return create_computation(input, output, [](auto && x) { return std::move(x); });
     }
