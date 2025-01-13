@@ -124,13 +124,13 @@ constexpr void assert_all_observable_values_are_same() {
 
 /// An observable. Similar to a promise in JS.
 /// TODO consider CRTP, would also be beneficial for PIMPL 
-template<typename _Value, typename _ErrorValue = std::string>
-class Observable : public ObservableBase, public Buffer<_Value>, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+template<typename _Value>
+class Observable : public ObservableBase, public Buffer<_Value>, public std::enable_shared_from_this<Observable<_Value>> {
     friend class Context; /// To prevent misuse, only the Context is allowed to register on_change callbacks
 public:
     using Value = _Value;
-    using ErrorValue = _ErrorValue;
-    using Self = Observable<_Value, _ErrorValue>;
+    using ErrorValue = std::string;
+    using Self = Observable<_Value>;
 
     using OnResolve = std::function<void(const Value&)>;
     using OnReject = std::function<void(const ErrorValue&)>;
@@ -602,7 +602,8 @@ struct DataFlowGraph {
 
     void print() {
         auto &g = graph_;
-        std::cout << "Vertices:" << std::endl;
+
+        std::cout << "Created data-flow graph:\nVertices:" << std::endl;
         for (auto v : boost::make_iterator_range(vertices(g))) {
             std::cout << "Vertex " << v << ": " << g[v]->class_name << ": " << g[v]->name << std::endl;
         }
@@ -950,19 +951,14 @@ protected:
             std::cout << "[icey::Context] attach_everything_to_node() start" << std::endl;
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
-
-    
         const auto attach_priority_order = [this](size_t v1, size_t v2) {
             return data_flow_graph_.graph_[v1]->attach_priority() 
                     < data_flow_graph_.graph_[v2]->attach_priority();
         };
-
-
         /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
         /// Now, allow for attaching additional nodes after we got the parameters. After attaching, parameters immediatelly have their values. 
-        /// For this, first attach only the parameters (prio 0)
-        if(icey_debug_print)
-            std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
+        if(icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
+
         for(auto i_vertex : data_flow_graph_.get_vertices_ordered_by(attach_priority_order)) {
             const auto &attachable = data_flow_graph_.graph_[i_vertex];
             if(attachable->attach_priority() == 1) /// Stop after attachning all parameters
@@ -980,8 +976,7 @@ protected:
         analyze_dfg(); /// Now analyze the graph before attaching everything to detect cycles as soon as possible, especially before the node is started and everything crashes
         
 
-        if(icey_debug_print)
-            std::cout << "[icey::Context] Attaching everything ... " << std::endl;
+        if(icey_debug_print) std::cout << "[icey::Context] Attaching everything ... " << std::endl;
         /// If additional vertices have been added to the DFG, attach it as well 
         
         for(auto i_vertex : data_flow_graph_.get_vertices_ordered_by(attach_priority_order)) {
@@ -1056,22 +1051,19 @@ public:
 };
 
 /// Blocking spawn of an existing node. 
-void spawn(std::shared_ptr<ROSAdapter::Node> node, bool use_mt=true) {
-    if(use_mt) {
-        rclcpp::executors::MultiThreadedExecutor executor;
-        executor.add_node(node);
-        executor.spin();
-    } else {
-        rclcpp::spin(node);
-    }
+void spawn(std::shared_ptr<ROSAdapter::Node> node) {
+    /// We use single-threaded executor because the MT one can starve due to a bug
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(node);
+    executor.spin();
     rclcpp::shutdown();
 }
 
 void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
-    auto num_threads = 2; /// TODO how many do we need ?
+    rclcpp::executors::SingleThreadedExecutor executor;
     /// This is how nodes should be composed according to ROS maintainer wjwwood: https://robotics.stackexchange.com/a/89767
     /// He references https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
+    //rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
     for(const auto &node : nodes)  
         executor.add_node(node);
     executor.spin();

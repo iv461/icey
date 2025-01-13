@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
         load_neural_network_model(nn_model_filename_param->value());
 
-        /// Add additional subscribers  TODO 
+        /// Add additional subscribers 
         auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
         /// TODO 
