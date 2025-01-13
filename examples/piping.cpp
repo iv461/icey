@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     /// Test publishing something that is derived from Observable 
     icey::create_publisher(map_base_link_tf, "map_to_base_link_transform");
     /// Or use member function API:
-    map_base_link_tf.publish("map_to_base_link_transform2");
+    map_base_link_tf->publish("map_to_base_link_transform2");
 
     //// Now multiple-input to single output: Modeling control flow such as 
     icey::spawn(argc, argv, "piping_example"); /// Create and start node

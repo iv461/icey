@@ -82,9 +82,9 @@ auto create_transform_subscription(const std::string &target_frame, const std::s
     return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-template<typename MessageT>
-void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    g_state.get_context().create_publisher<MessageT>(parent, topic_name, qos);
+template<class Parent>
+void create_publisher(Parent parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    g_state.get_context().create_publisher(parent, topic_name, qos);
 }
 
 template<typename MessageT>
@@ -92,7 +92,8 @@ auto create_writable_publisher(const std::string &topic_name, const ROS2Adapter:
     g_state.get_context().create_writable_publisher<MessageT>(topic_name, qos);
 }
 
-void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent){
+template<typename Parent>
+void create_transform_publisher(Parent parent){
     g_state.get_context().create_transform_publisher(parent);
 }
 
@@ -105,10 +106,9 @@ auto create_service(const std::string &service_name, const rclcpp::QoS &qos = rc
     return g_state.get_context().create_service<ServiceT>(service_name, qos);
 }
 
-template<typename ServiceT> 
-auto create_client(typename ClientObservable<ServiceT>::Parent parent, 
-         const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-            return g_state.get_context().create_client<ServiceT>(parent, service_name, qos);
+template<typename ServiceT, class Parent>
+auto create_client(Parent parent, const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    return g_state.get_context().create_client<ServiceT>(parent, service_name, qos);
 }
 
 /// Now some extra events 
@@ -125,8 +125,8 @@ void on_node_destruction(std::function<void()> cb) {
 
 /// Now the filters
 template<typename... Parents>
-auto synchronize(Parents && ... parents) { 
-    return g_state.get_context().synchronize(std::forward<Parents>(parents)...);
+auto synchronize(Parents... parents) { 
+    return g_state.get_context().synchronize(parents...);
 }
 
 /*template<typename... Parents>
@@ -135,8 +135,8 @@ auto fuse(Parents && ... parents) {
 }*/
 
 template<typename... Parents>
-auto serialize(Parents && ... parents) { 
-    return g_state.get_context().serialize(std::forward<Parents>(parents)...);
+auto serialize(Parents... parents) { 
+    return g_state.get_context().serialize(parents...);
 }
 
 template<typename Parent, typename F>

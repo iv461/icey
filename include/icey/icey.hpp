@@ -64,11 +64,27 @@ protected:
 struct ObservableBase  : public DFGNode, public NodeAttachable {};
 
 template<class T>
-constexpr  void assert_is_observable() { static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable"); }
+constexpr  void assert_is_observable() { 
+    static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable"); }
+
+template<class T>
+constexpr  void assert_observable_holds_tuple() {
+    assert_is_observable<T>();
+    static_assert(is_tuple_v<typename remove_shared_ptr_t<T>::Value >, "The Observable must hold a tuple as a value for unpacking.");
+}
 
 template<typename... Args>
 constexpr void assert_are_observables() {
     (assert_is_observable<Args>(), ...);
+}
+
+// Assert that all Observables types hold the same value
+template <typename First, typename... Rest>
+constexpr void assert_all_observable_values_are_same() {
+    assert_are_observables<First, Rest...>(); /// Only Observables are expected to have ::Value
+    // Static assert that each T::Value is the same as First::Value
+    static_assert((std::is_same_v<typename remove_shared_ptr_t<First>::Value, typename remove_shared_ptr_t<Rest>::Value> && ...),
+                  "The values of all the observables must be the same");
 }
 
 /// An observable. Similar to a promise in JS.
@@ -88,8 +104,7 @@ public:
     template<typename F>
     auto then(F && f) { return this->context.lock()->then(this->shared_from_this(), f); }
 
-    /// Create a ROS publisher for this observable.
-    template<typename MessageT>
+    /// Create a ROS publisher for this observable.    
     void publish(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
         return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
     }
@@ -281,6 +296,8 @@ template<typename _Value>
 class PublisherObservable : public Observable<_Value> {
 public:
     using Value = _Value;
+    using Base = Observable<_Value>;
+    using Base::publish;
     static_assert(rclcpp::is_ros_compatible_type<Value>::value, "A publisher must use a publishable ROS message (no primitive types are possible)");
 
     PublisherObservable(const std::string &topic_name, const ROSAdapter::QoS qos=ROS2Adapter::DefaultQos()) : topic_name_(topic_name), qos_(qos) {
@@ -500,8 +517,10 @@ struct Context : public std::enable_shared_from_this<Context> {
         return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
     }
 
-    template<typename MessageT>
-    void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    template<class Parent>
+    void create_publisher(Parent parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+        assert_is_observable<Parent>();
+        using MessageT = typename remove_shared_ptr_t<Parent>::Value;
         auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
         connect_with_identity(child, parent);
     }
@@ -511,7 +530,9 @@ struct Context : public std::enable_shared_from_this<Context> {
         return create_observable<WritablePublisherObservable<MessageT>>(topic_name, qos);
     }
 
-    void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
+    template<class Parent>
+    void create_transform_publisher(Parent parent) {
+        assert_is_observable<Parent>();
         auto child = create_observable<TransformPublisherObservable>();
         connect_with_identity(child, parent);
     }
@@ -526,9 +547,9 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
 
     /// Add a service client
-    template<typename ServiceT> 
-    auto create_client(typename ClientObservable<ServiceT>::Parent parent, 
-         const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    template<class ServiceT, class Parent> 
+    auto create_client(Parent parent, const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+        assert_is_observable<Parent>();
         return create_observable<ClientObservable<ServiceT>>(service_name, qos);
     }
     
@@ -556,6 +577,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps approximately
     template<typename... Parents>
     auto synchronize_approx_time(Parents ... parents) { 
+        assert_are_observables<Parents...>();
         using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
         static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
         
@@ -577,6 +599,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<typename... Parents>
     auto synchronize(Parents ... parents) {
+        assert_are_observables<Parents...>();
         using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
         static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
         using partitioned = mp::mp_partition<inputs, is_interpolatable>;
@@ -606,7 +629,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
     template<typename... Parents>
     auto serialize(Parents ... parents) { 
-        /// TODO assert all types are the same -> cannot take variable number of same type arguments
+        assert_all_observable_values_are_same<Parents...>();
         using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ParentValue = typename std::remove_reference_t<Parent>::Value;
         /// First, create a new observable
@@ -637,6 +660,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// For a tuple-observable, get it's N'th element
     template<int index, class Parent>
     auto get_nth(Parent & parent) { 
+        assert_observable_holds_tuple<Parent>();
         return then(parent, [](const auto &... args) { /// Need to take variadic because then() automatically unpacks tuples
             return std::get<index>(std::forward_as_tuple(args...)); /// So we need to pack this again in a tuple
         });
