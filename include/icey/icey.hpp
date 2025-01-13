@@ -161,6 +161,10 @@ struct BufferedObservable : public Observable<_Value> {
     
 };
 
+struct Nothing {};
+/// For fucntions returning void a dummy observable
+struct DevNullObservable : public Observable<Nothing> {};
+
 /// An interpolatable observable is one that buffers the incoming values using a circular buffer and allows to query the message at a given point, optionally using interpolation.
 /// It is an essential for using lookupTransform with TF.
 /// It is used by synchronizers to synchronize a topic exactly at a given time point. 
@@ -677,6 +681,9 @@ struct Context : public std::enable_shared_from_this<Context> {
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value >()) );
         using ObsValue = typename remove_optional<ReturnType>::type;
         if constexpr (std::is_void_v<ReturnType>) {
+            /// create a dummy to satisfy the graph
+            auto child = create_observable< DevNullObservable >();
+            connect(child, parent, std::move(f));
             /// return nothing so that no computation can be made based on the result
         } else {
             auto child = create_observable<Observable<ObsValue>>();
