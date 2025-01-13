@@ -87,6 +87,11 @@ void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::s
     g_state.get_context().create_publisher<MessageT>(parent, topic_name, qos);
 }
 
+template<typename MessageT>
+auto create_writable_publisher(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    g_state.get_context().create_writable_publisher<MessageT>(topic_name, qos);
+}
+
 void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent){
     g_state.get_context().create_transform_publisher(parent);
 }

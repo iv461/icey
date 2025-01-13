@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     /// Synchronize, uses approx time
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);
-
+    
     /// We always have to take a ConstPtr to the message:
     auto pipe1 = icey::then(float_tfed,
         [](std_msgs::msg::Float32::ConstPtr float_val, 
@@ -44,6 +44,11 @@ int main(int argc, char **argv) {
 
     auto serialized = icey::serialize(float1, float2, float3);
     icey::create_publisher(serialized, "float_serialized");
+
+    /// Test publishing something that is derived from Observable 
+    icey::create_publisher(map_base_link_tf, "map_to_base_link_transform");
+    /// Or use member function API:
+    map_base_link_tf.publish("map_to_base_link_transform2");
 
     //// Now multiple-input to single output: Modeling control flow such as 
     icey::spawn(argc, argv, "piping_example"); /// Create and start node

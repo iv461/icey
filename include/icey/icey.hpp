@@ -64,8 +64,11 @@ protected:
 struct ObservableBase  : public DFGNode, public NodeAttachable {};
 
 template<class T>
-void assert_is_observable()     
-    static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable");
+constexpr  void assert_is_observable() { static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable"); }
+
+template<typename... Args>
+constexpr void assert_are_observables() {
+    (assert_is_observable<Args>(), ...);
 }
 
 /// An observable. Similar to a promise in JS.
@@ -302,27 +305,27 @@ template<typename _Value>
 class WritablePublisherObservable : public PublisherObservable<_Value> {
 public:
     using Value = _Value;
-    void publish(const Value &message) {
-        this->_set(message);
-    }
+    void publish(const Value &message) { this->_set(message); }
 };
 
 struct AnyComputation { 
     std::function<void()> f;
 };
 
+/// TODO maybe for easier debugging ?
 template<class _Input, class _Output>
 struct Computation : public AnyComputation {
     std::shared_ptr< Observable<_Input> > input;
     std::shared_ptr< Observable<_Output> > output;
 };  
 
+/// Wrap the message_filters official ROS package. In the following, "MFL" refers to the message_filters package.
 /// An adapter, adapting the message_filters::SimpleFilter to our Observable (two different implementations of almost the same concept).
 /// Does nothing else than what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 // We neeed the base to be able to recognize interpolatable nodes for example
-template<typename _Value, class Base = Observable<_Value> >
-struct SimpleFilterAdapter : public Base, public message_filters::SimpleFilter<_Value> {
+template<typename _Value, class _Base = Observable<_Value> >
+struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Value> {
     using Value = _Value;
     SimpleFilterAdapter() {
         this->on_change([this](const Value &msg) {
@@ -334,18 +337,6 @@ struct SimpleFilterAdapter : public Base, public message_filters::SimpleFilter<_
     }
 };
 
-/// Observables can have multiple outputs, but not multiple inputs. This class changes that.
-/// It is a composition of multiple observables, so not itself one. 
-/// TODO we only need this to correctly model the synchronizer in the data-flow graph
-template<template <typename> class _Base, typename... _Values>
-struct MultipleInputObservable  {
-    const auto &inputs() const { return inputs_; }
-protected:
-    using Inputs = std::tuple< std::shared_ptr< _Base <_Values> >... >;
-    Inputs inputs_;
-};
-
-/// Wrap the message_filters official ROS package. In the following, "MFL" refers to the message_filters package.
 /// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
 /// TODO adapt queue size automatically if we detect very different frequencies so that synchronization still works. 
 /// I would guess it works if the lowest frequency topic has a frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
@@ -370,7 +361,7 @@ private:
     void create_mfl_synchronizer() {
         synchronizer_ = std::make_shared<Sync>(Policy(queue_size_));
         /// Connect with the input observables
-        std::apply([this](auto &... input_filters) { synchronizer_->connectInput(*input_filters...);},inputs_);
+        std::apply([this](auto &... input_filters) { synchronizer_->connectInput(*input_filters...);}, inputs_);
         synchronizer_->setAgePenalty(0.50); /// TODO not sure why this is needed, present in example code
         synchronizer_->registerCallback(&Self::sync_callback, this); /// That is the only overload that we can use here that works with the legacy pre-variadic template code
     }
@@ -451,11 +442,6 @@ protected:
     ROSAdapter::QoS qos_;
 };
 
-/// A dev/null observable, i.e. a observable that cannot have children (you realize now that there are much worse names for this, right ?).
-struct DevNullObservable {
-
-};
-
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
 struct DataFlowGraph {
     /// TODO store the computation 
@@ -520,6 +506,11 @@ struct Context : public std::enable_shared_from_this<Context> {
         connect_with_identity(child, parent);
     }
     
+    template<typename MessageT>
+    auto create_writable_publisher(const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+        return create_observable<WritablePublisherObservable<MessageT>>(topic_name, qos);
+    }
+
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
         auto child = create_observable<TransformPublisherObservable>();
         connect_with_identity(child, parent);
@@ -625,111 +616,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         return child; 
     }
 
-    /// Creates a computation for the graph mode. If eager mode is enabled, it additionaly registers the computation so that it is immediatelly run
-    template<class Input, class Output, class F>
-    AnyComputation create_computation(Input input, Output output, F && f)  {
-        assert_is_observable<Input>();
-        assert_is_observable<Output>();
-        using ReturnType = decltype( apply_if_tuple(f, std::declval< typename remove_shared_ptr_t<Input>::Value >()) );
-        AnyComputation computation;
-
-        const auto on_new_value = [output, f=std::move(f)](const auto &new_value) {
-            auto ret = apply_if_tuple(f, new_value);
-            if constexpr (is_optional_v<ReturnType>) {
-                if(ret) {
-                    output->_set(*ret);
-                }
-            } else {
-                output->_set(ret);
-            }
-        };
-        const auto on_new_value_void = [f=std::move(f)](const auto &new_value) {
-            apply_if_tuple(f, new_value);
-        };
-        
-        if constexpr (std::is_void_v<ReturnType>) {
-            /// The computation has no arguments, it obtains the buffered value from the input and calls the function
-            computation.f = [input, f=std::move(on_new_value_void)]() { f(input->value()); };
-            if(this->use_eager_mode_) {
-                input->on_change(on_new_value_void);
-            }
-        } else {
-            computation.f= [input, f=std::move(on_new_value)]() { f(input->value()); };
-            if(this->use_eager_mode_) {
-                input->on_change(on_new_value);
-            }
-        }
-        if(!this->use_eager_mode_) {
-            // And register the callback for running the graph_loop if not already done (we have to call smth when the subscriber callback get's called, right)
-            if_needed_register_run_graph_mode(input);
-        }
-
-        return computation;
-    }
-
-    template<class Child, class Parent, class F>
-    void connect(Child child, Parent parent, F && f) {
-        std::vector<size_t> parent_ids;
-        parent_ids.push_back(parent->index.value());
-        
-        std::vector<AnyComputation> edges_data;
-        auto computation = create_computation(parent, child, std::move(f));
-        edges_data.push_back(computation);
-        /// Add vertex data, parent id's and edges data
-        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
-    }
-
-
-    template<class Child, typename... Parents>
-    void connect_with_identity(Child child, Parents ... parents) {
-        std::vector<size_t> parent_ids;
-        // TODO maybe use std::array to get rid of this check
-        if constexpr(sizeof...(Parents) == 1) {
-            /// TODO do better ? take_
-            const auto &first_parent = std::get<0>(std::forward_as_tuple(parents...));
-            parent_ids.push_back(first_parent->index.value());
-        } else {
-            parent_ids = {parents->index.value()...}; 
-        }
-        
-        std::vector<AnyComputation> edges_data;
-        ([&]{ 
-            /// This should be called "parent"
-            auto f = create_identity_computation(parents, child);
-            edges_data.push_back(f);
-        }(), ...);
-        
-        /// Add vertex data, parent id's and edges data
-        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
-
-    }
-
-    /// Connects each of the N inputs with the corresponding N outputs using identity
-    template<class Inputs, class Outputs>
-    std::vector<AnyComputation> create_identity_computation_mimo(
-            Inputs inputs, Outputs outputs
-    ) {
-        static_assert(std::tuple_size_v<Inputs> == std::tuple_size_v<Outputs>,
-                  "Inputs and outputs must have the same size");
-        // Generate a sequence of indices corresponding to the tuple size
-        using Indices = mp::mp_iota_c<std::tuple_size_v<Inputs>>;
-        std::vector<AnyComputation> computations;
-        // Iterate over the indices
-        mp::mp_for_each<Indices>([&](auto I) {
-            auto f = create_identity_computation(std::get<I>(inputs), std::get<I>(outputs));
-            computations.push_back(f);
-        });
-        return computations;     
-    }
-
-    template<class Input, class Output>
-    AnyComputation create_identity_computation(Input input, Output output) {
-        assert_is_observable<Input>();
-        assert_is_observable<Output>();
-        /// TODO Assert Input is not a tuple or return tuple if it is 
-        return create_computation(input, output, [](auto && x) { return std::move(x); });
-    }
-    
+ 
     template<typename Parent, typename F>
     auto then(Parent parent, F && f) {
         assert_is_observable<Parent>();
@@ -797,6 +684,109 @@ protected:
         return observable;
     }
     
+     /// Creates a computation for the graph mode. If eager mode is enabled, it additionaly registers the computation so that it is immediatelly run
+    template<class Input, class Output, class F>
+    AnyComputation create_computation(Input input, Output output, F && f)  {
+        assert_is_observable<Input>();
+        assert_is_observable<Output>();
+        using ReturnType = decltype( apply_if_tuple(f, std::declval< typename remove_shared_ptr_t<Input>::Value >()) );
+        AnyComputation computation;
+
+        const auto on_new_value = [output, f=std::move(f)](const auto &new_value) {
+            auto ret = apply_if_tuple(f, new_value);
+            if constexpr (is_optional_v<ReturnType>) {
+                if(ret) {
+                    output->_set(*ret);
+                }
+            } else {
+                output->_set(ret);
+            }
+        };
+        const auto on_new_value_void = [f=std::move(f)](const auto &new_value) {
+            apply_if_tuple(f, new_value);
+        };
+        
+        if constexpr (std::is_void_v<ReturnType>) {
+            /// The computation has no arguments, it obtains the buffered value from the input and calls the function
+            computation.f = [input, f=std::move(on_new_value_void)]() { f(input->value()); };
+            if(this->use_eager_mode_) {
+                input->on_change(on_new_value_void);
+            }
+        } else {
+            computation.f= [input, f=std::move(on_new_value)]() { f(input->value()); };
+            if(this->use_eager_mode_) {
+                input->on_change(on_new_value);
+            }
+        }
+        if(!this->use_eager_mode_) {
+            // And register the callback for running the graph_loop if not already done (we have to call smth when the subscriber callback get's called, right)
+            if_needed_register_run_graph_mode(input);
+        }
+        return computation;
+    }
+
+    template<class Child, class Parent, class F>
+    void connect(Child child, Parent parent, F && f) {
+        std::vector<size_t> parent_ids;
+        parent_ids.push_back(parent->index.value());
+        
+        std::vector<AnyComputation> edges_data;
+        auto computation = create_computation(parent, child, std::move(f));
+        edges_data.push_back(computation);
+        /// Add vertex data, parent id's and edges data
+        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
+    }
+
+
+    template<class Child, typename... Parents>
+    void connect_with_identity(Child child, Parents ... parents) {
+        std::vector<size_t> parent_ids;
+        // TODO maybe use std::array to get rid of this check
+        if constexpr(sizeof...(Parents) == 1) {
+            /// TODO do better ? take_
+            const auto &first_parent = std::get<0>(std::forward_as_tuple(parents...));
+            parent_ids.push_back(first_parent->index.value());
+        } else {
+            parent_ids = {parents->index.value()...}; 
+        }
+        
+        std::vector<AnyComputation> edges_data;
+        ([&]{ 
+            /// This should be called "parent"
+            auto f = create_identity_computation(parents, child);
+            edges_data.push_back(f);
+        }(), ...);
+        
+        /// Add vertex data, parent id's and edges data
+        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
+
+    }
+
+    /// Connects each of the N inputs with the corresponding N outputs using identity
+    template<class Inputs, class Outputs>
+    std::vector<AnyComputation> create_identity_computation_mimo(
+            Inputs inputs, Outputs outputs
+    ) {
+        static_assert(std::tuple_size_v<Inputs> == std::tuple_size_v<Outputs>,
+                  "Inputs and outputs must have the same size");
+        // Generate a sequence of indices corresponding to the tuple size
+        using Indices = mp::mp_iota_c<std::tuple_size_v<Inputs>>;
+        std::vector<AnyComputation> computations;
+        // Iterate over the indices
+        mp::mp_for_each<Indices>([&](auto I) {
+            auto f = create_identity_computation(std::get<I>(inputs), std::get<I>(outputs));
+            computations.push_back(f);
+        });
+        return computations;     
+    }
+
+    template<class Input, class Output>
+    AnyComputation create_identity_computation(Input input, Output output) {
+        assert_is_observable<Input>();
+        assert_is_observable<Output>();
+        /// TODO Assert Input is not a tuple or return tuple if it is 
+        return create_computation(input, output, [](auto && x) { return std::move(x); });
+    }
 
     void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
         if(icey_debug_print)
