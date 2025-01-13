@@ -9,7 +9,7 @@
 #include <map>
 #include <optional>
 #include <unordered_map>
-/// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a dependecy of one 
+/// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a dependecy of one of our deps. It's not rclcpp and not message_filters.
 #include <boost/noncopyable.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
@@ -224,8 +224,8 @@ protected:
     MaybeValue get_at_time(const Time &time_point) const override {
         std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
         try {
-            // Note that this call does not wait, the transform must already be arrived. This works because get_at_time()
-            // is called by the synchronizer as 
+            // Note that this call does not wait, the transform must already have arrived. This works because get_at_time()
+            // is called by the synchronizer
             tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time_point);
         } catch (tf2::TransformException & e) {
 
@@ -333,6 +333,18 @@ struct SimpleFilterAdapter : public Base, public message_filters::SimpleFilter<_
     }
 };
 
+/// Observables can have multiple outputs, but not multiple inputs. This class changes that.
+/// It is a composition of multiple observables, so not itself one. 
+/// TODO we only need this to have a vertex for the synchroniuzer in the graph  ...
+template<class _Base, typename... _Values>
+struct MultipleInputObservable  {
+
+    const auto &inputs() const { return inputs_; }
+protected:
+    using Inputs = std::tuple< std::shared_ptr< _Base <_Values> >... >;
+    Inputs inputs_;
+};
+
 /// Wrap the message filters package 
 /// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
 /// TODO adapt queue size automatically if we detect very different frequencies so that synchronization still works. 
@@ -346,10 +358,16 @@ public:
     using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
     using Sync = message_filters::Synchronizer<Policy>;
     using Inputs = std::tuple< std::shared_ptr<SimpleFilterAdapter<Messages>>... >;
+
     SynchronizerObservable(uint32_t queue_size) :
          inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...), /// They are dynamically allocated as is every other Observable
          queue_size_(queue_size) {
-            
+         create_mfl_synchronizer();
+    }
+
+    const auto &inputs() const { return inputs_; }
+private:
+    void create_mlf_synchronizer() {
         synchronizer_ = std::make_shared<Sync>(Policy(queue_size_));
         /// Connect with the input observables
         std::apply([this](auto &... input_filters) { synchronizer_->connectInput(*input_filters...);},inputs_);
@@ -357,8 +375,6 @@ public:
         synchronizer_->registerCallback(&Self::sync_callback, this); /// That is the only overload that we can use here that works with the legacy pre-variadic template code
     }
 
-    const auto &inputs() const { return inputs_; }
-private:
     void sync_callback(typename Messages::ConstPtr... messages) {
         this->_set(std::forward_as_tuple(messages...));
     }
@@ -443,7 +459,7 @@ struct DevNullObservable {
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the data, we could even use std::any
 struct DataFlowGraph {
     /// TODO store the computation 
-    struct EdgeData : public AnyComputation {};
+    using EdgeData = AnyComputation;
     using VertexData = std::shared_ptr<AttachableNode>;
     /// vecS needed so that the vertex id's are consecutive integers
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
@@ -495,11 +511,13 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<typename MessageT>
     void create_publisher(std::shared_ptr<Observable<MessageT>> parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-        create_observable_with_parent<PublisherObservable<MessageT>>(parent->index.value(), topic_name, qos);
+        auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
+        connect_with_identity(child, parent);
     }
     
     void create_transform_publisher(std::shared_ptr<Observable<geometry_msgs::msg::TransformStamped>> parent) {
-        create_observable_with_parent<TransformPublisherObservable>(parent->index.value());
+        auto child = create_observable<TransformPublisherObservable>();
+        connect_with_identity(child, parent);
     }
     
     auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false, bool is_one_off_timer = false) {
@@ -519,114 +537,9 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
     
 
-    enum class SynchronizerType { APPROX_TIME, INTERPOLATE };
-
-    template<typename... Parents>
-    SynchronizerType choose_synchronizer_based_in_inputs(Parents ... parents) {
-        using partitioned = mp::mp_partition<std::tuple<remove_shared_ptr_t<Parents>...>, is_interpolatable>;
-        using interpolatables =  mp::mp_first<partitioned>;
-        using non_interpolatables = mp::mp_second<partitioned>;
-        if constexpr(mp::mp_size<non_interpolatables> > 1) { 
-            /// We need the ApproxTime 
-            auto approx_time_output = synchronize_approx_time()
-        } else {
-
-        }
-        //std::array<bool, N> sig_is_interpolateable{std::is_base_of_v<InterpolateableObservableBase, remove_shared_ptr_t<Parents>>...};
-        std::is_base_of_v<InterpolateableObservableBase, remove_shared_ptr_t<Parents>>
-        // num_int = sig_is_interpolateable.
-        
-    }
-
-    template<typename... Parents>
-    auto synchronize_approx_time(Parents ... parents) { 
-        uint32_t queue_size = 10; // TODO update automatically 
-        assert_icey_was_not_initialized();        
-        /// TODO choose_synchronizer_based_in_unputs(parents...)
-        /// TODO The following is duped with create_observable_with_parents because we need to connect many inputs to many outputs, 
-        /// maybe solve with vector then. 
-        auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
-        sync->context = shared_from_this();
-        /// Connect the inputs of the synchronizer to the parents
-        std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
-        data_flow_graph_.add_vertex_with_parents(sync, std::vector<size_t>(parents->index.value() ...));
-        return sync;
-    }
-
-    /// Synchronize observables using approximate time
-    template<typename... Parents>
-    auto synchronize(Parents ... parents) { 
-        uint32_t queue_size = 10; // TODO update automatically 
-        assert_icey_was_not_initialized();        
-        /// TODO choose_synchronizer_based_in_unputs(parents...)
-        /// TODO The following is duped with create_observable_with_parents because we need to connect many inputs to many outputs, 
-        /// maybe solve with vector then. 
-        auto sync = std::make_shared< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
-        sync->context = shared_from_this();
-        /// Connect the inputs of the synchronizer to the parents
-        std::apply([&](const auto &... inputs) {( icey_connect(parents, inputs), ...);}, sync->inputs());
-        data_flow_graph_.add_vertex_with_parents(sync, std::vector<size_t>(parents->index.value() ...));
-        return sync;
-    }
-
-    /// Here are the filters. First, the most basic filter: fuse. It fuses the inputs and updates the output if any of the inputs change.
-    /// Parents must be of type Observable
-    /// TODO Think this filter through, it is like Promise.any but it requres that all were received at least once etc.
-    /*template<typename... Parents>
-    auto fuse(Parents && ... parents) { 
-        /// Remote shared_ptr TODO write proper type trait for this
-        using ReturnType = std::tuple<typename std::remove_reference_t<decltype(*parents)>::Value...>;
-        auto resulting_observable = std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-        data_flow_graph_.add_vertex_with_parents(resulting_observable, {parents->index.value()...}); /// And add to the graph
-        ([&]{ 
-            const auto f_continued = [resulting_observable](auto&&... parents) {
-                auto all_argunments_arrived = (parents->value_ && ... && true);
-                if(all_argunments_arrived) 
-                    resulting_observable->_set(std::make_tuple(parents->value_.value()...));
-            };
-            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
-            parents->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
-        }(), ...);
-        return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
-    }*/
-
-    /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
-    template<typename... Parents>
-    auto serialize(Parents ... parents) { 
-        /// TODO assert all types are the same -> cannot take variable number of same type arguments
-        using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
-        using ParentValue = typename std::remove_reference_t<Parent>::Value;
-        /// First, create a new observable
-        auto child = create_observable_with_parents<Observable<ParentValue>>({parents->index.value()...});
-        /// Now connect each parent with the child with the identity function
-        ([&]{ 
-            const auto cb = [child](const auto &new_val) {
-                child->_set(new_val);
-            };
-            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
-            parents->on_change(cb);
-        }(), ...);
-        return child; /// Return the underlying pointer. We can do this, since internally everything is stored reference-counted.
-    }
     /*
-    template<class ParentValue>
-    auto serialize(std::shared_ptr<ParentValue> ... parents) { 
-        auto child = create_observable_with_parents<Observable<ParentValue>>(std::forward_as_tuple(parents...));
-        ([&]{ 
-            const auto cb = [child](const auto &new_val) {
-                child->_set(new_val);
-            };
-            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
-            parents->on_change(cb);
-        }(), ...);
-        return child; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
-    }
-    */
-
-    /// When reference updates, we pass all others parents, 
-    /// TODO need BufferedObservable for this, but using this filter is discouraged
-
-    /*
+    /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics interpolated
+    // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic mean of all the header stamps.
     template<class Reference, class... Parents>
     auto sync_with_reference(Reference && reference, Parents && ... parents) { 
         /// Remote shared_ptr TODO write proper type trait for this
@@ -643,6 +556,68 @@ struct Context : public std::enable_shared_from_this<Context> {
         return resulting_observable; /// Return the underlying pointer. We can do this, since internally everything is stores reference-counted.
     }
     */
+
+    /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps approximately
+    template<typename... Parents>
+    auto synchronize_approx_time(Parents ... parents) { 
+        using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
+        static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
+        
+        uint32_t queue_size = 10; 
+        auto synchronizer = create_observable< SynchronizerObservable< typename remove_shared_ptr_t<Parents>::Value ...> >(queue_size);
+
+        auto parent_ids = std::vector<size_t>(parents->index.value() ...);
+        /// Connect the parents to the inputs of the synchronizer
+        std::vector<AnyComputation> edges_data = create_identity_computation_mimo(
+            std::forward_as_tuple(parents),
+            synchronizer->inputs());
+        //std::apply([&](const auto &... child) {( icey_connect(parents, child), ...);}, sync->inputs());
+        /// Add vertex data, parent id's and edges data
+        /// We add it manually to the graph since we want to represent the topology that is required for the 
+        // dependency analysis. The synchronizer is a single node, altough it has N input observables 
+        data_flow_graph_.add_vertex_with_parents(synchronizer, parent_ids, edges_data);
+        return sync;
+    }
+
+    template<typename... Parents>
+    void synchronize(Parents ... parents) {
+        using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
+        static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
+        using partitioned = mp::mp_partition<inputs, is_interpolatable>;
+        using interpolatables =  mp::mp_first<partitioned>;
+        using non_interpolatables = mp::mp_second<partitioned>;
+        constexpr int num_interpolatables = mp::mp_size<interpolatables>::value;
+        constexpr int num_non_interpolatables = mp::mp_size<non_interpolatables>::value;
+        static_assert(num_interpolatables == 0 || num_non_interpolatables >= 1, "You are trying to synchronize only interpolatable signals. This does not work, you need to have at least one non-interpolatable signal that is the common time for all the interpolatables.");
+    
+        // auto non_interpolatables_v = filter_tuple(parents, not is_interpolatable);
+        /// auto interpolatables_v = filter_tuple(parents, is_interpolatable);
+        // This can only either be one or more than one. Precondition is that we synchronize at least two entities. Given the condition above, the statement follows.
+        if constexpr(num_non_interpolatables > 1) {
+            /// We need the ApproxTime 
+            //auto approx_time_output = synchronize_approx_time(non_interpolatables_v);
+            if constexpr(num_interpolatables > 1) {
+                /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
+                // return sync_with_reference(approx_time_output, interpolatables_v...);
+            }
+        }  else {
+            // Otherwise, we only need a sync with reference
+            /// return sync_with_reference(std::get<0>(non_interpolatables_v), interpolatables_v...);
+        }
+    }
+     
+    /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
+    template<typename... Parents>
+    auto serialize(Parents ... parents) { 
+        /// TODO assert all types are the same -> cannot take variable number of same type arguments
+        using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
+        using ParentValue = typename std::remove_reference_t<Parent>::Value;
+        /// First, create a new observable
+        auto child = create_observable<Observable<ParentValue>>();
+        /// Now connect each parent with the child with the identity function
+        connect_with_identity(child, parents...);
+        return child; 
+    }
 
     template<class Input, class Output, class F>
     AnyComputation create_computation(
@@ -672,6 +647,55 @@ struct Context : public std::enable_shared_from_this<Context> {
         return computation;
     }
 
+    template<class Child, typename... Parents>
+    void connect_with_identity(Child child, Parents ... parents) {
+        std::vector<size_t> parent_ids;
+        // TODO maybe use std::array to get rid of this check
+        if constexpr(sizeof...(Parents) == 1) {
+            parent_ids.push_back(parents->index.value());
+        } else {
+            parent_ids = std::vector<size_t>(parents->index.value()...); 
+        }
+        
+        std::vector<AnyComputation> edges_data;
+        ([&]{ 
+            /// This should be called "parent"
+            auto f = create_identity_computation(parents, child);
+            edges_data.push_back(f);
+        }(), ...);
+        
+        /// Add vertex data, parent id's and edges data
+        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
+        
+        /* Old eager-mode code
+        ([&]{ 
+            const auto cb = [child](const auto &new_val) {
+                child->_set(new_val);
+            };
+            /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold expressions
+            parents->on_change(cb);
+        }(), ...);
+        */
+    }
+
+    /// Connects each of the N inputs with the corresponding N outputs using identity
+    template<class Inputs, class Outputs>
+    std::vector<AnyComputation> create_identity_computation_mimo(
+            Inputs inputs, Outputs outputs
+    ) {
+        static_assert(std::tuple_size_v<Inputs> == std::tuple_size_v<Outputs>,
+                  "Inputs and outputs must have the same size");
+        // Generate a sequence of indices corresponding to the tuple size
+        using Indices = mp::mp_iota_c<std::tuple_size_v<Inputs>>;
+        std::vector<AnyComputation> computations;
+        // Iterate over the indices
+        mp::mp_for_each<Indices>([&](auto I) {
+            auto f = create_identity_computation(std::get<I>(inputs), std::get<I>(outputs));
+            computations.push_back(f);
+        });
+        return computations;     
+    }
+
     template<class Input, class Output>
     AnyComputation create_identity_computation(
             std::shared_ptr< Observable<Input> > input, 
@@ -683,33 +707,16 @@ struct Context : public std::enable_shared_from_this<Context> {
     template<typename Parent, typename F>
     auto then(Parent parent, F && f) {     
         // assert parent has index
-#ifdef ICEY_EAGER_MODE
+        /// TODO static_assert here signature for better error messages
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()) );
+        using ObsValue = typename remove_optional<ReturnType>::type;
         if constexpr (std::is_void_v<ReturnType>) {
-            /// Create a dummy node to be able to add the edge in the graph
-            parent->on_change([f=std::move(f)](const auto &new_value) {
-                apply_if_tuple(f, new_value);
-            });
+            /// return nothing so that no computation can be made based on the result
         } else {
-            using ObsValue = typename remove_optional<ReturnType>::type;
-            auto child = create_observable_with_parent<Observable<ObsValue>>(parent->index.value());
-
-            const auto f_continued = [child, f=std::move(f)](const auto &new_value) {
-                auto ret = apply_if_tuple(f, new_value);
-                if constexpr (is_optional_v<ReturnType>) {
-                    if(ret) {
-                        child->_set(*ret);
-                    }
-                } else {
-                    child->_set(ret);
-                }
-            };
-            parent->on_change(f_continued);
+            auto child = create_observable<Observable<ObsValue>>();
+            connect_with_identity(child, parent);
             return child;
         }
-#else 
-        create_computation
-#endif 
     }
     /// Now we can construct higher-order filters.
 
@@ -763,34 +770,16 @@ protected:
             throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
     }
     
-    /// Overload for source observables, ones that have no parents
+    /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph for which only the vertex id's are needed .
+    /// It does not connect the observables together, for this a call to connect is necessary
     template<class O, typename... Args>
     std::shared_ptr<O> create_observable(Args &&... args) {
-        return create_observable_with_parent<O>(std::nullopt, std::forward<Args>(args)...);
-    }
-    
-    /// Overload for a single parent
-    template<class O, typename... Args>
-    std::shared_ptr<O> create_observable_with_parent(std::optional<size_t> maybe_parent_id, Args &&... args) {
-        std::vector<size_t> parent_ids;
-        if(maybe_parent_id) {
-            parent_ids.push_back(*maybe_parent_id);
-        }
-        return create_observable_with_parents<O>(parent_ids, std::forward<Args>(args)...);
-    }
-
-    /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph for which only the vertex id's are needed .
-    /// It does not connect the observables together, meaning they cannot communicate after calling this but instead icey_connect must be called
-    template<class O, typename... Args>
-    std::shared_ptr<O> create_observable_with_parents(const std::vector<size_t> &parent_ids, Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
         observable->context = shared_from_this();
-        data_flow_graph_.add_vertex_with_parents(observable, parent_ids);
         return observable;
     }
     
-
 
     void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
         if(icey_debug_print)
