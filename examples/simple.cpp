@@ -10,7 +10,10 @@ int main(int argc, char **argv) {
             return out_msg;
         }
         );
+        
     icey::create_publisher(result, "new_velocity");
+
+    //icey::create_publisher(*result, "new_velocity"); //Should trigger static_assert
 
     icey::spawn(argc, argv, "ppc_controller_node"); /// Create and start node
 }

@@ -63,8 +63,32 @@ protected:
 /// Needed for storing in the graph as well as to let the compiler check for correct types
 struct ObservableBase  : public DFGNode, public NodeAttachable {};
 
+/*template <typename... Types>
+struct AssertAllAreObservables;
+
+// Specialization for variadic types
+template <typename First, typename... Rest>
+struct AssertAllAreObservables<First, Rest...> {
+    static_assert((std::is_same_v<typename First::Foo, typename Rest::Foo> && ...),
+                  "All T::Foo types must be the same");
+    // Optional: Add other static assertions here if needed
+};
+*/
+
+template<typename... Args>
+struct observable_traits {
+    
+    static_assert(
+        ( is_shared_ptr<Args> && ...), "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
+    static_assert(
+        ( std::is_base_of_v<ObservableBase, remove_shared_ptr_t<Args> > && ...) , "The arguments must be an icey::Observable");
+    
+};
+
+
 template<class T>
 constexpr  void assert_is_observable() { 
+    static_assert(is_shared_ptr<T>, "The argument must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
     static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable"); }
 
 template<class T>
@@ -518,8 +542,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
 
     template<class Parent>
-    void create_publisher(Parent parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-        assert_is_observable<Parent>();
+    void create_publisher(Parent && parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+        observable_traits<Parent>{}; 
         using MessageT = typename remove_shared_ptr_t<Parent>::Value;
         auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
         connect_with_identity(child, parent);
@@ -532,7 +556,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<class Parent>
     void create_transform_publisher(Parent parent) {
-        assert_is_observable<Parent>();
+        observable_traits<Parent>{}; 
         auto child = create_observable<TransformPublisherObservable>();
         connect_with_identity(child, parent);
     }
@@ -549,7 +573,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Add a service client
     template<class ServiceT, class Parent> 
     auto create_client(Parent parent, const std::string & service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-        assert_is_observable<Parent>();
+        observable_traits<Parent>{}; 
         return create_observable<ClientObservable<ServiceT>>(service_name, qos);
     }
     
@@ -577,7 +601,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps approximately
     template<typename... Parents>
     auto synchronize_approx_time(Parents ... parents) { 
-        assert_are_observables<Parents...>();
+        observable_traits<Parents...>{};
         using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
         static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
         
@@ -599,7 +623,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     template<typename... Parents>
     auto synchronize(Parents ... parents) {
-        assert_are_observables<Parents...>();
+        observable_traits<Parents...>{};
         using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
         static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
         using partitioned = mp::mp_partition<inputs, is_interpolatable>;
@@ -629,7 +653,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
     template<typename... Parents>
     auto serialize(Parents ... parents) { 
-        assert_all_observable_values_are_same<Parents...>();
+        observable_traits<Parents...>{}; 
+        //assert_all_observable_values_are_same<Parents...>();
         using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
         using ParentValue = typename std::remove_reference_t<Parent>::Value;
         /// First, create a new observable
@@ -642,7 +667,7 @@ struct Context : public std::enable_shared_from_this<Context> {
  
     template<typename Parent, typename F>
     auto then(Parent parent, F && f) {
-        assert_is_observable<Parent>();
+        observable_traits<Parent>{};
         // assert parent has index
         /// TODO static_assert here signature for better error messages
         using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value >()) );

@@ -83,8 +83,8 @@ auto create_transform_subscription(const std::string &target_frame, const std::s
 }
 
 template<class Parent>
-void create_publisher(Parent parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    g_state.get_context().create_publisher(parent, topic_name, qos);
+void create_publisher(Parent && parent, const std::string &topic_name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    g_state.get_context().create_publisher(std::move(parent), topic_name, qos);
 }
 
 template<typename MessageT>

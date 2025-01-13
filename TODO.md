@@ -7,7 +7,7 @@ Sorted by decreasing priority.
 - [ ] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
 - [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless !
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
-- [ ] Writable publiser, otherwise no hardware drivers possible !
+- [X] Writable publiser, otherwise no hardware drivers possible !
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 
 - [X] Code clean-up and dup: Wrap API in tuples, create graph afterwards
@@ -35,10 +35,10 @@ Sorted by decreasing priority.
 - [] some autoware node needs dynamic parameter update callback to be set after algorithm has been initialized: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L153 (does not make any sense to me)
 - [] add custom loggers in the node: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L161
 - [] publish if subscribed (unnecessary imo)
-- [] be able to publish a tuple of optional values where some are set and some not. We need a way to directly publish some things and some not. for this, refactor connect using then, for this refactor then to receive a parent of the right type
-- [] Automatic synchronizer: idea is that it would be nice if there is only one icey::Sync method iIinterpolates if some signals are interpolatable, otherwise use approx time. If using approx time, exact time matches if the stamps match exactly. If the message type has no stamp, take receive time automatically. The idea is that the user should not specify which filter should be used, since we can infer this.
-- X] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals)
-- [] Vector publisher: timings etc, vector_publish(sig1, sig2, ... , topic1, topic2 ...)
+- [X] be able to publish a tuple of optional values where some are set and some not. We need a way to directly publish some things and some not. for this, refactor connect using then, for this refactor then to receive a parent of the right type
+- [X] Automatic synchronizer: idea is that it would be nice if there is only one icey::Sync method iIinterpolates if some signals are interpolatable, otherwise use approx time. If using approx time, exact time matches if the stamps match exactly. If the message type has no stamp, take receive time automatically. The idea is that the user should not specify which filter should be used, since we can infer this.
+- [X] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals) -> removed fuse
+- [] Vector publisher: timings etc, vector_publish(sig1, sig2, ... , topic1, topic2 ...) -> won't fix
 
 ## Other nice-to-have features, not for 0.1
 
