@@ -60,14 +60,18 @@ protected:
     /// The last received value.
     MaybeValue value_;
 };
+/// Needed for storing in the graph as well as to let the compiler check for correct types
+struct ObservableBase  : public DFGNode, public NodeAttachable {};
 
-struct AttachableNode  : public DFGNode, public NodeAttachable {
+template<class T>
+void assert_is_observable() {
+    static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T> >, "The argument must be an icey::Observable");
+}
 
-};
 /// An observable. Similar to a promise in JS.
 /// TODO consider CRTP, would also be beneficial for PIMPL 
 template<typename _Value, typename _ErrorValue = std::string>
-class Observable : public AttachableNode, public Buffer<_Value>, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+class Observable : public ObservableBase, public Buffer<_Value>, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
     friend class Context; /// To prevent misuse, only the Context is allowed to register on_change callbacks
 public:
     using Value = _Value;
@@ -335,25 +339,24 @@ struct SimpleFilterAdapter : public Base, public message_filters::SimpleFilter<_
 
 /// Observables can have multiple outputs, but not multiple inputs. This class changes that.
 /// It is a composition of multiple observables, so not itself one. 
-/// TODO we only need this to have a vertex for the synchroniuzer in the graph  ...
-template<class _Base, typename... _Values>
+/// TODO we only need this to correctly model the synchronizer in the data-flow graph
+template<template <typename> class _Base, typename... _Values>
 struct MultipleInputObservable  {
-
     const auto &inputs() const { return inputs_; }
 protected:
     using Inputs = std::tuple< std::shared_ptr< _Base <_Values> >... >;
     Inputs inputs_;
 };
 
-/// Wrap the message filters package 
+/// Wrap the message_filters official ROS package. In the following, "MFL" refers to the message_filters package.
 /// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
 /// TODO adapt queue size automatically if we detect very different frequencies so that synchronization still works. 
 /// I would guess it works if the lowest frequency topic has a frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
 template<typename... Messages>
-class SynchronizerObservable : public Observable< std::tuple<const typename Messages::ConstPtr ...> > { 
+class SynchronizerObservable : public Observable< std::tuple< typename Messages::ConstPtr ...> > { 
 public:
     using Self = SynchronizerObservable<Messages...>;
-    using Value = std::tuple<const typename Messages::ConstPtr ...>;
+    using Value = std::tuple< typename Messages::ConstPtr ...>;
     /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the `TImeSynchronizer` uses by default ExactTime
     using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
     using Sync = message_filters::Synchronizer<Policy>;
@@ -362,12 +365,12 @@ public:
     SynchronizerObservable(uint32_t queue_size) :
          inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...), /// They are dynamically allocated as is every other Observable
          queue_size_(queue_size) {
-         create_mfl_synchronizer();
+         this->create_mfl_synchronizer();
     }
 
     const auto &inputs() const { return inputs_; }
 private:
-    void create_mlf_synchronizer() {
+    void create_mfl_synchronizer() {
         synchronizer_ = std::make_shared<Sync>(Policy(queue_size_));
         /// Connect with the input observables
         std::apply([this](auto &... input_filters) { synchronizer_->connectInput(*input_filters...);},inputs_);
@@ -460,13 +463,13 @@ struct DevNullObservable {
 struct DataFlowGraph {
     /// TODO store the computation 
     using EdgeData = AnyComputation;
-    using VertexData = std::shared_ptr<AttachableNode>;
+    using VertexData = std::shared_ptr<ObservableBase>;
     /// vecS needed so that the vertex id's are consecutive integers
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
 
     /// Create a new node from data
     /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
-    void add_vertex_with_parents(std::shared_ptr<AttachableNode> vertex_data, 
+    void add_vertex_with_parents(std::shared_ptr<ObservableBase> vertex_data, 
         const std::vector<size_t> &parents,
         const std::vector<EdgeData> &edges_data) {
         vertex_data->index = add_vertex(vertex_data, graph_); /// TODO very ugly, but Obs needs to know the index so we can connect them here
@@ -569,18 +572,18 @@ struct Context : public std::enable_shared_from_this<Context> {
         auto parent_ids = std::vector<size_t>(parents->index.value() ...);
         /// Connect the parents to the inputs of the synchronizer
         std::vector<AnyComputation> edges_data = create_identity_computation_mimo(
-            std::forward_as_tuple(parents),
+            std::forward_as_tuple(parents...),
             synchronizer->inputs());
         //std::apply([&](const auto &... child) {( icey_connect(parents, child), ...);}, sync->inputs());
         /// Add vertex data, parent id's and edges data
         /// We add it manually to the graph since we want to represent the topology that is required for the 
         // dependency analysis. The synchronizer is a single node, altough it has N input observables 
         data_flow_graph_.add_vertex_with_parents(synchronizer, parent_ids, edges_data);
-        return sync;
+        return synchronizer;
     }
 
     template<typename... Parents>
-    void synchronize(Parents ... parents) {
+    auto synchronize(Parents ... parents) {
         using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
         static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
         using partitioned = mp::mp_partition<inputs, is_interpolatable>;
@@ -604,6 +607,7 @@ struct Context : public std::enable_shared_from_this<Context> {
             // Otherwise, we only need a sync with reference
             /// return sync_with_reference(std::get<0>(non_interpolatables_v), interpolatables_v...);
         }
+        return synchronize_approx_time(parents...);
     }
      
     /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the control-flow where the same publisher can be called from multiple callbacks
@@ -620,20 +624,19 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
 
     template<class Input, class Output, class F>
-    AnyComputation create_computation(
-            std::shared_ptr< Observable<Input> > input, 
-            std::shared_ptr< Observable<Output> > output, 
-            F && f)  {
-        using ReturnType = decltype( apply_if_tuple(f, std::declval<Input>()) );
+    AnyComputation create_computation(Input input, Output output, F && f)  {
+        assert_is_observable<Input>();
+        assert_is_observable<Output>();
+        using ReturnType = decltype( apply_if_tuple(f, std::declval< typename remove_shared_ptr_t<Input>::Value >()) );
         AnyComputation computation;
         if constexpr (std::is_void_v<ReturnType>) {
             computation.f = [input, f=std::move(f)]() {
-                auto new_value = input.value();
+                auto new_value = input->value();
                 apply_if_tuple(f, new_value);
             };
         } else {
             computation.f= [input, output, f=std::move(f)]() {
-                auto new_value = input.value();
+                auto new_value = input->value();
                 auto ret = apply_if_tuple(f, new_value);
                 if constexpr (is_optional_v<ReturnType>) {
                     if(ret) {
@@ -647,14 +650,28 @@ struct Context : public std::enable_shared_from_this<Context> {
         return computation;
     }
 
+    template<class Child, class Parent, class F>
+    void connect(Child child, Parent parent, F && f) {
+        std::vector<size_t> parent_ids;
+        parent_ids.push_back(parent->index.value());
+        
+        std::vector<AnyComputation> edges_data;
+        auto computation = create_computation(parent, child, std::move(f));
+        edges_data.push_back(computation);
+        /// Add vertex data, parent id's and edges data
+        data_flow_graph_.add_vertex_with_parents(child, parent_ids, edges_data);
+    }
+
     template<class Child, typename... Parents>
     void connect_with_identity(Child child, Parents ... parents) {
         std::vector<size_t> parent_ids;
         // TODO maybe use std::array to get rid of this check
         if constexpr(sizeof...(Parents) == 1) {
-            parent_ids.push_back(parents->index.value());
+            /// TODO do better ? take_
+            const auto &first_parent = std::get<0>(std::forward_as_tuple(parents...));
+            parent_ids.push_back(first_parent->index.value());
         } else {
-            parent_ids = std::vector<size_t>(parents->index.value()...); 
+            parent_ids = {parents->index.value()...}; 
         }
         
         std::vector<AnyComputation> edges_data;
@@ -697,24 +714,25 @@ struct Context : public std::enable_shared_from_this<Context> {
     }
 
     template<class Input, class Output>
-    AnyComputation create_identity_computation(
-            std::shared_ptr< Observable<Input> > input, 
-            std::shared_ptr< Observable<Output> > output) {
+    AnyComputation create_identity_computation(Input input, Output output) {
+        assert_is_observable<Input>();
+        assert_is_observable<Output>();
         /// TODO Assert Input is not a tuple or return tuple if it is 
         return create_computation(input, output, [](auto && x) { return std::move(x); });
     }
     
     template<typename Parent, typename F>
-    auto then(Parent parent, F && f) {     
+    auto then(Parent parent, F && f) {
+        assert_is_observable<Parent>();
         // assert parent has index
         /// TODO static_assert here signature for better error messages
-        using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()) );
+        using ReturnType = decltype( apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value >()) );
         using ObsValue = typename remove_optional<ReturnType>::type;
         if constexpr (std::is_void_v<ReturnType>) {
             /// return nothing so that no computation can be made based on the result
         } else {
             auto child = create_observable<Observable<ObsValue>>();
-            connect_with_identity(child, parent);
+            connect(child, parent, std::move(f));
             return child;
         }
     }
