@@ -15,8 +15,8 @@ int main(int argc, char **argv) {
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);
     
     /// We always have to take a ConstPtr to the message:
-    auto pipe1 = float_tfed->then([](std_msgs::msg::Float32::ConstPtr float_val, 
-            geometry_msgs::msg::TransformStamped::ConstPtr tf_val) -> float {
+    auto pipe1 = float_tfed->then([](std_msgs::msg::Float32::SharedPtr float_val, 
+            geometry_msgs::msg::TransformStamped::SharedPtr tf_val) -> float {
             return float(float_val->data * tf_val->transform.rotation.z);
         });
 

@@ -422,10 +422,10 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 /// TODO adapt queue size automatically if we detect very different frequencies so that synchronization still works. 
 /// I would guess it works if the lowest frequency topic has a frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
 template<typename... Messages>
-class SynchronizerObservable : public Observable< std::tuple< typename Messages::ConstPtr ...> > { 
+class SynchronizerObservable : public Observable< std::tuple< typename Messages::SharedPtr ...> > { 
 public:
     using Self = SynchronizerObservable<Messages...>;
-    using Value = std::tuple< typename Messages::ConstPtr ...>;
+    using Value = std::tuple< typename Messages::SharedPtr ...>;
     /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the `TImeSynchronizer` uses by default ExactTime
     using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
     using Sync = message_filters::Synchronizer<Policy>;
@@ -447,7 +447,7 @@ private:
         synchronizer_->registerCallback(&Self::sync_callback, this); /// That is the only overload that we can use here that works with the legacy pre-variadic template code
     }
 
-    void sync_callback(typename Messages::ConstPtr... messages) {
+    void sync_callback(typename Messages::SharedPtr... messages) {
         this->_set(std::forward_as_tuple(messages...));
     }
 
@@ -623,7 +623,7 @@ struct DataFlowGraph {
     Graph graph_;
 };
 
-/// A context, essentially the data-flow graph. Basis for the class-based API of ICEY.
+/// A context, creates and manages the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
     virtual ~Context() {
         if(on_node_destruction_cb_)
@@ -832,19 +832,19 @@ protected:
             throw std::invalid_argument("You are not allowed to add signals after ICEY was initialized. The graph must be static");
     }
     
-    /// Creates a new observable of type O using by passing it args to the constructor and adds it to the graph. The parents are added as edges to the graph for which only the vertex id's are needed .
-    /// It does not connect the observables together, for this a call to connect is necessary
+    /// Creates a new observable of type O by passing the args to the constructor. It also adds it as a vertex to the graph.
     template<class O, typename... Args>
     std::shared_ptr<O> create_observable(Args &&... args) {
         assert_icey_was_not_initialized();
         auto observable = std::make_shared<O>(std::forward<Args>(args)...);
-        data_flow_graph_.add_v(observable); /// Register to graph to obtain an ID
+        data_flow_graph_.add_v(observable); /// Register with graph to obtain a vertex ID
         observable->context = shared_from_this();
         observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
         return observable;
     }
     
-     /// Creates a computation for the graph mode. If eager mode is enabled, it additionaly registers the computation so that it is immediatelly run
+    /// Creates a computation object that is stored in the edges of the graph for the graph mode. 
+    /// If eager mode is enabled, it additionaly registers the computation so that it is immediatelly run
     template<class Input, class Output, class F>
     AnyComputation create_computation(Input input, Output output, F && f)  {
         observable_traits<Input, Output>{}; 
@@ -905,6 +905,7 @@ protected:
         return computation;
     }
 
+    /// Makes a connection from parent to child with the given function F and adds it to the data-flow graph.
     template<class Child, class Parent, class F>
     void connect(Child child, Parent parent, F && f) {
         // TODO assert parent has index
@@ -918,7 +919,7 @@ protected:
         data_flow_graph_.add_edges(child->index.value(), parent_ids, edges_data);
     }
 
-
+    /// Same but idetity, TODO fix code dup
     template<class Child, typename... Parents>
     void connect_with_identity(Child child, Parents ... parents) {
         std::vector<size_t> parent_ids;
@@ -941,6 +942,14 @@ protected:
 
     }
 
+    /// Create a identity computation between input and output.
+    template<class Input, class Output>
+    AnyComputation create_identity_computation(Input input, Output output) {
+        observable_traits<Input, Output>{}; 
+        /// TODO Assert Input is not a tuple or return tuple if it is 
+        return create_computation(input, output, [](auto && x) { return std::move(x); });
+    }
+
     /// Connects each of the N inputs with the corresponding N outputs using identity
     template<class Inputs, class Outputs>
     std::vector<AnyComputation> create_identity_computation_mimo(
@@ -957,13 +966,6 @@ protected:
             computations.push_back(f);
         });
         return computations;     
-    }
-
-    template<class Input, class Output>
-    AnyComputation create_identity_computation(Input input, Output output) {
-        observable_traits<Input, Output>{}; 
-        /// TODO Assert Input is not a tuple or return tuple if it is 
-        return create_computation(input, output, [](auto && x) { return std::move(x); });
     }
 
     void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
@@ -1029,7 +1031,7 @@ protected:
         if(this->use_eager_mode_) {
             return;
         }
-        /// In graph mode, no notify callbacks are registered except a single "run-graph-mode". So we just check if the notify list empty
+        /// In graph mode, no notify callbacks are registered except a single "run graph mode callback". So we just check whether the notify list empty
         if(parent->notify_list_.empty()) {
             parent->on_change([parent](const auto &) {
                     parent->context.lock()->run_graph_mode(parent->index.value());  // context is actually this, but we avoid capturing this in objects that we do not directly own 
@@ -1039,7 +1041,8 @@ protected:
 
     
     /// Executes the graph mode. This function gets called if some of the inputs change and propagates the result.
-    /// TODO deal with param stage, maybe lable only 
+    /// TODO deal with param stage, parameters fire always immediatelly after attaching. 
+    /// but at this point, the graph is not there yet. Maybe we can cache the value_changed array and process it later ? 
     void run_graph_mode(size_t signaling_vertex_id) {
         if(icey_debug_print)
             std::cout << "[icey::Context] Got event from vertex " << signaling_vertex_id << ", graph execution starts ..." << std::endl;
