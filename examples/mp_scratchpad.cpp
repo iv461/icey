@@ -1,9 +1,13 @@
 #include <boost/mp11.hpp>
+
+#include <boost/hana.hpp>
+
 #include <type_traits>
 #include <tuple>
 #include <iostream>
 
 namespace mp = boost::mp11;
+namespace hana = boost::hana;
 
 struct Base {};
 struct Derived1 : Base {};
@@ -34,6 +38,7 @@ auto filter(T tup) {
     }, tup);
 }
 
+/*
 template<typename... Args> 
 void partition_args(){
      // Define a tuple of types
@@ -75,7 +80,18 @@ void partition_args(){
         std::cout << typeid(t).name() << std::endl;
     });
 }
+*/
+template<typename... Args> 
+void partition_tuple_hana(std::tuple<Args...> tuple){
+
+}
+
 int main() {
-    partition_args<Base, Derived1, Derived2, NotDerived>();
+
+    std::tuple<Base, Derived1, NotDerived3, Derived2, NotDerived, NotDerived2> tup{};
+
+    partition_tuple_hana(tup);
+
+    //partition_args<Base, Derived1, Derived2, NotDerived>();
     return 0;
 }

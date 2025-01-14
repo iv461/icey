@@ -777,10 +777,28 @@ struct Context : public std::enable_shared_from_this<Context> {
     return create_observable<ClientObservable<ServiceT>>(service_name, qos);
   }
 
-  /*
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
-  interpolated
+  // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
+  template<class Reference, class... Parents> 
+  auto sync_with_reference(Reference && reference, Parents && ... parents) {
+    observable_traits<Parents...>{};
+    using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
+    static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
+    using partitioned = mp::mp_partition<inputs, is_interpolatable>;
+    using interpolatables = mp::mp_first<partitioned>;
+    using non_interpolatables = mp::mp_second<partitioned>;
+    constexpr int num_interpolatables = mp::mp_size<interpolatables>::value;
+    constexpr int num_non_interpolatables = mp::mp_size<non_interpolatables>::value;
+    static_assert(num_interpolatables == 0 || num_non_interpolatables >= 1,
+                  "You are trying to synchronize only interpolatable signals. This does not work, "
+                  "you need to "
+                  "have at least one non-interpolatable signal that is the common time for all the "
+                  "interpolatables.");
+
+  }
+
+  /*
   mean of all the header stamps. template<class Reference, class... Parents> auto
   sync_with_reference(Reference && reference, Parents && ... parents) {
       /// Remote shared_ptr TODO write proper type trait for this
@@ -819,12 +837,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Connect the parents to the inputs of the synchronizer
     std::vector<AnyComputation> edges_data =
         create_identity_computation_mimo(std::forward_as_tuple(parents...), synchronizer->inputs());
-    // std::apply([&](const auto &... child) {( icey_connect(parents, child), ...);},
-    // sync->inputs());
-    /// Add vertex data, parent id's and edges data
     /// We add it manually to the graph since we want to represent the topology that is required for
-    /// the
-    // dependency analysis. The synchronizer is a single node, altough it has N input observables
+    /// the dependency analysis. The synchronizer is a single node, altough it has N input observables
     data_flow_graph_.add_edges(synchronizer->index.value(), parent_ids, edges_data);
     return synchronizer;
   }
