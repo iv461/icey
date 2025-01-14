@@ -77,7 +77,9 @@ protected:
   MaybeValue value_;
 };
 /// Needed for storing in the graph as well as to let the compiler check for correct types
-struct ObservableBase : public DFGNode, public NodeAttachable {};
+struct ObservableBase : public DFGNode, public NodeAttachable {
+  virtual void notify_about_change() = 0;
+};
 
 /*template <typename... Types>
 struct AssertAllAreObservables;
@@ -166,22 +168,40 @@ protected:
   virtual void on_change(OnResolve &&cb) {
     notify_list_.emplace_back(std::move(cb));  /// TODO rename to children ?
   }
+
+  void notify_about_change() override {
+    for (auto cb : notify_list_) {
+      cb(this->value());
+    }
+  }
+
   /// set and notify all observers about the new value
   virtual void _set(const Value &new_value) {
     this->value_ = new_value;
+    /*
     if (icey_debug_print)
       std::cout << "[" + this->class_name + ", " + this->name + "] _set() called, this->value_: "
                 << this->value_.has_value() << std::endl;
+    */
 
-    for (auto cb : notify_list_) {
-      cb(new_value);
-    }
+
+    if(run_graph_engine_)
+      run_graph_engine_(this->index.value());
+
+    notify_about_change(); 
   }
 
   void _reject(const ErrorValue &error) {
     for (auto cb : reject_cbs_) cb(error);
   }
 
+  using RunGraphEngineCb = std::function < void (size_t) >;
+
+  void register_run_graph_engine(RunGraphEngineCb cb) {
+    run_graph_engine_ = cb;
+  }
+
+  RunGraphEngineCb run_graph_engine_;
   std::vector<OnResolve> notify_list_;
   std::vector<OnReject> reject_cbs_;
 };
@@ -1106,7 +1126,6 @@ protected:
     topological_order_ = maybe_topological_order.value();
 
     data_flow_graph_.print();
-
     /// analyze_dependencies() -> computes the number of threads needed
   }
 
@@ -1118,10 +1137,9 @@ protected:
     }
     /// In graph mode, no notify callbacks are registered except a single "run graph mode callback".
     /// So we just check whether the notify list empty
-    if (parent->notify_list_.empty()) {
-      parent->on_change([parent](const auto &) {
-        parent->context.lock()->run_graph_mode(
-            parent->index.value());  // context is actually this, but we avoid capturing this in
+    if (!parent->run_graph_engine_) {
+      parent->register_run_graph_engine([parent](size_t node_id) {
+        parent->context.lock()->run_graph_mode(node_id);  // context is actually this, but we avoid capturing this in
                                      // objects that we do not directly own
       });
     }
@@ -1158,8 +1176,9 @@ protected:
         if (icey_debug_print)
           std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
         auto &edge_data = graph_[edge];  // Access edge data
-        edge_data.f();
-        /// TODO call notify on leaves, we need to publish ..
+        edge_data.f(); /// Execute the computation, pass over the value
+        /// Call this to enable publishers to work. 
+        graph_[target_vertex]->notify_about_change();
       }
     }
     if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
