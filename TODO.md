@@ -4,7 +4,7 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Graph engine: notify leaves
+- [X] Graph engine: notify leaves
 - [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless ! -> depends on understanding hana and implementing `synch_with_reference`
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack

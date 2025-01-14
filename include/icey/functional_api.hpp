@@ -84,7 +84,7 @@ GlobalState g_state;
 /// Enable API icey::node
 auto& node = g_state;
 
-static Context& get_global_context() { return g_state.get_context(); }
+inline Context& get_global_context() { return g_state.get_context(); }
 
 template <class ParameterT>
 auto declare_parameter(const std::string& name,

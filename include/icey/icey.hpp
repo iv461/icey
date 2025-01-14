@@ -34,13 +34,15 @@ public:
   /// We bould the node starting from the root, to allow a context-free graph creation, we refer to
   /// the parents
   std::weak_ptr<Context> context;
-  std::optional<size_t>
-      index;  /// The index of this observable in list of vertices in the data-flow graph. We have
-              /// to store it here because of cyclic dependency. None if this observable was not
-              /// attached to the graph yet.
-  std::string class_name;  // The class name, i.e. the type, for example SubscriberObservable<>
-  std::string name;  /// A name to identify it among multiple with the same type, usually the topic
-                     /// or service name
+  /// The index of this observable in list of vertices in the data-flow graph. We have
+  /// to store it here because of cyclic dependency. None if this observable was not
+  /// attached to the graph yet.
+  std::optional<size_t> index;
+  // The class name, i.e. the type, for example SubscriberObservable<>
+  std::string class_name;
+  /// A name to identify it among multiple with the same type, usually the topic
+  /// or service name
+  std::string name;
 };
 
 /// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber
@@ -140,8 +142,8 @@ template <typename _Value>
 class Observable : public ObservableBase,
                    public Buffer<_Value>,
                    public std::enable_shared_from_this<Observable<_Value>> {
-  friend class Context;  /// To prevent misuse, only the Context is allowed to register register_on_change_cb
-                         /// callbacks
+  friend class Context;  /// To prevent misuse, only the Context is allowed to register
+                         /// register_on_change_cb callbacks
 public:
   using Value = _Value;
   using ErrorValue = std::string;
@@ -154,17 +156,18 @@ public:
   /// observable changes, where y = f(x).
   template <typename F>
   auto then(F &&f) {
-    return this->context.lock()->then(this->shared_from_this(), f);
+    std::shared_ptr<Context> ctx = this->context.lock();
+    return ctx->then(this->shared_from_this(), f);
   }
 
   /// Create a ROS publisher for this observable.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
+    std::shared_ptr<Context> ctx = this->context.lock();
+    return ctx->create_publisher(this->shared_from_this(), topic_name, qos);
   }
 
 protected:
-
   virtual void register_on_change_cb(OnResolve &&cb) {
     notify_list_.emplace_back(std::move(cb));  /// TODO rename to children ?
   }
@@ -180,7 +183,7 @@ protected:
     this->value_ = new_value;
 
     if (icey_debug_print)
-        std::cout << "[" + this->class_name + ", " + this->name + "] _set was called, this->value_: "
+      std::cout << "[" + this->class_name + ", " + this->name + "] _set was called, this->value_: "
                 << this->has_value() << std::endl;
   }
 
@@ -189,25 +192,23 @@ protected:
     this->_set(new_value);
     /*
     if (icey_debug_print)
-      std::cout << "[" + this->class_name + ", " + this->name + "] _set_and_notify() called, this->value_: "
+      std::cout << "[" + this->class_name + ", " + this->name + "] _set_and_notify() called,
+    this->value_: "
                 << this->value_.has_value() << std::endl;
     */
-   /// TODO I'm surprised to see this code here, but I should not be
-    if(run_graph_engine_)
-      run_graph_engine_(this->index.value());
+    /// TODO I'm surprised to see this code here, but I should not be
+    if (run_graph_engine_) run_graph_engine_(this->index.value());
 
-    notify_about_change(); 
+    notify_about_change();
   }
 
   void _reject(const ErrorValue &error) {
     for (auto cb : reject_cbs_) cb(error);
   }
 
-  using RunGraphEngineCb = std::function < void (size_t) >;
+  using RunGraphEngineCb = std::function<void(size_t)>;
 
-  void register_run_graph_engine(RunGraphEngineCb cb) {
-    run_graph_engine_ = cb;
-  }
+  void register_run_graph_engine(RunGraphEngineCb cb) { run_graph_engine_ = cb; }
 
   RunGraphEngineCb run_graph_engine_;
   std::vector<OnResolve> notify_list_;
@@ -328,8 +329,8 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
     node_handle.add_subscription<Value>(
-        name_, [this](std::shared_ptr<Value> new_value) { this->_set_and_notify(*new_value); }, qos_,
-        options_);
+        name_, [this](std::shared_ptr<Value> new_value) { this->_set_and_notify(*new_value); },
+        qos_, options_);
   }
 
   std::string name_;
@@ -368,7 +369,9 @@ protected:
       std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
-        [this](const geometry_msgs::msg::TransformStamped &new_value) { this->_set_and_notify(new_value); });
+        [this](const geometry_msgs::msg::TransformStamped &new_value) {
+          this->_set_and_notify(new_value);
+        });
   }
 
   std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
@@ -424,7 +427,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_publication<Value>(topic_name_, qos_);
-    this->register_on_change_cb([publish](auto &&new_value) { publish(new_value); });
+    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
   }
 
   std::string topic_name_;
@@ -442,7 +445,8 @@ public:
 };
 
 struct AnyComputation {
-  /// executes and returns whether the value changed, meaning whether the function returned something. If not, we do not need to notify
+  /// executes and returns whether the value changed, meaning whether the function returned
+  /// something. If not, we do not need to notify
   std::function<bool()> f;
 };
 
@@ -533,7 +537,7 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->register_on_change_cb([publish](auto &&new_value) { publish(new_value); });
+    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
   }
 };
 
@@ -584,8 +588,8 @@ protected:
     if (icey_debug_print) std::cout << "[ClientObservable] attach_to_node()" << std::endl;
     auto client = node_handle.add_client<_ServiceT>(service_name_, qos_);
     this->register_on_change_cb([this, client](std::shared_ptr<Request> request) {
-      client->async_send_request(request,
-                                 [this](auto response_futur) { this->_set_and_notify(response_futur.get()); });
+      client->async_send_request(
+          request, [this](auto response_futur) { this->_set_and_notify(response_futur.get()); });
     });
   }
 
@@ -787,13 +791,14 @@ struct Context : public std::enable_shared_from_this<Context> {
   parents->index.value()...}); /// And add to the graph const auto f_continued =
   [resulting_observable, reference](auto&&... parents) { auto all_argunments_arrived =
   (parents->value_ && ... && true); if(all_argunments_arrived)
-              resulting_observable->_set_and_notify(std::make_tuple(reference, parents->value_.value()...));
+              resulting_observable->_set_and_notify(std::make_tuple(reference,
+  parents->value_.value()...));
       };
-      /// This should be called "parent", "parent->register_on_change_cb()". This is essentially a for-loop over
-  all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold
-  expressions reference->register_on_change_cb(std::bind(f_continued, std::forward<Parents>(parents)...));
-      return resulting_observable; /// Return the underlying pointer. We can do this, since
-  internally everything is stores reference-counted.
+      /// This should be called "parent", "parent->register_on_change_cb()". This is essentially a
+  for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we
+  got these fold expressions reference->register_on_change_cb(std::bind(f_continued,
+  std::forward<Parents>(parents)...)); return resulting_observable; /// Return the underlying
+  pointer. We can do this, since internally everything is stores reference-counted.
   }
   */
 
@@ -897,7 +902,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <int index, class Parent>
   auto get_nth(Parent &parent) {
     assert_observable_holds_tuple<Parent>();
-    return then(parent, [](auto &&...args) {  /// Need to take variadic because then()
+    return then(parent, [](const auto &...args) {  /// Need to take variadic because then()
                                                    /// automatically unpacks tuples
       return std::get<index>(
           std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple
@@ -964,7 +969,7 @@ protected:
     const auto on_new_value = [f = std::move(f)](auto &new_value) {
       return apply_if_tuple(f, new_value);
     };
-    const auto on_new_value_void = [f = std::move(f)](auto &&new_value) {
+    const auto on_new_value_void = [f = std::move(f)](const auto &new_value) {
       apply_if_tuple(f, new_value);
     };
 
@@ -978,30 +983,31 @@ protected:
 
       if (this->use_eager_mode_) {
         input->register_on_change_cb(
-            [f = std::move(on_new_value_void)](auto &&new_value) { f(std::move(new_value)); });
+            [f = std::move(on_new_value_void)](const auto &new_value) { f(new_value); });
       }
     } else {
       computation.f = [input, output, f = std::move(on_new_value)]() {
-        auto result = f(input->value_.value()); // The computation can also return nothing
+        auto result = f(input->value_.value());  // The computation can also return nothing
         if constexpr (is_optional_v<ReturnType>) {
           bool has_value = result.has_value();
-          if(has_value) /// Set result only if it is not nothing
+          if (has_value)            /// Set result only if it is not nothing
             output->_set(*result);  /// Do not notify, only set
-          return has_value; /// Return whether the value changed, if not we are not allowed to notify
+          return has_value;  /// Return whether the value changed, if not we are not allowed to
+                             /// notify
         } else {
           output->_set(result);  /// Do not notify, only set
-          return true;/// value always changes if the function does not return optional
+          return true;           /// value always changes if the function does not return optional
         }
       };
       if (this->use_eager_mode_) {
-        input->register_on_change_cb([output, f = std::move(on_new_value)](auto &&new_value) {
-          auto ret = f(std::move(new_value));
+        input->register_on_change_cb([output, f = std::move(on_new_value)](const auto &new_value) {
+          auto ret = f(new_value);
           if constexpr (is_optional_v<ReturnType>) {
             if (ret) {
-              output->_set_and_notify(std::move(*ret));
+              output->_set_and_notify(*ret);
             }
           } else {
-            output->_set_and_notify(std::move(ret));
+            output->_set_and_notify(ret);
           }
         });
       }
@@ -1148,8 +1154,9 @@ protected:
     /// So we just check whether the notify list empty
     if (!parent->run_graph_engine_) {
       parent->register_run_graph_engine([parent](size_t node_id) {
-        parent->context.lock()->run_graph_mode(node_id);  // context is actually this, but we avoid capturing this in
-                                     // objects that we do not directly own
+        parent->context.lock()->run_graph_mode(
+            node_id);  // context is actually this, but we avoid capturing this in
+                       // objects that we do not directly own
       });
     }
   }
@@ -1184,10 +1191,11 @@ protected:
         value_changed.at(target_vertex) = 1;
         if (icey_debug_print)
           std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
-        auto &edge_data = graph_[edge];  // Access edge data
-        bool should_propagate = edge_data.f(); /// Execute the computation, pass over the value
-        if(should_propagate) {
-          /// Call this to enable publishers to work. Only publishers have something in the notify list
+        auto &edge_data = graph_[edge];         // Access edge data
+        bool should_propagate = edge_data.f();  /// Execute the computation, pass over the value
+        if (should_propagate) {
+          /// Call this to enable publishers to work. Only publishers have something in the notify
+          /// list
           /// TODO maybe rename notify_ROS
           graph_[target_vertex]->notify_about_change();
         }
