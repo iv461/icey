@@ -11,6 +11,7 @@ int main(int argc, char **argv) {
 
     auto period_time = 100ms;
 
+    getchar();
     auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
     auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
 
@@ -48,6 +49,7 @@ int main(int argc, char **argv) {
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
         double y = amplitude->value() * std::sin((period_time_s * ticks) / frequency->value() * 2 * M_PI);
         float_val.data = y;
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Publishing sine... " << y);
         return float_val;
     });
 

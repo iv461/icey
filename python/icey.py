@@ -22,7 +22,7 @@ class Observable:
     def __init__(self):
         self.notify_list = []
 
-    def on_change(self, msg):
+    def register_on_change_cb(self, msg):
         for cb in self.notify_list:
             cb(msg)
 
@@ -94,7 +94,7 @@ def compute_based_on(F, *args):
 
     def continued():
         new_state = computation()
-        result.on_change(new_state)
+        result.register_on_change_cb(new_state)
 
     for arg in *args:
         arg.notify_list.append(continued)

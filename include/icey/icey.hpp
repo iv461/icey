@@ -140,7 +140,7 @@ template <typename _Value>
 class Observable : public ObservableBase,
                    public Buffer<_Value>,
                    public std::enable_shared_from_this<Observable<_Value>> {
-  friend class Context;  /// To prevent misuse, only the Context is allowed to register on_change
+  friend class Context;  /// To prevent misuse, only the Context is allowed to register register_on_change_cb
                          /// callbacks
 public:
   using Value = _Value;
@@ -164,8 +164,8 @@ public:
   }
 
 protected:
-  /// Register to be notified when smth. changes
-  virtual void on_change(OnResolve &&cb) {
+
+  virtual void register_on_change_cb(OnResolve &&cb) {
     notify_list_.emplace_back(std::move(cb));  /// TODO rename to children ?
   }
 
@@ -175,16 +175,24 @@ protected:
     }
   }
 
-  /// set and notify all observers about the new value
+  /// Set without notify
   virtual void _set(const Value &new_value) {
     this->value_ = new_value;
+
+    if (icey_debug_print)
+        std::cout << "[" + this->class_name + ", " + this->name + "] _set was called, this->value_: "
+                << this->has_value() << std::endl;
+  }
+
+  /// set and notify all observers about the new value
+  virtual void _set_and_notify(const Value &new_value) {
+    this->_set(new_value);
     /*
     if (icey_debug_print)
-      std::cout << "[" + this->class_name + ", " + this->name + "] _set() called, this->value_: "
+      std::cout << "[" + this->class_name + ", " + this->name + "] _set_and_notify() called, this->value_: "
                 << this->value_.has_value() << std::endl;
     */
-
-
+   /// TODO I'm surprised to see this code here, but I should not be
     if(run_graph_engine_)
       run_graph_engine_(this->index.value());
 
@@ -287,15 +295,14 @@ protected:
         parameter_name_, default_value_,
         [this](const rclcpp::Parameter &new_param) {
           Value new_value = new_param.get_value<Value>();
-          this->value_ = new_value;  /// Store value
-          this->_set(new_value);     /// notify
+          this->_set_and_notify(new_value);
         },
         parameter_descriptor_, ignore_override_);
     /// Set default value
     if (default_value_) {
       Value initial_value;
       node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-      this->_set(initial_value);
+      this->_set_and_notify(initial_value);
     }
   }
   std::string parameter_name_;
@@ -321,7 +328,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
     node_handle.add_subscription<Value>(
-        name_, [this](std::shared_ptr<Value> new_value) { this->_set(*new_value); }, qos_,
+        name_, [this](std::shared_ptr<Value> new_value) { this->_set_and_notify(*new_value); }, qos_,
         options_);
   }
 
@@ -361,7 +368,7 @@ protected:
       std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
-        [this](const geometry_msgs::msg::TransformStamped &new_value) { this->_set(new_value); });
+        [this](const geometry_msgs::msg::TransformStamped &new_value) { this->_set_and_notify(new_value); });
   }
 
   std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
@@ -383,7 +390,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[TimerObservable] attach_to_node()" << std::endl;
     ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this]() {
-      this->_set(ticks_counter_++);
+      this->_set_and_notify(ticks_counter_++);
       if (is_one_off_timer_) ros_timer_->cancel();
     });
   }
@@ -417,21 +424,9 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_publication<Value>(topic_name_, qos_);
-    this->on_change([publish](const auto &new_value) { publish(new_value); });
+    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
   }
 
-  virtual void on_change(typename Base::OnResolve &&cb) override {
-    if (icey_debug_print)
-      std::cout << "[PublisherObservable on " + topic_name_ + "] on_change()  " << std::endl;
-    Base::on_change(std::move(cb));
-  }
-
-  virtual void _set(const Value &new_value) {  /// TODO DBG
-    if (icey_debug_print)
-      std::cout << "[PublisherObservable] _set() called, notify_list_.size(): "
-                << this->notify_list_.size() << std::endl;
-    Base::_set(new_value);
-  }
   std::string topic_name_;
   ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
 };
@@ -443,14 +438,15 @@ template <typename _Value>
 class WritablePublisherObservable : public PublisherObservable<_Value> {
 public:
   using Value = _Value;
-  void publish(const Value &message) { this->_set(message); }
+  void publish(const Value &message) { this->_set_and_notify(message); }
 };
 
 struct AnyComputation {
-  std::function<void()> f;
+  /// executes and returns whether the value changed, meaning whether the function returned something. If not, we do not need to notify
+  std::function<bool()> f;
 };
 
-/// TODO maybe for easier debugging ?
+/// TODO for easier debugging and less binary bloat (should work bc CTAD)
 template <class _Input, class _Output>
 struct Computation : public AnyComputation {
   std::shared_ptr<Observable<_Input>> input;
@@ -467,7 +463,7 @@ template <typename _Value, class _Base = Observable<_Value>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Value> {
   using Value = _Value;
   SimpleFilterAdapter() {
-    this->on_change([this](const Value &msg) {
+    this->register_on_change_cb([this](const Value &msg) {
       using Event = message_filters::MessageEvent<const Value>;
       /// TODO HACK, fix properly, do not deref in sub
       auto msg_ptr = std::make_shared<Value>(msg);
@@ -515,7 +511,7 @@ private:
   }
 
   void sync_callback(typename Messages::SharedPtr... messages) {
-    this->_set(std::forward_as_tuple(messages...));
+    this->_set_and_notify(std::forward_as_tuple(messages...));
   }
 
   /// The input filters
@@ -537,7 +533,7 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->on_change([publish](const auto &new_value) { publish(new_value); });
+    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
   }
 };
 
@@ -561,7 +557,7 @@ protected:
     node_handle.add_service<_ServiceT>(
         service_name_,
         [this](Request request, Response response) {
-          this->_set(std::make_pair(request, response));
+          this->_set_and_notify(std::make_pair(request, response));
         },
         qos_);
   }
@@ -587,9 +583,9 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[ClientObservable] attach_to_node()" << std::endl;
     auto client = node_handle.add_client<_ServiceT>(service_name_, qos_);
-    this->on_change([this, client](std::shared_ptr<Request> request) {
+    this->register_on_change_cb([this, client](std::shared_ptr<Request> request) {
       client->async_send_request(request,
-                                 [this](auto response_futur) { this->_set(response_futur.get()); });
+                                 [this](auto response_futur) { this->_set_and_notify(response_futur.get()); });
     });
   }
 
@@ -677,6 +673,8 @@ struct DataFlowGraph {
     std::vector<size_t> topological_order;
     try {
       topological_sort(graph_, std::back_inserter(topological_order));
+      /// Boost outputs the topological order in reversed order. ..
+      std::reverse(topological_order.begin(), topological_order.end());
       return topological_order;
     } catch (const boost::not_a_dag &) {
       return {};
@@ -735,7 +733,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   }
 
   template <class Parent>
-  void create_publisher(Parent &&parent, const std::string &topic_name,
+  void create_publisher(Parent parent, const std::string &topic_name,
                         const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
     observable_traits<Parent>{};
     using MessageT = typename remove_shared_ptr_t<Parent>::Value;
@@ -789,11 +787,11 @@ struct Context : public std::enable_shared_from_this<Context> {
   parents->index.value()...}); /// And add to the graph const auto f_continued =
   [resulting_observable, reference](auto&&... parents) { auto all_argunments_arrived =
   (parents->value_ && ... && true); if(all_argunments_arrived)
-              resulting_observable->_set(std::make_tuple(reference, parents->value_.value()...));
+              resulting_observable->_set_and_notify(std::make_tuple(reference, parents->value_.value()...));
       };
-      /// This should be called "parent", "parent->on_change()". This is essentially a for-loop over
+      /// This should be called "parent", "parent->register_on_change_cb()". This is essentially a for-loop over
   all parents, but C++ cannot figure out how to create a readable syntax, instead we got these fold
-  expressions reference->on_change(std::bind(f_continued, std::forward<Parents>(parents)...));
+  expressions reference->register_on_change_cb(std::bind(f_continued, std::forward<Parents>(parents)...));
       return resulting_observable; /// Return the underlying pointer. We can do this, since
   internally everything is stores reference-counted.
   }
@@ -955,6 +953,7 @@ protected:
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
   /// If eager mode is enabled, it additionaly registers the computation so that it is immediatelly
   /// run
+  /// TODO fix the massive code dup here, use higher-order functions and make sure GCC inlines them
   template <class Input, class Output, class F>
   AnyComputation create_computation(Input input, Output output, F &&f) {
     observable_traits<Input, Output>{};
@@ -974,25 +973,35 @@ protected:
       /// the function
       computation.f = [input, f = std::move(on_new_value_void)]() {
         f(input->value());
+        return false;
       };
 
       if (this->use_eager_mode_) {
-        input->on_change(
+        input->register_on_change_cb(
             [f = std::move(on_new_value_void)](const auto &new_value) { f(new_value); });
       }
     } else {
       computation.f = [input, output, f = std::move(on_new_value)]() {
-        output->value_ = f(input->value_.value());  /// Do not notify, only set
+        auto result = f(input->value_.value()); // The computation can also return nothing
+        if constexpr (is_optional_v<ReturnType>) {
+          bool has_value = result.has_value();
+          if(has_value) /// Set result only if it is not nothing
+            output->_set(*result);  /// Do not notify, only set
+          return has_value; /// Return whether the value changed, if not we are not allowed to notify
+        } else {
+          output->_set(result);  /// Do not notify, only set
+          return true;/// value always changes if the function does not return optional
+        }
       };
       if (this->use_eager_mode_) {
-        input->on_change([output, f = std::move(on_new_value)](const auto &new_value) {
+        input->register_on_change_cb([output, f = std::move(on_new_value)](const auto &new_value) {
           auto ret = f(new_value);
           if constexpr (is_optional_v<ReturnType>) {
             if (ret) {
-              output->_set(*ret);
+              output->_set_and_notify(*ret);
             }
           } else {
-            output->_set(ret);
+            output->_set_and_notify(ret);
           }
         });
       }
@@ -1176,9 +1185,12 @@ protected:
         if (icey_debug_print)
           std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
         auto &edge_data = graph_[edge];  // Access edge data
-        edge_data.f(); /// Execute the computation, pass over the value
-        /// Call this to enable publishers to work. 
-        graph_[target_vertex]->notify_about_change();
+        bool should_propagate = edge_data.f(); /// Execute the computation, pass over the value
+        if(should_propagate) {
+          /// Call this to enable publishers to work. Only publishers have something in the notify list
+          /// TODO maybe rename notify_ROS
+          graph_[target_vertex]->notify_about_change();
+        }
       }
     }
     if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
