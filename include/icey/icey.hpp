@@ -953,16 +953,7 @@ protected:
       /// The computation has no arguments, it obtains the buffered value from the input and calls
       /// the function
       computation.f = [input, f = std::move(on_new_value_void)]() {
-        if (icey_debug_print) {
-          std::cout << "Executing void compute for input [" + input->class_name + ", " +
-                           input->name + "]  has value: "
-                    << input->value_.has_value() << std::endl;
-        }
-        std::cout << "getting New value ... " << std::endl;
-        // auto new_value = input->value();
-        auto new_value = input->value_.value();
-        std::cout << "got New value . " << std::endl;
-        f(new_value);
+        f(input->value());
       };
 
       if (this->use_eager_mode_) {
@@ -971,14 +962,7 @@ protected:
       }
     } else {
       computation.f = [input, output, f = std::move(on_new_value)]() {
-        if (icey_debug_print) {
-          std::cout << "Executing compute for input [" + input->class_name + ", " + input->name +
-                           "] , has value: "
-                    << input->value_.has_value() << std::endl;
-        }
-        std::cout << "getting New value 2... " << std::endl;
-        auto new_value = input->value_.value();
-        output->value_ = f(new_value);  /// Do not notify, only set
+        output->value_ = f(input->value_.value());  /// Do not notify, only set
       };
       if (this->use_eager_mode_) {
         input->on_change([output, f = std::move(on_new_value)](const auto &new_value) {
@@ -1184,9 +1168,9 @@ protected:
   DataFlowGraph data_flow_graph_;
   std::vector<size_t> topological_order_;
 
-  bool was_initialized_{
-      false};  /// Indicates whether initialize() was called. Used to ensure the graph is static,
-               /// i.e. no items are added after initially initilizing.
+  /// Indicates whether initialize() was called. Used to ensure the graph is static,
+  /// i.e. no items are added after initially initilizing.
+  bool was_initialized_{false};
 
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;

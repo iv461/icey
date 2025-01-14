@@ -7,25 +7,32 @@ In Icey, you can rapidly prototype Nodes in data-flow oriented manner.
 
 The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
 
-[Example1](examples/simple.cpp)
+[Signal generator example](examples/signal_generator.cpp)
 ```cpp
 #include <icey/icey_ros2.hpp>
-#include "std_msgs/msg/float32.hpp"
-
 int main(int argc, char **argv) {
-    auto current_velocity = icey::create_subscription<std_msgs::msg::Float32>("current_velocity");
 
-    auto result = icey::compute_based_on([](std_msgs::msg::Float32 new_velocity) {
-            std_msgs::msg::Float32 out_msg;
-            out_msg.data = 2. * new_velocity.data;
-            return out_msg;
-        },
-        current_velocity);
+    auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
+    auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
+    auto timer_signal = icey::create_timer(100ms);
+    /// Add a callback for the timer:
+    auto rectangle_sig = timer_signal->then([](size_t ticks) { 
+        std::optional<float> result; 
+        //  1/10 Frequency divider
+        if(ticks % 10 == 0) {
+            result = (ticks % 20 == 0) ? 1.f : 0.f;
+        } // Otherwise publish nothing
+        return result;
+    })->publish("rectangle_signal"); // And publish the result
 
-    result->publish("new_velocity"),
+    /// Add another callback for the timer
+    auto sine_signal = timer_signal->then([&](size_t ticks) {
+        /// We can access parameters in callbacks using .value() because parameters are always initialized first.
+        double y = amplitude->value() * std::sin((0.1 * ticks) / frequency->value() * 2 * M_PI);
+        return y;
+    })->publish("sine_generator");
 
-
-    icey::spawn(argc, argv, "ppc_controller_node"); /// Create and start node
+    icey::spawn(argc, argv, "signal_generator_example"); 
 }
 ```
 
@@ -33,10 +40,9 @@ You can build your own data-driven pipeline of computations:
 
 
 The key in ICEY is to describe the data-flow declaratively and then 
-This not only simplifies the code, but prevents dead-lock bugs. ICEY automatically analyzes the data-flow graph and performs topological sorting, asserts no loops are present, and determines how many callback-groups are needed.
+This not only simplifies the code, but prevents dead-lock bugs.ICEY automatically analyzes the data-flow graph and asserts no loops are present, performs topological sorting, and determines how many callback-groups are needed.
 
 ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anything or use private implementation details.
-
 
 TODO more 
 
@@ -53,35 +59,11 @@ auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
 
 Icey is a thin wrapper around ROS 2/1 and you can always switch to using the regular ROS 2 API: 
 
-```cpp
-icey::node
-```
-
-You can always listen on changes of a state, like a subscriber callback:
-
-```cpp
-
-auto max_velocity_parameter = icey::SubscriptionObservable<float>("maximum_velocity");
-max_velocity_parameter.on_change([](const auto &new_value) {
-    ...
-});
-
-auto max_velocity_parameter = icey::ParameterState<float>("maximum_velocity");
-max_velocity_parameter.on_change([](const auto &new_value) {
-    ...
-});
-```
-
-Likewise, you can publish a state by calling `set()`: 
-
-```cpp
-auto slip_angle_state = icey::create_state<float>("/states/slip_angle");
-slip_angle_state.set(0.01f) /// This will get published
-```
+TODO 
 
 # Why should I use ICEY: 
 
-TODO mor convincing 
+TODO more convincing 
 
 If the examples did not yet convince you: 
 

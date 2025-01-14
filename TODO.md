@@ -4,8 +4,9 @@
 
 Sorted by decreasing priority. 
 
-- [ ] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
-- [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless !
+- [X] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
+- [ ] Graph engine: notify leaves
+- [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless ! -> depends on understanding hana and implementing `synch_with_reference`
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [X] Writable publiser, otherwise no hardware drivers possible !
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
@@ -13,7 +14,7 @@ Sorted by decreasing priority.
 - [X] Code clean-up and dup: Wrap API in tuples, create graph afterwards
 - [ ] Code clean up: take shared_ptr by value everywhere
 - [ ] publish shared ptr should be supported 
-- [ ] Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
+- [X] Forbid and detect cycles in the DAG: React has a "cyclic dependency detected" thing
 - [X] Support ApproxTime synchronization
 - [ ] Forbid subscribing to the same topic that is published by the same node 
 - [ ] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
@@ -21,8 +22,8 @@ Sorted by decreasing priority.
 - [ ] Promise-API: .catch(), finally mostly important for timeout detection of service call 
 
 - [] Unit-tests testing the node
-
 - [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
+
 ## Error-handling 
 
 ## Examples 

@@ -5,9 +5,8 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-
+    /// Use graph mode
     icey::get_global_context().use_eager_mode_ = false;
-    
     icey::icey_debug_print = true;
 
     auto period_time = 100ms;
