@@ -3,22 +3,35 @@
 #include <boost/hana.hpp>
 
 #include <type_traits>
+#include <boost/type_index.hpp>
+
 #include <tuple>
 #include <iostream>
 
 namespace mp = boost::mp11;
 namespace hana = boost::hana;
 
-struct Base {};
+struct Base {
+    virtual ~Base(){
+
+    }
+};
 struct Derived1 : Base {};
 struct Derived2 : Base {};
-struct NotDerived {};
-struct NotDerived2 {};
-struct NotDerived3 {};
+struct NotDerived {
+    virtual ~NotDerived(){}
+};
+struct NotDerived2 {
+    virtual ~NotDerived2(){}
+};
+struct NotDerived3 {
+    virtual ~NotDerived3(){}
+};
 
-template<class T>
-using is_based = std::is_base_of<Base, T>;
+//template<class T>
+//using is_based = std::is_base_of<Base, T>;
 
+/*
 template<class T>
 auto filter(T tup) {
     return std::apply([&](auto first, auto... rest) {
@@ -38,7 +51,6 @@ auto filter(T tup) {
     }, tup);
 }
 
-/*
 template<typename... Args> 
 void partition_args(){
      // Define a tuple of types
@@ -81,13 +93,59 @@ void partition_args(){
     });
 }
 */
+
+/*template <typename T>
+struct basic_type {};
+
+template <typename T>
+constexpr auto is_based(basic_type<T> const&)
+{ return hana::bool_c<false>; }
+ 
+template <typename T>
+constexpr auto is_based(basic_type<Base> const&)
+{ return hana::bool_c<true>; }
+*/
+
+template <typename T>
+constexpr auto is_based(hana::basic_type<T>) {
+    if constexpr(std::is_base_of_v<Base, T >) 
+        return hana::bool_c<true>;
+    else 
+        return hana::bool_c<false>;    
+}
+ 
+
 template<typename... Args> 
 void partition_tuple_hana(std::tuple<Args...> tuple){
 
+    auto Types = hana::tuple_t<Args...>;
+
+    auto DerivedOnes = hana::remove_if(Types, [](auto t) { return not is_based(t); });
+
+    //hana::make_tuple(
+    auto NotDerivedOnes = hana::remove_if(Types, [](auto t) { return is_based(t); });
+
+
+    std::cout << "Result: "<< std::endl;
+
+    std::cout << "Types derived from base: "<< std::endl;
+    
+    hana::for_each(DerivedOnes, [](auto const& element) {
+        std::cout << boost::typeindex::type_id_runtime(element).pretty_name() << std::endl;
+    });
+    
+    std::cout << "Types NOT derived from base: "<< std::endl;
+
+    hana::for_each(NotDerivedOnes, [](auto const& element) {
+        std::cout << boost::typeindex::type_id_runtime(element).pretty_name() << std::endl;
+    });
+
+    std::cout << "Done. "<< std::endl;
+    
 }
 
 int main() {
-
+    std::cout << "MP " << std::endl;
     std::tuple<Base, Derived1, NotDerived3, Derived2, NotDerived, NotDerived2> tup{};
 
     partition_tuple_hana(tup);
