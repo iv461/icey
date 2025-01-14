@@ -153,9 +153,12 @@ protected:
     virtual void _set(const Value &new_value) {
         this->value_ = new_value;
         if(icey_debug_print)
-            std::cout << "[Observable]_set(), notify list: " <<  notify_list_.size() << std::endl;
+            std::cout << "[" + this->class_name + ", " + this->name + "] _set() called, this->value_: "  
+                << this->value_.has_value() << std::endl;
 
-        for(auto cb: notify_list_) cb(new_value);   
+        for(auto cb: notify_list_) {
+            cb(new_value);   
+        }
     }
 
     void _reject(const ErrorValue &error) {
@@ -858,7 +861,15 @@ protected:
         if constexpr (std::is_void_v<ReturnType>) {
             /// The computation has no arguments, it obtains the buffered value from the input and calls the function
             computation.f = [input, f=std::move(on_new_value_void)]() { 
-                f(input->value()); };
+                if(icey_debug_print) {
+                    std::cout << "Executing void compute for input [" + input->class_name + ", " + input->name + "]  has value: " << input->value_.has_value() << std::endl;
+                  }
+                std::cout << "getting New value ... " << std::endl;
+                //auto new_value = input->value();
+                auto new_value = input->value_.value();
+                std::cout << "got New value . " << std::endl;
+                f(new_value); 
+            };
 
             if(this->use_eager_mode_) {
                 input->on_change([f=std::move(on_new_value_void)](const auto&new_value) { 
@@ -867,7 +878,12 @@ protected:
             }
         } else {
             computation.f= [input, output, f=std::move(on_new_value)]() { 
-                    output->value_ = f(input->value());  /// Do not notify, only set
+                  if(icey_debug_print) {
+                    std::cout << "Executing compute for input [" + input->class_name + ", " + input->name + "] , has value: " << input->value_.has_value()  << std::endl;
+                  }
+                  std::cout << "getting New value 2... " << std::endl;
+                  auto new_value = input->value_.value();
+                    output->value_ = f(new_value);  /// Do not notify, only set
                         };
             if(this->use_eager_mode_) {
                 input->on_change([output, f=std::move(on_new_value)](const auto&new_value) { 
@@ -1023,6 +1039,7 @@ protected:
 
     
     /// Executes the graph mode. This function gets called if some of the inputs change and propagates the result.
+    /// TODO deal with param stage, maybe lable only 
     void run_graph_mode(size_t signaling_vertex_id) {
         if(icey_debug_print)
             std::cout << "[icey::Context] Got event from vertex " << signaling_vertex_id << ", graph execution starts ..." << std::endl;
@@ -1049,6 +1066,7 @@ protected:
                         std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
                     auto& edge_data = graph_[edge];           // Access edge data
                     edge_data.f();
+                    /// TODO call notify on leaves, we need to publish ..
                 }
         }
         if(icey_debug_print)
