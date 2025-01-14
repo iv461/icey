@@ -66,7 +66,7 @@ struct Buffer  {
     using MaybeValue = std::optional<Value>;
 
     virtual bool has_value() const {return value_.has_value(); }
-    virtual const Value &value() const { value_.value(); }
+    virtual const Value &value() const { return value_.value(); }
 protected:
     /// The last received value.
     MaybeValue value_;
