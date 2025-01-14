@@ -12,20 +12,19 @@ namespace mp = boost::mp11;
 namespace hana = boost::hana;
 
 struct Base {
-    virtual ~Base(){
-
-    }
+    int a{1};
 };
 struct Derived1 : Base {};
 struct Derived2 : Base {};
 struct NotDerived {
-    virtual ~NotDerived(){}
+    int a{6};
 };
 struct NotDerived2 {
-    virtual ~NotDerived2(){}
+    int a{7};
 };
+
 struct NotDerived3 {
-    virtual ~NotDerived3(){}
+    int a{3};
 };
 
 //template<class T>
@@ -107,8 +106,9 @@ constexpr auto is_based(basic_type<Base> const&)
 */
 
 template <typename T>
-constexpr auto is_based(hana::basic_type<T>) {
-    if constexpr(std::is_base_of_v<Base, T >) 
+//constexpr auto is_based(hana::basic_type<T>) { type version
+constexpr auto is_based(T) { /// value version
+    if constexpr(std::is_base_of_v<Base, T >)
         return hana::bool_c<true>;
     else 
         return hana::bool_c<false>;    
@@ -116,13 +116,12 @@ constexpr auto is_based(hana::basic_type<T>) {
  
 
 template<typename... Args> 
-void partition_tuple_hana(std::tuple<Args...> tuple){
+void partition_tuple_hana(Args... args){
 
-    auto Types = hana::tuple_t<Args...>;
+    //auto Types = hana::tuple_t<Args...>;
+    auto Types = hana::make_tuple(args...);
 
     auto DerivedOnes = hana::remove_if(Types, [](auto t) { return not is_based(t); });
-
-    //hana::make_tuple(
     auto NotDerivedOnes = hana::remove_if(Types, [](auto t) { return is_based(t); });
 
 
@@ -137,7 +136,8 @@ void partition_tuple_hana(std::tuple<Args...> tuple){
     std::cout << "Types NOT derived from base: "<< std::endl;
 
     hana::for_each(NotDerivedOnes, [](auto const& element) {
-        std::cout << boost::typeindex::type_id_runtime(element).pretty_name() << std::endl;
+        std::cout << boost::typeindex::type_id_runtime(element).pretty_name() 
+            << ", has value: " << element.a << std::endl;
     });
 
     std::cout << "Done. "<< std::endl;
@@ -148,7 +148,7 @@ int main() {
     std::cout << "MP " << std::endl;
     std::tuple<Base, Derived1, NotDerived3, Derived2, NotDerived, NotDerived2> tup{};
 
-    partition_tuple_hana(tup);
+    partition_tuple_hana(Base{}, Derived1{}, NotDerived3{}, Derived2{}, NotDerived{}, NotDerived2{});
 
     //partition_args<Base, Derived1, Derived2, NotDerived>();
     return 0;
