@@ -545,6 +545,8 @@ struct DataFlowGraph {
         }
     }
 
+    // Returns an index remapping for the indices that sort them by a predicate. Note that you should never mutate the order of the vertices, meaning sorting them directly.
+    // This is because the vertex data (the Observables) references this index.
     std::vector<size_t> get_vertices_ordered_by(std::function<bool(size_t, size_t)> predicate) {
         auto vertex_index_range = boost::make_iterator_range(vertices(graph_));
         std::vector<size_t> vertex_index_range_copy(vertex_index_range.begin(), vertex_index_range.end());
@@ -846,15 +848,8 @@ protected:
         using ReturnType = decltype( apply_if_tuple(f, std::declval< typename remove_shared_ptr_t<Input>::Value >()) );
         AnyComputation computation;
 
-        const auto on_new_value = [output, f=std::move(f)](const auto &new_value) {
-            auto ret = apply_if_tuple(f, new_value);
-            if constexpr (is_optional_v<ReturnType>) {
-                if(ret) {
-                    output->_set(*ret);
-                }
-            } else {
-                output->_set(ret);
-            }
+        const auto on_new_value = [f=std::move(f)](const auto &new_value) {
+            return apply_if_tuple(f, new_value);
         };
         const auto on_new_value_void = [f=std::move(f)](const auto &new_value) {
             apply_if_tuple(f, new_value);
@@ -862,14 +857,29 @@ protected:
         
         if constexpr (std::is_void_v<ReturnType>) {
             /// The computation has no arguments, it obtains the buffered value from the input and calls the function
-            computation.f = [input, f=std::move(on_new_value_void)]() { f(input->value()); };
+            computation.f = [input, f=std::move(on_new_value_void)]() { 
+                f(input->value()); };
+
             if(this->use_eager_mode_) {
-                input->on_change(on_new_value_void);
+                input->on_change([f=std::move(on_new_value_void)](const auto&new_value) { 
+                    f(new_value);
+                });
             }
         } else {
-            computation.f= [input, f=std::move(on_new_value)]() { f(input->value()); };
+            computation.f= [input, output, f=std::move(on_new_value)]() { 
+                    output->value_ = f(input->value());  /// Do not notify, only set
+                        };
             if(this->use_eager_mode_) {
-                input->on_change(on_new_value);
+                input->on_change([output, f=std::move(on_new_value)](const auto&new_value) { 
+                            auto ret = f(new_value);
+                            if constexpr (is_optional_v<ReturnType>) {
+                                if(ret) {
+                                    output->_set(*ret);
+                                }
+                            } else {
+                                output->_set(ret);
+                            }
+                });
             }
         }
         
@@ -1016,7 +1026,33 @@ protected:
     void run_graph_mode(size_t signaling_vertex_id) {
         if(icey_debug_print)
             std::cout << "[icey::Context] Got event from vertex " << signaling_vertex_id << ", graph execution starts ..." << std::endl;
-            
+        
+        auto &graph_ = data_flow_graph_.graph_;
+        /// We traverse the vertices in the topological order and check which value changed. 
+        /// If a value changed, then for all its outgoing edges the computation is executed and these vertices are marked as changed.
+        std::vector<int> value_changed(num_vertices(graph_), 0);
+        value_changed.at(signaling_vertex_id) = 1;
+        for(auto v : topological_order_) {
+                if(!value_changed.at(v)) {
+                    if(icey_debug_print)
+                        std::cout << "Vertex " << v << " did not change, skipping ..." << std::endl;
+                    continue;
+                }
+                if(icey_debug_print)
+                    std::cout << "Vertex " << v << " changed, propagating ..." << std::endl;
+
+                for (auto edge : boost::make_iterator_range(out_edges(v, graph_))) {
+                    auto target_vertex = target(edge, graph_); // Get the target vertex
+
+                    value_changed.at(target_vertex) = 1;
+                    if(icey_debug_print)
+                        std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
+                    auto& edge_data = graph_[edge];           // Access edge data
+                    edge_data.f();
+                }
+        }
+        if(icey_debug_print)
+            std::cout << "Propagation finished. " << std::endl;
     }
     
     DataFlowGraph data_flow_graph_;
