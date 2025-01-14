@@ -10,22 +10,22 @@
 
 namespace icey {
 
-template <typename T>
+template <class T>
 struct is_tuple : std::false_type {};
 
 template <typename... Args>
 struct is_tuple<std::tuple<Args...>> : std::true_type {};
 
-template <typename T>
+template <class T>
 struct is_pair : std::false_type {};
 
 template <typename... Args>
 struct is_pair<std::pair<Args...>> : std::true_type {};
 
-template <typename T>
+template <class T>
 constexpr bool is_tuple_v = is_tuple<T>::value;
 
-template <typename T>
+template <class T>
 constexpr bool is_pair_v = is_pair<T>::value;
 
 template <class T>
@@ -57,7 +57,7 @@ struct remove_optional<std::optional<T>> {
 };
 
 template <class T>
-using remove_optional_t = typename remove_optional<T>::type;
+using remove_optional_t = class remove_optional<T>::type;
 
 template <class T>
 struct remove_shared_ptr {
@@ -70,15 +70,15 @@ struct remove_shared_ptr<std::shared_ptr<T>> {
 };
 
 template <class T>
-using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
+using remove_shared_ptr_t = class remove_shared_ptr<T>::type;
 
 /// Are all the types of the tuple the same ?
-template <typename Head, typename... Tail>
+template <class Head, typename... Tail>
 constexpr bool all_same(const std::tuple<Head, Tail...> &) {
   return (std::is_same_v<Head, Tail> && ...);
 }
 
-template <typename Func, typename Tuple>
+template <class Func, class Tuple>
 auto apply_if_tuple(Func &&func, Tuple &&tuple) {
   if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {
     // Tuple detected, unpack and call the function

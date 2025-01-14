@@ -15,7 +15,7 @@ struct NotDerived3 {};
 template<class T>
 using is_based = std::is_base_of<Base, T>;
 
-template<typename T>
+template<class T>
 auto filter(T tup) {
     return std::apply([&](auto first, auto... rest) {
         auto filtered_rest = [&]{
@@ -50,7 +50,7 @@ void partition_args(){
 
 
     using SatisfyingTuple =  mp::mp_first<Partitioned>;
-    using NonSatisfyingTuple = typename mp::mp_second<Partitioned>;
+    using NonSatisfyingTuple = class mp::mp_second<Partitioned>;
 
 
     // Convert filtered types to a std::tuple

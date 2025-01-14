@@ -424,7 +424,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_publication<Value>(topic_name_, qos_);
-    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
+    this->register_on_change_cb([publish](auto &&new_value) { publish(new_value); });
   }
 
   std::string topic_name_;
@@ -533,7 +533,7 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
+    this->register_on_change_cb([publish](auto &&new_value) { publish(new_value); });
   }
 };
 
@@ -897,7 +897,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <int index, class Parent>
   auto get_nth(Parent &parent) {
     assert_observable_holds_tuple<Parent>();
-    return then(parent, [](const auto &...args) {  /// Need to take variadic because then()
+    return then(parent, [](auto &&...args) {  /// Need to take variadic because then()
                                                    /// automatically unpacks tuples
       return std::get<index>(
           std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple
@@ -951,7 +951,7 @@ protected:
   }
 
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
-  /// If eager mode is enabled, it additionaly registers the computation so that it is immediatelly
+  /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
   /// run
   /// TODO fix the massive code dup here, use higher-order functions and make sure GCC inlines them
   template <class Input, class Output, class F>
@@ -961,10 +961,10 @@ protected:
         decltype(apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Input>::Value>()));
     AnyComputation computation;
 
-    const auto on_new_value = [f = std::move(f)](const auto &new_value) {
+    const auto on_new_value = [f = std::move(f)](auto &new_value) {
       return apply_if_tuple(f, new_value);
     };
-    const auto on_new_value_void = [f = std::move(f)](const auto &new_value) {
+    const auto on_new_value_void = [f = std::move(f)](auto &&new_value) {
       apply_if_tuple(f, new_value);
     };
 
@@ -978,7 +978,7 @@ protected:
 
       if (this->use_eager_mode_) {
         input->register_on_change_cb(
-            [f = std::move(on_new_value_void)](const auto &new_value) { f(new_value); });
+            [f = std::move(on_new_value_void)](auto &&new_value) { f(std::move(new_value)); });
       }
     } else {
       computation.f = [input, output, f = std::move(on_new_value)]() {
@@ -994,14 +994,14 @@ protected:
         }
       };
       if (this->use_eager_mode_) {
-        input->register_on_change_cb([output, f = std::move(on_new_value)](const auto &new_value) {
-          auto ret = f(new_value);
+        input->register_on_change_cb([output, f = std::move(on_new_value)](auto &&new_value) {
+          auto ret = f(std::move(new_value));
           if constexpr (is_optional_v<ReturnType>) {
             if (ret) {
-              output->_set_and_notify(*ret);
+              output->_set_and_notify(std::move(*ret));
             }
           } else {
-            output->_set_and_notify(ret);
+            output->_set_and_notify(std::move(ret));
           }
         });
       }

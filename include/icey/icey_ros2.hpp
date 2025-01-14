@@ -30,7 +30,7 @@ namespace icey {
 
 class ROS2Adapter {
 public:
-  template <typename Msg>
+  template <class Msg>
   using MsgPtr = std::shared_ptr<Msg>;
 
   /// TODO should be compatible with the templates, but check
@@ -40,10 +40,10 @@ public:
 
   using Timer = rclcpp::TimerBase::SharedPtr;
 
-  template <typename Msg>
-  using Subscriber = typename rclcpp::Subscription<Msg>::SharedPtr;
-  template <typename Msg>
-  using Publisher = typename rclcpp::Publisher<Msg>::SharedPtr;
+  template <class Msg>
+  using Subscriber = class rclcpp::Subscription<Msg>::SharedPtr;
+  template <class Msg>
+  using Publisher = class rclcpp::Publisher<Msg>::SharedPtr;
 
   using NodePtr = std::shared_ptr<rclcpp::Node>;
   using _Node = rclcpp::Node;  /// Underlying Node type
@@ -66,7 +66,7 @@ public:
     TFListener(NodePtr node, tf2::BufferCore &buffer) : node_(node), buffer_(buffer) { init(node); }
 
     /// Add notification for a single transform.
-    template <typename CallbackT>
+    template <class CallbackT>
     void add_subscription(std::string target_frame, std::string source_frame,
                           CallbackT &&callback) {
       subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), std::nullopt,
@@ -162,7 +162,7 @@ public:
 
     Node(const std::string &name) : Base(name) {}
 
-    template <typename ParameterT, class CallbackT>
+    template <class ParameterT, class CallbackT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
                            CallbackT &&update_callback,
                            const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
@@ -179,7 +179,7 @@ public:
       return param;
     }
 
-    template <typename Msg, typename F>
+    template <class Msg, class F>
     void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                           const rclcpp::SubscriptionOptions &options) {
       if (my_subscribers_.count(topic) != 0) {
@@ -191,7 +191,7 @@ public:
       my_subscribers_[topic] = create_subscription<Msg>(topic, qos, cb, options);
     }
 
-    template <typename Msg>
+    template <class Msg>
     auto add_publication(const std::string &topic, const QoS &qos = DefaultQos(),
                          std::optional<double> max_frequency = std::nullopt) {
       if (my_publishers_.count(topic) != 0) {
@@ -209,7 +209,7 @@ public:
       return publish;
     }
 
-    template <typename CallbackT>
+    template <class CallbackT>
     auto add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&cb) {
       rclcpp::TimerBase::SharedPtr timer =
           use_wall_time
@@ -220,7 +220,7 @@ public:
       return timer;
     }
 
-    template <typename ServiceT, typename CallbackT>
+    template <class ServiceT, class CallbackT>
     void add_service(const std::string &service_name, CallbackT &&callback,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
       auto service = this->create_service<ServiceT>(
@@ -230,7 +230,7 @@ public:
     }
 
     /// TODO cb groups !!
-    template <typename Service>
+    template <class Service>
     auto add_client(const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
       auto client = this->create_client<Service>(service_name, qos);
@@ -239,7 +239,7 @@ public:
     }
 
     /// Subscribe to a transform on tf between two frames
-    template <typename CallbackT>
+    template <class CallbackT>
     auto add_tf_subscription(std::string target_frame, std::string source_frame,
                              CallbackT &&callback) {
       add_tf_listener_if_needed();

@@ -86,7 +86,7 @@ auto& node = g_state;
 
 static Context& get_global_context() { return g_state.get_context(); }
 
-template <typename ParameterT>
+template <class ParameterT>
 auto declare_parameter(const std::string& name,
                        const std::optional<ParameterT>& maybe_default_value = std::nullopt,
                        const rcl_interfaces::msg::ParameterDescriptor& parameter_descriptor =
@@ -95,7 +95,7 @@ auto declare_parameter(const std::string& name,
   return g_state.get_context().declare_parameter<ParameterT>(name, maybe_default_value,
                                                              parameter_descriptor, ignore_override);
 }
-template <typename MessageT>
+template <class MessageT>
 auto create_subscription(
     const std::string& topic_name, const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQos(),
     const rclcpp::SubscriptionOptions& options = rclcpp::SubscriptionOptions()) {
@@ -107,13 +107,13 @@ auto create_transform_subscription(const std::string& target_frame,
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-template <typename MessageT>
+template <class MessageT>
 auto create_writable_publisher(const std::string& topic_name,
                                const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQos()) {
   g_state.get_context().create_writable_publisher<MessageT>(topic_name, qos);
 }
 
-template <typename Parent>
+template <class Parent>
 void create_transform_publisher(Parent parent) {
   g_state.get_context().create_transform_publisher(parent);
 }
@@ -123,13 +123,13 @@ auto create_timer(const ROSAdapter::Duration& interval, bool use_wall_time = fal
   return g_state.get_context().create_timer(interval, use_wall_time, is_one_off_timer);
 }
 
-template <typename ServiceT>
+template <class ServiceT>
 auto create_service(const std::string& service_name,
                     const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
   return g_state.get_context().create_service<ServiceT>(service_name, qos);
 }
 
-template <typename ServiceT, class Parent>
+template <class ServiceT, class Parent>
 auto create_client(Parent parent, const std::string& service_name,
                    const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
   return g_state.get_context().create_client<ServiceT>(parent, service_name, qos);
