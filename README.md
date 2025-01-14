@@ -73,7 +73,7 @@ If the examples did not yet convince you:
 
 # Robustness 
 
-This library is designed to be robust against common usage mistakes: It will detect problems like cyclic dependencies that would cause infinite update cycles. It enforces this by creating a Directed Acyclic Graph (DAG) and using topological sorting to ensure a well-defined order of updates. 
+This library is designed to be robust against common usage mistakes: It will detect problems like cyclic dependencies that would cause infinite update cycles. It enforces this by creating a Directed Acyclic Graph (DAG) and using topological sorting to ensure a pre-determined order of updates that guarantees all predecessor nodes are updated before their children ("deterministic update")
 
 # Similar projects 
 

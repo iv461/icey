@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "HELLOOOO ");
 
             return std::make_tuple(int_val, float_val);
-        });
+    });
     
     icey::get_nth<0>(two_results)->publish("int_result");
     icey::get_nth<1>(two_results)->publish("float_result");
@@ -43,9 +43,8 @@ int main(int argc, char **argv) {
 
     icey::serialize(float1, float2, float3)->publish("float_serialized");
     
-    /// Test publishing something that is derived from Observable 
-    map_base_link_tf->publish("map_to_base_link_transform");;
+    /// And directly publish this signal:
+    map_base_link_tf->publish("map_to_base_link_transform");
 
-    //// Now multiple-input to single output: Modeling control flow such as 
     icey::spawn(argc, argv, "piping_example"); /// Create and start node
 }
