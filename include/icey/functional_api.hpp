@@ -67,6 +67,8 @@ GlobalState g_state;
 /// Enable API icey::node
 auto &node = g_state;
 
+static Context& get_global_context() { return g_state.get_context(); }
+
 template<typename ParameterT>
 auto declare_parameter(const std::string &name, const std::optional<ParameterT> &maybe_default_value=std::nullopt, 
         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = rcl_interfaces::msg::ParameterDescriptor(), 

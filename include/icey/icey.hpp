@@ -274,7 +274,6 @@ protected:
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using lookupTransform, not an own buffer 
 struct TransformSubscriptionObservable : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
-     friend class Context;
 public:
     TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) : 
          target_frame_(target_frame), source_frame_(source_frame) { 
@@ -315,7 +314,6 @@ protected:
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to the callback
 struct TimerObservable: public Observable<size_t> {
-     friend class Context;
     using Value = size_t;
     TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) : 
         interval_(interval), use_wall_time_(use_wall_time), is_one_off_timer_(is_one_off_timer) { 
@@ -332,12 +330,6 @@ protected:
             if(is_one_off_timer_)
                 ros_timer_->cancel();
         });
-    }
-
-    virtual void _set(const Value &new_value) { /// TODO DBG
-        if(icey_debug_print)
-            std::cout << "[TimerObservable] _set() called, notify_list_.size(): " <<  this->notify_list_.size() << std::endl;
-        Observable<size_t>::_set(new_value);
     }
 
     rclcpp::TimerBase::SharedPtr ros_timer_;
@@ -466,6 +458,7 @@ private:
 
 // A transform broadcaster observable 
 class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+     friend class Context;
 public:
     using Value = geometry_msgs::msg::TransformStamped;
 protected:
@@ -601,6 +594,7 @@ struct DataFlowGraph {
     }
 
     void print() {
+
         auto &g = graph_;
 
         std::cout << "Created data-flow graph:\nVertices:" << std::endl;
@@ -949,6 +943,7 @@ protected:
     void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
         if(icey_debug_print)
             std::cout << "[icey::Context] attach_everything_to_node() start" << std::endl;
+
         /// First, sort the attachables by priority: first parameters, then publishers, services, subsribers etc.
         /// We could do bin-sort here which runs in linear time, but the standard library does not have an implementation for it.
         const auto attach_priority_order = [this](size_t v1, size_t v2) {
@@ -974,7 +969,6 @@ protected:
         if(icey_debug_print)
             std::cout << "[icey::Context] Analyzing data flow graph ... " << std::endl;
         analyze_dfg(); /// Now analyze the graph before attaching everything to detect cycles as soon as possible, especially before the node is started and everything crashes
-        
 
         if(icey_debug_print) std::cout << "[icey::Context] Attaching everything ... " << std::endl;
         /// If additional vertices have been added to the DFG, attach it as well 
@@ -986,7 +980,7 @@ protected:
             attachable->attach_to_node(node); /// Attach
         }
         if(icey_debug_print)
-            std::cout << "[icey::Context] attach_everything_to_node() finished. " << std::endl;
+            std::cout << "[icey::Context] Attaching finished, node starts... " << std::endl;
     }
 
     /// TODO 
@@ -1012,19 +1006,20 @@ protected:
         /// In graph mode, no notify callbacks are registered except a single "run-graph-mode". So we just check if the notify list empty
         if(parent->notify_list_.empty()) {
             parent->on_change([parent](const auto &) {
-                    parent->context.lock()->run_graph_mode();  // context is actually this, but we avoid capturing this in objects that we do not directly own 
+                    parent->context.lock()->run_graph_mode(parent->index.value());  // context is actually this, but we avoid capturing this in objects that we do not directly own 
             });
         }
     }
 
     
-
-    void run_graph_mode() {
-
+    /// Executes the graph mode. This function gets called if some of the inputs change and propagates the result.
+    void run_graph_mode(size_t signaling_vertex_id) {
+        if(icey_debug_print)
+            std::cout << "[icey::Context] Got event from vertex " << signaling_vertex_id << ", graph execution starts ..." << std::endl;
+            
     }
     
     DataFlowGraph data_flow_graph_;
-
     std::vector <size_t> topological_order_;
 
     bool was_initialized_{false}; /// Indicates whether initialize() was called. Used to ensure the graph is static, i.e. no items are added after initially initilizing.

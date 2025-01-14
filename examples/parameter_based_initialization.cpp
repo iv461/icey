@@ -9,6 +9,10 @@ void load_neural_network_model(std::string filename) {
 }
 
 int main(int argc, char **argv) {
+    icey::icey_debug_print = true;
+    /// Use graph mode
+    icey::get_global_context().use_eager_mode_ = false;
+
     auto nn_model_filename_param = icey::declare_parameter<std::string>("nn_model_filename", "");
     auto publish_debug_markers_param = icey::declare_parameter<bool>("publish_debug_markers", false);
 
