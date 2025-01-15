@@ -4,19 +4,29 @@
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int32.hpp"
 
+#include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+
 int main(int argc, char **argv) {
 
     icey::g_state.get_context().use_eager_mode_ = true;
 
-    auto float_sig = icey::create_subscription<std_msgs::msg::Float32>("my_float");
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
-    auto got_tf = icey::sync_with_reference(float_sig, map_base_link_tf);
+    auto float_sig = icey::create_subscription<std_msgs::msg::Float32>("my_float");
 
+
+    auto camera_image = icey::create_subscription<sensor_msgs::msg::Image>("camera");
+    auto point_cloud = icey::create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
+
+    auto cam_sync = icey::sync_with_reference(camera_image, map_base_link_tf);
+
+        /*
     got_tf->then([](std_msgs::msg::Float32::SharedPtr float_val, 
             std::optional<geometry_msgs::msg::TransformStamped::SharedPtr> tf_val)  {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got from sync with ref");
     });
+        */
 
     /// Synchronize, uses approx time
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);

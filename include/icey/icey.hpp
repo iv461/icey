@@ -126,8 +126,11 @@ constexpr void assert_are_observables() {
   (assert_is_observable<Args>(), ...);
 }
 
+template<class T> using obs_val = typename remove_shared_ptr_t<T>::Value;
+/// The ROS message that a observable holds
 template<class T>
-using obs_val = typename remove_shared_ptr_t<T>::Value;
+using obs_msg = remove_shared_ptr_t<obs_val<T>>;
+
 
 // Assert that all Observables types hold the same value
 template <typename First, typename... Rest>
@@ -364,7 +367,6 @@ public:
   /// TODO override: Is TF buffer empty ? -> Needed to distinguitsh TF errors
   virtual bool has_value() const { return this->value_.has_value(); }
 
-protected:
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
     try {
       // Note that this call does not wait, the transform must already have arrived. This works
@@ -377,6 +379,7 @@ protected:
     }
   }
 
+protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print)
       std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
@@ -787,6 +790,9 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto sync_with_reference(Reference reference, Parents ...parents) {
     observable_traits<Reference>{};
     observable_traits<Parents...>{};
+    using namespace message_filters::message_traits;
+
+    static_assert(HasHeader<obs_msg<Reference>>::value, "The ROS message type must have a header with the timestamp to be synchronized");
 
     using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
     
@@ -798,6 +804,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     AnyComputation computation = create_computation(reference, child, [parents_tuple](auto && new_value) {  
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
+
               return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
         });
     });
