@@ -441,22 +441,14 @@ public:
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
-    auto publish = node_handle.add_publication<Value>(topic_name_, qos_);
-    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
+    auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
+    /// Take by const ref to avoid copying the message, since we do know whether we receive the message by shared_ptr or by value (i.e. whether Value and Message are different). This way, both works as expected.
+    /// If it is by value, then we achieve that we do not copy the value, if it is by shared_ptr we achieve this as well.
+    this->register_on_change_cb([publisher](const auto &new_value) { publisher(new_value); });
   }
 
   std::string topic_name_;
   ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
-};
-
-/// A publishabe state, can be written. Needed where we need to publish by reacting on external
-/// events
-// that are not in control of ROS. This is needed for hardware drivers for example
-template <typename _Value>
-class WritablePublisherObservable : public PublisherObservable<_Value> {
-public:
-  using Value = _Value;
-  void publish(const Value &message) { this->_set_and_notify(message); }
 };
 
 struct AnyComputation {
@@ -478,15 +470,12 @@ struct Computation : public AnyComputation {
 /// what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 // We neeed the base to be able to recognize interpolatable nodes for example
-template <typename _Value, class _Base = Observable<_Value>>
-struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Value> {
-  using Value = _Value;
+template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
+struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->register_on_change_cb([this](const Value &msg) {
-      using Event = message_filters::MessageEvent<const Value>;
-      /// TODO HACK, fix properly, do not deref in sub
-      auto msg_ptr = std::make_shared<Value>(msg);
-      this->signalMessage(Event(msg_ptr));
+    this->register_on_change_cb([this](typename _Message::SharedPtr msg) {
+      using Event = message_filters::MessageEvent<const _Message>;
+      this->signalMessage(Event(msg));
     });
   }
 };
@@ -758,12 +747,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     using MessageT = typename remove_shared_ptr_t<Parent>::Value;
     auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
     connect_with_identity(child, parent);
-  }
-
-  template <typename MessageT>
-  auto create_writable_publisher(const std::string &topic_name,
-                                 const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    return create_observable<WritablePublisherObservable<MessageT>>(topic_name, qos);
   }
 
   template <class Parent>

@@ -107,12 +107,6 @@ auto create_transform_subscription(const std::string& target_frame,
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-template <class MessageT>
-auto create_writable_publisher(const std::string& topic_name,
-                               const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQos()) {
-  g_state.get_context().create_writable_publisher<MessageT>(topic_name, qos);
-}
-
 template <class Parent>
 void create_transform_publisher(Parent parent) {
   g_state.get_context().create_transform_publisher(parent);
