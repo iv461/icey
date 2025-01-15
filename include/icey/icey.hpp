@@ -442,9 +442,14 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
-    /// Take by const ref to avoid copying the message, since we do know whether we receive the message by shared_ptr or by value (i.e. whether Value and Message are different). This way, both works as expected.
-    /// If it is by value, then we achieve that we do not copy the value, if it is by shared_ptr we achieve this as well.
-    this->register_on_change_cb([publisher](const auto &new_value) { publisher(new_value); });
+    this->register_on_change_cb([publisher](const Value &new_value) { 
+                // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
+        // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
+        if constexpr(is_shared_ptr<Value>)
+          publisher(*new_value);
+        else 
+          publisher(new_value);
+    });
   }
 
   std::string topic_name_;
