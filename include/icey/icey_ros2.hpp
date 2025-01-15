@@ -63,7 +63,7 @@ public:
   struct TFListener {
     using TransformMsg = geometry_msgs::msg::TransformStamped;
 
-    TFListener(NodePtr node, tf2::BufferCore &buffer) : node_(node), buffer_(buffer) { init(node); }
+    TFListener(NodePtr node, tf2_ros::Buffer &buffer) : node_(node), buffer_(buffer) { init(node); }
 
     /// Add notification for a single transform.
     template <class CallbackT>
@@ -72,8 +72,8 @@ public:
       subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), std::nullopt,
                                           std::move(callback));
     }
-
-    tf2::BufferCore &buffer_;
+  
+    tf2_ros::Buffer  &buffer_;
 
   private:
     using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;

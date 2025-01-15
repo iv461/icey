@@ -80,12 +80,14 @@ If the examples did not yet convince you:
 
 This library is designed to be robust against common usage mistakes: It will detect problems like cyclic dependencies that would cause infinite update cycles. It enforces this by creating a Directed Acyclic Graph (DAG) and using topological sorting to ensure a pre-determined order of updates that guarantees all predecessor nodes are updated before their children ("deterministic update")
 
-# Similar projects 
+# Related effords
 
-Some similar projects exist, but not quite close:
-- Autoware's `autoware::component_interface_utils::NodeAdaptor` is a simplified API as well 
-- [SMACC] https://github.com/robosoft-ai/SMACC
-- [RXROS] https://github.com/rosin-project/rxros2
+- Autoware's `autoware::component_interface_utils::NodeAdaptor` simplifies the ROS-API as well 
+- [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept
+- [RXROS](https://github.com/rosin-project/rxros2) Proof on concept
+
+## Not directly related
+- [fuse](https://github.com/locusrobotics/fuse) Allows to model data flows, but it is focused on one application: sensor fusion. ICEY on the other hand is general 
 
 # References 
 

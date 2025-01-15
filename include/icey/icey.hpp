@@ -344,7 +344,7 @@ struct InterpolateableObservable : public InterpolateableObservableBase,
   using MaybeValue = std::optional < typename SubscriptionObservableBase<_Message>::Value >;
   /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
-  virtual MaybeValue get_at_time(const Time &time_point) const = 0;
+  virtual MaybeValue get_at_time(const rclcpp::Time &time) const = 0;
 };
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
@@ -365,11 +365,11 @@ public:
   virtual bool has_value() const { return this->value_.has_value(); }
 
 protected:
-  MaybeValue get_at_time(const Time &time_point) const override {
+  MaybeValue get_at_time(const rclcpp::Time &time) const override {
     try {
       // Note that this call does not wait, the transform must already have arrived. This works
       // because get_at_time() is called by the synchronizer
-      auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time_point);
+      auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
       return std::make_shared<Message>(tf_msg); // For the sake of consistency, messages are always returned as shared pointers. Since lookupTransform gives us a value, we copy it over to a shared pointer.
     } catch (tf2::TransformException &e) {
       /// TODO notify except if registered
@@ -796,9 +796,11 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     auto parents_tuple = hana::make_tuple(parents...);
 
-    AnyComputation computation; /*= create_computation(reference, child, [parents_tuple](auto && new_value) {
-
-    });*/
+    AnyComputation computation = create_computation(reference, child, [parents_tuple](auto && new_value) {  
+        auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
+              return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
+        });
+    });
 
     /// The interpolatable topics do not update. (they also do not register with the graph) So we create empty computations for them.
     std::vector<AnyComputation> edges_data(parent_ids.size());
