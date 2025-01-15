@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
         auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
         /// TODO 
-        auto rectangle_sig = map_base_link_tf->then([](const auto &msg) {
+        auto rectangle_sig = map_base_link_tf->then([](auto msg) {
             std::optional<std_msgs::msg::Float32> result;             
             return result;        
         });

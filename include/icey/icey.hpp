@@ -16,12 +16,13 @@
 #include <boost/graph/strong_components.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <boost/mp11.hpp>  /// For template meta-programming, operation on tuples etc.
+#include <boost/hana.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/type_index.hpp>
 #include <icey/bag_of_metaprogramming_tricks.hpp>
 
 namespace mp = boost::mp11;
-
+namespace hana = boost::hana;
 namespace icey {
 
 bool icey_debug_print = false;
@@ -218,44 +219,19 @@ protected:
   std::vector<OnReject> reject_cbs_;
 };
 
-/// An observable storing the last received value TODO rem
-template <typename _Value>
-struct BufferedObservable : public Observable<_Value> {
-  using Base = Observable<_Value>;
-  using Value = _Value;
-  using MaybeValue = std::optional<Value>;
-};
 
 struct Nothing {};
 /// For fucntions returning void a dummy observable
 struct DevNullObservable : public Observable<Nothing> {};
 
-/// An interpolatable observable is one that buffers the incoming values using a circular buffer and
-/// allows to query the message at a given point, optionally using interpolation. It is an essential
-/// for using lookupTransform with TF. It is used by synchronizers to synchronize a topic exactly at
-/// a given time point.
-struct InterpolateableObservableBase {};
-template <typename _Value>
-struct InterpolateableObservable : public InterpolateableObservableBase,
-                                   public BufferedObservable<_Value> {
-  using Value = _Value;
-  using Base = BufferedObservable<_Value>;
-  using MaybeValue = typename Base::MaybeValue;
-  /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or
-  /// an extrapolation would be required.
-  virtual MaybeValue get_at_time(const Time &time_point) const = 0;
-};
-
-template <class T>
-using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
 
 /// An observable that holds the last received value. Fires initially an event if a default_value is
 /// set
 template <typename _Value>
-class ParameterObservable : public BufferedObservable<_Value> {
+class ParameterObservable : public Observable<_Value> {
 public:
   using Value = _Value;
-  using Base = BufferedObservable<_Value>;
+  using Base = Observable<_Value>;
   using MaybeValue = typename Base::MaybeValue;
 
   /// TODO FIX ARG DUP, capture hana sequence maybe in cb maybe
@@ -315,12 +291,24 @@ protected:
   bool ignore_override_;
 };
 
-template <typename _Value>
-class SubscriptionObservable : public Observable<_Value> {
+/// A subscriber observable, always stores a shared pointer to the message as it's value
+/// this is the base for all observables that subscribe to messages since we want to pass them as shared pointers
+template <typename _Message>
+class SubscriptionObservableBase : public Observable< typename _Message::SharedPtr > {
+  friend class Context;
+public:
+  using Message = _Message;
+  using Value = typename _Message::SharedPtr;
+};
+
+template <typename _Message>
+class SubscriptionObservable : public SubscriptionObservableBase< _Message > {
   friend class Context;
 
 public:
-  using Value = _Value;
+  using Base =  SubscriptionObservableBase< _Message >;
+  using Value = typename Base::Value;
+  using Message = typename Base::Message;
   SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos,
                          const rclcpp::SubscriptionOptions &options)
       : name_(name), qos_(qos), options_(options) {
@@ -332,7 +320,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
     node_handle.add_subscription<Value>(
-        name_, [this](std::shared_ptr<Value> new_value) { this->_set_and_notify(*new_value); },
+        name_, [this](typename Message::SharedPtr new_value) { this->_set_and_notify(new_value); },
         qos_, options_);
   }
 
@@ -340,6 +328,25 @@ protected:
   ROSAdapter::QoS qos_;
   const rclcpp::SubscriptionOptions options_;
 };
+
+/// An interpolatable observable is one that buffers the incoming messages using a circular buffer and
+/// allows to query the message at a given point, optionally using interpolation. It is an essential
+/// for using lookupTransform with TF. It is used by synchronizers to synchronize a topic exactly at
+/// a given time point.
+struct InterpolateableObservableBase {}; // TODO basically only there to be able to recognize observables in the synchronizer
+template <typename _Message>
+struct InterpolateableObservable : public InterpolateableObservableBase,
+                                   public SubscriptionObservableBase<_Message> {
+  
+  using MaybeValue = typename Base::MaybeValue;
+  /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or
+  /// an extrapolation would be required.
+  virtual MaybeValue get_at_time(const Time &time_point) const = 0;
+};
+
+template <class T>
+using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
+
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
@@ -381,6 +388,7 @@ protected:
   std::string target_frame_;
   std::string source_frame_;
 };
+
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
 /// the callback
@@ -466,15 +474,12 @@ struct Computation : public AnyComputation {
 /// what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 // We neeed the base to be able to recognize interpolatable nodes for example
-template <typename _Value, class _Base = Observable<_Value>>
-struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Value> {
-  using Value = _Value;
+template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
+struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->register_on_change_cb([this](const Value &msg) {
+    this->register_on_change_cb([this](typename _Message::SharedPtr msg) {
       using Event = message_filters::MessageEvent<const Value>;
-      /// TODO HACK, fix properly, do not deref in sub
-      auto msg_ptr = std::make_shared<Value>(msg);
-      this->signalMessage(Event(msg_ptr));
+      this->signalMessage(Event(msg));
     });
   }
 };
@@ -784,19 +789,26 @@ struct Context : public std::enable_shared_from_this<Context> {
   // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
   template<class Reference, class... Parents> 
-  auto sync_with_reference(Reference reference, Parents && ... parents) {
-    observable_traits<Reference, Parents...>{};
+  auto sync_with_reference(Reference reference, Parents ...parents) {
+    observable_traits<Reference>{};
+    observable_traits<Parents...>{};
 
-    using Output = std::tuple< obs_val<Reference>, obs_val<Parents>...>;
+    using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
     
     auto child = create_observable< Observable<Output> >();
     
     std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
 
-    AnyComputation computation = create_computation(reference, child, [parents...](auto && new_value) {
+    auto parents_tuple = hana::make_tuple(parents...);
 
-    });
-    
+    AnyComputation computation; /*= create_computation(reference, child, [parents_tuple](auto && new_value) {
+
+    });*/
+
+    /// The interpolatable topics do not update. (they also do not register with the graph) So we create empty computations for them.
+    std::vector<AnyComputation> edges_data(parent_ids.size());
+    edges_data.at(0) = computation;
+
     data_flow_graph_.add_edges(child->index.value(), parent_ids, edges_data);
     return child;
   }
@@ -1189,7 +1201,10 @@ protected:
         if (icey_debug_print)
           std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
         auto &edge_data = graph_[edge];         // Access edge data
-        bool should_propagate = edge_data.f();  /// Execute the computation, pass over the value
+        bool should_propagate = false;
+        if(edge_data.f) {
+          should_propagate = edge_data.f();  /// Execute the computation, pass over the value
+        }
         if (should_propagate) {
           /// Call this to enable publishers to work. Only publishers have something in the notify
           /// list

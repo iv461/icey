@@ -25,8 +25,8 @@ int main(int argc, char **argv) {
 
     auto received_sine_signal = icey::create_subscription<std_msgs::msg::Float32>("sine_generator");
 
-    received_sine_signal->then([](const auto signal_value) {
-        RCLCPP_INFO_STREAM(icey::node("receiver_node")->get_logger(), "Received the sine signal: " << signal_value.data);
+    received_sine_signal->then([](std_msgs::msg::Float32::SharedPtr signal_value) {
+        RCLCPP_INFO_STREAM(icey::node("receiver_node")->get_logger(), "Received the sine signal: " << signal_value->data);
     });
 
     auto receiver_node = icey::create_node(argc, argv, "receiver_node");

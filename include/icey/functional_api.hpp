@@ -150,6 +150,11 @@ auto synchronize(Parents... parents) {
   return g_state.get_context().synchronize(parents...);
 }
 
+template<class Reference, class... Parents> 
+  auto sync_with_reference(Reference reference, Parents && ... parents) {
+  return g_state.get_context().sync_with_reference(reference, parents...);
+}
+
 template <typename... Parents>
 auto serialize(Parents... parents) {
   return g_state.get_context().serialize(parents...);
