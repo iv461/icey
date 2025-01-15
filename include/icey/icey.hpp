@@ -125,6 +125,9 @@ constexpr void assert_are_observables() {
   (assert_is_observable<Args>(), ...);
 }
 
+template<class T>
+using obs_val = typename remove_shared_ptr_t<T>::Value;
+
 // Assert that all Observables types hold the same value
 template <typename First, typename... Rest>
 constexpr void assert_all_observable_values_are_same() {
@@ -781,44 +784,23 @@ struct Context : public std::enable_shared_from_this<Context> {
   // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
   template<class Reference, class... Parents> 
-  auto sync_with_reference(Reference && reference, Parents && ... parents) {
-    observable_traits<Parents...>{};
-    using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
-    static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
-    using partitioned = mp::mp_partition<inputs, is_interpolatable>;
-    using interpolatables = mp::mp_first<partitioned>;
-    using non_interpolatables = mp::mp_second<partitioned>;
-    constexpr int num_interpolatables = mp::mp_size<interpolatables>::value;
-    constexpr int num_non_interpolatables = mp::mp_size<non_interpolatables>::value;
-    static_assert(num_interpolatables == 0 || num_non_interpolatables >= 1,
-                  "You are trying to synchronize only interpolatable signals. This does not work, "
-                  "you need to "
-                  "have at least one non-interpolatable signal that is the common time for all the "
-                  "interpolatables.");
+  auto sync_with_reference(Reference reference, Parents && ... parents) {
+    observable_traits<Reference, Parents...>{};
 
+    using Output = std::tuple< obs_val<Reference>, obs_val<Parents>...>;
+    
+    auto child = create_observable< Observable<Output> >();
+    
+    std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
+
+    AnyComputation computation = create_computation(reference, child, [parents...](auto && new_value) {
+
+    });
+    
+    data_flow_graph_.add_edges(child->index.value(), parent_ids, edges_data);
+    return child;
   }
 
-  /*
-  mean of all the header stamps. template<class Reference, class... Parents> auto
-  sync_with_reference(Reference && reference, Parents && ... parents) {
-      /// Remote shared_ptr TODO write proper type trait for this
-      using ReturnType = std::tuple<Reference, typename
-  std::remove_reference_t<decltype(*parents)>::Value...>; auto resulting_observable =
-  std::make_shared< Observable<ReturnType> >();  /// A result is rhs, i.e. read-only
-      data_flow_graph_.add_vertex_with_parents(resulting_observable, {reference,
-  parents->index.value()...}); /// And add to the graph const auto f_continued =
-  [resulting_observable, reference](auto&&... parents) { auto all_argunments_arrived =
-  (parents->value_ && ... && true); if(all_argunments_arrived)
-              resulting_observable->_set_and_notify(std::make_tuple(reference,
-  parents->value_.value()...));
-      };
-      /// This should be called "parent", "parent->register_on_change_cb()". This is essentially a
-  for-loop over all parents, but C++ cannot figure out how to create a readable syntax, instead we
-  got these fold expressions reference->register_on_change_cb(std::bind(f_continued,
-  std::forward<Parents>(parents)...)); return resulting_observable; /// Return the underlying
-  pointer. We can do this, since internally everything is stores reference-counted.
-  }
-  */
 
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
@@ -833,7 +815,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         create_observable<SynchronizerObservable<typename remove_shared_ptr_t<Parents>::Value...>>(
             queue_size);
 
-    auto parent_ids = std::vector<size_t>(parents->index.value()...);
+    std::vector<size_t> parent_ids{parents->index.value()...};
     /// Connect the parents to the inputs of the synchronizer
     std::vector<AnyComputation> edges_data =
         create_identity_computation_mimo(std::forward_as_tuple(parents...), synchronizer->inputs());
@@ -846,6 +828,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
+    //auto parents_tuple = hana::make_tuple(parents...);
     using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
     static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
     using partitioned = mp::mp_partition<inputs, is_interpolatable>;

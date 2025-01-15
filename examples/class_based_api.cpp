@@ -32,12 +32,11 @@ public:
         /// Register callback when this node is destructed (this is still valid at this point)
         icey().register_on_node_destruction_cb([this](){ on_destruction(); });
 
-        /// Finally, create all the needed subsciptions, publications etc. for the ICEY-observables we just declared.
+        /// Finally, call this at the end of the constructor to create all the needed subsciptions, publications etc. 
         icey_initialize();
     }
 
     void after_parameters_are_initialized() {
-        
         /// Initialize here you algorithms, are parameters are already available
     }
     /// Put here your code that you would normally put in the destructor

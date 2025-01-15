@@ -78,6 +78,7 @@ constexpr bool all_same(const std::tuple<Head, Tail...> &) {
   return (std::is_same_v<Head, Tail> && ...);
 }
 
+/// TODO consider using hana::unpack and hana::fuse
 template <class Func, class Tuple>
 auto apply_if_tuple(Func &&func, Tuple &&tuple) {
   if constexpr (is_tuple_v<std::decay_t<Tuple>> || is_pair_v<std::decay_t<Tuple>>) {

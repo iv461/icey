@@ -16,10 +16,13 @@ Sorted by decreasing priority.
 - [] Unit-tests testing the node
 - [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
 
+- [] Measure perf and compare with plain ROS node to avoid surprises
+
 ## Error-handling 
 
 ## Examples 
 
+- [ ] Examples in separate package `icey_examples`
 - [ ] port a small autoware or nav2 node to find out how many line of code we save
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 

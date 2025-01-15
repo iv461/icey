@@ -61,6 +61,11 @@ Icey is a thin wrapper around ROS 2/1 and you can always switch to using the reg
 
 TODO 
 
+# Dependencies: 
+
+- needs ROS 2 (tested on Humble)
+- Boost (Hana, Graph library)
+
 # Why should I use ICEY: 
 
 TODO more convincing 
