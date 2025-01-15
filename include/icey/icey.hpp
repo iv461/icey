@@ -334,25 +334,27 @@ protected:
 /// for using lookupTransform with TF. It is used by synchronizers to synchronize a topic exactly at
 /// a given time point.
 struct InterpolateableObservableBase {}; // TODO basically only there to be able to recognize observables in the synchronizer
+template <class T>
+using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
+
 template <typename _Message>
 struct InterpolateableObservable : public InterpolateableObservableBase,
                                    public SubscriptionObservableBase<_Message> {
   
-  using MaybeValue = typename Base::MaybeValue;
+  using MaybeValue = std::optional < typename SubscriptionObservableBase<_Message>::Value >;
   /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
   virtual MaybeValue get_at_time(const Time &time_point) const = 0;
 };
-
-template <class T>
-using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
-
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
 struct TransformSubscriptionObservable
     : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
 public:
+  using Message = geometry_msgs::msg::TransformStamped;
+  using MaybeValue = InterpolateableObservable<Message>::MaybeValue;
+
   TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame)
       : target_frame_(target_frame), source_frame_(source_frame) {
     this->attach_priority_ = 3;
@@ -364,14 +366,15 @@ public:
 
 protected:
   MaybeValue get_at_time(const Time &time_point) const override {
-    std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
     try {
       // Note that this call does not wait, the transform must already have arrived. This works
       // because get_at_time() is called by the synchronizer
-      tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time_point);
+      auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time_point);
+      return std::make_shared<Message>(tf_msg); // For the sake of consistency, messages are always returned as shared pointers. Since lookupTransform gives us a value, we copy it over to a shared pointer.
     } catch (tf2::TransformException &e) {
+      /// TODO notify except if registered
+      return {};
     }
-    return tf_msg;
   }
 
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
@@ -380,7 +383,7 @@ protected:
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
         [this](const geometry_msgs::msg::TransformStamped &new_value) {
-          this->_set_and_notify(new_value);
+          this->_set_and_notify(std::make_shared<Message>(new_value));
         });
   }
 
@@ -416,7 +419,7 @@ protected:
   Value ticks_counter_{0};
 };
 
-/// A publishabe state, read-only
+/// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message> 
 template <typename _Value>
 class PublisherObservable : public Observable<_Value> {
   friend class Context;
@@ -424,7 +427,8 @@ class PublisherObservable : public Observable<_Value> {
 public:
   using Value = _Value;
   using Base = Observable<_Value>;
-  static_assert(rclcpp::is_ros_compatible_type<Value>::value,
+  using Message = remove_shared_ptr_t<Value>; 
+  static_assert(rclcpp::is_ros_compatible_type< Message >::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
 
   PublisherObservable(const std::string &topic_name,
@@ -474,12 +478,15 @@ struct Computation : public AnyComputation {
 /// what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 // We neeed the base to be able to recognize interpolatable nodes for example
-template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
-struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
+template <typename _Value, class _Base = Observable<_Value>>
+struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Value> {
+  using Value = _Value;
   SimpleFilterAdapter() {
-    this->register_on_change_cb([this](typename _Message::SharedPtr msg) {
+    this->register_on_change_cb([this](const Value &msg) {
       using Event = message_filters::MessageEvent<const Value>;
-      this->signalMessage(Event(msg));
+      /// TODO HACK, fix properly, do not deref in sub
+      auto msg_ptr = std::make_shared<Value>(msg);
+      this->signalMessage(Event(msg_ptr));
     });
   }
 };
@@ -824,7 +831,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     uint32_t queue_size = 10;
     auto synchronizer =
-        create_observable<SynchronizerObservable<typename remove_shared_ptr_t<Parents>::Value...>>(
+        create_observable<SynchronizerObservable<typename remove_shared_ptr_t<Parents>::Message...>>(
             queue_size);
 
     std::vector<size_t> parent_ids{parents->index.value()...};
