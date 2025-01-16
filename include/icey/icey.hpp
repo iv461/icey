@@ -17,6 +17,7 @@
 #include <boost/graph/topological_sort.hpp>
 #include <boost/mp11.hpp>  /// For template meta-programming, operation on tuples etc.
 #include <boost/hana.hpp>
+#include <boost/hana/ext/std/tuple.hpp> /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
 #include <boost/noncopyable.hpp>
 #include <boost/type_index.hpp>
 #include <icey/bag_of_metaprogramming_tricks.hpp>
@@ -790,8 +791,9 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto sync_with_reference(Reference reference, Parents ...parents) {
     observable_traits<Reference>{};
     observable_traits<Parents...>{};
-    using namespace message_filters::message_traits;
 
+    /// TODO consider hana as well auto has_header = hana::is_valid([](auto&& x) -> decltype((void)x.header) { });
+    using namespace message_filters::message_traits;
     static_assert(HasHeader<obs_msg<Reference>>::value, "The ROS message type must have a header with the timestamp to be synchronized");
 
     using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
@@ -800,13 +802,13 @@ struct Context : public std::enable_shared_from_this<Context> {
     
     std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
 
-    auto parents_tuple = hana::make_tuple(parents...);
+    auto parents_tuple = std::make_tuple(parents...);
 
     AnyComputation computation = create_computation(reference, child, [parents_tuple](auto && new_value) {  
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
-
               return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
         });
+        return hana::prepend(parent_maybe_values, new_value);
     });
 
     /// The interpolatable topics do not update. (they also do not register with the graph) So we create empty computations for them.

@@ -4,7 +4,7 @@
 
 #include <type_traits>
 #include <boost/type_index.hpp>
-
+#include <boost/hana/ext/std/tuple.hpp> 
 #include <tuple>
 #include <iostream>
 
@@ -27,84 +27,6 @@ struct NotDerived3 {
     int a{3};
 };
 
-//template<class T>
-//using is_based = std::is_base_of<Base, T>;
-
-/*
-template<class T>
-auto filter(T tup) {
-    return std::apply([&](auto first, auto... rest) {
-        auto filtered_rest = [&]{
-            if constexpr (sizeof...(rest)) {
-                return filter(std::tuple{rest...});
-            } else {
-                return std::tuple{};
-            }
-        }();
-
-        if constexpr ( is_based < decltype(first)  > :: value ) {
-            return std::tuple_cat(std::tuple{first}, filtered_rest);
-        } else {
-            return filtered_rest;
-        }
-    }, tup);
-}
-
-template<typename... Args> 
-void partition_args(){
-     // Define a tuple of types
-    //using types = std::tuple<Base, Derived1, NotDerived2, Derived2, NotDerived>;
-    //using types = mp::mp_list<Base, Derived1, NotDerived2, Derived2, NotDerived>;
-    using types = mp::mp_list<Args ...>;
-
-    auto t = std::tuple<Args...>(Args{}...);
-    auto satisfying_values = filter(t);
-    
-    using TupleTypeList = mp::mp_transform<std::decay_t, types>;
-    
-    using Partitioned = mp::mp_partition<types, is_based>;
-
-
-    using SatisfyingTuple =  mp::mp_first<Partitioned>;
-    using NonSatisfyingTuple = class mp::mp_second<Partitioned>;
-
-
-    // Convert filtered types to a std::tuple
-    using SatisfyingSTDTuple = mp::mp_apply<std::tuple, SatisfyingTuple>;
-    using NonSatisfyingSTDTuple = mp::mp_apply<std::tuple, NonSatisfyingTuple>;
-
-    static_assert ( std::is_same_v <  std::tuple<Base, Derived1, Derived2>, decltype(satisfying_values) > );
-    //static_assert( std::is_same_v < SatisfyingTuple, std::tuple<Base, Derived1, Derived2> >);
-    //static_assert( std::is_same_v < NonSatisfyingSTDTuple, std::tuple<NotDerived2, NotDerived> >);
-
-    std::cout << "Result: "<< std::endl;
-
-    std::cout << "Types derived from base: "<< std::endl;
-    // Print type names (optional)
-    mp::mp_for_each<SatisfyingSTDTuple>([](auto t) {
-        std::cout << typeid(t).name() << std::endl;
-    });
-    
-    std::cout << "Types NOT derived from base: "<< std::endl;
-    // Print type names (optional)
-    mp::mp_for_each<NonSatisfyingSTDTuple>([](auto t) {
-        std::cout << typeid(t).name() << std::endl;
-    });
-}
-*/
-
-/*template <typename T>
-struct basic_type {};
-
-template <typename T>
-constexpr auto is_based(basic_type<T> const&)
-{ return hana::bool_c<false>; }
- 
-template <typename T>
-constexpr auto is_based(basic_type<Base> const&)
-{ return hana::bool_c<true>; }
-*/
-
 template <typename T>
 //constexpr auto is_based(hana::basic_type<T>) { type version
 constexpr auto is_based(T) { /// value version
@@ -114,34 +36,31 @@ constexpr auto is_based(T) { /// value version
         return hana::bool_c<false>;    
 }
  
-
 template<typename... Args> 
 void partition_tuple_hana(Args... args){
 
     //auto Types = hana::tuple_t<Args...>;
-    auto Types = hana::make_tuple(args...);
+    auto Types = std::make_tuple(args...);
 
     auto DerivedOnes = hana::remove_if(Types, [](auto t) { return not is_based(t); });
     auto NotDerivedOnes = hana::remove_if(Types, [](auto t) { return is_based(t); });
 
+    const bool all_are_derived = hana::all_of(DerivedOnes,  [](auto t) { return is_based(t); }); 
+    std::cout << "All are derived "<< all_are_derived << std::endl;
 
     std::cout << "Result: "<< std::endl;
-
     std::cout << "Types derived from base: "<< std::endl;
-    
     hana::for_each(DerivedOnes, [](auto const& element) {
         std::cout << boost::typeindex::type_id_runtime(element).pretty_name() << std::endl;
     });
     
     std::cout << "Types NOT derived from base: "<< std::endl;
-
     hana::for_each(NotDerivedOnes, [](auto const& element) {
         std::cout << boost::typeindex::type_id_runtime(element).pretty_name() 
             << ", has value: " << element.a << std::endl;
     });
 
     std::cout << "Done. "<< std::endl;
-    
 }
 
 int main() {

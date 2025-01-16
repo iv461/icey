@@ -5,6 +5,7 @@
 Sorted by decreasing priority. 
 
 - [X] Graph engine: notify leaves
+- [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 - [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless ! -> depends on understanding hana and implementing `synch_with_reference`
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
@@ -79,6 +80,7 @@ Sorted by decreasing priority.
 - [ ] Scout https://github.com/orgs/ros-perception/
 
 ## Bugs/Leaks
+
 
 - [ ] Support official message filters API
 - [ ] Really think about memory leaks, they should not be possible !
