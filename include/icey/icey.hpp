@@ -341,6 +341,14 @@ struct InterpolateableObservableBase {}; // TODO basically only there to be able
 template <class T>
 using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
 
+template <typename T>
+constexpr auto hana_is_interpolatable(T) {
+    if constexpr(std::is_base_of_v<InterpolateableObservableBase, T>)
+        return hana::bool_c<true>;
+    else 
+        return hana::bool_c<false>;    
+}
+
 template <typename _Message>
 struct InterpolateableObservable : public InterpolateableObservableBase,
                                    public SubscriptionObservableBase<_Message> {
@@ -797,12 +805,10 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(HasHeader<obs_msg<Reference>>::value, "The ROS message type must have a header with the timestamp to be synchronized");
 
     using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
-    
-    auto child = create_observable< Observable<Output> >();
-    
-    std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
-
     auto parents_tuple = std::make_tuple(parents...);
+    auto child = create_observable< Observable<Output> >();
+
+    const bool all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return hana_is_interpolatable(t); }); 
 
     AnyComputation computation = create_computation(reference, child, [parents_tuple](auto && new_value) {  
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
@@ -811,6 +817,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         return hana::prepend(parent_maybe_values, new_value);
     });
 
+    std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
     /// The interpolatable topics do not update. (they also do not register with the graph) So we create empty computations for them.
     std::vector<AnyComputation> edges_data(parent_ids.size());
     edges_data.at(0) = computation;
@@ -825,13 +832,11 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename... Parents>
   auto synchronize_approx_time(Parents... parents) {
     observable_traits<Parents...>{};
-    using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
-    static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
+    //auto parents_tuple = std::make_tuple(parents...);
+    static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
 
     uint32_t queue_size = 10;
-    auto synchronizer =
-        create_observable<SynchronizerObservable<typename remove_shared_ptr_t<Parents>::Message...>>(
-            queue_size);
+    auto synchronizer = create_observable<SynchronizerObservable< obs_msg<Parents>...>>(queue_size);
 
     std::vector<size_t> parent_ids{parents->index.value()...};
     /// Connect the parents to the inputs of the synchronizer
@@ -846,36 +851,34 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
-    //auto parents_tuple = hana::make_tuple(parents...);
-    using inputs = std::tuple<remove_shared_ptr_t<Parents>...>;
-    static_assert(mp::mp_size<inputs>::value >= 2, "You need to synchronize at least two inputs.");
-    using partitioned = mp::mp_partition<inputs, is_interpolatable>;
-    using interpolatables = mp::mp_first<partitioned>;
-    using non_interpolatables = mp::mp_second<partitioned>;
-    constexpr int num_interpolatables = mp::mp_size<interpolatables>::value;
-    constexpr int num_non_interpolatables = mp::mp_size<non_interpolatables>::value;
+    static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
+    auto parents_tuple = std::make_tuple(parents...);
+    auto interpolatables = hana::remove_if(parents_tuple, [](auto t) { return not  hana_is_interpolatable(t); });
+    auto non_interpolatables = hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
+
+    constexpr int num_interpolatables = hana::length(interpolatables);
+    constexpr int num_non_interpolatables = hana::length(non_interpolatables);
     static_assert(num_interpolatables == 0 || num_non_interpolatables >= 1,
                   "You are trying to synchronize only interpolatable signals. This does not work, "
                   "you need to "
                   "have at least one non-interpolatable signal that is the common time for all the "
                   "interpolatables.");
-
-    // auto non_interpolatables_v = filter_tuple(parents, not is_interpolatable);
-    /// auto interpolatables_v = filter_tuple(parents, is_interpolatable);
     // This can only either be one or more than one. Precondition is that we synchronize at least
     // two entities. Given the condition above, the statement follows.
     if constexpr (num_non_interpolatables > 1) {
       /// We need the ApproxTime
-      // auto approx_time_output = synchronize_approx_time(non_interpolatables_v);
+      auto approx_time_output = hana::unpack(non_interpolatables, [this](auto ...parents) { return synchronize_approx_time(parents...);});
       if constexpr (num_interpolatables > 1) {
         /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
-        // return sync_with_reference(approx_time_output, interpolatables_v...);
+        return hana::unpack(hana::prepend(interpolatables, approx_time_output), [this](auto ref, auto ...ints) { return sync_with_reference(ref, ints...); });
+      } else {
+        return approx_time_output;
       }
     } else {
       // Otherwise, we only need a sync with reference
-      /// return sync_with_reference(std::get<0>(non_interpolatables_v), interpolatables_v...);
+      return hana::unpack(hana::prepend(interpolatables, std::get<0>(non_interpolatables)), 
+        [this](auto ref, auto ...ints) { return sync_with_reference(ref, ints...); });
     }
-    return synchronize_approx_time(parents...);
   }
 
   /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the
