@@ -72,23 +72,10 @@ public:
   bool was_attached_{false};
 };
 
-/// An buffer, storing the last received value
-template <typename _Value>
-struct Buffer {
-  using Value = _Value;
-  using MaybeValue = std::optional<Value>;
 
-  virtual bool has_value() const { return value_.has_value(); }
-  virtual const Value &value() const { return value_.value(); }
-
-protected:
-  /// The last received value.
-  MaybeValue value_;
-};
 /// Needed for storing in the graph as well as to let the compiler check for correct types
 struct ObservableBase : public DFGNode, public NodeAttachable {
   virtual void notify_about_change() = 0;
-  
 };
 
 template <typename... Args>
@@ -138,23 +125,36 @@ constexpr void assert_all_observable_values_are_same() {
                 "The values of all the observables must be the same");
 }
 
+struct Nothing {};
+
+/// An event of an Observable is generally like the state of a promise and needed to distinguish between the callbacks to call.
+/// It is similar to a state of a promise, but it's called event because we have a continous data-flow and the state transitions are also 
+/// not final. And also there is a state none to be able to stop the pipeline. 
+enum class EventType {
+  SOME,  /// .then() is called
+  NONE,  /// .none() is calle
+  ERROR, /// .except() is called
+  CUSTOM /// .event() is called
+};
+
 /// An observable. Similar to a promise in JS.
 /// TODO consider CRTP, would also be beneficial for PIMPL
-template <typename _Value>
-class Observable : public ObservableBase,
-                   public Buffer<_Value>,
-                   public std::enable_shared_from_this<Observable<_Value>> {
+/// TODO we can either hold a value or an error not, both, use therefore a sum type (std::variant)
+template <typename _Value, typename _Error = Nothing>
+class Observable : public ObservableBase, public std::enable_shared_from_this<Observable<_Value>> {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
 public:
   using Value = _Value;
-  using ErrorValue = std::string;
-  using Self = Observable<_Value>;
+  using MaybeValue = std::optional<Value>;
+
+  using ErrorValue = _ErrorValue;
+  using Self = Observable<Value, ErrorValue>;
 
   using OnResolve = std::function<void(const Value &)>;
   using OnReject = std::function<void(const ErrorValue &)>;
 
-  /*
+  /*  Using boost::asio::timer we can easily implement the classic promise example.
   using Thenable= std::function<void(OnResolve)>;
   explicit Observable(const Thenable &thenable) {
       thenable([this](const Value &new_value){this->_set_and_notify(new_value);});
@@ -168,11 +168,19 @@ public:
     return this->context.lock()->then(this->shared_from_this(), f);
   }
 
+  template <typename F>
+  auto except(F &&f) {
+    return this->context.lock()->except(this->shared_from_this(), f);
+  }
+
   /// Create a ROS publisher for this observable.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
+
+  virtual bool has_value() const { return value_.has_value(); }
+  virtual const Value &value() const { return value_.value(); }
 
 //protected:
   virtual void register_on_change_cb(OnResolve &&cb) {
@@ -191,7 +199,6 @@ public:
   /// Set without notify
   virtual void _set(const Value &new_value) {
     this->value_ = new_value;
-
     if (icey_debug_print)
       std::cout << "[" + this->class_name + ", " + this->name + "] _set was called, this->value_: "
                 << this->has_value() << std::endl;
@@ -200,12 +207,6 @@ public:
   /// set and notify all observers about the new value
   virtual void _set_and_notify(const Value &new_value) {
     this->_set(new_value);
-    /*
-    if (icey_debug_print)
-      std::cout << "[" + this->class_name + ", " + this->name + "] _set_and_notify() called,
-    this->value_: "
-                << this->value_.has_value() << std::endl;
-    */
     notify_about_change();
   }
 
@@ -213,16 +214,15 @@ public:
     for (auto cb : reject_cbs_) cb(error);
   }
 
+  /// The last received value, it is buffered. It is buffered only to be able to do graph mode.
+  MaybeValue value_; 
+
   /// TODO I don't think we need lists because .then and .catch always create 
   std::vector<OnResolve> notify_list_;
   std::vector<OnReject> reject_cbs_;
 };
 
-
-struct Nothing {};
-/// For fucntions returning void a dummy observable
 struct DevNullObservable : public Observable<Nothing> {};
-
 
 /// An observable that holds the last received value. Fires initially an event if a default_value is
 /// set
@@ -292,6 +292,8 @@ protected:
 
 /// A subscriber observable, always stores a shared pointer to the message as it's value
 /// this is the base for all observables that subscribe to messages since we want to pass them as shared pointers
+/// TODO a subscription is fallible as well, reject the promiseif the QoS is not ok for example (via SubscriptionOptions)
+/// .event(icey::SubscriptionEventType, F) maybe ?
 template <typename _Message>
 class SubscriptionObservableBase : public Observable< typename _Message::SharedPtr > {
   friend class Context;
@@ -586,7 +588,7 @@ protected:
 };
 
 template <typename _ServiceT>
-struct ClientObservable : public Observable<typename _ServiceT::Response> {
+struct ClientObservable : public Observable<typename _ServiceT::Response, rclcpp::FutureReturnCode> {
   using Request = typename _ServiceT::Request;
   using Response = typename _ServiceT::Request;
   using Value = Response;
@@ -1069,6 +1071,25 @@ struct Context : public std::enable_shared_from_this<Context> {
       return child;
     }
   }
+
+  template <typename Parent, typename F>
+  auto done_gen(Parent parent, F &&f) {
+    observable_traits<Parent>{};
+    /// TODO static_assert here signature for better error messages
+    using ReturnType =
+        decltype(apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Parent>::Value>()));
+    using ObsValue = typename remove_optional<ReturnType>::type;
+    if constexpr (std::is_void_v<ReturnType>) {
+      /// create a dummy to satisfy the graph
+      auto child = create_observable<DevNullObservable>();
+      connect(child, parent, std::move(f));
+      /// return nothing so that no computation can be made based on the result
+    } else {
+      auto child = create_observable<Observable<ObsValue>>();
+      connect(child, parent, std::move(f));
+      return child;
+    }
+  }
   /// Now we can construct higher-order filters.
 
   /// For a tuple-observable, get it's N'th element
@@ -1122,52 +1143,42 @@ struct Context : public std::enable_shared_from_this<Context> {
         decltype(apply_if_tuple(f, std::declval<typename remove_shared_ptr_t<Input>::Value>()));
     AnyComputation computation;
 
+    /// TODO hof
     const auto on_new_value = [f = std::move(f)](auto &new_value) {
-      return apply_if_tuple(f, new_value);
-    };
-    const auto on_new_value_void = [f = std::move(f)](const auto &new_value) {
-      apply_if_tuple(f, new_value);
-    };
-
-    if constexpr (std::is_void_v<ReturnType>) {
-      /// The computation has no arguments, it obtains the buffered value from the input and calls
-      /// the function
-      computation.f = [input, f = std::move(on_new_value_void)]() {
-        f(input->value());
-        return false;
-      };
-
-      if (this->use_eager_mode_) {
-        input->register_on_change_cb(
-            [f = std::move(on_new_value_void)](const auto &new_value) { f(new_value); });
+      if constexpr (std::is_void_v<ReturnType>) {
+        apply_if_tuple(f, new_value);
+      } else {
+        return apply_if_tuple(f, new_value);
       }
-    } else {
-      computation.f = [input, output, f = std::move(on_new_value)]() {
-        auto result = f(input->value_.value());  // The computation can also return nothing
-        if constexpr (is_optional_v<ReturnType>) {
-          bool has_value = result.has_value();
-          if (has_value)            /// Set result only if it is not nothing
-            output->_set(*result);  /// Do not notify, only set
-          return has_value;  /// Return whether the value changed, if not we are not allowed to
-                             /// notify
+    };
+
+    const auto compute = [output, f = std::move(on_new_value)](auto && new_value) {
+        auto ret = f(std::move(new_value));
+        if constexpr (std::is_void_v<ReturnType>) {
+          /// Nothing to do.
+          return false;
         } else {
-          output->_set(result);  /// Do not notify, only set
-          return true;           /// value always changes if the function does not return optional
-        }
-      };
-      if (this->use_eager_mode_) {
-        input->register_on_change_cb([output, f = std::move(on_new_value)](const auto &new_value) {
-          auto ret = f(new_value);
+          bool has_value{true};
           if constexpr (is_optional_v<ReturnType>) {
-            if (ret) {
-              output->_set_and_notify(*ret);
-            }
+            has_value = result.has_value();
+            if (has_value)            /// Set result only if it is not nothing
+              output->_set(*result);  /// Do not notify, only set
           } else {
-            output->_set_and_notify(ret);
+            output->_set(result);
           }
-        });
-      }
+          return has_value;
+        }
+    };
+
+    const auto front_transport = [input]() { return input->value();};
+    const auto end_transport = [output]() { return input->value();};
+
+    computation.f = 
+
+    if (this->use_eager_mode_) {
+      input->register_on_change_cb(continued(computation.f, notification(EventType)));
     }
+    
     return computation;
   }
 
