@@ -174,7 +174,7 @@ public:
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
 
-protected:
+//protected:
   virtual void register_on_change_cb(OnResolve &&cb) {
     notify_list_.emplace_back(std::move(cb));  /// TODO rename to children ?
   }
@@ -645,9 +645,9 @@ struct DataFlowGraph {
     }
   }
 
-  // Returns an index remapping for the indices that sort them by a predicate. Note that you should
-  // never mutate the order of the vertices, meaning sorting them directly. This is because the
-  // vertex data (the Observables) references this index.
+  // Returns an index remapping for the indices that sort them by a predicate. You should
+  // never mutate the order of the vertices, meaning sorting them directly, but instead use this function. 
+  //This is because the vertex data (the Observables) reference their index in the list of vertices.
   std::vector<size_t> get_vertices_ordered_by(std::function<bool(size_t, size_t)> predicate) {
     auto vertex_index_range = boost::make_iterator_range(vertices(graph_));
     std::vector<size_t> vertex_index_range_copy(vertex_index_range.begin(),
@@ -746,7 +746,7 @@ struct GraphEngine {
   }
 
    /// Executes the graph mode. This function gets called if some of the inputs change and propagates
-  /// the result.
+  /// the result. TODO Add literature reference, how is this algorithm called ? Found nothing in Tardos and Kleinberg
   void run_graph_mode(size_t signaling_vertex_id) {
     if (icey_debug_print)
       std::cout << "[icey::GraphEngine] Got event from vertex " << signaling_vertex_id
@@ -1090,7 +1090,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   bool use_eager_mode_{true};  // Use eager mode or graph mode TODO rem, do the wiring in the executor
   bool was_initialized_{false};
 
-protected:
+//protected: TODO for testing
   void assert_icey_was_not_initialized() {
     if (was_initialized_)
       throw std::invalid_argument(
@@ -1236,7 +1236,7 @@ protected:
   }
 
   /// The data-flow graph that this context creates. Everyghing is stored and owned by this graph. 
-  std::shared_ptr<DataFlowGraph> data_flow_graph_;
+  std::shared_ptr<DataFlowGraph> data_flow_graph_{std::make_shared<DataFlowGraph>()};
 
   std::shared_ptr<GraphEngine> graph_engine_;
   std::function<void()> after_parameter_initialization_cb_;

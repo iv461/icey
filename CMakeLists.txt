@@ -30,6 +30,7 @@ include_directories(
 
 ament_auto_add_executable(piping_example examples/piping.cpp)
 ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
+ament_auto_add_executable(promise_test test/promise_test.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE
