@@ -1,14 +1,13 @@
-#include <boost/mp11.hpp>
 
 #include <boost/hana.hpp>
+#include <boost/hana/ext/std/tuple.hpp> 
 
 #include <type_traits>
 #include <boost/type_index.hpp>
-#include <boost/hana/ext/std/tuple.hpp> 
 #include <tuple>
 #include <iostream>
 
-namespace mp = boost::mp11;
+
 namespace hana = boost::hana;
 
 struct Base {
@@ -36,8 +35,15 @@ constexpr auto is_based(T) { /// value version
         return hana::bool_c<false>;    
 }
  
+void f(int i) {
+    std::cout << "f(i): " << i << std::endl;
+}
+
+
 template<typename... Args> 
 void partition_tuple_hana(Args... args){
+
+    // hana::unpack(3, f); 
 
     //auto Types = hana::tuple_t<Args...>;
     auto Types = std::make_tuple(args...);

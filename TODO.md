@@ -18,7 +18,7 @@ Sorted by decreasing priority.
 - [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
 
 - [] Measure perf and compare with plain ROS node to avoid surprises
-
+- [] Make sure no double-move occurs while forwarding 
 ## Error-handling 
 
 ## Examples 

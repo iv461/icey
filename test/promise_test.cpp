@@ -21,4 +21,29 @@ int main() {
         });
 
     my_promise->_set_and_notify("heloo");
+
+    using ResolveValue = std::string;
+    using ErrorValue = int;
+    auto my_promise2 = ctx->create_observable< icey::Observable<ResolveValue, ErrorValue> >();
+
+my_promise2->then([](ResolveValue res) {
+            std::cout << "Got " << res << std::endl;
+            return std::string("foo");
+        })
+        ->then([](ResolveValue res) {
+            std::cout << "Got " << res << std::endl;
+            return std::string("foo");
+        })
+        ;
+
+        my_promise2->except([](ErrorValue retcode) {
+            std::cout << "Got error " << retcode << std::endl;
+            return 7.f;
+        })
+        ->then([](float x) {
+            std::cout << "Got float after error:  " << x << std::endl;
+        });
+
+
+    my_promise2->_set_and_notify_event<icey::EventType::error>(-3);
 }
