@@ -45,6 +45,11 @@ public:
   /// A name to identify it among multiple with the same type, usually the topic
   /// or service name
   std::string name;
+
+  /// TODO this looks clean but it really isn't, nodes should not know whether 
+  using RunGraphEngineCb = std::function<void(size_t)>;
+  void register_run_graph_engine(RunGraphEngineCb cb) { run_graph_engine_ = cb; }
+  RunGraphEngineCb run_graph_engine_;
 };
 
 /// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber
@@ -83,19 +88,8 @@ protected:
 /// Needed for storing in the graph as well as to let the compiler check for correct types
 struct ObservableBase : public DFGNode, public NodeAttachable {
   virtual void notify_about_change() = 0;
+  
 };
-
-/*template <typename... Types>
-struct AssertAllAreObservables;
-
-// Specialization for variadic types
-template <typename First, typename... Rest>
-struct AssertAllAreObservables<First, Rest...> {
-    static_assert((std::is_same_v<typename First::Foo, typename Rest::Foo> && ...),
-                  "All T::Foo types must be the same");
-    // Optional: Add other static assertions here if needed
-};
-*/
 
 template <typename... Args>
 struct observable_traits {
@@ -186,6 +180,9 @@ protected:
   }
 
   void notify_about_change() override {
+    /// TODO rem
+    if (run_graph_engine_) run_graph_engine_(this->index.value());
+
     for (auto cb : notify_list_) {
       cb(this->value());
     }
@@ -209,9 +206,6 @@ protected:
     this->value_: "
                 << this->value_.has_value() << std::endl;
     */
-    /// TODO I'm surprised to see this code here, but I should not be
-    if (run_graph_engine_) run_graph_engine_(this->index.value());
-
     notify_about_change();
   }
 
@@ -219,11 +213,6 @@ protected:
     for (auto cb : reject_cbs_) cb(error);
   }
 
-  using RunGraphEngineCb = std::function<void(size_t)>;
-
-  void register_run_graph_engine(RunGraphEngineCb cb) { run_graph_engine_ = cb; }
-
-  RunGraphEngineCb run_graph_engine_;
   /// TODO I don't think we need lists because .then and .catch always create 
   std::vector<OnResolve> notify_list_;
   std::vector<OnReject> reject_cbs_;
@@ -632,7 +621,7 @@ struct DataFlowGraph {
   using VertexData = std::shared_ptr<ObservableBase>;
   /// vecS needed so that the vertex id's are consecutive integers
   using Graph =
-      boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexData, EdgeData>;
+      boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, EdgeData>;
 
   void add_v(VertexData vertex_data) {
     if (vertex_data->index.has_value())
@@ -694,7 +683,7 @@ struct DataFlowGraph {
     std::cout << "Vertices in cycles (including self-loops):" << std::endl;
     for (const auto &comp : components) {
       if (comp.size() > 1 ||
-          (comp.size() == 1 && boost::edge(*comp.begin(), *comp.begin(), g).second)) {
+          (comp.size() == 1 && boost::edge(*comp.begin(), *comp.begin(), graph_).second)) {
         for (int v : comp) {
           std::cout << v << " ";
         }
@@ -737,8 +726,167 @@ struct DataFlowGraph {
   Graph graph_;
 };
 
+
+ /// Graph engine, it executes the event propagation in graph mode given a data-flow graph.
+struct GraphEngine {
+  explicit GraphEngine(std::shared_ptr<DataFlowGraph>  graph) : data_flow_graph_(graph) {}
+
+  void analyze_data_flow_graph() {
+    auto maybe_topological_order = data_flow_graph_->try_topological_sorting();
+    if (!maybe_topological_order) {
+      auto components = data_flow_graph_->compute_strong_components();
+      data_flow_graph_->print_strong_components(components);
+      throw std::runtime_error(
+          "The graph created is not a directed acyclic graph (DAG), meaning it has loops. Please "
+          "review the created vertices and remove the loops.");
+    }
+    topological_order_ = maybe_topological_order.value();
+    if (icey_debug_print)
+      data_flow_graph_->print();
+  }
+
+   /// Executes the graph mode. This function gets called if some of the inputs change and propagates
+  /// the result.
+  void run_graph_mode(size_t signaling_vertex_id) {
+    if (icey_debug_print)
+      std::cout << "[icey::GraphEngine] Got event from vertex " << signaling_vertex_id
+                << ", graph execution starts ..." << std::endl;
+
+    auto &graph_ = data_flow_graph_->graph_;
+    /// We traverse the vertices in the topological order and check which value changed.
+    /// If a value changed, then for all its outgoing edges the computation is executed and these
+    /// vertices are marked as changed.
+    std::vector<int> value_changed(num_vertices(graph_), 0);
+    value_changed.at(signaling_vertex_id) = 1;
+    for (auto v : topological_order_) {
+      if (!value_changed.at(v)) {
+        if (icey_debug_print)
+          std::cout << "Vertex " << v << " did not change, skipping ..." << std::endl;
+        continue;
+      }
+      if (icey_debug_print) std::cout << "Vertex " << v << " changed, propagating ..." << std::endl;
+
+      for (auto edge : boost::make_iterator_range(out_edges(v, graph_))) {
+        auto target_vertex = target(edge, graph_);  // Get the target vertex
+
+        value_changed.at(target_vertex) = 1;
+        if (icey_debug_print)
+          std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
+        auto &edge_data = graph_[edge];         // Access edge data
+        bool should_propagate = false;
+        if(edge_data.f) {
+          should_propagate = edge_data.f();  /// Execute the computation, pass over the value
+        }
+        if (should_propagate) {
+          /// Call this to enable publishers to work. Only publishers have something in the notify
+          /// list
+          /// TODO maybe rename notify_ROS -> if we have only one notify callback and differencitat beween sources and sinks, this is not needed
+          graph_[target_vertex]->notify_about_change();
+        }
+      }
+    }
+    if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
+  }
+
+  std::shared_ptr<DataFlowGraph> data_flow_graph_;
+  std::vector<size_t> topological_order_;
+};
+
+
 /// Creates the data-flow graph and asserts that it is not edited one obtain() is called
-struct GraphCreator {
+/// A context, creates and manages the data-flow graph. Basis for the class-based API of ICEY.
+struct Context : public std::enable_shared_from_this<Context> {
+  virtual ~Context() {
+    if (on_node_destruction_cb_) on_node_destruction_cb_();
+  }
+
+  /// Register callback to be called after all parameters have been attached
+  /// For the functional API
+  void register_after_parameter_initialization_cb(std::function<void()> cb) {
+    after_parameter_initialization_cb_ = cb;
+  }
+
+  void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = cb; }
+
+  void initialize(ROSAdapter::NodeHandle &node) {
+    if (data_flow_graph_->empty()) {
+      std::cout << "WARNING: Nothing to spawn, try first to create some signals/states"
+                << std::endl;
+      return;
+    }
+    attach_graph_to_node(node);
+    was_initialized_ = true;
+  }
+
+  void attach_graph_to_node(ROSAdapter::NodeHandle &node) {
+    if (icey_debug_print)
+      std::cout << "[icey::Context] attach_graph_to_node() start" << std::endl;
+
+    /// First, sort the attachables by priority: first parameters, then publishers, services,
+    /// subsribers etc. We could do bin-sort here which runs in linear time, but the standard
+    /// library does not have an implementation for it. 
+    // TODO honoring this order is not needed in ROS 2 anymore since there is an executor
+    const auto attach_priority_order = [this](size_t v1, size_t v2) {
+      return data_flow_graph_->graph_[v1]->attach_priority() <
+             data_flow_graph_->graph_[v2]->attach_priority();
+    };
+    /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
+    /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
+    /// parameters immediatelly have their values.
+    if (icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
+
+    for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
+      const auto &attachable = data_flow_graph_->graph_[i_vertex];
+      if (attachable->attach_priority() == 1)  /// Stop after attachning all parameters
+        break;
+      attachable->attach_to_node(node);  /// Attach
+    }
+
+    if (icey_debug_print)
+      std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
+    if (after_parameter_initialization_cb_)
+      after_parameter_initialization_cb_();  /// Call user callback. Here, more vertices may be
+                                             /// added
+
+
+    if (icey_debug_print) std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;
+    /// If additional vertices have been added to the DFG, attach it as well
+
+    for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
+      const auto &attachable = data_flow_graph_->graph_[i_vertex];
+      if (attachable->attach_priority() == 0) continue;
+      attachable->attach_to_node(node);  /// Attach
+    }
+    if (icey_debug_print)
+      std::cout << "[icey::Context] Attaching finished, node starts... " << std::endl;
+
+    if(!use_eager_mode_) {
+      if (icey_debug_print)
+        std::cout << "[icey::Context] Creating graph engine  ... " << std::endl;
+
+      graph_engine_ = std::make_shared<GraphEngine>(data_flow_graph_);
+      graph_engine_->analyze_data_flow_graph();
+      /// TODO maybe solve better, the nodes only know about the context. The context owns the graph engine, 
+      // so when the nodes are notified, they can only notify the context. So we have to direct through the context 
+      /// the action to the graph 
+      register_source_verices();
+      
+    }
+  }
+
+  /// Registers the run_graph_mode callback for every source vertex in the DFG so that the graph engine is triggered if a subsriber delivers something 
+  void register_source_verices() {
+    const auto N = num_vertices(data_flow_graph_->graph_);
+    for(size_t i_vertex = 0; i_vertex < N; i_vertex++) {
+      bool is_source = in_degree(i_vertex, data_flow_graph_->graph_) == 0;
+      if(is_source) {
+        auto source_vertex = data_flow_graph_->graph_[i_vertex];
+        source_vertex->register_run_graph_engine([source_vertex](size_t node_id) {
+          source_vertex->context.lock()->graph_engine_->run_graph_mode(node_id);
+        });
+      }
+    }
+  }
 
   template <typename ParameterT>
   auto declare_parameter(const std::string &name,
@@ -938,14 +1086,9 @@ struct GraphCreator {
   bool empty() const { return data_flow_graph_->empty(); }
   void clear() { data_flow_graph_->clear(); }
 
- 
-  /// After everything is created, this obtains the graph, i.e. it returns the internal shared ptr and sets initialized to true
-  std::shared_ptr<DataFlowGraph> obtain() {
-    was_initialized_ = true;
-    return data_flow_graph_;
-  }
 
   bool use_eager_mode_{true};  // Use eager mode or graph mode TODO rem, do the wiring in the executor
+  bool was_initialized_{false};
 
 protected:
   void assert_icey_was_not_initialized() {
@@ -965,23 +1108,6 @@ protected:
     observable->context = shared_from_this();
     observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
     return observable;
-  }
-
-  /// Register that on change, this observable will run the graph mode of the context
-  template <class Parent>
-  void if_needed_register_run_graph_mode(Parent parent) {
-    if (this->use_eager_mode_) {
-      return;
-    }
-    /// In graph mode, no notify callbacks are registered except a single "run graph mode callback".
-    /// So we just check whether the notify list empty
-    if (!parent->run_graph_engine_) {
-      parent->register_run_graph_engine([parent](size_t node_id) {
-        parent->context.lock()->run_graph_mode(
-            node_id);  // context is actually this, but we avoid capturing this in
-                       // objects that we do not directly own
-      });
-    }
   }
 
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
@@ -1042,12 +1168,6 @@ protected:
         });
       }
     }
-
-    // And register the callback for running the graph_loop if not already done (we have to call
-    // smth when the subscriber callback get's called, right)
-    /// TODO I do not think this is correct to do for anything else source nodes.
-    if_needed_register_run_graph_mode(input); 
-
     return computation;
   }
 
@@ -1118,94 +1238,11 @@ protected:
   /// The data-flow graph that this context creates. Everyghing is stored and owned by this graph. 
   std::shared_ptr<DataFlowGraph> data_flow_graph_;
 
+  std::shared_ptr<GraphEngine> graph_engine_;
+  std::function<void()> after_parameter_initialization_cb_;
+  std::function<void()> on_node_destruction_cb_;
 };
 
-
-/// A context, creates and manages the data-flow graph. Basis for the class-based API of ICEY.
-struct Context : public std::enable_shared_from_this<Context> {
-  virtual ~Context() {
-    if (on_node_destruction_cb_) on_node_destruction_cb_();
-  }
-
-  /// Register callback to be called after all parameters have been attached
-  /// For the functional API
-  void register_after_parameter_initialization_cb(std::function<void()> cb) {
-    after_parameter_initialization_cb_ = cb;
-  }
-
-  void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = cb; }
-
-  
-};
-
- /// Graph engine, it executes the event propagation in graph mode given a data-flow graph.
-struct GraphEngine {
-  explicit GraphEngine(std::shared_ptr<DataFlowGraph>  graph) : data_flow_graph_(graph) {}
-
-  void analyze_data_flow_graph() {
-    auto maybe_topological_order = data_flow_graph_->try_topological_sorting();
-    if (!maybe_topological_order) {
-      auto components = data_flow_graph_->compute_strong_components();
-      data_flow_graph_->print_strong_components(components);
-      throw std::runtime_error(
-          "The graph created is not a directed acyclic graph (DAG), meaning it has loops. Please "
-          "review the created vertices and remove the loops.");
-    }
-    topological_order_ = maybe_topological_order.value();
-    if (icey_debug_print)
-      data_flow_graph_->print();
-  }
-
-  
-   /// Executes the graph mode. This function gets called if some of the inputs change and propagates
-  /// the result.
-  /// TODO deal with param stage, parameters fire always immediatelly after attaching.
-  /// but at this point, the graph is not there yet. Maybe we can cache the value_changed array and
-  /// process it later ?
-  void run_graph_mode(size_t signaling_vertex_id) {
-    if (icey_debug_print)
-      std::cout << "[icey::Context] Got event from vertex " << signaling_vertex_id
-                << ", graph execution starts ..." << std::endl;
-
-    auto &graph_ = data_flow_graph_->graph_;
-    /// We traverse the vertices in the topological order and check which value changed.
-    /// If a value changed, then for all its outgoing edges the computation is executed and these
-    /// vertices are marked as changed.
-    std::vector<int> value_changed(num_vertices(graph_), 0);
-    value_changed.at(signaling_vertex_id) = 1;
-    for (auto v : topological_order_) {
-      if (!value_changed.at(v)) {
-        if (icey_debug_print)
-          std::cout << "Vertex " << v << " did not change, skipping ..." << std::endl;
-        continue;
-      }
-      if (icey_debug_print) std::cout << "Vertex " << v << " changed, propagating ..." << std::endl;
-
-      for (auto edge : boost::make_iterator_range(out_edges(v, graph_))) {
-        auto target_vertex = target(edge, graph_);  // Get the target vertex
-
-        value_changed.at(target_vertex) = 1;
-        if (icey_debug_print)
-          std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
-        auto &edge_data = graph_[edge];         // Access edge data
-        bool should_propagate = false;
-        if(edge_data.f) {
-          should_propagate = edge_data.f();  /// Execute the computation, pass over the value
-        }
-        if (should_propagate) {
-          /// Call this to enable publishers to work. Only publishers have something in the notify
-          /// list
-          /// TODO maybe rename notify_ROS -> if we have only one notify callback and differencitat beween sources and sinks, this is not needed
-          graph_[target_vertex]->notify_about_change();
-        }
-      }
-    }
-    if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
-  }
-
-  std::shared_ptr<DataFlowGraph> data_flow_graph_;
-  std::vector<size_t> topological_order_;
-};
 
 /// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables.
 /// This class is needed to ensure that the context lives for as long as the node lives.
@@ -1216,74 +1253,13 @@ public:
 
   /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It
   /// initializes everything in a pre-defined order.
-  void icey_initialize() { 
-    if (graph_.empty()) {
-      std::cout << "WARNING: Nothing to spawn, try first to create some signals/states"
-                << std::endl;
-      return;
-    }
-    auto data_flow_graph = graph_creator_.obtain();
-    attach_graph_to_node(data_flow_graph);
-   }
+  void icey_initialize() { icey().initialize(*this); }
+
   /// Returns the context that is needed to create ICEY observables
   Context &icey() { return *this->icey_context_; }
 
-  
-private:
-  void attach_graph_to_node(ROSAdapter::NodeHandle &node) {
-    if (icey_debug_print)
-      std::cout << "[icey::Context] attach_graph_to_node() start" << std::endl;
-
-    /// First, sort the attachables by priority: first parameters, then publishers, services,
-    /// subsribers etc. We could do bin-sort here which runs in linear time, but the standard
-    /// library does not have an implementation for it.
-    const auto attach_priority_order = [this](size_t v1, size_t v2) {
-      return data_flow_graph_->graph_[v1]->attach_priority() <
-             data_flow_graph_->graph_[v2]->attach_priority();
-    };
-    /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
-    /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
-    /// parameters immediatelly have their values.
-    if (icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
-
-    for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
-      const auto &attachable = data_flow_graph_->graph_[i_vertex];
-      if (attachable->attach_priority() == 1)  /// Stop after attachning all parameters
-        break;
-      attachable->attach_to_node(node);  /// Attach
-    }
-
-    if (icey_debug_print)
-      std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
-    if (after_parameter_initialization_cb_)
-      after_parameter_initialization_cb_();  /// Call user callback. Here, more vertices may be
-                                             /// added
-
-    if (icey_debug_print)
-      std::cout << "[icey::Context] Analyzing data flow graph ... " << std::endl;
-    analyze_data_flow_graph();  /// Now analyze the graph before attaching everything to detect cycles as soon
-                    /// as possible, especially before the node is started and everything crashes
-
-    if (icey_debug_print) std::cout << "[icey::Context] Attaching everything ... " << std::endl;
-    /// If additional vertices have been added to the DFG, attach it as well
-
-    for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
-      const auto &attachable = data_flow_graph_->graph_[i_vertex];
-      if (attachable->attach_priority() == 0) continue;
-      attachable->attach_to_node(node);  /// Attach
-    }
-    if (icey_debug_print)
-      std::cout << "[icey::Context] Attaching finished, node starts... " << std::endl;
-  }
 
   std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
-
-  /// Indicates whether initialize() was called. Used to ensure the graph is static,
-  /// i.e. no items are added after initially initilizing.
-  bool was_initialized_{false};
-
-  std::function<void()> after_parameter_initialization_cb_;
-  std::function<void()> on_node_destruction_cb_;
 };
 
 /// Blocking spawn of an existing node.
