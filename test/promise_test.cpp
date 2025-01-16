@@ -14,9 +14,9 @@ int main() {
         ->then([](std::string res1) {
             return "foo";
         })
-        ->then([](int res) {
+        ->then([](std::string res) {
             return "bar";
         });
 
-    ctx->run();
+    my_promise->_set_and_notify("heloo");
 }
