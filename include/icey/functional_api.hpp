@@ -25,7 +25,7 @@ struct GlobalState {
   /// derives from rclrpp::Node
   operator ROSNodeWithDFG*() { return get_node(); }
 
-  auto create_new_node(const std::string& name) {
+  auto create_new_node(const std::string& name) {    
     nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));
     auto node = nodes.at(name);
     currently_initializing_node_ =
@@ -159,7 +159,7 @@ auto get_nth(Parent& parent) {
   return g_state.get_context().get_nth<index, Parent>(parent);
 }
 
-/// Blocking spawn of a node using the global state
+/// Blocking spawn of a node using the global context
 void spawn(int argc, char** argv, std::string node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
@@ -167,8 +167,8 @@ void spawn(int argc, char** argv, std::string node_name) {
   spawn(g_state.create_new_node(node_name));
 }
 
-/// Create a node from the staged global state. Clears the global state so that multiple nodes can
-/// be created
+/// Create a node from the staged global context. Clears the global context so that multiple nodes can
+/// be created later.
 auto create_node(int argc, char** argv, std::string node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn

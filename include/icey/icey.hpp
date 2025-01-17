@@ -28,7 +28,7 @@ bool icey_debug_print = false;
 using Time = ROS2Adapter::Time;
 class Context;
 
-/// A node in the DFG-graph, corresponds to a node-attachable
+/// A node in the DFG-graph
 class DFGNode {
 public:
   /// We bould the node starting from the root, to allow a context-free graph creation, we refer to
@@ -594,12 +594,11 @@ protected:
   ROSAdapter::QoS qos_;
 };
 
-/// A service client Observable. Stores the response
-/// TODO should we store the request as well ? Because the ROS-API gives it
+/// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in the DFG
 template <typename _ServiceT>
-struct ClientObservable : public Observable< typename _ServiceT::Response::SharedPtr, rclcpp::FutureReturnCode> {
+struct ClientObservable : public AnyComputation, public NodeAttachable {
   using Request = typename _ServiceT::Request::SharedPtr;
-  using Value = typename _ServiceT::Response::SharedPtr;
+  using Response = typename _ServiceT::Response::SharedPtr;
   
   ClientObservable(const std::string &service_name)
       : service_name_(service_name){
@@ -747,6 +746,10 @@ struct DataFlowGraph {
 
 
  /// Graph engine, it executes the event propagation in graph mode given a data-flow graph.
+ /// This event propagation executes computations over the eges. It is designed so that edges can contain Service calls 
+ /// and therefore during the propagation, the GraphEngine can hand over to ROS at any time. When encountering an edge 
+ /// that requries waiting on ROS, the propagation returns, remembering which edges it already propagated. When ROS triggers 
+ /// an observable the next time, it continues to propagate.
 struct GraphEngine {
   explicit GraphEngine(std::shared_ptr<DataFlowGraph>  graph) : data_flow_graph_(graph) {}
 
@@ -772,12 +775,21 @@ struct GraphEngine {
                 << ", graph execution starts ..." << std::endl;
 
     auto &graph_ = data_flow_graph_->graph_;
+    /// Resize if we run for the first time
+    if(!propagation_state_) {
+      propagation_state_ = PropagationState();
+      propagation_state_->vertex_changed.resize(num_vertices(graph_), 0);
+      propagation_state_->propagated_edges_.resize(num_edges(graph_), 0);
+    }
+
     /// We traverse the vertices in the topological order and check which value changed.
     /// If a value changed, then for all its outgoing edges the computation is executed and these
     /// vertices are marked as changed.
-    std::vector<int> value_changed(num_vertices(graph_), 0);
-    value_changed.at(signaling_vertex_id) = 1;
-    for (auto v : topological_order_) {
+    propagation_state_->vertex_changed_.at(signaling_vertex_id) = 1;
+    size_t edge_index = 0;
+    auto &v = propagation_state_.index_in_topo_order_;
+    for (; v < topological_order_.size(); v++) {
+
       if (!value_changed.at(v)) {
         if (icey_debug_print)
           std::cout << "Vertex " << v << " did not change, skipping ..." << std::endl;
@@ -786,24 +798,56 @@ struct GraphEngine {
       if (icey_debug_print) std::cout << "Vertex " << v << " changed, propagating ..." << std::endl;
 
       for (auto edge : boost::make_iterator_range(out_edges(v, graph_))) {
+        if(propagation_state_.propagated_edges_.at(edge_index) == 1) { /// TODO consider pre-computing CSR edges list.
+          continue; /// Skip edges that were previously already propagated
+        }
+        edge_index++;
         auto target_vertex = target(edge, graph_);  // Get the target vertex
-
-        value_changed.at(target_vertex) = 1;
-        if (icey_debug_print)
-          std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
         auto &edge_data = graph_[edge];         // Access edge data
-        
-        if(edge_data.f) {
-          edge_data.f();  /// Execute the computation, pass over the value
-          /// And not notify ROS (Call this to enable publishers to work. Only publishers have something in the notify
-          /// list)
+
+        /// Now this edge counts a propagated, regardless of whether we return waitning on ROS or not because when ROS notifies us, the edge was already propagated.
+        propagation_state_.propagated_edges_.at(edge_index) = 1;
+        if(edge_data.requires_waiting_on_ros) {
+          if (icey_debug_print)
+            std::cout << "Edge execution requires waiting on ROS, returning...  " << target_vertex << " ..." << std::endl;  
+          return; /// We return here, we will be called again when ROS is done
+        } else {
+          if (icey_debug_print)
+            std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
+          if(edge_data.f) {
+            edge_data.f();  /// Execute the computation, pass over the value
+            /// And not notify ROS (Call this to enable publishers to work. Only publishers have something in the notify
+            /// list)
+          }
+          propagation_state_->vertex_changed_.at(target_vertex) = 1; /// After executing the computation, the targed vertex changed.
         }
       }
     }
+    propagation_state_.value().reset(); /// If we finished propagation, reset the state of the algorithm 
     if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
   }
 
+
+  /// The propagation state remembers how far the propagation mode got the last time in case 
+  /// we need to interrupt the propagation to wait on ROS. 
+  struct PropagationState {
+    size_t index_in_topo_order_{0}; // The index of the element in the topological_order_ array we were iterating last time
+    std::vector<int> vertex_changed_; /// Which vertex index, i.e. observable 
+    std::vector<int> propagated_edges_; /// A boolean vector that indicates which edges where propagated (1 if yes, 0 otherwise). This is an edge list as in CSR storage.
+
+    /// When propagation finishes, this state is reset so that next time something changes, it is propagated again.
+    void reset()  {
+      index_in_topo_order_ = 0;
+      std::fill(vertex_changed_.begin(), vertex_changed_.end(), 0);
+      std::fill(propagated_edges_.begin(), propagated_edges_.end(), 0);
+    }
+  };
+
+  std::optional<PropagationState> propagation_state_;
+
+  /// The data-flow graph the graph engine operates on. It contains observables as vertices and computations as edges.
   std::shared_ptr<DataFlowGraph> data_flow_graph_;
+  /// The pre-computed topological order of vertex indices.
   std::vector<size_t> topological_order_;
 };
 
