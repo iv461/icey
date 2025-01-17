@@ -169,11 +169,17 @@ public:
     return this->context.lock()->template then_event<EventType::error>(this->shared_from_this(), f);
   }
 
-  /// Create a ROS publisher for this observable.
+  /// Create a ROS publisher and publish this observable.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
+
+  /// Call a service, this observable holds the request.
+  /*auto call_service(const std::string &topic_name,
+               const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    return this->context.lock()->create_client(this->shared_from_this(), topic_name, qos);
+  }*/
 
   virtual bool has_value() const { return value_.has_value(); }
   virtual const Value &value() const { return value_.value(); }
@@ -588,16 +594,15 @@ protected:
   ROSAdapter::QoS qos_;
 };
 
+/// A service client Observable. Stores the response
+/// TODO should we store the request as well ? Because the ROS-API gives it
 template <typename _ServiceT>
-struct ClientObservable : public Observable<typename _ServiceT::Response, rclcpp::FutureReturnCode> {
-  using Request = typename _ServiceT::Request;
-  using Response = typename _ServiceT::Request;
-  using Value = Response;
-  /// The type of the required input
-  using Parent = std::shared_ptr<Observable<std::shared_ptr<Request>>>;
-
-  ClientObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : service_name_(service_name), qos_(qos) {
+struct ClientObservable : public Observable< typename _ServiceT::Response::SharedPtr, rclcpp::FutureReturnCode> {
+  using Request = typename _ServiceT::Request::SharedPtr;
+  using Value = typename _ServiceT::Response::SharedPtr;
+  
+  ClientObservable(const std::string &service_name)
+      : service_name_(service_name){
     this->attach_priority_ = 4;
     this->name = service_name_;
   }
@@ -605,15 +610,26 @@ struct ClientObservable : public Observable<typename _ServiceT::Response, rclcpp
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[ClientObservable] attach_to_node()" << std::endl;
-    auto client = node_handle.add_client<_ServiceT>(service_name_, qos_);
+    auto client = node_handle.add_client<_ServiceT>(service_name_);
+    using Future = typename rclcpp::Client<_ServiceT>::SharedFutureWithRequest;
     this->register_on_change_cb([this, client](std::shared_ptr<Request> request) {
       client->async_send_request(
-          request, [this](auto response_futur) { this->_set_and_notify(response_futur.get()); });
+          request, [this](Future response_futur) { 
+            if(response_futur.valid()) {
+              this->_set_and_notify(response_futur.get());
+            } else {
+              /// TOOD
+              this->template _set_and_notify_event<EventType::error>(rclcpp::FutureReturnCode::TIMEOUT);
+              /// TODO Do the weird cleanup thing
+            }
+
+          });
+
     });
   }
 
   std::string service_name_;
-  ROSAdapter::QoS qos_;
+  //ROSAdapter::QoS qos_; TODO add for Iron/Jazzy, Humble had still the old APIs (rmw_*)
 };
 
 /// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the
@@ -938,11 +954,12 @@ struct Context : public std::enable_shared_from_this<Context> {
   }
 
   /// Add a service client
-  template <class ServiceT, class Parent>
+  template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     observable_traits<Parent>{};
-    return create_observable<ClientObservable<ServiceT>>(service_name, qos);
+    static_assert(std::is_same_v< typename ServiceT::Request, obs_msg<Parent> >, "The parent triggering the service must be of type Request");
+    return create_observable<ClientObservable<ServiceT>>(service_name);
   }
 
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics

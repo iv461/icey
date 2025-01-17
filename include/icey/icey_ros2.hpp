@@ -231,9 +231,8 @@ public:
 
     /// TODO cb groups !!
     template <class Service>
-    auto add_client(const std::string &service_name,
-                    const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-      auto client = this->create_client<Service>(service_name, qos);
+    auto add_client(const std::string &service_name) {
+      auto client = this->create_client<Service>(service_name);
       my_services_clients_.emplace(service_name, client);
       return client;
     }

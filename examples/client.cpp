@@ -17,10 +17,15 @@ int main(int argc, char **argv) {
         return request;
     });
 
-    auto service_response = icey::create_client(timed_request, "set_bool_service");
+    auto service_response = icey::create_client<ExampleService>(timed_request, "set_bool_service");
 
-    service_response->then([](std::shared_ptr<ExampleService::Response> response) {
+    service_response
+        ->then([](ExampleService::Response::SharedPtr response) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response: " << response->success);
+        });
+
+    service_response->except([](rclcpp::FutureReturnCode retcode) {
+        std::cout << "Service got error: " << retcode << std::endl;
     });
     
     icey::spawn(argc, argv, "client_example"); 

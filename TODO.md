@@ -44,8 +44,10 @@ Sorted by decreasing priority.
 - [ ] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
 - [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125)
 
-- [ ] Custom bufferts: https://github.com/autowarefoundation/autoware.universe/blob/main/localization/autoware_ekf_localizer/include/autoware/ekf_localizer/ekf_localizer.hpp#L128
-## Error-handling 
+- [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
+
+- [ ] Custom buffers: https://github.com/autowarefoundation/autoware.universe/blob/main/localization/autoware_ekf_localizer/include/autoware/ekf_localizer/ekf_localizer.hpp#L128
+## Error-handling
 
 ## Examples 
 

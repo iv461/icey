@@ -20,6 +20,7 @@ include_directories(
 #ament_auto_add_executable(listener_example examples/listener.cpp)
 #ament_auto_add_executable(talker_example examples/talker.cpp)
 #ament_auto_add_executable(service_example examples/service.cpp)
+ament_auto_add_executable(client_example examples/client.cpp)
 #ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
 #ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
 ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
@@ -28,9 +29,9 @@ ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp
 #ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
 #ament_auto_add_executable(message_filters_interoperability_example examples/message_filters_interoperability.cpp)
 
-ament_auto_add_executable(piping_example examples/piping.cpp)
-ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
-ament_auto_add_executable(promise_test test/promise_test.cpp)
+#ament_auto_add_executable(piping_example examples/piping.cpp)
+#ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
+#ament_auto_add_executable(promise_test test/promise_test.cpp)
 
 ament_auto_package(
   INSTALL_TO_SHARE
