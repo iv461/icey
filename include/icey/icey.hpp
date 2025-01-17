@@ -70,7 +70,6 @@ public:
   bool was_attached_{false};
 };
 
-
 /// Needed for storing in the graph as well as to let the compiler check for correct types
 struct ObservableBase : public DFGNode, public NodeAttachable, private boost::noncopyable {
 };
@@ -115,7 +114,7 @@ constexpr void assert_all_observable_values_are_same() {
                 "The values of all the observables must be the same");
 }
 
-struct Nothing {};
+struct Nothing {}; 
 
 /// An observable. Similar to a promise in JS.
 /// TODO consider CRTP, would also be beneficial for PIMPL
@@ -125,19 +124,11 @@ class Observable : public ObservableBase, public std::enable_shared_from_this<Ob
                          /// register_on_change_cb callbacks
 public:
   using Value = _Value;
-  using MaybeValue = std::optional<Value>;
   using ErrorValue = _ErrorValue;
   using Self = Observable<Value, ErrorValue>;
-
-  using ValueORError = std::variant<MaybeValue, ErrorValue>;
+  using MaybeValue = std::optional<Value>;
+  using ValueORError = std::variant<std::monostate, Value, ErrorValue>;
   using Handler = std::function<void()>;
-
-  /*  Using boost::asio::timer we can easily implement the classic promise example.
-  using Thenable= std::function<void(OnResolve)>;
-  explicit Observable(const Thenable &thenable) {
-      thenable([this](const Value &new_value){this->_set_and_notify(new_value);});
-  }
-  */
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
@@ -168,11 +159,11 @@ public:
   }
 
   virtual bool has_value() const { 
-      return !has_error() && std::get<MaybeValue>(value_).has_value(); 
+      return std::holds_alternative<Value>(value_); 
   }
 
-  virtual const Value &value() const { return std::get<MaybeValue>(value_).value(); }
-  virtual const Error &error() const { return std::get<ErrorValue>(value_); }
+  virtual const Value &value() const { return std::get<Value>(value_); }
+  virtual const ErrorValue &error() const { return std::get<ErrorValue>(value_); }
 
 
 //protected:
@@ -181,8 +172,22 @@ public:
   }
 
   /// Set without notify
-  void resolve(const MaybeValue &x) { std::get<MaybeValue>(value_) = x; }
-  void reject(const Error &x) { std::get<ErrorValue>(value_) = x; }
+  void resolve(const MaybeValue &x) { 
+      if(x) 
+        std::get<Value>(value_) = x;
+      else 
+        value_ = std::monostate{};
+  }
+  void reject(const ErrorValue &x) { std::get<ErrorValue>(value_) = x; }
+
+  void resolve_and_notify(const MaybeValue &x) {   
+    this->resolve(x);
+    this->notify();
+  }
+  void reject_and_notify(const ErrorValue &x) {
+    this->reject(x);
+    this->notify();
+  }
 
   /*
   if (icey_debug_print)
@@ -196,6 +201,7 @@ public:
   
     if(this->has_value() || this->has_error()) {
       for (auto cb : handlers_) cb();
+    }
   }
   
   /// The last received value, it is buffered. It is buffered only to be able to do graph mode.
@@ -256,14 +262,14 @@ protected:
         parameter_name_, default_value_,
         [this](const rclcpp::Parameter &new_param) {
           Value new_value = new_param.get_value<Value>();
-          this->_set_and_notify(new_value);
+          this->resolve_and_notify(new_value);
         },
         parameter_descriptor_, ignore_override_);
     /// Set default value
     if (default_value_) {
       Value initial_value;
       node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-      this->_set_and_notify(initial_value);
+      this->resolve_and_notify(initial_value);
     }
   }
   std::string parameter_name_;
@@ -290,7 +296,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
     node_handle.add_subscription<Value>(
-        name_, [this](typename Message::SharedPtr new_value) { this->_set_and_notify(new_value); },
+        name_, [this](typename Message::SharedPtr new_value) { this->resolve_and_notify(new_value); },
         qos_, options_);
   }
 
@@ -336,10 +342,7 @@ public:
     this->attach_priority_ = 3;
     this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
   }
-
-  /// TODO override: Is TF buffer empty ? -> Needed to distinguitsh TF errors
-  virtual bool has_value() const { return this->value_.has_value(); }
-
+  
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
     try {
       // Note that this call does not wait, the transform must already have arrived. This works
@@ -359,7 +362,7 @@ protected:
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
         [this](const geometry_msgs::msg::TransformStamped &new_value) {
-          this->_set_and_notify(std::make_shared<Message>(new_value));
+          this->resolve_and_notify(std::make_shared<Message>(new_value));
         });
   }
 
@@ -383,7 +386,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[TimerObservable] attach_to_node()" << std::endl;
     ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this]() {
-      this->_set_and_notify(ticks_counter_++);
+      this->resolve_and_notify(ticks_counter_++);
       if (is_one_off_timer_) ros_timer_->cancel();
     });
   }
@@ -418,7 +421,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
-    this->register_handler([this, publisher]() { 
+    this->_register_handler([this, publisher]() { 
                 // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
         // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
         const auto &new_value = this->value(); /// There can be no error
@@ -448,7 +451,7 @@ struct AnyComputation {
 template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->register_handler([this]() {
+    this->_register_handler([this]() {
       using Event = message_filters::MessageEvent<const _Message>;
       const auto &new_value = this->value(); /// There can be no error
       this->signalMessage(Event(new_value));
@@ -495,7 +498,7 @@ private:
   }
 
   void sync_callback(typename Messages::SharedPtr... messages) {
-    this->_set_and_notify(std::forward_as_tuple(messages...));
+    this->resolve_and_notify(std::forward_as_tuple(messages...));
   }
 
   /// The input filters
@@ -517,7 +520,7 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->register_handler([this, publish]() { 
+    this->_register_handler([this, publish]() { 
         const auto &new_value = this->value(); /// There can be no error
         publish(new_value); 
     });
@@ -544,7 +547,7 @@ protected:
     node_handle.add_service<_ServiceT>(
         service_name_,
         [this](Request request, Response response) {
-          this->_set_and_notify(std::make_pair(request, response));
+          this->resolve_and_notify(std::make_pair(request, response));
         },
         qos_);
   }
@@ -572,15 +575,16 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
       client_->async_send_request(
         request, [this](Future response_futur) { 
           if(response_futur.valid()) {
-            output_->_set_and_notify(response_futur.get());
+            this->output_->resolve_and_notify(response_futur.get());
           } else {
             /// TOOD
-            output_->template _set_and_notify_event<EventType::error>(rclcpp::FutureReturnCode::TIMEOUT);
+            this->output_->reject_and_notify(rclcpp::FutureReturnCode::TIMEOUT);
             /// TODO Do the weird cleanup thing
           }
 
       });
   }
+  std::shared_ptr<OutputObservable> output_;
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[ClientObservable] attach_to_node()" << std::endl;
@@ -744,7 +748,7 @@ struct GraphEngine {
     auto &v = propagation_state_.index_in_topo_order_;
     for (; v < topological_order_.size(); v++) {
 
-      if (!value_changed.at(v)) {
+      if (!propagation_state_.vertex_changed_.at(v)) {
         if (icey_debug_print)
           std::cout << "Vertex " << v << " did not change, skipping ..." << std::endl;
         continue;
@@ -777,7 +781,7 @@ struct GraphEngine {
         }
       }
     }
-    propagation_state_.value().reset(); /// If we finished propagation, reset the state of the algorithm 
+    propagation_state_.reset(); /// If we finished propagation, reset the state of the algorithm 
     if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
   }
 
@@ -786,8 +790,8 @@ struct GraphEngine {
   /// we need to interrupt the propagation to wait on ROS. 
   struct PropagationState {
     explicit PropagationState(std::shared_ptr<DataFlowGraph> graph) {
-      vertex_changed.resize(num_vertices(graph), 0);
-      propagated_edges_.resize(num_edges(graph), 0); 
+      vertex_changed_.resize(num_vertices(graph->graph_), 0);
+      propagated_edges_.resize(num_edges(graph->graph_), 0); 
     }
 
     /// When propagation finishes, this state is reset so that next time something changes, it is propagated again.
@@ -969,7 +973,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto child = create_observable< typename Comp::OutputObservable >();
 
     Comp comp(service_name);
-    comp.f = 
+    /// TODO create_with continuation
     return child;
   }
 
@@ -1099,6 +1103,8 @@ struct Context : public std::enable_shared_from_this<Context> {
       auto child = create_observable<DevNullObservable>();
       connect<resolve>(child, parent, std::move(f));
       /// return nothing so that no computation can be made based on the result
+    } else if(is_variant_v<ReturnType>) { /// But it may be an result type
+      /// In this case we want to be able to pass over the same error TODO 
     } else {
       /// The resulting observable always has the same ErrorValue so that it can pass through the error
       using OutputObservable = Observable<ReturnTypeSome, obs_err<Parent> >;
@@ -1114,8 +1120,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <int index, class Parent>
   auto get_nth(Parent &parent) {
     assert_observable_holds_tuple<Parent>();
-    /// TODO we want to forward ALL events, not only on some !
-    return then_event<EventType::some>(parent, [](const auto &...args) {  /// Need to take variadic because then()
+    return done<true>(parent, [](const auto &...args) {  /// Need to take variadic because then()
                                                    /// automatically unpacks tuples
       return std::get<index>(
           std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple
@@ -1155,12 +1160,13 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
   /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
   /// run
+  /// TODO generalize, allow for creating async computes by passing continuation (maybe move this logic into Obs)
   template <bool resolve, class Input, class Output, class F>
   AnyComputation create_computation(Input input, Output output, F &&f) {
     observable_traits<Input, Output>{};
 
-    using Value = obs_val<Parent>;
-    using ErrorValue = obs_err<Parent>;
+    using Value = obs_val<Input>;
+    using ErrorValue = obs_err<Input>;
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
 
     // TODO use std::invoke_result
@@ -1180,7 +1186,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     /// TODO refactor, bind
     auto notify = [output]() { output->_notify(); };
-    auto resolve = [output, f = std::move(on_new_value)](const FunctionArgument &new_value) -> bool {
+    auto call_and_resolve = [output, f = std::move(on_new_value)](const FunctionArgument &new_value) {
         if constexpr (std::is_void_v<ReturnType>) {
           f(new_value);
         } else {
@@ -1189,14 +1195,14 @@ struct Context : public std::enable_shared_from_this<Context> {
         }
     };
     
-    auto resolve_if_needed = [input, resolve=std::move(resolve)]() {
+    auto resolve_if_needed = [input, output, call_and_resolve=std::move(call_and_resolve)]() {
       if constexpr (!resolve) { /// If we .catch() 
         if(input->has_error())  { /// Then only resolve with the error if there is one
-          resolve(input->error());
+          call_and_resolve(input->error());
         } /// Else do nothing
       } else {
         if(input->has_value()) { 
-          resolve(input->value());
+          call_and_resolve(input->value());
         } else if (input->has_error()) {
           output->reject(input->error()); /// Important: do not execute computation, but propagate the error
         }
@@ -1207,7 +1213,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     computation.f = [=]() { resolve_if_needed(); notify(); };//hana::compose(notify, compute, get_input_value);
 
     if (this->use_eager_mode_) {
-      input->register_handler(computation.f);
+      input->_register_handler(computation.f);
     }
   
     return computation;
