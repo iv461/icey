@@ -56,13 +56,13 @@ TEST_F(PromiseTest, Fallthrough) {
         ->then(marker(3));
 
     EXPECT_TRUE(events.empty());
-    my_promise2->resolve("resolution");
+    my_promise2->resolve_and_notify("resolution");
     std::vector<size_t> target_order1{0, 1};
 
     EXPECT_EQ(target_order1, events);
     events.clear();
 
-    my_promise2->reject(-3);
+    my_promise2->reject_and_notify(-3);
 
     std::vector<size_t> target_order2{2, 3};
     EXPECT_EQ(target_order2, events);
