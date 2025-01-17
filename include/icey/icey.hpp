@@ -52,7 +52,7 @@ public:
 
 /// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber
 /// etc.
-class NodeAttachable : private boost::noncopyable {
+class NodeAttachable  {
 public:
   virtual void attach_to_node(ROSAdapter::NodeHandle &) {
     if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
@@ -72,7 +72,7 @@ public:
 
 
 /// Needed for storing in the graph as well as to let the compiler check for correct types
-struct ObservableBase : public DFGNode, public NodeAttachable {
+struct ObservableBase : public DFGNode, public NodeAttachable, private boost::noncopyable {
 };
 
 template <typename... Args>
@@ -483,6 +483,7 @@ protected:
 struct AnyComputation {
   /// executes and notifies
   std::function<void()> f;
+  bool requires_waiting_on_ros{false}; /// Is this computation a service call currently. 
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -596,37 +597,39 @@ protected:
 
 /// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in the DFG
 template <typename _ServiceT>
-struct ClientObservable : public AnyComputation, public NodeAttachable {
+struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
-  
-  ClientObservable(const std::string &service_name)
-      : service_name_(service_name){
+  using Client = rclcpp::Client<_ServiceT>;
+  using OutputObservable = Observable <Response, rclcpp::FutureReturnCode>;
+
+  ServiceClientComputation(const std::string &service_name)
+      : service_name_(service_name ){
     this->attach_priority_ = 4;
     this->name = service_name_;
+    this->requires_waiting_on_ros = true;
   }
 
+  void call(Request request) {
+      using Future = typename Client::SharedFutureWithRequest;
+      client_->async_send_request(
+        request, [this](Future response_futur) { 
+          if(response_futur.valid()) {
+            output_->_set_and_notify(response_futur.get());
+          } else {
+            /// TOOD
+            output_->template _set_and_notify_event<EventType::error>(rclcpp::FutureReturnCode::TIMEOUT);
+            /// TODO Do the weird cleanup thing
+          }
+
+      });
+  }
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[ClientObservable] attach_to_node()" << std::endl;
-    auto client = node_handle.add_client<_ServiceT>(service_name_);
-    using Future = typename rclcpp::Client<_ServiceT>::SharedFutureWithRequest;
-    this->register_on_change_cb([this, client](std::shared_ptr<Request> request) {
-      client->async_send_request(
-          request, [this](Future response_futur) { 
-            if(response_futur.valid()) {
-              this->_set_and_notify(response_futur.get());
-            } else {
-              /// TOOD
-              this->template _set_and_notify_event<EventType::error>(rclcpp::FutureReturnCode::TIMEOUT);
-              /// TODO Do the weird cleanup thing
-            }
-
-          });
-
-    });
+    client_ = node_handle.add_client<_ServiceT>(service_name_);
   }
-
+  typename Client::SharedPtr client_;
   std::string service_name_;
   //ROSAdapter::QoS qos_; TODO add for Iron/Jazzy, Humble had still the old APIs (rmw_*)
 };
@@ -751,7 +754,8 @@ struct DataFlowGraph {
  /// that requries waiting on ROS, the propagation returns, remembering which edges it already propagated. When ROS triggers 
  /// an observable the next time, it continues to propagate.
 struct GraphEngine {
-  explicit GraphEngine(std::shared_ptr<DataFlowGraph>  graph) : data_flow_graph_(graph) {}
+  explicit GraphEngine(std::shared_ptr<DataFlowGraph>  graph) : data_flow_graph_(graph), 
+        propagation_state_(graph) {}
 
   void analyze_data_flow_graph() {
     auto maybe_topological_order = data_flow_graph_->try_topological_sorting();
@@ -775,17 +779,10 @@ struct GraphEngine {
                 << ", graph execution starts ..." << std::endl;
 
     auto &graph_ = data_flow_graph_->graph_;
-    /// Resize if we run for the first time
-    if(!propagation_state_) {
-      propagation_state_ = PropagationState();
-      propagation_state_->vertex_changed.resize(num_vertices(graph_), 0);
-      propagation_state_->propagated_edges_.resize(num_edges(graph_), 0);
-    }
-
     /// We traverse the vertices in the topological order and check which value changed.
     /// If a value changed, then for all its outgoing edges the computation is executed and these
     /// vertices are marked as changed.
-    propagation_state_->vertex_changed_.at(signaling_vertex_id) = 1;
+    propagation_state_.vertex_changed_.at(signaling_vertex_id) = 1;
     size_t edge_index = 0;
     auto &v = propagation_state_.index_in_topo_order_;
     for (; v < topological_order_.size(); v++) {
@@ -805,7 +802,7 @@ struct GraphEngine {
         auto target_vertex = target(edge, graph_);  // Get the target vertex
         auto &edge_data = graph_[edge];         // Access edge data
 
-        /// Now this edge counts a propagated, regardless of whether we return waitning on ROS or not because when ROS notifies us, the edge was already propagated.
+        /// Now this edge counts a propagated, regardless of whether we have to wait on ROS or not because when at the time ROS notifies us, the edge was already propagated.
         propagation_state_.propagated_edges_.at(edge_index) = 1;
         if(edge_data.requires_waiting_on_ros) {
           if (icey_debug_print)
@@ -819,7 +816,7 @@ struct GraphEngine {
             /// And not notify ROS (Call this to enable publishers to work. Only publishers have something in the notify
             /// list)
           }
-          propagation_state_->vertex_changed_.at(target_vertex) = 1; /// After executing the computation, the targed vertex changed.
+          propagation_state_.vertex_changed_.at(target_vertex) = 1; /// After executing the computation, the targed vertex changed.
         }
       }
     }
@@ -831,9 +828,10 @@ struct GraphEngine {
   /// The propagation state remembers how far the propagation mode got the last time in case 
   /// we need to interrupt the propagation to wait on ROS. 
   struct PropagationState {
-    size_t index_in_topo_order_{0}; // The index of the element in the topological_order_ array we were iterating last time
-    std::vector<int> vertex_changed_; /// Which vertex index, i.e. observable 
-    std::vector<int> propagated_edges_; /// A boolean vector that indicates which edges where propagated (1 if yes, 0 otherwise). This is an edge list as in CSR storage.
+    explicit PropagationState(std::shared_ptr<DataFlowGraph> graph) {
+      vertex_changed.resize(num_vertices(graph), 0);
+      propagated_edges_.resize(num_edges(graph), 0); 
+    }
 
     /// When propagation finishes, this state is reset so that next time something changes, it is propagated again.
     void reset()  {
@@ -841,12 +839,18 @@ struct GraphEngine {
       std::fill(vertex_changed_.begin(), vertex_changed_.end(), 0);
       std::fill(propagated_edges_.begin(), propagated_edges_.end(), 0);
     }
+
+    size_t index_in_topo_order_{0}; // The index of the element in the topological_order_ array we were iterating last time
+    std::vector<int> vertex_changed_; /// Which vertex index, i.e. observable 
+    std::vector<int> propagated_edges_; /// A boolean vector that indicates which edges where propagated (1 if yes, 0 otherwise). This is an edge list as in CSR storage.
+
   };
 
-  std::optional<PropagationState> propagation_state_;
 
   /// The data-flow graph the graph engine operates on. It contains observables as vertices and computations as edges.
   std::shared_ptr<DataFlowGraph> data_flow_graph_;
+
+  PropagationState propagation_state_;
   /// The pre-computed topological order of vertex indices.
   std::vector<size_t> topological_order_;
 };
@@ -937,6 +941,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   void register_source_verices() {
     const auto N = num_vertices(data_flow_graph_->graph_);
     for(size_t i_vertex = 0; i_vertex < N; i_vertex++) {
+      /// TODO register by flag
       bool is_source = in_degree(i_vertex, data_flow_graph_->graph_) == 0;
       if(is_source) {
         auto source_vertex = data_flow_graph_->graph_[i_vertex];
@@ -1001,9 +1006,14 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    observable_traits<Parent>{};
-    static_assert(std::is_same_v< typename ServiceT::Request, obs_msg<Parent> >, "The parent triggering the service must be of type Request");
-    return create_observable<ClientObservable<ServiceT>>(service_name);
+    observable_traits<Parent>{}; // obs_val since the Request must be a shared_ptr
+    static_assert(std::is_same_v< typename ServiceT::Request, obs_val<Parent> >, "The parent triggering the service must hold a value of type Request::SharedPtr");
+    using Comp = ServiceClientComputation<ServiceT>;
+    auto child = create_observable< typename Comp::OutputObservable >();
+
+    Comp comp(service_name);
+    comp.f = 
+    return child;
   }
 
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
@@ -1174,6 +1184,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     return observable;
   }
 
+  
+  
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
   /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
   /// run
@@ -1193,13 +1205,13 @@ struct Context : public std::enable_shared_from_this<Context> {
       }
     };
 
+    /// TODO refactor, BIND
     auto get_input_value = [input]() { 
       if constexpr (e == EventType::some) {
         return input->value();
       } else if (e == EventType::error) {
         return input->error_.value();
       }
-
     };
     auto compute = [output, f = std::move(on_new_value)](const obs_val_e_t<e, Input> &new_value) -> bool {
         if constexpr (std::is_void_v<ReturnType>) {
