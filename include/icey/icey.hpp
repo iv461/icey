@@ -124,7 +124,7 @@ class Observable : public ObservableBase, public std::enable_shared_from_this<Ob
                          /// register_on_change_cb callbacks
 public:
   using Value = _Value;
-  using ErrorValue = _ErrorValue;
+  using ErrorValue =  _ErrorValue;
   using Self = Observable<Value, ErrorValue>;
   using MaybeValue = std::optional<Value>;
   using ValueORError = std::variant<std::monostate, Value, ErrorValue>;
@@ -148,22 +148,11 @@ public:
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
 
-  /// Call a service, this observable holds the request.
-  /*auto call_service(const std::string &topic_name,
-               const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    return this->context.lock()->create_client(this->shared_from_this(), topic_name, qos);
-  }*/
+  virtual bool has_error() { return value_.index() == 2; }
+  virtual bool has_value() const { return value_.index() == 1; }
 
-  virtual bool has_error() {
-      return std::holds_alternative<ErrorValue>(value_);
-  }
-
-  virtual bool has_value() const { 
-      return std::holds_alternative<Value>(value_); 
-  }
-
-  virtual const Value &value() const { return std::get<Value>(value_); }
-  virtual const ErrorValue &error() const { return std::get<ErrorValue>(value_); }
+  virtual const Value &value() const { return std::get<1>(value_); }
+  virtual const ErrorValue &error() const { return std::get<2>(value_); }
 
 
 //protected:
@@ -174,19 +163,19 @@ public:
   /// Set without notify
   void resolve(const MaybeValue &x) { 
       if(x) 
-        std::get<Value>(value_) = x;
+        std::get<1>(value_) = *x;
       else 
         value_ = std::monostate{};
   }
-  void reject(const ErrorValue &x) { std::get<ErrorValue>(value_) = x; }
+  void reject(const ErrorValue &x) { std::get<2>(value_) = x; }
 
   void resolve_and_notify(const MaybeValue &x) {   
     this->resolve(x);
-    this->notify();
+    this->_notify();
   }
   void reject_and_notify(const ErrorValue &x) {
     this->reject(x);
-    this->notify();
+    this->_notify();
   }
 
   /*
@@ -240,8 +229,7 @@ public:
   const Value &value() const override {
     /// TODO do we want to allow this if the user provided a default value ? I think not, since it
     /// adds conceptual inconcistency to the otherwise inaccessible Observables
-    if (!this->value_
-             .has_value()) {  /// First, check if this observable was accessed before spawning. This
+    if (!this->has_value()) {  /// First, check if this observable was accessed before spawning. This
                               /// is needed to provide a nice  error message since confusing
                               /// syncronous code will likely happen for users.
       throw std::runtime_error(
@@ -249,7 +237,7 @@ public:
           "'] You cannot access the parameters before spawning the node, you can only access them "
           "inside callbacks (which are triggered after calling icey::spawn())");
     }
-    return this->value_.value();
+    return this->value();
   }
 
 protected:
@@ -566,7 +554,7 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
   ServiceClientComputation(const std::string &service_name)
       : service_name_(service_name ){
     this->attach_priority_ = 4;
-    this->name = service_name_;
+    ///this->name = service_name_; TODO edge names
     this->requires_waiting_on_ros = true;
   }
 
@@ -968,7 +956,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto create_client(Parent parent, const std::string &service_name,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     observable_traits<Parent>{}; // obs_val since the Request must be a shared_ptr
-    static_assert(std::is_same_v< typename ServiceT::Request, obs_val<Parent> >, "The parent triggering the service must hold a value of type Request::SharedPtr");
+    static_assert(std::is_same_v< obs_val<Parent>, typename ServiceT::Request::SharedPtr >, "The parent triggering the service must hold a value of type Request::SharedPtr");
     using Comp = ServiceClientComputation<ServiceT>;
     auto child = create_observable< typename Comp::OutputObservable >();
 
@@ -1091,16 +1079,15 @@ struct Context : public std::enable_shared_from_this<Context> {
     observable_traits<Parent>{};
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
-    using ReturnType = 
-          std::conditional_t<resolve,
-          decltype(apply_if_tuple(f, std::declval< obs_val< Parent> >())),
-          decltype(apply_if_tuple(f, std::declval< obs_err< Parent> >()))>;
+    using FunctionArgument = std::conditional_t<resolve, obs_val<Parent>, obs_err<Parent> >;
+    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
 
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = typename remove_optional<ReturnType>::type;
     if constexpr (std::is_void_v<ReturnType>) {
       /// create a dummy to satisfy the graph
-      auto child = create_observable<DevNullObservable>();
+      
+      auto child = create_observable< Observable<Nothing, obs_err<Parent> > >(); // Must pass error 
       connect<resolve>(child, parent, std::move(f));
       /// return nothing so that no computation can be made based on the result
     } else if(is_variant_v<ReturnType>) { /// But it may be an result type
@@ -1170,11 +1157,10 @@ struct Context : public std::enable_shared_from_this<Context> {
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
 
     // TODO use std::invoke_result
-    using ReturnType = 
-          std::conditional_t<resolve,
-          decltype(apply_if_tuple(f, std::declval< FunctionArgument >())),
-          decltype(apply_if_tuple(f, std::declval< FunctionArgument >()))>;
+    
+    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
 
+    
     /// TODO hof, hana::unpack
     const auto on_new_value = [f = std::move(f)](const FunctionArgument &new_value) -> ReturnType {
       if constexpr (std::is_void_v<ReturnType>) {
