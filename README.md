@@ -64,8 +64,16 @@ TODO
 # Dependencies: 
 
 - needs ROS 2 (tested on Humble)
-- Boost (Hana, Graph library)
+- Boost (Hana, Graph Library)
 
+# Build and test 
+
+```sh
+colcon build  --packages-select icey
+colcon test --packages-select icey 
+# Run test
+build/icey./promise_test
+```
 # Why should I use ICEY: 
 
 TODO more convincing 

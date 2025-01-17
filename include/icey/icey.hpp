@@ -161,13 +161,14 @@ public:
   }
 
   /// Set without notify
+  /// TODO https://stackoverflow.com/a/78894559
   void resolve(const MaybeValue &x) { 
       if(x) 
-        std::get<1>(value_) = *x;
+        value_.template emplace<1>(*x);
       else 
-        value_ = std::monostate{};
+        value_.template emplace<0>(std::monostate{});
   }
-  void reject(const ErrorValue &x) { std::get<2>(value_) = x; }
+  void reject(const ErrorValue &x) { value_.template emplace<2>(x); }
 
   void resolve_and_notify(const MaybeValue &x) {   
     this->resolve(x);

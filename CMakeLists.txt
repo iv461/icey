@@ -33,6 +33,22 @@ ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp
 #ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
 #ament_auto_add_executable(promise_test test/promise_test.cpp)
 
+if(BUILD_TESTING)
+  # Automatic inclusion of lint-related tests
+  #find_package(ament_lint_auto REQUIRED)
+  #ament_lint_auto_find_test_dependencies()
+
+  # Add gtests
+  find_package(ament_cmake_gtest REQUIRED)
+  #add_subdirectory(test)
+  
+  ament_auto_add_gtest(promise_test test/promise_test.cpp) 
+
+  ##target_include_directories(promise_test PUBLIC include/)
+  ament_target_dependencies(promise_test rclcpp) 
+
+endif()
+
 ament_auto_package(
   INSTALL_TO_SHARE
 )
