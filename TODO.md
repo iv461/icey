@@ -4,28 +4,45 @@
 
 Sorted by decreasing priority. 
 
-- [X] Graph engine: notify leaves
-- [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
-- [ ] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless ! -> depends on understanding hana and implementing `synch_with_reference`
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 
-- [ ] publish shared ptr should be supported 
-- [ ] Forbid subscribing to the same topic that is published by the same node 
-- [ ] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
-- [ ] Promise-API: .catch(), finally mostly important for timeout detection of service call 
-- [] Unit-tests testing the node
-- [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
+- [ ] Implement Promises properly, adhering to fallthrough
+- [ ] Up-to-date docs 
+- [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
-- [] Measure perf and compare with plain ROS node to avoid surprises
-- [] Make sure no double-move occurs while forwarding 
+- [ ] Unit-tests GraphEngine: topo order should lead to correct single-update behavior
+- [ ] Unit-test promise behavior, fall-through etc. 
+- [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
+- [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
+- [ ] Unit-test that no dead-locks occur, use example from the official docu where a timer drives the service client
+- [ ] Unit-test the synchronizers, is the lookupTransform correct ?
+
+- [ ] .catch() promise fo TF buffer, would be useful to print the lookup error
+
+- [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
+- [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported
+
+- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important
+
+- [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
+
+- [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> easy TODO
+- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
+
+- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid 
+- [ ] Remove MP11 as dependency
+- [ ] Forbid subscribing to the same topic that is published by the same node 
+- [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
+- [ ] Doxygen parsable comments -> low prio since internal is subject to change
+- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
+
 ## Error-handling 
 
 ## Examples 
 
 - [ ] Examples in separate package `icey_examples`
 - [ ] port a small autoware or nav2 node to find out how many line of code we save
-- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
 ## Other
 
@@ -33,42 +50,26 @@ Sorted by decreasing priority.
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
 
-- [] Transform an existing message, i.e. output [it already transformed](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Using-Stamped-Datatypes-With-Tf2-Ros-MessageFilter.html). API: .transform("target_fram") ? 
-
-- [] some autoware node needs dynamic parameter update callback to be set after algorithm has been initialized: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L153 (does not make any sense to me)
-- [] add custom loggers in the node: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L161
-- [] publish if subscribed (unnecessary imo)
-- [X] be able to publish a tuple of optional values where some are set and some not. We need a way to directly publish some things and some not. for this, refactor connect using then, for this refactor then to receive a parent of the right type
-- [X] Automatic synchronizer: idea is that it would be nice if there is only one icey::Sync method iIinterpolates if some signals are interpolatable, otherwise use approx time. If using approx time, exact time matches if the stamps match exactly. If the message type has no stamp, take receive time automatically. The idea is that the user should not specify which filter should be used, since we can infer this.
-- [X] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals) -> removed fuse
-- [] Vector publisher: timings etc, vector_publish(sig1, sig2, ... , topic1, topic2 ...) -> won't fix
-
 ## Other nice-to-have features, not for 0.1
 
 - [ ] Message converters to subscribe directly to https://github.com/ros2/examples/blob/rolling/rclcpp/topics/minimal_publisher/member_function_with_type_adapter.cpp
-- [ ] Check callback has the right type, compiler messages are hard to understand 
 - [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
-- [ ] .catch() promise fo TF buffer, would be useful to print the lookup error
-- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
-    Sometimes we want to use the values of parameters to initialize the other stuff, i.e. frames of tf (topics should not be needed). So we need to somehow first get the parameters and then update sub/pub 
-- [ ] A way to enable/disable the node 
+
+- [X] A way to enable/disable the node -> Lifecycle node
 - [ ] Maybe Simulink-style blocks, i.e. constant, step, function etc.
 - [ ] tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
 - [ ] `StaticTransformBroadcaster` -> low prio since even the official do mentions you should use the executable instead of writing this code yourself: https://docs.ros.org/en/foxy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Static-Broadcaster-Cpp.html#the-proper-way-to-publish-static-transforms
+- [ ] Actions ? See https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble
 
 ## API elegance/clarity
 
-- [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs)
-- [X] ->then() as member
 - [ ] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
 - SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
 - [ ] Search for code that fixes the most common issues like setting int to an double param should be allowed
 
 ## Documentation 
 
-- [ ] Up-to-date docs 
 - [ ] Visualize DFG, maybe create a sequence diagram with websequencediagrams.com
-- [ ] Doxygen parsable comments 
 
 ## Examples
 
@@ -81,15 +82,8 @@ Sorted by decreasing priority.
 
 ## Bugs/Leaks
 
-
-- [ ] Support official message filters API
-- [ ] Really think about memory leaks, they should not be possible !
-- [ ] Check reference counts on all shared ptr to understand whrere they are all incremented
-- [ ] Ensure soundness of our promises, see e.g. the rules for monads: https://stackoverflow.com/a/48553568
-- [ ] Actions ? See https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble
-- [ ] Lifecycle nodes
-
-- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Destruction order remains correct despite global var
+- [X] Support official message filters API
+- [X] Ensure soundness of our promises, see e.g. the rules for monads: https://stackoverflow.com/a/48553568 -> will satisfy Promise-spec instead, fallthrough etc.
 
 ## Done 
 
@@ -135,13 +129,30 @@ Sorted by decreasing priority.
 - [X] We need a after params callback in functional API to initialize parameters, otherwise imposible to init algorithms
 - [X] Multiple-input single output-> serialize filter for modeling calling publisher from multiple places
 
+- [X] Transform an existing message, i.e. output [it already transformed](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Using-Stamped-Datatypes-With-Tf2-Ros-MessageFilter.html). API: .transform("target_fram") ? -> not doing, in plain ROS it is not transformed as well
+
+- [X] some autoware node needs dynamic parameter update callback to be set after algorithm has been initialized: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L153 (does not make any sense to me) -> does not make sense
+- [X] add custom loggers in the node: https://github.com/autowarefoundation/autoware.universe/blob/main/planning/autoware_path_optimizer/src/node.cpp#L161 -> easilly doable by mixing existing API
+- [X] publish if subscribed (unnecessary imo) -> PublisherOptions, not for 0.1
+- [X] be able to publish a tuple of optional values where some are set and some not. We need a way to directly publish some things and some not. for this, refactor connect using then, for this refactor then to receive a parent of the right type
+- [X] Automatic synchronizer: idea is that it would be nice if there is only one icey::Sync method iIinterpolates if some signals are interpolatable, otherwise use approx time. If using approx time, exact time matches if the stamps match exactly. If the message type has no stamp, take receive time automatically. The idea is that the user should not specify which filter should be used, since we can infer this.
+- [X] fuse is a composed filter, not elementary. it can be composed using SyncWithReference(any(signals), signals) -> removed fuse
+- [X] Vector publisher: timings etc, vector_publish(sig1, sig2, ... , topic1, topic2 ...) -> won't fix
+
+- [X] Graph engine: notify leaves
+- [X] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless ! -> depends on understanding hana and implementing `synch_with_reference`
+- [X] publish shared ptr should be supported  
+- [X] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
+- [X] Promise-API: .catch(), finally mostly important for timeout detection of service call 
+- [X] ->then() as member
+
 ### Code 
 
-- Use Result https://github.com/bitwizeshift/result
-- Use fplus 
-- More FP
-- Use boost hana instead fo rolling our own bag of meta-programming tricks
-- Look at https://github.com/xhawk18/promise-cpp
+- [X] Use Result https://github.com/bitwizeshift/result
+- [X] Use fplus -> Hana supports enough FP
+- [X] More FP
+- [X] Use boost hana instead fo rolling our own bag of meta-programming tricks
+- [X] Look at https://github.com/xhawk18/promise-cpp
 
 # Missing features
 

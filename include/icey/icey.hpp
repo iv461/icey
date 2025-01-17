@@ -1,8 +1,5 @@
 #pragma once
 
-#include <fmt/core.h>
-#include <fmt/ostream.h>
-
 #include <functional>
 #include <iostream>
 #include <map>
@@ -24,6 +21,7 @@
 
 namespace mp = boost::mp11;
 namespace hana = boost::hana;
+
 namespace icey {
 
 bool icey_debug_print = false;
@@ -75,7 +73,6 @@ public:
 
 /// Needed for storing in the graph as well as to let the compiler check for correct types
 struct ObservableBase : public DFGNode, public NodeAttachable {
-  virtual void notify_about_change() = 0;
 };
 
 template <typename... Args>
@@ -88,32 +85,17 @@ struct observable_traits {
 };
 
 template <class T>
-constexpr void assert_is_observable() {
-  static_assert(
-      is_shared_ptr<T>,
-      "The argument must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
-  static_assert(std::is_base_of_v<ObservableBase, remove_shared_ptr_t<T>>,
-                "The argument must be an icey::Observable");
-}
-
-template <class T>
 constexpr void assert_observable_holds_tuple() {
-  assert_is_observable<T>();
   static_assert(is_tuple_v<typename remove_shared_ptr_t<T>::Value>,
                 "The Observable must hold a tuple as a value for unpacking.");
 }
 
-template <typename... Args>
-constexpr void assert_are_observables() {
-  (assert_is_observable<Args>(), ...);
-}
-
-template<class T> using obs_val = typename remove_shared_ptr_t<T>::Value;
+template<class T> 
+using obs_val = typename remove_shared_ptr_t<T>::Value;
 
 /// The ROS message that a observable holds
 template<class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
-
 
 // Assert that all Observables types hold the same value
 template <typename First, typename... Rest>
@@ -130,12 +112,10 @@ struct Nothing {};
 
 /// An event of an Observable is generally like the state of a promise and needed to distinguish between the callbacks to call.
 /// It is similar to a state of a promise, but it's called event because we have a continous data-flow and the state transitions are also 
-/// not final. And also there is a state none to be able to stop the pipeline. 
+/// not final. 
 enum class EventType {
   some,  /// .then() is called
-  none,  /// .none() is calle
   error, /// .except() is called
-  custom /// .event() is called
 };
 
 /// Trait for the type of the message for a given event TODO try to solve this mode clever
@@ -146,18 +126,10 @@ template<class T>
 struct obs_val_e<EventType::some, T>{
   using type = typename remove_shared_ptr_t<T>::Value;
 };
- 
 template<class T> 
 struct obs_val_e<EventType::error, T>{
   using type = typename remove_shared_ptr_t<T>::ErrorValue;
 };
-
- 
-template<class T> 
-struct obs_val_e<EventType::none, T>{
-  using type = void;
-};
-
 template<EventType e, class T> 
 using obs_val_e_t = typename obs_val_e<e, T>::type;
 
@@ -197,11 +169,6 @@ public:
     return this->context.lock()->template then_event<EventType::error>(this->shared_from_this(), f);
   }
 
-  template <typename F>
-  auto none(F &&f) {
-    return this->context.lock()->template then_event<EventType::none>(this->shared_from_this(), f);
-  }
-
   /// Create a ROS publisher for this observable.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
@@ -216,7 +183,7 @@ public:
     notify_list_.emplace_back(std::move(cb));  /// TODO rename to children ?
   }
 
-  void notify_about_change() override {
+  void notify_about_change() {
     /// TODO rem
     if (run_graph_engine_) run_graph_engine_(this->index.value());
 
@@ -243,8 +210,6 @@ public:
   void _set_event(const V &x) {
     if constexpr(e == EventType::some) {
       this->_set(x);
-    } else if(e == EventType::none) {
-      value_ = std::nullopt; // Rest value from last time
     } else if(e == EventType::error) {
       error_ = x;
     }
@@ -256,9 +221,6 @@ public:
       run_graph_engine_(this->index.value());
     if constexpr(e == EventType::some) {
         this->notify_about_change();
-    } else if(e == EventType::none) {
-        for (auto cb : none_event_cbs_) 
-          cb();
     } else if(e == EventType::error) {
         for (auto cb : error_event_cbs_) 
           cb(error_.value());
@@ -270,18 +232,6 @@ public:
     this->_set_event<e>(x);
     this->_notify_event<e>();
   }
-  
-  /// TODO Nah, thats too ugly, use the hana example
-  template<EventType e, class F>
-  void _register_on_event_cb(F cb) {
-    if constexpr(e == EventType::some) {
-        notify_list_.emplace_back(std::move(cb));
-    } else if(e == EventType::none) {
-        none_event_cbs_.emplace_back(std::move(cb));
-    } else if(e == EventType::error) {
-        error_event_cbs_.emplace_back(std::move(cb));
-    }
-  }
 
   void _register_on_error_cb(OnReject cb) {
       error_event_cbs_.emplace_back(std::move(cb));
@@ -290,13 +240,10 @@ public:
   /// The last received value, it is buffered. It is buffered only to be able to do graph mode.
   /// TODO model type correctly, std::variant 
   MaybeValue value_; 
-
   std::optional<ErrorValue> error_;
 
-  /// TODO I don't think we need lists because .then and .catch always create 
   std::vector<OnResolve> notify_list_;
-  std::vector<OnReject> error_event_cbs_;
-  std::vector< std::function<void()> > none_event_cbs_;
+  std::vector<OnReject> error_event_cbs_;  
 };
 
 struct DevNullObservable : public Observable<Nothing> {};
@@ -368,25 +315,12 @@ protected:
 };
 
 /// A subscriber observable, always stores a shared pointer to the message as it's value
-/// this is the base for all observables that subscribe to messages since we want to pass them as shared pointers
-/// TODO a subscription is fallible as well, reject the promiseif the QoS is not ok for example (via SubscriptionOptions)
-/// .event(icey::SubscriptionEventType, F) maybe ?
 template <typename _Message>
-class SubscriptionObservableBase : public Observable< typename _Message::SharedPtr > {
+class SubscriptionObservable : public Observable < typename _Message::SharedPtr > {
   friend class Context;
 public:
-  using Message = _Message;
   using Value = typename _Message::SharedPtr;
-};
-
-template <typename _Message>
-class SubscriptionObservable : public SubscriptionObservableBase< _Message > {
-  friend class Context;
-
-public:
-  using Base =  SubscriptionObservableBase< _Message >;
-  using Value = typename Base::Value;
-  using Message = typename Base::Message;
+  using Message = _Message;
   SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos,
                          const rclcpp::SubscriptionOptions &options)
       : name_(name), qos_(qos), options_(options) {
@@ -408,12 +342,10 @@ protected:
 };
 
 /// An interpolatable observable is one that buffers the incoming messages using a circular buffer and
-/// allows to query the message at a given point, optionally using interpolation. It is an essential
+/// allows to query the message at a given point, using interpolation. It is an essential
 /// for using lookupTransform with TF. It is used by synchronizers to synchronize a topic exactly at
 /// a given time point.
 struct InterpolateableObservableBase {}; // TODO basically only there to be able to recognize observables in the synchronizer
-template <class T>
-using is_interpolatable = std::is_base_of<InterpolateableObservableBase, T>;
 
 template <typename T>
 constexpr auto hana_is_interpolatable(T) {
@@ -425,10 +357,10 @@ constexpr auto hana_is_interpolatable(T) {
 
 template <typename _Message>
 struct InterpolateableObservable : public InterpolateableObservableBase,
-                                   public SubscriptionObservableBase<_Message> {
+                                   public Observable < typename _Message::SharedPtr, std::string > {
   
-  using MaybeValue = std::optional < typename SubscriptionObservableBase<_Message>::Value >;
-  /// Get the closest measurement to a given time point. Returns nothing if the buffer is empty or
+  using MaybeValue = std::optional < typename _Message::SharedPtr >;
+  /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
   virtual MaybeValue get_at_time(const rclcpp::Time &time) const = 0;
 };
@@ -545,13 +477,6 @@ protected:
 struct AnyComputation {
   /// executes and notifies
   std::function<void()> f;
-};
-
-/// TODO for easier debugging and less binary bloat (should work bc CTAD)
-template <class _Input, class _Output>
-struct Computation : public AnyComputation {
-  std::shared_ptr<Observable<_Input>> input;
-  std::shared_ptr<Observable<_Output>> output;
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -1191,8 +1116,6 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
   /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
   /// run
-  /// TODO fix the massive code dup here, use higher-order functions and make sure GCC inlines them
-  /// TODO make the wiring based on the computation object. I.e. if we use eager-mode, we just register the computation object
   // TODO event is input event
   template <EventType e, class Input, class Output, class F>
   AnyComputation create_computation(Input input, Output output, F &&f) {
@@ -1257,8 +1180,6 @@ struct Context : public std::enable_shared_from_this<Context> {
       };
       if constexpr(e == EventType::some) {
         input->register_on_change_cb(cb);
-      } else if(e == EventType::none) {
-          
       } else if(e == EventType::error) {
           input->_register_on_error_cb(cb);
       }
