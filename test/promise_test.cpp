@@ -20,7 +20,7 @@ int main() {
             return "bar";
         });
 
-    my_promise->_set_and_notify("heloo");
+    my_promise->resolve("heloo");
 
     using ResolveValue = std::string;
     using ErrorValue = int;
@@ -33,10 +33,7 @@ my_promise2->then([](ResolveValue res) {
         ->then([](ResolveValue res) {
             std::cout << "Got " << res << std::endl;
             return std::string("foo");
-        })
-        ;
-
-        my_promise2->except([](ErrorValue retcode) {
+        })->except([](ErrorValue retcode) {
             std::cout << "Got error " << retcode << std::endl;
             return 7.f;
         })
@@ -44,6 +41,6 @@ my_promise2->then([](ResolveValue res) {
             std::cout << "Got float after error:  " << x << std::endl;
         });
 
-
-    my_promise2->_set_and_notify_event<icey::EventType::error>(-3);
+    my_promise2->resolve("resolution");
+    my_promise2->reject(-3);
 }

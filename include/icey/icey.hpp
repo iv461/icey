@@ -90,8 +90,15 @@ constexpr void assert_observable_holds_tuple() {
                 "The Observable must hold a tuple as a value for unpacking.");
 }
 
+/// Some observable traits
 template<class T> 
 using obs_val = typename remove_shared_ptr_t<T>::Value;
+
+template<class T> 
+using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
+
+template<class T> 
+using obs_vor = typename remove_shared_ptr_t<T>::ValueORError;
 
 /// The ROS message that a observable holds
 template<class T>
@@ -110,32 +117,8 @@ constexpr void assert_all_observable_values_are_same() {
 
 struct Nothing {};
 
-/// An event of an Observable is generally like the state of a promise and needed to distinguish between the callbacks to call.
-/// It is similar to a state of a promise, but it's called event because we have a continous data-flow and the state transitions are also 
-/// not final. 
-enum class EventType {
-  some,  /// .then() is called
-  error, /// .except() is called
-};
-
-/// Trait for the type of the message for a given event TODO try to solve this mode clever
-template<EventType e, class T> 
-struct obs_val_e{};
-
-template<class T> 
-struct obs_val_e<EventType::some, T>{
-  using type = typename remove_shared_ptr_t<T>::Value;
-};
-template<class T> 
-struct obs_val_e<EventType::error, T>{
-  using type = typename remove_shared_ptr_t<T>::ErrorValue;
-};
-template<EventType e, class T> 
-using obs_val_e_t = typename obs_val_e<e, T>::type;
-
 /// An observable. Similar to a promise in JS.
 /// TODO consider CRTP, would also be beneficial for PIMPL
-/// TODO we can either hold a value or an error not, both, use therefore a sum type (std::variant)
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : public ObservableBase, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
@@ -143,12 +126,11 @@ class Observable : public ObservableBase, public std::enable_shared_from_this<Ob
 public:
   using Value = _Value;
   using MaybeValue = std::optional<Value>;
-
   using ErrorValue = _ErrorValue;
   using Self = Observable<Value, ErrorValue>;
 
-  using OnResolve = std::function<void(const Value &)>;
-  using OnReject = std::function<void(const ErrorValue &)>;
+  using ValueORError = std::variant<MaybeValue, ErrorValue>;
+  using Handler = std::function<void()>;
 
   /*  Using boost::asio::timer we can easily implement the classic promise example.
   using Thenable= std::function<void(OnResolve)>;
@@ -161,12 +143,12 @@ public:
   /// observable changes, where y = f(x).
   template <typename F>
   auto then(F &&f) {
-    return this->context.lock()->template then_event<EventType::some>(this->shared_from_this(), f);
+    return this->context.lock()->template done<true>(this->shared_from_this(), f);
   }
 
   template <typename F>
   auto except(F &&f) {
-    return this->context.lock()->template then_event<EventType::error>(this->shared_from_this(), f);
+    return this->context.lock()->template done<false>(this->shared_from_this(), f);
   }
 
   /// Create a ROS publisher and publish this observable.
@@ -181,75 +163,45 @@ public:
     return this->context.lock()->create_client(this->shared_from_this(), topic_name, qos);
   }*/
 
-  virtual bool has_value() const { return value_.has_value(); }
-  virtual const Value &value() const { return value_.value(); }
-
-//protected:
-  virtual void register_on_change_cb(OnResolve &&cb) {
-    notify_list_.emplace_back(std::move(cb));  /// TODO rename to children ?
+  virtual bool has_error() {
+      return std::holds_alternative<ErrorValue>(value_);
   }
 
-  void notify_about_change() {
-    /// TODO rem
-    if (run_graph_engine_) run_graph_engine_(this->index.value());
+  virtual bool has_value() const { 
+      return !has_error() && std::get<MaybeValue>(value_).has_value(); 
+  }
 
-    for (auto cb : notify_list_) {
-      cb(this->value());
-    }
+  virtual const Value &value() const { return std::get<MaybeValue>(value_).value(); }
+  virtual const Error &error() const { return std::get<ErrorValue>(value_); }
+
+
+//protected:
+  void _register_handler(Handler cb) {
+      handlers_.emplace_back(std::move(cb));
   }
 
   /// Set without notify
-  virtual void _set(const Value &new_value) {
-    this->value_ = new_value;
-    if (icey_debug_print)
-      std::cout << "[" + this->class_name + ", " + this->name + "] _set was called, this->value_: "
-                << this->has_value() << std::endl;
-  }
+  void resolve(const MaybeValue &x) { std::get<MaybeValue>(value_) = x; }
+  void reject(const Error &x) { std::get<ErrorValue>(value_) = x; }
 
-  /// set and notify all observers about the new value
-  virtual void _set_and_notify(const Value &new_value) {
-    this->_set(new_value);
-    notify_about_change();
-  }
-
-  template<EventType e, class V> 
-  void _set_event(const V &x) {
-    if constexpr(e == EventType::some) {
-      this->_set(x);
-    } else if(e == EventType::error) {
-      error_ = x;
-    }
-  }
-
-  template<EventType e>
-  void _notify_event() {
+  /*
+  if (icey_debug_print)
+      std::cout << "[" + this->class_name + ", " + this->name + "] _set was called" << std::endl;
+  */  
+  
+  /// Notify about error or value, depending on the state. If there is no value, it does not notify
+  void _notify() {
     if (run_graph_engine_) 
       run_graph_engine_(this->index.value());
-    if constexpr(e == EventType::some) {
-        this->notify_about_change();
-    } else if(e == EventType::error) {
-        for (auto cb : error_event_cbs_) 
-          cb(error_.value());
-    }
+  
+    if(this->has_value() || this->has_error()) {
+      for (auto cb : handlers_) cb();
   }
-
-  template<EventType e, class V> 
-  void _set_and_notify_event(const V &x) {
-    this->_set_event<e>(x);
-    this->_notify_event<e>();
-  }
-
-  void _register_on_error_cb(OnReject cb) {
-      error_event_cbs_.emplace_back(std::move(cb));
-  }
-
+  
   /// The last received value, it is buffered. It is buffered only to be able to do graph mode.
-  /// TODO model type correctly, std::variant 
-  MaybeValue value_; 
-  std::optional<ErrorValue> error_;
-
-  std::vector<OnResolve> notify_list_;
-  std::vector<OnReject> error_event_cbs_;  
+  ValueORError value_; 
+  std::vector<Handler> handlers_;
+  
 };
 
 struct DevNullObservable : public Observable<Nothing> {};
@@ -466,9 +418,10 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
-    this->register_on_change_cb([publisher](const Value &new_value) { 
+    this->register_handler([this, publisher]() { 
                 // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
         // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
+        const auto &new_value = this->value(); /// There can be no error
         if constexpr(is_shared_ptr<Value>)
           publisher(*new_value);
         else 
@@ -495,9 +448,10 @@ struct AnyComputation {
 template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->register_on_change_cb([this](typename _Message::SharedPtr msg) {
+    this->register_handler([this]() {
       using Event = message_filters::MessageEvent<const _Message>;
-      this->signalMessage(Event(msg));
+      const auto &new_value = this->value(); /// There can be no error
+      this->signalMessage(Event(new_value));
     });
   }
 };
@@ -563,7 +517,10 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->register_on_change_cb([publish](const auto &new_value) { publish(new_value); });
+    this->register_handler([this, publish]() { 
+        const auto &new_value = this->value(); /// There can be no error
+        publish(new_value); 
+    });
   }
 };
 
@@ -1036,7 +993,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     //auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return hana_is_interpolatable(t); }); 
     //static_assert(all_are_interpolatables, "All inputs must be interpolatable when using the sync_with_reference");
 
-    AnyComputation computation = create_computation<EventType::some>(reference, child, 
+    AnyComputation computation = create_computation<true>(reference, child, 
       [parents_tuple](const obs_val<Reference> &new_value) {  
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
               return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
@@ -1124,20 +1081,29 @@ struct Context : public std::enable_shared_from_this<Context> {
     return child;
   }
 
-  template <EventType e, typename Parent, typename F>
-  auto then_event(Parent parent, F &&f) {
+  /// Promise register, if register_both is true, resolve and reject handles are registered, otherwise only the reject handler is registered that resolves with the error
+  template <bool resolve, typename Parent, typename F>
+  auto done(Parent parent, F &&f) {
     observable_traits<Parent>{};
     /// TODO static_assert here signature for better error messages
-    using ReturnType = decltype(apply_if_tuple(f, std::declval< obs_val_e_t<e, Parent> >()));
-    using ObsValue = typename remove_optional<ReturnType>::type;
+    /// Return type depending of if the it is called when the Promise resolves or rejects
+    using ReturnType = 
+          std::conditional_t<resolve,
+          decltype(apply_if_tuple(f, std::declval< obs_val< Parent> >())),
+          decltype(apply_if_tuple(f, std::declval< obs_err< Parent> >()))>;
+
+    /// Now we want to call resolve only if it is not none, so strip optional
+    using ReturnTypeSome = typename remove_optional<ReturnType>::type;
     if constexpr (std::is_void_v<ReturnType>) {
       /// create a dummy to satisfy the graph
       auto child = create_observable<DevNullObservable>();
-      connect<e>(child, parent, std::move(f));
+      connect<resolve>(child, parent, std::move(f));
       /// return nothing so that no computation can be made based on the result
     } else {
-      auto child = create_observable<Observable<ObsValue>>();
-      connect<e>(child, parent, std::move(f));
+      /// The resulting observable always has the same ErrorValue so that it can pass through the error
+      using OutputObservable = Observable<ReturnTypeSome, obs_err<Parent> >;
+      auto child = create_observable< OutputObservable >();
+      connect<resolve>(child, parent, std::move(f));
       return child;
     }
   }
@@ -1189,15 +1155,22 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
   /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
   /// run
-  // TODO event is input event
-  template <EventType e, class Input, class Output, class F>
+  template <bool resolve, class Input, class Output, class F>
   AnyComputation create_computation(Input input, Output output, F &&f) {
     observable_traits<Input, Output>{};
+
+    using Value = obs_val<Parent>;
+    using ErrorValue = obs_err<Parent>;
+    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
+
     // TODO use std::invoke_result
-    using ReturnType =decltype(apply_if_tuple(f, std::declval< obs_val_e_t<e, Input> >()));
+    using ReturnType = 
+          std::conditional_t<resolve,
+          decltype(apply_if_tuple(f, std::declval< FunctionArgument >())),
+          decltype(apply_if_tuple(f, std::declval< FunctionArgument >()))>;
 
     /// TODO hof, hana::unpack
-    const auto on_new_value = [f = std::move(f)](const obs_val_e_t<e, Input> &new_value) ->ReturnType {
+    const auto on_new_value = [f = std::move(f)](const FunctionArgument &new_value) -> ReturnType {
       if constexpr (std::is_void_v<ReturnType>) {
         apply_if_tuple(f, new_value);
       } else {
@@ -1205,72 +1178,51 @@ struct Context : public std::enable_shared_from_this<Context> {
       }
     };
 
-    /// TODO refactor, BIND
-    auto get_input_value = [input]() { 
-      if constexpr (e == EventType::some) {
-        return input->value();
-      } else if (e == EventType::error) {
-        return input->error_.value();
-      }
-    };
-    auto compute = [output, f = std::move(on_new_value)](const obs_val_e_t<e, Input> &new_value) -> bool {
+    /// TODO refactor, bind
+    auto notify = [output]() { output->_notify(); };
+    auto resolve = [output, f = std::move(on_new_value)](const FunctionArgument &new_value) -> bool {
         if constexpr (std::is_void_v<ReturnType>) {
           f(new_value);
-          return false;
         } else {
           ReturnType result = f(new_value);
-          /// TODO here we have bug, we do not notify about none. We should handle this in the observable actually
-          if constexpr (is_optional_v<ReturnType>) {
-            bool has_value = result.has_value();
-            if (has_value)            /// Set result only if it is not nothing
-              output->template _set_event<EventType::some>(*result);  /// Do not notify, only set
-            return has_value;
-          } else {
-            output->template _set_event<EventType::some>(result);
-            return true;
-          }
+          output->resolve(result); /// Do not notify, only set (may be none)
         }
     };
-
-    auto notify = [output](bool was_some) { 
-      if(was_some) 
-        output->template _notify_event<EventType::some>();
+    
+    auto resolve_if_needed = [input, resolve=std::move(resolve)]() {
+      if constexpr (!resolve) { /// If we .catch() 
+        if(input->has_error())  { /// Then only resolve with the error if there is one
+          resolve(input->error());
+        } /// Else do nothing
+      } else {
+        if(input->has_value()) { 
+          resolve(input->value());
+        } else if (input->has_error()) {
+          output->reject(input->error()); /// Important: do not execute computation, but propagate the error
+        }
+      }
     };
 
-    /// Shove the result in and compute, then notify (only ROS)
     AnyComputation computation;
-    computation.f = [=]() {
-      auto ret1 = get_input_value();
-      auto ret2 = compute(ret1);
-      notify(ret2);
-    };//hana::compose(notify, compute, get_input_value);
+    computation.f = [=]() { resolve_if_needed(); notify(); };//hana::compose(notify, compute, get_input_value);
 
     if (this->use_eager_mode_) {
-      //hana::compose(notify, compute);
-      const auto cb = [=](const obs_val_e_t<e, Input> &new_value) {
-            auto ret2 = compute(new_value);
-          notify(ret2);
-      };
-      if constexpr(e == EventType::some) {
-        input->register_on_change_cb(cb);
-      } else if(e == EventType::error) {
-          input->_register_on_error_cb(cb);
-      }
+      input->register_handler(computation.f);
     }
-    
+  
     return computation;
   }
 
   /// Makes a connection from parent to child with the given function F and adds it to the data-flow
   /// graph.
-  template <EventType e, class Child, class Parent, class F>
+  template <bool resolve, class Child, class Parent, class F>
   void connect(Child child, Parent parent, F &&f) {
     // TODO assert parent has index
     std::vector<size_t> parent_ids;
     parent_ids.push_back(parent->index.value());
 
     std::vector<AnyComputation> edges_data;
-    auto computation = create_computation<e>(parent, child, std::move(f));
+    auto computation = create_computation<resolve>(parent, child, std::move(f));
     edges_data.push_back(computation);
     /// Add connections to the graph
     data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
@@ -1306,9 +1258,9 @@ struct Context : public std::enable_shared_from_this<Context> {
   AnyComputation create_identity_computation(Input input, Output output) {
     observable_traits<Input, Output>{};
     /// TODO Assert Input is not a tuple or return tuple if it is
-    /// TODO generalize to event
     /// TOOD use hana::id
-    return create_computation<EventType::some>(input, output, [](auto &&x) { return std::move(x); });
+    /// idendity computation always propagates both resolve and reject
+    return create_computation<true>(input, output, [](auto &&x) { return std::move(x); });
   }
 
   /// Connects each of the N inputs with the corresponding N outputs using identity
