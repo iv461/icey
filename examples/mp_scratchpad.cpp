@@ -6,7 +6,7 @@
 #include <boost/type_index.hpp>
 #include <tuple>
 #include <iostream>
-
+#include <variant>
 
 namespace hana = boost::hana;
 

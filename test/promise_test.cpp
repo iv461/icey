@@ -1,9 +1,8 @@
 /// This test tests whether the Promises behave like promises as specified in JavaScript, especially 
 /// regarding catch-handlers executed correctly (fall-through behavior).
 
-#include <icey/icey_ros2.hpp>
+#include <icey/impl/observable.hpp>
 #include <iostream>
-
 #include <gtest/gtest.h>
 
 class PromiseTest : public testing::Test {
@@ -30,39 +29,46 @@ class PromiseTest : public testing::Test {
      // before the destructor).
   }
 
+   enum MarkerBehavior { Some, None, Err };
+   template<MarkerBehavior behavior>
   auto marker(size_t i) {
     return [this, i](auto v) {
+      using Result = icey::Result<std::string, std::string>;
         events.push_back(i);
         std::cout << "Marker " << i << " called " << std::endl;
-        return std::string("marker_from_" + std::to_string(i));
+        if constexpr(behavior == MarkerBehavior::Some)
+         return std::string("marker_from_" + std::to_string(i));
+        else if constexpr (behavior == MarkerBehavior::None)
+         return std::optional<std::string>{};
+       else
+         return Result::Err("erroring_" + std::to_string(i));
     };
   }
 
-  using Promise = icey::Observable<std::string>; 
-
-  std::shared_ptr<icey::Context> ctx_{std::make_shared<icey::Context>()};
   std::vector<size_t> events;
 };
 
 TEST_F(PromiseTest, Fallthrough) {
     using ResolveValue = std::string;
     using ErrorValue = int;
-    auto my_promise2 = ctx_->create_observable< icey::Observable<ResolveValue, ErrorValue> >();
+
+    auto my_promise2 = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
 
     my_promise2
-        ->then(marker(0))
-        ->then(marker(1))
-        ->except(marker(2))
-        ->then(marker(3));
+        ->then(marker<Some>(1))
+        ->then(marker<Err>(2))
+        ->then(marker<Some>(3))
+        ->except(marker<None>(4))
+        ->then(marker<Some>(5));
 
     EXPECT_TRUE(events.empty());
-    my_promise2->resolve_and_notify("resolution");
+    my_promise2->resolve("resolution");
     std::vector<size_t> target_order1{0, 1};
 
     EXPECT_EQ(target_order1, events);
     events.clear();
 
-    my_promise2->reject_and_notify(-3);
+    my_promise2->reject(-3);
 
     std::vector<size_t> target_order2{2, 3};
     EXPECT_EQ(target_order2, events);

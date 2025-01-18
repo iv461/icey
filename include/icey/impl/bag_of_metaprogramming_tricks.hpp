@@ -66,7 +66,7 @@ struct remove_optional<std::optional<T>> {
 };
 
 template <class T>
-using remove_optional_t = class remove_optional<T>::type;
+using remove_optional_t = typename remove_optional<T>::type;
 
 template <class T>
 struct remove_shared_ptr {
@@ -79,7 +79,7 @@ struct remove_shared_ptr<std::shared_ptr<T>> {
 };
 
 template <class T>
-using remove_shared_ptr_t = class remove_shared_ptr<T>::type;
+using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
 
 /// Are all the types of the tuple the same ?
 template <class Head, typename... Tail>

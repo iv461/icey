@@ -74,30 +74,12 @@ public:
 struct ObservableBase : public DFGNode, public NodeAttachable, private boost::noncopyable {
 };
 
-template <typename... Args>
-struct observable_traits {
-  static_assert(
-      (is_shared_ptr<Args> && ...),
-      "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
-  static_assert((std::is_base_of_v<ObservableBase, remove_shared_ptr_t<Args>> && ...),
-                "The arguments must be an icey::Observable");
-};
 
 template <class T>
 constexpr void assert_observable_holds_tuple() {
   static_assert(is_tuple_v<typename remove_shared_ptr_t<T>::Value>,
                 "The Observable must hold a tuple as a value for unpacking.");
 }
-
-/// Some observable traits
-template<class T> 
-using obs_val = typename remove_shared_ptr_t<T>::Value;
-
-template<class T> 
-using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
-
-template<class T> 
-using obs_vor = typename remove_shared_ptr_t<T>::ValueORError;
 
 /// The ROS message that a observable holds
 template<class T>
@@ -113,10 +95,20 @@ constexpr void assert_all_observable_values_are_same() {
                  ...),
                 "The values of all the observables must be the same");
 }
+/// A Result-type like in Rust, it is a sum type that can either hold Value or Error, or, different to Rust, none.
+/// We create a new type to be able to recognize it when it is returned from a user callback.
+struct ResultBase {}:
+template <class _Value, class _ErrorValue>
+struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public ResultBase {
+  static None() {return Result<_Value, _ErrorValue>{};}
+  static Ok(const _Value &x) { this->template emplace<1>(*x); }
+  static Err(const _ErrorValue &x) { this->template emplace<2>(x); }
+};
 
-struct Nothing {}; 
+template<class T>
+constexpr bool is_result = std::is_base_of_v<T, ResultBase>;
 
-/// An observable. Similar to a promise in JS.
+/// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : public ObservableBase, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
@@ -127,7 +119,7 @@ public:
   using ErrorValue =  _ErrorValue;
   using Self = Observable<Value, ErrorValue>;
   using MaybeValue = std::optional<Value>;
-  using ValueORError = std::variant<std::monostate, Value, ErrorValue>;
+  using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
@@ -138,7 +130,8 @@ public:
   }
 
   template <typename F>
-  auto except(F &&f) {
+  auto except(F &&f) { 
+    static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
     return this->context.lock()->template done<false>(this->shared_from_this(), f);
   }
 
@@ -161,14 +154,14 @@ public:
   }
 
   /// Set without notify
-  /// TODO https://stackoverflow.com/a/78894559
-  void resolve(const MaybeValue &x) { 
+  /// TODO this will destroy first, see behttps://stackoverflow.com/a/78894559
+  void _set_value(const MaybeValue &x) { 
       if(x) 
         value_.template emplace<1>(*x);
       else 
         value_.template emplace<0>(std::monostate{});
   }
-  void reject(const ErrorValue &x) { value_.template emplace<2>(x); }
+  void _set_error(const ErrorValue &x) { value_.template emplace<2>(x); }
 
   void resolve_and_notify(const MaybeValue &x) {   
     this->resolve(x);
@@ -186,6 +179,8 @@ public:
   
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
   void _notify() {
+    if (icey_debug_print)
+      std::cout << "[" + this->class_name + ", " + this->name + "] _notify was called" << std::endl;
     if (run_graph_engine_) 
       run_graph_engine_(this->index.value());
   
@@ -193,11 +188,73 @@ public:
       for (auto cb : handlers_) cb();
     }
   }
+
+  /// @brief Returns the given function, but if called with a tuple, the tuple is first unpacked and passed as multiple arguments
+  /// TODO use hana::unpack
+  /// @param f an arbitrary callable
+  template <class F>
+  static apply_if_needed(F && f) {
+    return[f = std::move(f)](const auto &new_value){
+      if constexpr (std::is_void_v<ReturnType>) {
+        apply_if_tuple(f, new_value);
+      } else {
+        return apply_if_tuple(f, new_value);
+      }
+    };
+  }
+
+  /// @brief This function creates a handler for the promise and returns it as a function object. 
+  /// It is basis for implementing the .then() function but it does three things differently: 
+  /// First, it does not create the new promise, the output prmise. 
+  /// Second, it only optionally registers this handler, it must not be registered for the graph mode.
+  /// Third, we only can register on resolve or on reject, not both. on resolve is implemented such that implicitly the on reject handler 
+  /// passes over the error. 
+  /// @param this (implicit): Observable<V, E>* The input promise
+  /// @param output: SharedPtr< Observable<V2, E> > or derived, the resulting promise
+  /// @param f:  (V) -> V2 The user callback function to call when the input promises resolves or rejects
+  template <bool resolve, class Output, class F>
+  AnyComputation create_computation(Output output, F &&f, bool register_it) {
+    observable_traits<Output>{};
+    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
+    // TODO use std::invoke_result
+    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
+    const auto on_new_value = apply_if_needed(f);
+    /// TODO refactor, bind
+    auto notify = [output]() { output->_notify(); };
+    auto call_and_resolve = [output, f = std::move(on_new_value)](const FunctionArgument &new_value) {
+        if constexpr (std::is_void_v<ReturnType>) {
+          f(new_value);
+        } else {
+          ReturnType result = f(new_value);
+          output->resolve(result); /// Do not notify, only set (may be none)
+        }
+    };
+    
+    auto resolve_if_needed = [input, output, call_and_resolve=std::move(call_and_resolve)]() {
+      if constexpr (!resolve) { /// If we .catch() 
+        if(input->has_error())  { /// Then only resolve with the error if there is one
+          call_and_resolve(input->error());
+        } /// Else do nothing
+      } else {
+        if(input->has_value()) { 
+          call_and_resolve(input->value());
+        } else if (input->has_error()) {
+          output->reject(input->error()); /// Important: do not execute computation, but propagate the error
+        }
+      }
+    };
+
+    AnyComputation computation;
+    computation.f = [=]() { resolve_if_needed(); notify(); };//hana::compose(notify, compute, get_input_value);
+
+    if (register_it) 
+      input->_register_handler(computation.f);
+    return computation;
+  }
   
   /// The last received value, it is buffered. It is buffered only to be able to do graph mode.
   ValueORError value_; 
   std::vector<Handler> handlers_;
-  
 };
 
 struct DevNullObservable : public Observable<Nothing> {};
@@ -1064,7 +1121,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename... Parents>
   auto serialize(Parents... parents) {
     observable_traits<Parents...>{};
-    // assert_all_observable_values_are_same<Parents...>();
+    // TODO assert_all_observable_values_are_same<Parents...>();
     using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
     /// First, create a new observable
