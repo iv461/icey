@@ -16,7 +16,7 @@ struct Nothing {};
 /// We create a new type to be able to recognize it when it is returned from a user callback.
 struct ResultBase{};
 template <class _Value, class _ErrorValue>
-struct Result : public std::variant<std::monostate, _Value, _ErrorValue> {
+struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public ResultBase {
   using Value = _Value;
   using ErrorValue =  _ErrorValue;
   using Self = Result<_Value, _ErrorValue>;
@@ -32,7 +32,7 @@ struct Result : public std::variant<std::monostate, _Value, _ErrorValue> {
 /*template<class T, class V, class E>
 constexpr bool is_result = std::is_same_v<T, Result<V, E>>;*/
 template<class T>
-constexpr bool is_result = std::is_base_of_v<T, ResultBase>;
+constexpr bool is_result = std::is_base_of_v<ResultBase, T>;
 
 /// Some traits of the observables
 template<class T> 
@@ -82,9 +82,7 @@ public:
   virtual const Value &value() const { return value_.value(); }
   virtual const ErrorValue &error() const { return value_.error(); }
 
-  void _register_handler(Handler cb) {
-      handlers_.emplace_back(std::move(cb));
-  }
+  void _register_handler(Handler cb) {handlers_.emplace_back(std::move(cb)); }
 
   /// Set without notify
   /// TODO this will destroy first, see behttps://stackoverflow.com/a/78894559
@@ -148,16 +146,20 @@ public:
     auto input = this->shared_from_this(); // strong reference to this for binding, instead of only weak if we would bind this
     //observable_traits<Output>{}; TODO 
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
+    static_assert(std::is_same_v <std::string, Value>);
+    static_assert(std::is_same_v <std::string, ErrorValue>);
     // TODO use std::invoke_result
     using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
-    const auto on_new_value = apply_if_needed(f);
+    //const auto on_new_value = apply_if_needed(f);
     /// TODO refactor, bind
     auto notify = [output]() { output->_notify(); };
-    auto call_and_resolve = [output, f = std::move(on_new_value)](const FunctionArgument &new_value) {
-        if constexpr (std::is_void_v<ReturnType>) {
-          f(new_value);
+    auto call_and_resolve = [output, f = std::move(f)](const FunctionArgument &x) {
+        if constexpr (std::is_void_v<ReturnType>) {    
+            apply_if_tuple(f, x);
+        } else if constexpr(is_result<ReturnType>){
+          output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant
         } else {
-          ReturnType result = f(new_value);
+          ReturnType result = apply_if_tuple(f, x);
           output->_set_value(result); /// Do not notify, only set (may be none)
         }
     };
@@ -187,6 +189,9 @@ public:
   auto done(F &&f) {
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
+     static_assert(std::is_same_v <std::string, Value>);
+    static_assert(std::is_same_v <std::string, ErrorValue>);
+
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
     using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
     /// Now we want to call resolve only if it is not none, so strip optional
@@ -199,8 +204,11 @@ public:
       /// return nothing so that no computation can be made based on the result
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
       /// In this case we want to be able to pass over the same error 
-      auto child = create_observable< Observable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
       
+      static_assert(std::is_same_v <std::string, typename ReturnType::Value>);
+      auto child = create_observable< Observable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
+      auto handler = create_handler<resolve>(child, std::move(f), register_handler);
+      return child;
     } else { /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the error
       auto child = create_observable< Observable<ReturnTypeSome, ErrorValue > >();

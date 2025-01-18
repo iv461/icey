@@ -1,6 +1,6 @@
-/// This test tests whether the Promises behave like promises as specified in JavaScript, especially 
+/// This test tests whether the Promises behave like promises in JavaScript, especially 
 /// regarding catch-handlers executed correctly (fall-through behavior).
-
+/// Note that for our use-case, we need only resolving with values, not with other promises
 #include <icey/impl/observable.hpp>
 #include <iostream>
 #include <gtest/gtest.h>
@@ -44,13 +44,15 @@ class PromiseTest : public testing::Test {
          return Result::Err("erroring_" + std::to_string(i));
     };
   }
+  size_t marker_counter{0};
 
   std::vector<size_t> events;
 };
 
+/// Smoke, tests correct chaining and skipping of except-handler in case of no exception, including skipping everything after the except-handler
 TEST_F(PromiseTest, Smoke) {
     using ResolveValue = std::string;
-    using ErrorValue = int;
+    using ErrorValue = std::string;
     auto promise = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
 
    promise
@@ -60,26 +62,26 @@ TEST_F(PromiseTest, Smoke) {
         ->except(marker<Some>(4))
         ->then(marker<Some>(5));
 
-   EXPECT_TRUE(events.empty());
-   promise->resolve("resolution");    
+   EXPECT_TRUE(events.empty()); /// Negative test
+   promise->resolve("hello");
 
    std::vector<size_t> target_order1{1, 2, 3};
    
     EXPECT_EQ(target_order1, events);
    events.clear();
 
-    promise->reject(-3);
+    promise->reject("BigExcEptiOn");
    std::vector<size_t> target_order2{4, 5};
-
     EXPECT_EQ(target_order2, events);
 }
 
-/*TEST_F(PromiseTest, Smoke) {
+/// Test error from then-handler and no return from except handler
+TEST_F(PromiseTest, VoidCatch) {
     using ResolveValue = std::string;
-    using ErrorValue = int;
+    using ErrorValue = std::string;
     auto promise = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
 
-    promise
+       promise
         ->then(marker<Some>(1))
         ->then(marker<Err>(2))
         ->then(marker<Some>(3))
@@ -87,13 +89,37 @@ TEST_F(PromiseTest, Smoke) {
         ->then(marker<Some>(5));
 
    EXPECT_TRUE(events.empty());
-   events.clear();
 
-    my_promise2->reject(-3);
+    promise->resolve("hello2");
+   std::vector<size_t> target_order{1, 2, 4};
+    EXPECT_EQ(target_order, events);
 
-    std::vector<size_t> target_order2{2, 3};
-    EXPECT_EQ(target_order2, events);
-}*/
+    events.clear();
+    promise->reject("BigExcEptiOn");
+    target_order = {4};
+    EXPECT_EQ(target_order, events);
+}
+
+TEST_F(PromiseTest, ThenErroring) {
+    using ResolveValue = std::string;
+    using ErrorValue = std::string;
+    auto promise = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
+
+       promise
+        ->then(marker<Err>(1))
+        ->then(marker<Err>(2))
+        ->then(marker<Some>(3))
+        ->except(marker<Err>(4))
+        ->except(marker<Err>(5))
+        ->then(marker<Some>(6))
+        ->then(marker<Err>(7));
+
+   EXPECT_TRUE(events.empty());
+
+    promise->resolve("GoodVal");
+   std::vector<size_t> target_order{1, 4, 5};
+    EXPECT_EQ(target_order, events);
+}
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
