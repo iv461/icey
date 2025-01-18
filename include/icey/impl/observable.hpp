@@ -34,7 +34,7 @@ using obs_val = typename remove_shared_ptr_t<T>::Value;
 template<class T> 
 using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
 template<class T> 
-using obs_vor = typename remove_shared_ptr_t<T>::ValueORError;
+using obs_state = typename remove_shared_ptr_t<T>::State;
 
 /*
 template <typename... Args>
@@ -70,35 +70,12 @@ public:
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
 
-  /// Creates a new Observable that changes it's value to y every time the value x of the parent
-  /// observable changes, where y = f(x).
-  /*
-  template <typename F>
-  auto then(F &&f) {
-    return this->context.lock()->template done<true>(this->shared_from_this(), f);
-  }
-
-  template <typename F>
-  auto except(F &&f) { 
-    static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-    return this->context.lock()->template done<false>(this->shared_from_this(), f);
-  }
-
-  /// Create a ROS publisher and publish this observable.
-  void publish(const std::string &topic_name,
-               const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
-    return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
-  }
-  */
-
   virtual bool has_error() { return value_.index() == 2; }
   virtual bool has_value() const { return value_.index() == 1; }
 
   virtual const Value &value() const { return std::get<1>(value_); }
   virtual const ErrorValue &error() const { return std::get<2>(value_); }
 
-
-//protected:
   void _register_handler(Handler cb) {
       handlers_.emplace_back(std::move(cb));
   }
@@ -113,14 +90,6 @@ public:
   }
   void _set_error(const ErrorValue &x) { value_.template emplace<2>(x); }
 
-  void resolve(const MaybeValue &x) {   
-    this->_set_value(x);
-    this->_notify();
-  }
-  void reject(const ErrorValue &x) {
-    this->_set_error(x);
-    this->_notify();
-  }
 
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
   void _notify() {
@@ -132,6 +101,16 @@ public:
     if(this->has_value() || this->has_error()) {
       for (auto cb : handlers_) cb();
     }
+  }
+
+  void resolve(const MaybeValue &x) {   
+    this->_set_value(x);
+    this->_notify();
+  }
+
+  void reject(const ErrorValue &x) {
+    this->_set_error(x);
+    this->_notify();
   }
 
   /// @brief Returns the given function, but if called with a tuple, the tuple is first unpacked and passed as multiple arguments
@@ -173,7 +152,7 @@ public:
           f(new_value);
         } else {
           ReturnType result = f(new_value);
-          output->resolve(result); /// Do not notify, only set (may be none)
+          output->_set_value(result); /// Do not notify, only set (may be none)
         }
     };
     
@@ -186,7 +165,7 @@ public:
         if(input->has_value()) { 
           call_and_resolve(input->value());
         } else if (input->has_error()) {
-          output->reject(input->error()); /// Important: do not execute computation, but propagate the error
+          output->_set_error(input->error()); /// Important: do not execute computation, but propagate the error
         }
       }
     };
@@ -223,6 +202,7 @@ public:
   }  
 
     template <class F> auto then(F &&f) { return this->done<true, true>(f); }
+
     template <class F> 
     auto except(F &&f) { 
         static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
