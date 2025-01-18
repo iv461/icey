@@ -146,19 +146,17 @@ public:
     auto input = this->shared_from_this(); // strong reference to this for binding, instead of only weak if we would bind this
     //observable_traits<Output>{}; TODO 
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
-    static_assert(std::is_same_v <std::string, Value>);
-    static_assert(std::is_same_v <std::string, ErrorValue>);
     // TODO use std::invoke_result
     using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
     //const auto on_new_value = apply_if_needed(f);
     /// TODO refactor, bind
     auto notify = [output]() { output->_notify(); };
     auto call_and_resolve = [output, f = std::move(f)](const FunctionArgument &x) {
-        if constexpr (std::is_void_v<ReturnType>) {    
+        if constexpr (std::is_void_v<ReturnType>) {
             apply_if_tuple(f, x);
-        } else if constexpr(is_result<ReturnType>){
-          output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant
-        } else {
+        } else if constexpr(is_result<ReturnType>) { /// support callbacks that at runtime may return value or error
+          output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant but differentiate and set error or value
+        } else { /// support returning std::optional
           ReturnType result = apply_if_tuple(f, x);
           output->_set_value(result); /// Do not notify, only set (may be none)
         }
@@ -189,9 +187,6 @@ public:
   auto done(F &&f) {
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
-     static_assert(std::is_same_v <std::string, Value>);
-    static_assert(std::is_same_v <std::string, ErrorValue>);
-
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
     using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
     /// Now we want to call resolve only if it is not none, so strip optional
@@ -200,12 +195,9 @@ public:
       /// create a dummy to satisfy the graph
       auto child = create_observable< Observable<Nothing, ErrorValue> >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
-      
       /// return nothing so that no computation can be made based on the result
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
       /// In this case we want to be able to pass over the same error 
-      
-      static_assert(std::is_same_v <std::string, typename ReturnType::Value>);
       auto child = create_observable< Observable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return child;
