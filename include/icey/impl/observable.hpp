@@ -17,10 +17,16 @@ struct Nothing {};
 struct ResultBase{};
 template <class _Value, class _ErrorValue>
 struct Result : public std::variant<std::monostate, _Value, _ErrorValue> {
+  using Value = _Value;
+  using ErrorValue =  _ErrorValue;
   using Self = Result<_Value, _ErrorValue>;
   static Self None() {return Result<_Value, _ErrorValue>{};}
   static Self Ok(const _Value &x) { Self ret; ret.template emplace<1>(*x); return ret;}
   static Self Err(const _ErrorValue &x) { Self ret; ret.template emplace<2>(x); return ret;}
+  bool has_error() { return this->index() == 2; }
+  bool has_value() const { return this->index() == 1; }
+  const Value &value() const { return std::get<1>(*this); }
+  const ErrorValue &error() const { return std::get<2>(*this); }
 };
 
 /*template<class T, class V, class E>
@@ -70,11 +76,11 @@ public:
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
 
-  virtual bool has_error() { return value_.index() == 2; }
-  virtual bool has_value() const { return value_.index() == 1; }
+  virtual bool has_error() { return value_.has_error(); }
+  virtual bool has_value() const { return value_.has_value(); }
 
-  virtual const Value &value() const { return std::get<1>(value_); }
-  virtual const ErrorValue &error() const { return std::get<2>(value_); }
+  virtual const Value &value() const { return value_.value(); }
+  virtual const ErrorValue &error() const { return value_.error(); }
 
   void _register_handler(Handler cb) {
       handlers_.emplace_back(std::move(cb));
@@ -191,8 +197,10 @@ public:
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       
       /// return nothing so that no computation can be made based on the result
-    } else if(is_result<ReturnType>) { /// But it may be an result type
-      /// In this case we want to be able to pass over the same error TODO 
+    } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
+      /// In this case we want to be able to pass over the same error 
+      auto child = create_observable< Observable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
+      
     } else { /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the error
       auto child = create_observable< Observable<ReturnTypeSome, ErrorValue > >();
