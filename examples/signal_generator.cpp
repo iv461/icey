@@ -15,6 +15,7 @@ int main(int argc, char **argv) {
     auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
     auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
 
+
     /// You cannot use parameters yet, this will throw an exception:
     // std::cout << "parameter  frequency is:: " << frequency->get() << std::endl;
 

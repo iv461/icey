@@ -42,14 +42,25 @@ using obs_state = typename remove_shared_ptr_t<T>::State;
 template<class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
-struct ObservableBase{};
+struct ObservableTag{}; /// A tag to be able to recognize the type "Observeble" using traits
 template <typename... Args>
 struct observable_traits {
   static_assert(
       (is_shared_ptr<Args> && ...),
       "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
-  static_assert((std::is_base_of_v<ObservableBase, remove_shared_ptr_t<Args>> && ...),
+  static_assert((std::is_base_of_v<ObservableTag, remove_shared_ptr_t<Args>> && ...),
                 "The arguments must be an icey::Observable");
+};
+
+/// The default base class for an observable, needed because of CRTP
+template <typename _Value, typename _ErrorValue>
+struct ObservableDefaultBase {
+  template<class O, typename... Args>
+  std::shared_ptr< O > create_observable(Args &&...args) {
+    auto observable = std::make_shared< O >(std::forward<Args>(args)...);
+    //observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
+    return observable;
+  }
 };
 
 class Context;
@@ -61,15 +72,25 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
     //observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
     return observable;
 }
+
+template <typename T>
+struct crtp_helper{
+    T& underlying() { return static_cast<T&>(*this); }
+    T const& underlying() const { return static_cast<T const&>(*this); }
+};
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
-template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : public ObservableBase, private boost::noncopyable, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+template <typename _Value, typename _ErrorValue, template<class, class> class Derived = ObservableDefaultBase>
+class Observable : 
+        public crtp_helper<Derived<_Value, _ErrorValue>>, 
+        public ObservableTag, 
+        private boost::noncopyable, 
+        public std::enable_shared_from_this< Observable<_Value, _ErrorValue, Derived > > {
   friend class Context; 
 public:
   using Value = _Value;
   using ErrorValue =  _ErrorValue;
-  using Self = Observable<Value, ErrorValue>;
+  using Self = Observable<Value, ErrorValue, Derived>;
   using MaybeValue = std::optional<Value>;
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
@@ -174,9 +195,17 @@ public:
       input->_register_handler(handler);
     return handler;
   }
+  /*
+  template<class, class> class NewObservable, class V, class E, typename... Args>
+  static std::shared_ptr< NewObservable<V, E> > create_observable(Args &&...args) {
+    auto observable = std::make_shared< NewObservable<V, E> >(std::forward<Args>(args)...);
+    //observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
+    return observable;
+  }
+  */
 
   /// Common function for both then and .except. bool resolve says whether f is the resolve or the reject handler (Unlike JS, we can only register one at the time)
-  template <bool resolve, template<class, class> class NewObservable, typename F>
+  template <bool resolve,  typename F>
   auto done(F &&f, bool register_handler) {
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
@@ -185,17 +214,20 @@ public:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto child = create_observable< NewObservable<Nothing, ErrorValue> >(); 
+      using NewObservable = Derived<Nothing, ErrorValue>;
+      auto child = this->underlying().template create_observable< NewObservable >();       
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
       /// In this case we want to be able to pass over the same error 
-      auto child = create_observable< NewObservable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
+      using NewObservable = Derived<typename ReturnType::Value, typename ReturnType::ErrorValue>;
+      auto child = this->underlying().template create_observable< NewObservable >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else { /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the error
-      auto child = create_observable< NewObservable<ReturnTypeSome, ErrorValue > >();
+      using NewObservable = Derived<ReturnTypeSome, ErrorValue>;
+      auto child = this->underlying().template create_observable< NewObservable >();
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     }
@@ -205,12 +237,12 @@ public:
     template <class F> auto then(F &&f) { 
       /// Note that it may only have errors
       static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, so you cannot register .then() on it.");
-      return std::get<0>(this->template done<true, Observable>(f, true)); 
+      return std::get<0>(this->template done<true>(f, true)); 
     }
     template <class F> 
     auto except(F &&f) { 
         static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-        return std::get<0>(this-> template  done<false, Observable>(f, true)); 
+        return std::get<0>(this-> template done<false>(f, true)); 
     }
 
 

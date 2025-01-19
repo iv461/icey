@@ -30,8 +30,7 @@ class Context;
 /// A node in the DFG-graph
 class DFGNode {
 public:
-  /// We bould the node starting from the root, to allow a context-free graph creation, we refer to
-  /// the parents
+  /// For building the tree
   std::weak_ptr<Context> context;
   /// The index of this observable in list of vertices in the data-flow graph. We have
   /// to store it here because of cyclic dependency. It is None if this node was not
@@ -90,17 +89,27 @@ constexpr void assert_all_observable_values_are_same() {
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : public impl::Observable<_Value, _ErrorValue>, public GraphObservableBase {
+class Observable : public impl::Observable<_Value, _ErrorValue, Observable>,
+                   public GraphObservableBase {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
 public:
-  using Value = typename impl::Observable<_Value, _ErrorValue>::Value;
-  using ErrorValue =  typename impl::Observable<_Value, _ErrorValue>::ErrorValue;
+  using Value = typename impl::Observable<_Value, _ErrorValue, Observable>::Value;
+  using ErrorValue =  typename impl::Observable<_Value, _ErrorValue, Observable>::ErrorValue;
   using Self = Observable<Value, ErrorValue>;
 
   void assert_we_have_context() {  //Cpp is great, but Java still has a NullPtrException more...
-    if(!this->context.lock()) throw std::runtime_error("This observable does not have context");
+    if(!this->context.lock()) throw std::runtime_error("This observable does not have context, we cannot do stuff with it that depends on the context.");
   }
+
+  template<class O, typename... Args>
+  std::shared_ptr< O > create_observable(Args &&...args) const {
+    auto observable = std::make_shared< O >(std::forward<Args>(args)...);
+    observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
+    observable->context = this->context;
+    return observable;
+  }
+
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   /*template <typename F>
@@ -113,17 +122,11 @@ public:
     static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
     return this->context.lock()->template done<false>(this->shared_from_this(), f);
   }*/
-  // TODO reimplement so that instances of Derived are created. TODO CRTP would solve this more elegantly
-  template <class F> auto then(F &&f) { return std::get<0>(this->template done<true, Observable>(f, true)); }
-    template <class F> 
-    auto except(F &&f) { 
-        static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-        return std::get<0>(this->template done<false, Observable>(f, true)); 
-    }
 
   /// Create a ROS publisher and publish this observable.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+    assert_we_have_context();
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
 
