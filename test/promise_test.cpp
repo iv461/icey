@@ -44,17 +44,16 @@ class PromiseTest : public testing::Test {
          return Result::Err("erroring_" + std::to_string(i));
     };
   }
-  size_t marker_counter{0};
+  
+       using ResolveValue = std::string;
+    using ErrorValue = std::string;
+    icey::impl::Observable<ResolveValue, ErrorValue> promise{icey::impl::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> >()};
 
   std::vector<size_t> events;
 };
 
 /// Smoke, tests correct chaining and skipping of except-handler in case of no exception, including skipping everything after the except-handler
 TEST_F(PromiseTest, Smoke) {
-    using ResolveValue = std::string;
-    using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
-
    promise
         ->then(marker<Some>(1))
         ->then(marker<Some>(2))
@@ -77,10 +76,6 @@ TEST_F(PromiseTest, Smoke) {
 
 /// Test error from then-handler and no return from except handler
 TEST_F(PromiseTest, VoidCatch) {
-    using ResolveValue = std::string;
-    using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
-
        promise
         ->then(marker<Some>(1))
         ->then(marker<Err>(2))
@@ -102,10 +97,6 @@ TEST_F(PromiseTest, VoidCatch) {
 
 /// Test that .then() can error
 TEST_F(PromiseTest, ThenErroring) {
-    using ResolveValue = std::string;
-    using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
-
        promise
         ->then(marker<Err>(1))
         ->then(marker<Err>(2))
@@ -124,10 +115,6 @@ TEST_F(PromiseTest, ThenErroring) {
 
 /// Test whether a .then() handler that returns void still propagates correctly errors
 TEST_F(PromiseTest, VoidThenPropagating) {
-    using ResolveValue = std::string;
-    using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
-
        promise
         ->then(marker<Some>(1))
         ->then(marker<Some>(2))

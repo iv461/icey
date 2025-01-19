@@ -98,6 +98,9 @@ public:
   using ErrorValue =  typename impl::Observable<_Value, _ErrorValue>::ErrorValue;
   using Self = Observable<Value, ErrorValue>;
 
+  void assert_we_have_context() {  //Cpp is great, but Java still has a NullPtrException more...
+    if(!this->context.lock()) throw std::runtime_error("This observable does not have context");
+  }
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   /*template <typename F>
@@ -1072,7 +1075,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <class O, typename... Args>
   std::shared_ptr<O> create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
-    auto observable = icey::create_observable<O>(args...);
+    auto observable = impl::create_observable<O>(args...);
     data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
     observable->context = shared_from_this();
     observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();

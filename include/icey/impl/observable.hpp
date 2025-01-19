@@ -52,6 +52,8 @@ struct observable_traits {
                 "The arguments must be an icey::Observable");
 };
 
+class Context;
+namespace impl {
 /// Creates a new observable of type O by passing the args to the constructor. Observables are always reference counted by using shared pointers
 template <class O, typename... Args>
 static std::shared_ptr<O> create_observable(Args &&...args) {
@@ -59,9 +61,6 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
     //observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
     return observable;
 }
-
-class Context;
-namespace impl {
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
