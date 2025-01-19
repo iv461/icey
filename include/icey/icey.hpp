@@ -71,6 +71,16 @@ public:
 /// Needed for storing in the graph as well as to let the compiler check for correct types
 struct GraphObservableBase : public DFGNode, public NodeAttachable {};
 
+struct ObservableTag{}; /// A tag to be able to recognize the type "Observeble" using traits
+template <typename... Args>
+struct observable_traits {
+  static_assert(
+      (is_shared_ptr<Args> && ...),
+      "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
+  static_assert((std::is_base_of_v<ObservableTag, remove_shared_ptr_t<Args>> && ...),
+                "The arguments must be an icey::Observable");
+};
+
 template <class T>
 constexpr void assert_observable_holds_tuple() {
   static_assert(is_tuple_v<obs_msg<T>>, "The Observable must hold a tuple as a value for unpacking.");
@@ -87,16 +97,31 @@ constexpr void assert_all_observable_values_are_same() {
 }
 
 /// An observable. Similar to a promise in JavaScript.
-/// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : public impl::Observable<_Value, _ErrorValue, Observable>,
-                   public GraphObservableBase {
+class Observable : public ObservableTag, public GraphObservableBase,
+    public std::enable_shared_from_this< Observable<_Value, _ErrorValue > >  {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
 public:
-  using Value = typename impl::Observable<_Value, _ErrorValue, Observable>::Value;
-  using ErrorValue =  typename impl::Observable<_Value, _ErrorValue, Observable>::ErrorValue;
-  using Self = Observable<Value, ErrorValue>;
+  using Impl = impl::Observable<_Value, _ErrorValue>;
+  using Value = typename Impl::Value;
+  using MaybeValue = typename Impl::MaybeValue;
+  using ErrorValue =  typename Impl::ErrorValue;
+  using Self = Observable<_Value, _ErrorValue>;
+  using PImpl = std::shared_ptr<Impl>;
+
+  template<class T>
+  using DerivedFromImpl =  Observable < obs_val<T>, obs_err<T> >;
+
+  template<class NewVal, class NewErr>
+  //std::shared_ptr<Impl>
+  static std::shared_ptr < Observable<NewVal, NewErr> >
+     create_from_impl(std::shared_ptr < impl::Observable<NewVal, NewErr> > obs_impl) {
+    
+    auto new_obs = impl::create_observable<Observable<NewVal, NewErr>>();
+    new_obs->observable_ = obs_impl;
+    return new_obs;
+  }
 
   void assert_we_have_context() {  //Cpp is great, but Java still has a NullPtrException more...
     if(!this->context.lock()) throw std::runtime_error("This observable does not have context, we cannot do stuff with it that depends on the context.");
@@ -112,16 +137,23 @@ public:
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
-  /*template <typename F>
+  template <typename F>
   auto then(F &&f) {
-    return this->context.lock()->template done<true>(this->shared_from_this(), f);
+    auto child_obs = observable_->then(f);
+    auto child = Self::create_from_impl(child_obs);    
+    child->context = this->context;
+    return child;
   }
 
   template <typename F>
   auto except(F &&f) { 
     static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-    return this->context.lock()->template done<false>(this->shared_from_this(), f);
-  }*/
+    auto child_obs = observable_->except(f);
+    //auto child = impl::create_observable< DerivedFromImpl<decltype(child_obs)> >();
+    auto child = Self::create_from_impl(child_obs);
+    child->context = this->context;
+    return child;
+  }
 
   /// Create a ROS publisher and publish this observable.
   void publish(const std::string &topic_name,
@@ -130,6 +162,7 @@ public:
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
 
+  std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
 };
 
 struct DevNullObservable : public Observable<Nothing> {};
@@ -159,10 +192,10 @@ public:
   /// Parameters are initialized always at the beginning, so we can provide getters for the value.
   /// Note that has_value() must be checked beforehand since if no default value was provided, this
   /// function will throw std::bad_optional_access()
-  const Value &value() const override {
+  const Value &value() const {
     /// TODO do we want to allow this if the user provided a default value ? I think not, since it
     /// adds conceptual inconcistency to the otherwise inaccessible Observables
-    if (!this->has_value()) {  /// First, check if this observable was accessed before spawning. This
+    if (!this->observable_->has_value()) {  /// First, check if this observable was accessed before spawning. This
                               /// is needed to provide a nice  error message since confusing
                               /// syncronous code will likely happen for users.
       throw std::runtime_error(
@@ -170,7 +203,7 @@ public:
           "'] You cannot access the parameters before spawning the node, you can only access them "
           "inside callbacks (which are triggered after calling icey::spawn())");
     }
-    return this->value();
+    return this->observable_->value();
   }
 
 protected:
@@ -183,14 +216,14 @@ protected:
         parameter_name_, default_value_,
         [this](const rclcpp::Parameter &new_param) {
           Value new_value = new_param.get_value<Value>();
-          this->resolve(new_value);
+          this->observable_->resolve(new_value);
         },
         parameter_descriptor_, ignore_override_);
     /// Set default value
     if (default_value_) {
       Value initial_value;
       node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-      this->resolve(initial_value);
+      this->observable_->resolve(initial_value);
     }
   }
   std::string parameter_name_;
@@ -217,7 +250,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
     node_handle.add_subscription<Value>(
-        name_, [this](typename Message::SharedPtr new_value) { this->resolve(new_value); },
+        name_, [this](typename Message::SharedPtr new_value) { this->observable_->resolve(new_value); },
         qos_, options_);
   }
 
@@ -283,7 +316,7 @@ protected:
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
         [this](const geometry_msgs::msg::TransformStamped &new_value) {
-          this->resolve(std::make_shared<Message>(new_value));
+          this->observable_->resolve(std::make_shared<Message>(new_value));
         });
   }
 
@@ -307,7 +340,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[TimerObservable] attach_to_node()" << std::endl;
     ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this]() {
-      this->resolve(ticks_counter_++);
+      this->observable_->resolve(ticks_counter_++);
       if (is_one_off_timer_) ros_timer_->cancel();
     });
   }
@@ -342,10 +375,10 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
-    this->_register_handler([this, publisher]() { 
+    this->observable_->_register_handler([this, publisher]() { 
                 // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
         // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
-        const auto &new_value = this->value(); /// There can be no error
+        const auto &new_value = this->observable_->value(); /// There can be no error
         if constexpr(is_shared_ptr<Value>)
           publisher(*new_value);
         else 
@@ -372,9 +405,9 @@ struct AnyComputation {
 template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->_register_handler([this]() {
+    this->observable_->_register_handler([this]() {
       using Event = message_filters::MessageEvent<const _Message>;
-      const auto &new_value = this->value(); /// There can be no error
+      const auto &new_value = this->observable_->value(); /// There can be no error
       this->signalMessage(Event(new_value));
     });
   }
@@ -419,7 +452,7 @@ private:
   }
 
   void sync_callback(typename Messages::SharedPtr... messages) {
-    this->resolve(std::forward_as_tuple(messages...));
+    this->observable_->resolve(std::forward_as_tuple(messages...));
   }
 
   /// The input filters
@@ -441,8 +474,8 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->_register_handler([this, publish]() { 
-        const auto &new_value = this->value(); /// There can be no error
+    this->observable_->_register_handler([this, publish]() { 
+        const auto &new_value = this->observable_->value(); /// There can be no error
         publish(new_value); 
     });
   }
@@ -468,7 +501,7 @@ protected:
     node_handle.add_service<_ServiceT>(
         service_name_,
         [this](Request request, Response response) {
-          this->resolve(std::make_pair(request, response));
+          this->observable_->resolve(std::make_pair(request, response));
         },
         qos_);
   }
@@ -496,10 +529,10 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
       client_->async_send_request(
         request, [this](Future response_futur) { 
           if(response_futur.valid()) {
-            this->output_->resolve(response_futur.get().second);
+            this->output_->observable_->resolve(response_futur.get().second);
           } else {
             /// TOOD
-            this->output_->reject(rclcpp::FutureReturnCode::TIMEOUT);
+            this->output_->observable_->reject(rclcpp::FutureReturnCode::TIMEOUT);
             /// TODO Do the weird cleanup thing
           }
 
@@ -867,14 +900,14 @@ struct Context : public std::enable_shared_from_this<Context> {
     observable_traits<Parent>{};
     using MessageT = typename remove_shared_ptr_t<Parent>::Value;
     auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
-    parent->then([child](const auto &x) {child->resolve(x);});
+    parent->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
   }
 
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
     auto child = create_observable<TransformPublisherObservable>();
-    parent->then([child](const auto &x) {child->resolve(x);});
+    parent->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
   }
 
   auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false,
