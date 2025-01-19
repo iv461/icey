@@ -151,41 +151,41 @@ public:
     using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
     //const auto on_new_value = apply_if_needed(f);
     /// TODO refactor, bind
-    auto notify = [output]() { output->_notify(); };
-    auto call_and_resolve = [output, f = std::move(f)](const FunctionArgument &x) {
+    auto call_depending_on_signature = [output, f = std::move(f)](const FunctionArgument &x) {
         if constexpr (std::is_void_v<ReturnType>) {
             apply_if_tuple(f, x);
         } else if constexpr(is_result<ReturnType>) { /// support callbacks that at runtime may return value or error
           output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant but differentiate and set error or value
+          output->_notify();
         } else { /// support returning std::optional
           ReturnType result = apply_if_tuple(f, x);
-          output->_set_value(result); /// Do not notify, only set (may be none)
+          output->resolve(result); 
         }
     };
     
-    auto resolve_if_needed = [input, output, call_and_resolve=std::move(call_and_resolve)]() {
-      if constexpr (!resolve) { /// If we .catch() 
-        if(input->has_error())  { /// Then only resolve with the error if there is one
-          call_and_resolve(input->error());
-        } /// Else do nothing
-      } else {
+    auto handler = [input, output, f=std::move(call_depending_on_signature)]() {
+      if constexpr (resolve) { /// If we handle values with .then()
         if(input->has_value()) { 
-          call_and_resolve(input->value());
+          f(input->value());
         } else if (input->has_error()) {
-          output->_set_error(input->error()); /// Important: do not execute computation, but propagate the error
+          output->reject(input->error()); /// Do not execute f, but propagate the error
         }
+      } else { /// if we handle errors with .except()
+        if(input->has_error())  { /// Then only resolve with the error if there is one
+          f(input->error());
+        } /// Else do nothing
       }
     };
 
-    auto handler = [=]() { resolve_if_needed(); notify(); };//hana::compose(notify, compute, get_input_value);
+    
     if (register_it) 
       input->_register_handler(handler);
     return handler;
   }
 
-  /// TODO return handler
-  template <bool resolve, bool register_handler, typename F>
-  auto done(F &&f) {
+  /// Common function for both then and .except. bool resolve says whether f is the resolve or the reject handler (Unlike JS, we can only register one at the time)
+  template <bool resolve, typename F>
+  auto done(F &&f, bool register_handler) {
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
@@ -196,26 +196,26 @@ public:
       /// create a dummy to satisfy the graph
       auto child = create_observable< Observable<Nothing, ErrorValue> >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
-      /// return nothing so that no computation can be made based on the result
+      return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
       /// In this case we want to be able to pass over the same error 
       auto child = create_observable< Observable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
-      return child;
+      return std::make_tuple(child, handler);
     } else { /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the error
       auto child = create_observable< Observable<ReturnTypeSome, ErrorValue > >();
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
-      return child;
+      return std::make_tuple(child, handler);
     }
   }  
 
-    template <class F> auto then(F &&f) { return this->done<true, true>(f); }
-
+    /// These functions are for testing the promises stand-alone, i.e. in eager-mode. 
+    template <class F> auto then(F &&f) { return std::get<0>(this->done<true>(f, true)); }
     template <class F> 
     auto except(F &&f) { 
         static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-        return this->done<false, true>(f); 
+        return std::get<0>(this->done<false>(f, true)); 
     }
 
 
