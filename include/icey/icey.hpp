@@ -12,14 +12,13 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/strong_components.hpp>
 #include <boost/graph/topological_sort.hpp>
-#include <boost/mp11.hpp>  /// For template meta-programming, operation on tuples etc.
 #include <boost/hana.hpp>
 #include <boost/hana/ext/std/tuple.hpp> /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
-#include <boost/noncopyable.hpp>
 #include <boost/type_index.hpp>
-#include <icey/bag_of_metaprogramming_tricks.hpp>
 
-namespace mp = boost::mp11;
+#include <icey/impl/observable.hpp>
+#include <icey/impl/bag_of_metaprogramming_tricks.hpp>
+
 namespace hana = boost::hana;
 
 namespace icey {
@@ -71,34 +70,27 @@ public:
 };
 
 /// Needed for storing in the graph as well as to let the compiler check for correct types
-struct ObservableBase : public DFGNode, public NodeAttachable, private boost::noncopyable {
-};
+struct GraphObservableBase : public DFGNode, public NodeAttachable {};
 
 template <class T>
 constexpr void assert_observable_holds_tuple() {
-  static_assert(is_tuple_v<typename remove_shared_ptr_t<T>::Value>,
-                "The Observable must hold a tuple as a value for unpacking.");
+  static_assert(is_tuple_v<obs_msg<T>>, "The Observable must hold a tuple as a value for unpacking.");
 }
 
-/// The ROS message that a observable holds
-template<class T>
-using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
 // Assert that all Observables types hold the same value
 template <typename First, typename... Rest>
 constexpr void assert_all_observable_values_are_same() {
   observable_traits<First, Rest...>{};  /// Only Observables are expected to have ::Value
   // Static assert that each T::Value is the same as First::Value
-  static_assert((std::is_same_v<typename remove_shared_ptr_t<First>::Value,
-                                typename remove_shared_ptr_t<Rest>::Value> &&
-                 ...),
+  static_assert((std::is_same_v< obs_msg<First>, obs_msg<Rest>> && ...),
                 "The values of all the observables must be the same");
 }
 
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : public ObservableBase, public impl::Observable<_Value, _ErrorValue> {
+class Observable : public impl::Observable<_Value, _ErrorValue>, public GraphObservableBase {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
 public:
@@ -178,14 +170,14 @@ protected:
         parameter_name_, default_value_,
         [this](const rclcpp::Parameter &new_param) {
           Value new_value = new_param.get_value<Value>();
-          this->resolve_and_notify(new_value);
+          this->resolve(new_value);
         },
         parameter_descriptor_, ignore_override_);
     /// Set default value
     if (default_value_) {
       Value initial_value;
       node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-      this->resolve_and_notify(initial_value);
+      this->resolve(initial_value);
     }
   }
   std::string parameter_name_;
@@ -212,7 +204,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
     node_handle.add_subscription<Value>(
-        name_, [this](typename Message::SharedPtr new_value) { this->resolve_and_notify(new_value); },
+        name_, [this](typename Message::SharedPtr new_value) { this->resolve(new_value); },
         qos_, options_);
   }
 
@@ -278,7 +270,7 @@ protected:
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
         [this](const geometry_msgs::msg::TransformStamped &new_value) {
-          this->resolve_and_notify(std::make_shared<Message>(new_value));
+          this->resolve(std::make_shared<Message>(new_value));
         });
   }
 
@@ -302,7 +294,7 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[TimerObservable] attach_to_node()" << std::endl;
     ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this]() {
-      this->resolve_and_notify(ticks_counter_++);
+      this->resolve(ticks_counter_++);
       if (is_one_off_timer_) ros_timer_->cancel();
     });
   }
@@ -414,7 +406,7 @@ private:
   }
 
   void sync_callback(typename Messages::SharedPtr... messages) {
-    this->resolve_and_notify(std::forward_as_tuple(messages...));
+    this->resolve(std::forward_as_tuple(messages...));
   }
 
   /// The input filters
@@ -463,7 +455,7 @@ protected:
     node_handle.add_service<_ServiceT>(
         service_name_,
         [this](Request request, Response response) {
-          this->resolve_and_notify(std::make_pair(request, response));
+          this->resolve(std::make_pair(request, response));
         },
         qos_);
   }
@@ -491,10 +483,10 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
       client_->async_send_request(
         request, [this](Future response_futur) { 
           if(response_futur.valid()) {
-            this->output_->resolve_and_notify(response_futur.get());
+            this->output_->resolve(response_futur.get());
           } else {
             /// TOOD
-            this->output_->reject_and_notify(rclcpp::FutureReturnCode::TIMEOUT);
+            this->output_->reject(rclcpp::FutureReturnCode::TIMEOUT);
             /// TODO Do the weird cleanup thing
           }
 
@@ -516,7 +508,7 @@ protected:
 struct DataFlowGraph {
   /// TODO store the computation
   using EdgeData = AnyComputation;
-  using VertexData = std::shared_ptr<ObservableBase>;
+  using VertexData = std::shared_ptr<GraphObservableBase>;
   /// vecS needed so that the vertex id's are consecutive integers
   using Graph =
       boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, EdgeData>;
@@ -815,16 +807,20 @@ struct Context : public std::enable_shared_from_this<Context> {
   }
 
   /// Registers the run_graph_mode callback for every source vertex in the DFG so that the graph engine is triggered if a subsriber delivers something 
+  void register_trigger_vertex(size_t vertex_id) {
+      auto source_vertex = data_flow_graph_->graph_[vertex_id];
+      source_vertex->register_run_graph_engine([source_vertex](size_t node_id) {
+        source_vertex->context.lock()->graph_engine_->run_graph_mode(node_id);
+      });
+  }
+
   void register_source_verices() {
     const auto N = num_vertices(data_flow_graph_->graph_);
     for(size_t i_vertex = 0; i_vertex < N; i_vertex++) {
       /// TODO register by flag
       bool is_source = in_degree(i_vertex, data_flow_graph_->graph_) == 0;
       if(is_source) {
-        auto source_vertex = data_flow_graph_->graph_[i_vertex];
-        source_vertex->register_run_graph_engine([source_vertex](size_t node_id) {
-          source_vertex->context.lock()->graph_engine_->run_graph_mode(node_id);
-        });
+        register_trigger_vertex(i_vertex);
       }
     }
   }
@@ -887,9 +883,10 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(std::is_same_v< obs_val<Parent>, typename ServiceT::Request::SharedPtr >, "The parent triggering the service must hold a value of type Request::SharedPtr");
     using Comp = ServiceClientComputation<ServiceT>;
     auto child = create_observable< typename Comp::OutputObservable >();
-
+    register_trigger_vertex(child->index.value());
     Comp comp(service_name);
-    /// TODO create_with continuation
+    comp.output_ = child;
+    parent.then([comp](auto req) { comp.call(req); }); // TODO maybe only register
     return child;
   }
 
@@ -900,34 +897,32 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto sync_with_reference(Reference reference, Parents ...parents) {
     observable_traits<Reference>{};
     observable_traits<Parents...>{};
-
     /// TODO consider hana as well auto has_header = hana::is_valid([](auto&& x) -> decltype((void)x.header) { });
     using namespace message_filters::message_traits;
     static_assert(HasHeader<obs_msg<Reference>>::value, "The ROS message type must have a header with the timestamp to be synchronized");
 
-    using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
+    //using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
     auto parents_tuple = std::make_tuple(parents...);
-    auto child = create_observable< Observable<Output> >();
+    //auto child = create_observable< Observable<Output> >();
 
     /// TOOD somehow does not work
     //auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return hana_is_interpolatable(t); }); 
     //static_assert(all_are_interpolatables, "All inputs must be interpolatable when using the sync_with_reference");
-
-    AnyComputation computation = create_computation<true>(reference, child, 
-      [parents_tuple](const obs_val<Reference> &new_value) {  
+    return reference.then([parents_tuple](const obs_val<Reference> &new_value) {
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
               return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
         });
         return hana::prepend(parent_maybe_values, new_value);
     });
 
+    /*
     std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
     /// The interpolatable topics do not update. (they also do not register with the graph) So we create empty computations for them.
     std::vector<AnyComputation> edges_data(parent_ids.size());
     edges_data.at(0) = computation;
-
     data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
     return child;
+    */
   }
 
   // ID: [](auto &&x) { return std::move(x); }
@@ -942,13 +937,21 @@ struct Context : public std::enable_shared_from_this<Context> {
     uint32_t queue_size = 10;
     auto synchronizer = create_observable<SynchronizerObservable< obs_msg<Parents>...>>(queue_size);
 
-    std::vector<size_t> parent_ids{parents->index.value()...};
+    hana::for_each(hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs()), 
+        [](auto &input_output_tuple) {
+              auto &[parent, synchronizer_input] = input_output_tuple;
+              /// TODO add to graph, i.e. this->then(parent, f)
+              parent.then([synchronizer_input](const auto &x) { synchronizer_input.resolve(x); }); 
+        });
+
+    /*std::vector<size_t> parent_ids{parents->index.value()...};
     /// Connect the parents to the inputs of the synchronizer
     std::vector<AnyComputation> edges_data =
         create_identity_computation_mimo(std::forward_as_tuple(parents...), synchronizer->inputs());
     /// We add it manually to the graph since we want to represent the topology that is required for
     /// the dependency analysis. The synchronizer is a single node, altough it has N input observables
     data_flow_graph_->add_edges(synchronizer->index.value(), parent_ids, edges_data);
+    */
     return synchronizer;
   }
 
@@ -997,18 +1000,23 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// First, create a new observable
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
-    connect_with_identity(child, parents...);
+    hana::for_each(std::forward_as_tuple(parents...), 
+        [](auto &parent) {
+              /// TODO add to graph, i.e. this->then(parent, f)
+              parent.then([child](const auto &x) { child.resolve(x); }); 
+        });
     return child;
   }
 
-  /// Promise done, but register with graph.
+  /// Promise done, but registers additionally with graph.
+  /*
   template <bool resolve, typename Parent, typename F>
   auto done(Parent parent, F &&f) {
     auto [child, handler] = parent->template done<resolve>(f, this->use_eager_mode_);
     register_observable_in_graph(child);
     register_handler_in_graph(handler);
     return child;
-  }
+  }*/
 
   /// Now we can construct higher-order filters.
 
@@ -1056,8 +1064,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <class O, typename... Args>
   std::shared_ptr<O> create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
-    auto observable = icey::create_observable<O>(args)
-    auto observable = std::make_shared<O>(std::forward<Args>(args)...);
+    auto observable = icey::create_observable<O>(args);
     data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
     observable->context = shared_from_this();
     observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
@@ -1073,6 +1080,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
   /// Makes a connection from parent to child with the given function F and adds it to the data-flow
   /// graph.
+  /*
   template <class Child, class Parent>
   void register_handler_in_graph(Child child, Parent parent, std::function<void()> handler, bool 
     requires_waiting_on_ros) {
@@ -1087,48 +1095,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Add connections to the graph
     data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
   }
-
-  /// Same but idetity, TODO fix code dup
-  template <class Child, typename... Parents>
-  void connect_with_identity(Child child, Parents... parents) {
-    std::vector<size_t> parent_ids;
-    // TODO maybe use std::array to get rid of this check
-    if constexpr (sizeof...(Parents) == 1) {
-      /// TODO do better ? take_
-      const auto &first_parent = std::get<0>(std::forward_as_tuple(parents...));
-      parent_ids.push_back(first_parent->index.value());
-    } else {
-      parent_ids = {parents->index.value()...};
-    }
-
-    /// TODO use hana::for_each
-    std::vector<AnyComputation> edges_data;
-    (
-        [&] {
-          /// This should be called "parent"
-          auto f = create_identity_computation(parents, child);
-          edges_data.push_back(f);
-        }(),
-        ...);
-    data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
-  }
-
-
-  /// Connects each of the N inputs with the corresponding N outputs using identity
-  template <class Inputs, class Outputs>
-  std::vector<AnyComputation> create_identity_computation_mimo(Inputs inputs, Outputs outputs) {
-    static_assert(std::tuple_size_v<Inputs> == std::tuple_size_v<Outputs>,
-                  "Inputs and outputs must have the same size");
-    // Generate a sequence of indices corresponding to the tuple size
-    using Indices = mp::mp_iota_c<std::tuple_size_v<Inputs>>;
-    std::vector<AnyComputation> computations;
-    // Iterate over the indices
-    mp::mp_for_each<Indices>([&](auto I) {
-      auto f = create_identity_computation(std::get<I>(inputs), std::get<I>(outputs));
-      computations.push_back(f);
-    });
-    return computations;
-  }
+  */
 
   /// The data-flow graph that this context creates. Everyghing is stored and owned by this graph. 
   std::shared_ptr<DataFlowGraph> data_flow_graph_{std::make_shared<DataFlowGraph>()};

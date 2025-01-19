@@ -29,11 +29,8 @@ struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public
   const ErrorValue &error() const { return std::get<2>(*this); }
 };
 
-/*template<class T, class V, class E>
-constexpr bool is_result = std::is_same_v<T, Result<V, E>>;*/
 template<class T>
 constexpr bool is_result = std::is_base_of_v<ResultBase, T>;
-
 /// Some traits of the observables
 template<class T> 
 using obs_val = typename remove_shared_ptr_t<T>::Value;
@@ -41,8 +38,11 @@ template<class T>
 using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
 template<class T> 
 using obs_state = typename remove_shared_ptr_t<T>::State;
+/// By stripping the shared_ptr, we usually get the ROS message that a observable holds
+template<class T>
+using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
-/*
+struct ObservableBase{};
 template <typename... Args>
 struct observable_traits {
   static_assert(
@@ -51,7 +51,6 @@ struct observable_traits {
   static_assert((std::is_base_of_v<ObservableBase, remove_shared_ptr_t<Args>> && ...),
                 "The arguments must be an icey::Observable");
 };
-*/
 
 /// Creates a new observable of type O by passing the args to the constructor. Observables are always reference counted by using shared pointers
 template <class O, typename... Args>
@@ -67,7 +66,7 @@ namespace impl {
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : private boost::noncopyable, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+class Observable : public ObservableBase, private boost::noncopyable, public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
   friend class Context; 
 public:
   using Value = _Value;
@@ -149,20 +148,17 @@ public:
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
     // TODO use std::invoke_result
     using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
-    //const auto on_new_value = apply_if_needed(f);
-    /// TODO refactor, bind
     auto call_depending_on_signature = [output, f = std::move(f)](const FunctionArgument &x) {
         if constexpr (std::is_void_v<ReturnType>) {
             apply_if_tuple(f, x);
         } else if constexpr(is_result<ReturnType>) { /// support callbacks that at runtime may return value or error
           output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant but differentiate and set error or value
           output->_notify();
-        } else { /// support returning std::optional
-          ReturnType result = apply_if_tuple(f, x);
-          output->resolve(result); 
+        } else { /// Other return types are interpreted as value, i.e. resolving the promise. We also support returning std::optional
+          ReturnType ret = apply_if_tuple(f, x);
+          output->resolve(ret); 
         }
     };
-    
     auto handler = [input, output, f=std::move(call_depending_on_signature)]() {
       if constexpr (resolve) { /// If we handle values with .then()
         if(input->has_value()) { 
@@ -176,8 +172,6 @@ public:
         } /// Else do nothing
       }
     };
-
-    
     if (register_it) 
       input->_register_handler(handler);
     return handler;
@@ -193,8 +187,8 @@ public:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      /// create a dummy to satisfy the graph
-      auto child = create_observable< Observable<Nothing, ErrorValue> >(); // Must pass over error 
+      /// create a dummy to satisfy the graph TODO what is the graph ?? (We have here a small coupling between the graph mode here, i.e. it does not make sense that we create here another observable)
+      auto child = create_observable< Observable<Nothing> >(); 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
