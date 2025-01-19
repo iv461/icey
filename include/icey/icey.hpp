@@ -35,16 +35,16 @@ public:
   /// the parents
   std::weak_ptr<Context> context;
   /// The index of this observable in list of vertices in the data-flow graph. We have
-  /// to store it here because of cyclic dependency. None if this observable was not
+  /// to store it here because of cyclic dependency. It is None if this node was not
   /// attached to the graph yet.
   std::optional<size_t> index;
-  // The class name, i.e. the type, for example SubscriberObservable<>
+  // The class name, i.e. the name of the type, for example "SubscriberObservable<std::string>"
   std::string class_name;
-  /// A name to identify it among multiple with the same type, usually the topic
+  /// A name to identify this node among multiple ones with the same type, usually the topic
   /// or service name
   std::string name;
 
-  /// TODO this looks clean but it really isn't, nodes should not know whether 
+  /// TODO this looks clean but it really isn't, nodes should not know whether they are run in graph mode or not.
   using RunGraphEngineCb = std::function<void(size_t)>;
   void register_run_graph_engine(RunGraphEngineCb cb) { run_graph_engine_ = cb; }
   RunGraphEngineCb run_graph_engine_;
@@ -102,9 +102,9 @@ class Observable : public ObservableBase, public impl::Observable<_Value, _Error
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
 public:
-  using Value = typename Observable<_Value, _ErrorValue>::Value;
-  using ErrorValue =  typename Observable<_Value, _ErrorValue>::ErrorValue;
-  using Self = ObservablePublic<Value, ErrorValue>;
+  using Value = typename impl::Observable<_Value, _ErrorValue>::Value;
+  using ErrorValue =  typename impl::Observable<_Value, _ErrorValue>::ErrorValue;
+  using Self = Observable<Value, ErrorValue>;
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
@@ -930,7 +930,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     return child;
   }
 
-
+  // ID: [](auto &&x) { return std::move(x); }
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
   template <typename... Parents>
@@ -955,15 +955,15 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
-    static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
+    static_assert(sizeof...(Parents) >= 2, "You need to synchronize at least two inputs.");
     auto parents_tuple = std::make_tuple(parents...);
     
-    auto interpolatables = hana::remove_if(parents_tuple, [](auto t) { return not  hana_is_interpolatable(t); });
+    auto interpolatables = hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
     auto non_interpolatables = hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
 
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
-    static_assert(num_interpolatables == 0 || num_non_interpolatables >= 1,
+    static_assert(num_interpolatables > 0 && num_non_interpolatables == 0,
                   "You are trying to synchronize only interpolatable signals. This does not work, "
                   "you need to "
                   "have at least one non-interpolatable signal that is the common time for all the "
@@ -1001,32 +1001,13 @@ struct Context : public std::enable_shared_from_this<Context> {
     return child;
   }
 
-  /// Promise register, if register_both is true, resolve and reject handles are registered, otherwise only the reject handler is registered that resolves with the error
+  /// Promise done, but register with graph.
   template <bool resolve, typename Parent, typename F>
   auto done(Parent parent, F &&f) {
-    observable_traits<Parent>{};
-    /// TODO static_assert here signature for better error messages
-    /// Return type depending of if the it is called when the Promise resolves or rejects
-    using FunctionArgument = std::conditional_t<resolve, obs_val<Parent>, obs_err<Parent> >;
-    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
-
-    /// Now we want to call resolve only if it is not none, so strip optional
-    using ReturnTypeSome = typename remove_optional<ReturnType>::type;
-    if constexpr (std::is_void_v<ReturnType>) {
-      /// create a dummy to satisfy the graph
-      
-      auto child = create_observable< Observable<Nothing, obs_err<Parent> > >(); // Must pass error 
-      connect<resolve>(child, parent, std::move(f));
-      /// return nothing so that no computation can be made based on the result
-    } else if(is_variant_v<ReturnType>) { /// But it may be an result type
-      /// In this case we want to be able to pass over the same error TODO 
-    } else {
-      /// The resulting observable always has the same ErrorValue so that it can pass through the error
-      using OutputObservable = Observable<ReturnTypeSome, obs_err<Parent> >;
-      auto child = create_observable< OutputObservable >();
-      connect<resolve>(child, parent, std::move(f));
-      return child;
-    }
+    auto [child, handler] = parent->template done<resolve>(f, this->use_eager_mode_);
+    register_observable_in_graph(child);
+    register_handler_in_graph(handler);
+    return child;
   }
 
   /// Now we can construct higher-order filters.
@@ -1041,11 +1022,18 @@ struct Context : public std::enable_shared_from_this<Context> {
           std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple
     });
 
-    template <class Parent>
-    auto unpack(Parent &parent) {
-        
-    }
   }
+
+  /// Unpacks a observables of tuple into multiple observables
+  /*
+  template <class Parent>
+  auto unpack(Parent &parent) {
+  }
+  */
+  /// Then's on timeout. Creates a new timer.
+  // timeout
+  // Crates a new timer that sync_with_reference, matching exactly an output frequency. Input must be interpolatable.
+  // throttle
 
   // TODO maybe rem, derive from graph
   bool empty() const { return data_flow_graph_->empty(); }
@@ -1068,6 +1056,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <class O, typename... Args>
   std::shared_ptr<O> create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
+    auto observable = icey::create_observable<O>(args)
     auto observable = std::make_shared<O>(std::forward<Args>(args)...);
     data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
     observable->context = shared_from_this();
@@ -1080,74 +1069,20 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Creates a computation object that is stored in the edges of the graph for the graph mode.
   /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
   /// run
-  /// TODO generalize, allow for creating async computes by passing continuation (maybe move this logic into Obs)
-  template <bool resolve, class Input, class Output, class F>
-  AnyComputation create_computation(Input input, Output output, F &&f) {
-    observable_traits<Input, Output>{};
-
-    using Value = obs_val<Input>;
-    using ErrorValue = obs_err<Input>;
-    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
-
-    // TODO use std::invoke_result
-    
-    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
-
-    
-    /// TODO hof, hana::unpack
-    const auto on_new_value = [f = std::move(f)](const FunctionArgument &new_value) -> ReturnType {
-      if constexpr (std::is_void_v<ReturnType>) {
-        apply_if_tuple(f, new_value);
-      } else {
-        return apply_if_tuple(f, new_value);
-      }
-    };
-
-    /// TODO refactor, bind
-    auto notify = [output]() { output->_notify(); };
-    auto call_and_resolve = [output, f = std::move(on_new_value)](const FunctionArgument &new_value) {
-        if constexpr (std::is_void_v<ReturnType>) {
-          f(new_value);
-        } else {
-          ReturnType result = f(new_value);
-          output->resolve(result); /// Do not notify, only set (may be none)
-        }
-    };
-    
-    auto resolve_if_needed = [input, output, call_and_resolve=std::move(call_and_resolve)]() {
-      if constexpr (!resolve) { /// If we .catch() 
-        if(input->has_error())  { /// Then only resolve with the error if there is one
-          call_and_resolve(input->error());
-        } /// Else do nothing
-      } else {
-        if(input->has_value()) { 
-          call_and_resolve(input->value());
-        } else if (input->has_error()) {
-          output->reject(input->error()); /// Important: do not execute computation, but propagate the error
-        }
-      }
-    };
-
-    AnyComputation computation;
-    computation.f = [=]() { resolve_if_needed(); notify(); };//hana::compose(notify, compute, get_input_value);
-
-    if (this->use_eager_mode_) {
-      input->_register_handler(computation.f);
-    }
-  
-    return computation;
-  }
+ 
 
   /// Makes a connection from parent to child with the given function F and adds it to the data-flow
   /// graph.
-  template <bool resolve, class Child, class Parent, class F>
-  void connect(Child child, Parent parent, F &&f) {
+  template <class Child, class Parent>
+  void register_handler_in_graph(Child child, Parent parent, std::function<void()> handler, bool 
+    requires_waiting_on_ros) {
     // TODO assert parent has index
     std::vector<size_t> parent_ids;
     parent_ids.push_back(parent->index.value());
-
     std::vector<AnyComputation> edges_data;
-    auto computation = create_computation<resolve>(parent, child, std::move(f));
+    AnyComputation computation;
+    computation.f = handler;
+    computation.requires_waiting_on_ros = requires_waiting_on_ros;
     edges_data.push_back(computation);
     /// Add connections to the graph
     data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
@@ -1178,15 +1113,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
   }
 
-  /// Create a identity computation between input and output.
-  template <class Input, class Output>
-  AnyComputation create_identity_computation(Input input, Output output) {
-    observable_traits<Input, Output>{};
-    /// TODO Assert Input is not a tuple or return tuple if it is
-    /// TOOD use hana::id
-    /// idendity computation always propagates both resolve and reject
-    return create_computation<true>(input, output, [](auto &&x) { return std::move(x); });
-  }
 
   /// Connects each of the N inputs with the corresponding N outputs using identity
   template <class Inputs, class Outputs>
