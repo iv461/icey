@@ -100,7 +100,7 @@ public:
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
-  template <typename F>
+  /*template <typename F>
   auto then(F &&f) {
     return this->context.lock()->template done<true>(this->shared_from_this(), f);
   }
@@ -109,7 +109,14 @@ public:
   auto except(F &&f) { 
     static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
     return this->context.lock()->template done<false>(this->shared_from_this(), f);
-  }
+  }*/
+  // TODO reimplement so that instances of Derived are created. TODO CRTP would solve this more elegantly
+  template <class F> auto then(F &&f) { return std::get<0>(this->template done<true, Observable>(f, true)); }
+    template <class F> 
+    auto except(F &&f) { 
+        static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
+        return std::get<0>(this->template done<false, Observable>(f, true)); 
+    }
 
   /// Create a ROS publisher and publish this observable.
   void publish(const std::string &topic_name,
@@ -478,12 +485,12 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
     this->requires_waiting_on_ros = true;
   }
 
-  void call(Request request) {
+  void call(Request request) const {
       using Future = typename Client::SharedFutureWithRequest;
       client_->async_send_request(
         request, [this](Future response_futur) { 
           if(response_futur.valid()) {
-            this->output_->resolve(response_futur.get());
+            this->output_->resolve(response_futur.get().second);
           } else {
             /// TOOD
             this->output_->reject(rclcpp::FutureReturnCode::TIMEOUT);
@@ -854,14 +861,14 @@ struct Context : public std::enable_shared_from_this<Context> {
     observable_traits<Parent>{};
     using MessageT = typename remove_shared_ptr_t<Parent>::Value;
     auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
-    connect_with_identity(child, parent);
+    parent->then([child](const auto &x) {child->resolve(x);});
   }
 
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
     auto child = create_observable<TransformPublisherObservable>();
-    connect_with_identity(child, parent);
+    parent->then([child](const auto &x) {child->resolve(x);});
   }
 
   auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false,
@@ -886,7 +893,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     register_trigger_vertex(child->index.value());
     Comp comp(service_name);
     comp.output_ = child;
-    parent.then([comp](auto req) { comp.call(req); }); // TODO maybe only register
+    parent->then([comp](auto req) { comp.call(req); }); // TODO maybe only register
     return child;
   }
 
@@ -1001,7 +1008,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), 
-        [](auto &parent) {
+        [child](auto &parent) {
               /// TODO add to graph, i.e. this->then(parent, f)
               parent.then([child](const auto &x) { child.resolve(x); }); 
         });
@@ -1024,10 +1031,11 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <int index, class Parent>
   auto get_nth(Parent &parent) {
     assert_observable_holds_tuple<Parent>();
-    return done<true>(parent, [](const auto &...args) {  /// Need to take variadic because then()
+    /// TODO add to graph, i.e. this->then(parent, f)
+    return parent.then([](const auto &...args) {  /// Need to take variadic because then()
                                                    /// automatically unpacks tuples
       return std::get<index>(
-          std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple
+          std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple and get the index.
     });
 
   }
@@ -1064,7 +1072,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <class O, typename... Args>
   std::shared_ptr<O> create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
-    auto observable = icey::create_observable<O>(args);
+    auto observable = icey::create_observable<O>(args...);
     data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
     observable->context = shared_from_this();
     observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();

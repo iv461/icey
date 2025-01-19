@@ -61,7 +61,6 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 }
 
 class Context;
-
 namespace impl {
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
@@ -178,7 +177,7 @@ public:
   }
 
   /// Common function for both then and .except. bool resolve says whether f is the resolve or the reject handler (Unlike JS, we can only register one at the time)
-  template <bool resolve, typename F>
+  template <bool resolve, template<class, class> class NewObservable, typename F>
   auto done(F &&f, bool register_handler) {
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
@@ -187,29 +186,32 @@ public:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      /// create a dummy to satisfy the graph TODO what is the graph ?? (We have here a small coupling between the graph mode here, i.e. it does not make sense that we create here another observable)
-      auto child = create_observable< Observable<Nothing> >(); 
+      auto child = create_observable< NewObservable<Nothing, ErrorValue> >(); 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
       /// In this case we want to be able to pass over the same error 
-      auto child = create_observable< Observable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
+      auto child = create_observable< NewObservable< typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else { /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the error
-      auto child = create_observable< Observable<ReturnTypeSome, ErrorValue > >();
+      auto child = create_observable< NewObservable<ReturnTypeSome, ErrorValue > >();
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     }
   }  
 
     /// These functions are for testing the promises stand-alone, i.e. in eager-mode. 
-    template <class F> auto then(F &&f) { return std::get<0>(this->done<true>(f, true)); }
+    template <class F> auto then(F &&f) { 
+      /// Note that it may only have errors
+      static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, so you cannot register .then() on it.");
+      return std::get<0>(this->template done<true, Observable>(f, true)); 
+    }
     template <class F> 
     auto except(F &&f) { 
         static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-        return std::get<0>(this->done<false>(f, true)); 
+        return std::get<0>(this-> template  done<false, Observable>(f, true)); 
     }
 
 

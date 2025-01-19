@@ -100,6 +100,7 @@ TEST_F(PromiseTest, VoidCatch) {
     EXPECT_EQ(target_order, events);
 }
 
+/// Test that .then() can error
 TEST_F(PromiseTest, ThenErroring) {
     using ResolveValue = std::string;
     using ErrorValue = std::string;
@@ -118,6 +119,32 @@ TEST_F(PromiseTest, ThenErroring) {
 
     promise->resolve("GoodVal");
    std::vector<size_t> target_order{1, 4, 5};
+    EXPECT_EQ(target_order, events);
+}
+
+/// Test whether a .then() handler that returns void still propagates correctly errors
+TEST_F(PromiseTest, VoidThenPropagating) {
+    using ResolveValue = std::string;
+    using ErrorValue = std::string;
+    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
+
+       promise
+        ->then(marker<Some>(1))
+        ->then(marker<Some>(2))
+        ->then(marker<Err>(3))
+        ->then(marker<None>(4))
+        ->except(marker<Some>(5))
+        ->then(marker<Some>(6));
+
+   EXPECT_TRUE(events.empty());
+
+    promise->resolve("GoodVal");
+   std::vector<size_t> target_order{1, 2, 3, 5, 6};
+    EXPECT_EQ(target_order, events);
+
+    events.clear();
+    promise->reject("BigExcEptiOn3");
+    target_order = {5, 6};
     EXPECT_EQ(target_order, events);
 }
 
