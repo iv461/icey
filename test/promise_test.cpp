@@ -53,7 +53,7 @@ class PromiseTest : public testing::Test {
 TEST_F(PromiseTest, Smoke) {
     using ResolveValue = std::string;
     using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
+    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
 
    promise
         ->then(marker<Some>(1))
@@ -79,7 +79,7 @@ TEST_F(PromiseTest, Smoke) {
 TEST_F(PromiseTest, VoidCatch) {
     using ResolveValue = std::string;
     using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
+    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
 
        promise
         ->then(marker<Some>(1))
@@ -103,7 +103,7 @@ TEST_F(PromiseTest, VoidCatch) {
 TEST_F(PromiseTest, ThenErroring) {
     using ResolveValue = std::string;
     using ErrorValue = std::string;
-    auto promise = icey::create_observable< icey::Observable<ResolveValue, ErrorValue> > ();
+    auto promise = icey::create_observable< icey::impl::Observable<ResolveValue, ErrorValue> > ();
 
        promise
         ->then(marker<Err>(1))

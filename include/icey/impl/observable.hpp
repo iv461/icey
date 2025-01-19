@@ -63,6 +63,7 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 
 class Context;
 
+namespace impl {
 /// An observable. Similar to a promise in JavaScript.
 /// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
@@ -222,4 +223,5 @@ public:
   State value_; 
   std::vector<Handler> handlers_;
 };
+}
 }

@@ -7,12 +7,12 @@ Sorted by decreasing priority.
 - [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 
-- [ ] Implement Promises properly, adhering to fallthrough
+- [X] Implement Promises properly, adhering to fallthrough
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
 - [ ] Unit-tests GraphEngine: topo order should lead to correct single-update behavior
-- [ ] Unit-test promise behavior, fall-through etc. 
+- [X] Unit-test promise behavior, fall-through etc. 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
 - [ ] Unit-test that no dead-locks occur, use example from the official docu where a timer drives the service client
@@ -25,7 +25,7 @@ Sorted by decreasing priority.
 - [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported
 
 - [ ] unpack tuple of obs to multiple obs, this is easy 
-- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important
+- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
 
 - [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 - [ ] Maybe support cascading the synchronizers 
@@ -34,9 +34,9 @@ Sorted by decreasing priority.
 - [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 
 - [ ] Remove MP11 as dependency
-- [ ] Maybe support extention point 
+- [ ] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved)
 - [ ] Forbid subscribing to the same topic that is published by the same node 
-- [ ] Service: fix soundness issue of the DFG, we store request and response inside the same node.
+- [X] Service: fix soundness issue of the DFG, we store request and response inside the same node.
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
