@@ -23,10 +23,13 @@ struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public
   static Self None() {return Result<_Value, _ErrorValue>{};}
   static Self Ok(const _Value &x) { Self ret; ret.template emplace<1>(*x); return ret;}
   static Self Err(const _ErrorValue &x) { Self ret; ret.template emplace<2>(x); return ret;}
-  bool has_error() { return this->index() == 2; }
   bool has_value() const { return this->index() == 1; }
+  bool has_error() { return this->index() == 2; }
   const Value &value() const { return std::get<1>(*this); }
   const ErrorValue &error() const { return std::get<2>(*this); }
+  void set_none() { this->template emplace<0>(std::monostate{});}
+  void set_ok(const Value &x) { this->template emplace<1>(x); }
+  void set_err(const ErrorValue &x) { this->template emplace<2>(x); }
 };
 
 template<class T>
@@ -76,20 +79,15 @@ public:
   /// TODO this will destroy first, see behttps://stackoverflow.com/a/78894559
   void _set_value(const MaybeValue &x) { 
       if(x) 
-        value_.template emplace<1>(*x);
+        value_.set_ok(*x);
       else 
-        value_.template emplace<0>(std::monostate{});
+        value_.set_none();
   }
-  void _set_error(const ErrorValue &x) { value_.template emplace<2>(x); }
+  void _set_error(const ErrorValue &x) { value_.set_err(x); }
 
 
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
   void _notify() {
-    //if (icey_debug_print)
-      //std::cout << "[" + this->class_name + ", " + this->name + "] _notify was called" << std::endl;
-    //if (run_graph_engine_) 
-      //run_graph_engine_(this->index.value());
-  
     if(this->has_value() || this->has_error()) {
       for (auto cb : handlers_) cb();
     }
@@ -175,20 +173,17 @@ public:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      using NewObservable = Observable<Nothing, ErrorValue>;
-      auto child = create_observable< NewObservable >();
+      auto child = create_observable< Observable<Nothing, ErrorValue> >();
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) { /// But it may be an result type
       /// In this case we want to be able to pass over the same error 
-      using NewObservable = Observable<typename ReturnType::Value, typename ReturnType::ErrorValue>;
-      auto child = create_observable< NewObservable >(); // Must pass over error 
+      auto child = create_observable<  Observable<typename ReturnType::Value, typename ReturnType::ErrorValue> >(); // Must pass over error 
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     } else { /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
-      /// The resulting observable always has the same ErrorValue so that it can pass through the error
-      using NewObservable = Observable<ReturnTypeSome, ErrorValue>;
-      auto child = create_observable< NewObservable >();
+      /// The resulting observable always has the same ErrorValue so that it can pass through the error      
+      auto child = create_observable< Observable<ReturnTypeSome, ErrorValue> >();
       auto handler = create_handler<resolve>(child, std::move(f), register_handler);
       return std::make_tuple(child, handler);
     }

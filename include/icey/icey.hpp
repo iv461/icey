@@ -97,6 +97,7 @@ constexpr void assert_all_observable_values_are_same() {
 }
 
 /// An observable. Similar to a promise in JavaScript.
+/// TODO Do not create shared_ptr, we finally have PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : public ObservableTag, public GraphObservableBase,
     public std::enable_shared_from_this< Observable<_Value, _ErrorValue > >  {
@@ -113,11 +114,11 @@ public:
   template<class T>
   using DerivedFromImpl =  Observable < obs_val<T>, obs_err<T> >;
 
+  /// Pattern-maching factory function that creates a New Self with different value and error types 
+  // based on the passed Impl. Needed for then and except
   template<class NewVal, class NewErr>
-  //std::shared_ptr<Impl>
   static std::shared_ptr < Observable<NewVal, NewErr> >
-     create_from_impl(std::shared_ptr < impl::Observable<NewVal, NewErr> > obs_impl) {
-    
+     create_from_impl(std::shared_ptr < impl::Observable<NewVal, NewErr> > obs_impl) {  
     auto new_obs = impl::create_observable<Observable<NewVal, NewErr>>();
     new_obs->observable_ = obs_impl;
     return new_obs;
@@ -139,8 +140,7 @@ public:
   /// observable changes, where y = f(x).
   template <typename F>
   auto then(F &&f) {
-    auto child_obs = observable_->then(f);
-    auto child = Self::create_from_impl(child_obs);    
+    auto child = Self::create_from_impl(observable_->then(f));
     child->context = this->context;
     return child;
   }
@@ -148,9 +148,7 @@ public:
   template <typename F>
   auto except(F &&f) { 
     static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-    auto child_obs = observable_->except(f);
-    //auto child = impl::create_observable< DerivedFromImpl<decltype(child_obs)> >();
-    auto child = Self::create_from_impl(child_obs);
+    auto child = Self::create_from_impl(observable_->except(f));
     child->context = this->context;
     return child;
   }
