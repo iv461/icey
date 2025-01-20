@@ -63,7 +63,7 @@ public:
   // 3: subscribers
   // 4: clients
   // 5: timers
-  virtual size_t attach_priority() const { return attach_priority_; }
+  size_t attach_priority() const { return attach_priority_; }
   size_t attach_priority_{0};
   bool was_attached_{false};
 };
@@ -128,14 +128,6 @@ public:
     if(!this->context.lock()) throw std::runtime_error("This observable does not have context, we cannot do stuff with it that depends on the context.");
   }
 
-  template<class O, typename... Args>
-  std::shared_ptr< O > create_observable(Args &&...args) const {
-    auto observable = std::make_shared< O >(std::forward<Args>(args)...);
-    observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
-    observable->context = this->context;
-    return observable;
-  }
-
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   template <typename F>
@@ -162,8 +154,6 @@ public:
 
   std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
 };
-
-struct DevNullObservable : public Observable<Nothing> {};
 
 /// An observable that holds the last received value. Fires initially an event if a default_value is
 /// set
@@ -531,7 +521,6 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
       }
       client_->async_send_request(
         request, [output_obs](Future response_futur) { 
-          std::cout << "GoT async cB, futur valid: " << response_futur.valid() << std::endl;
           if(response_futur.valid()) {
             output_obs->resolve(response_futur.get().second);
           } else {
@@ -813,26 +802,39 @@ struct Context : public std::enable_shared_from_this<Context> {
       return data_flow_graph_->graph_[v1]->attach_priority() <
              data_flow_graph_->graph_[v2]->attach_priority();
     };
+
+    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
+    for (size_t i_vertex = 0; i_vertex < num_vertices(data_flow_graph_->graph_); i_vertex++) {
+      auto att = data_flow_graph_->graph_[i_vertex];
+      std::cout << "Vertex " << i_vertex << " has prio: " << 
+      att->attach_priority() << " and class name: " << att->class_name 
+          << " and neme: " << att->name  << std::endl;
+    }
+
     /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
     /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
     /// parameters immediatelly have their values.
     if (icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
 
     for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
-      const auto &attachable = data_flow_graph_->graph_[i_vertex];
-      if (attachable->attach_priority() == 1)  /// Stop after attachning all parameters
-        break;
+      const auto &attachable = data_flow_graph_->graph_[i_vertex]; 
+      if (attachable->attach_priority() != 0) 
+        continue;
       attachable->attach_to_node(node);  /// Attach
     }
 
+
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
+      
+    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
     if (after_parameter_initialization_cb_)
       after_parameter_initialization_cb_();  /// Call user callback. Here, more vertices may be
                                              /// added
 
 
     if (icey_debug_print) std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;
+    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
     /// If additional vertices have been added to the DFG, attach it as well
 
     for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
@@ -939,8 +941,12 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(std::is_same_v< obs_val<Parent>, typename ServiceT::Request::SharedPtr >, "The parent triggering the service must hold a value of type Request::SharedPtr");
     using Comp = ServiceClientComputation<ServiceT>;
     using OutputObs = typename Comp::OutputObservable;
-    auto child = create_observable<OutputObs>();
-    register_trigger_vertex(child->index.value());
+    /// TODO fix here code dup. We cannot call create_obs since it registers with graph (service violates design that every obs is a attachable)
+    auto child = impl::create_observable<OutputObs>();
+    child->context = shared_from_this();
+    child->class_name = boost::typeindex::type_id_runtime(*child).pretty_name();
+
+    //register_trigger_vertex(child->index.value()); Add but do not attach !
     auto comp = std::make_shared<Comp>(service_name, timeout);
     other_attachables_.push_back(comp);
     comp->output_ = child;
@@ -951,6 +957,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
   // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
+  // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to know the node's clock (that may be simulated time, i.e sub on /clock)
   template<class Reference, class... Parents> 
   auto sync_with_reference(Reference reference, Parents ...parents) {
     observable_traits<Reference>{};
@@ -1125,6 +1132,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     assert_icey_was_not_initialized();
     auto observable = impl::create_observable<O>(args...);
     data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
+    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
     observable->context = shared_from_this();
     observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
     return observable;

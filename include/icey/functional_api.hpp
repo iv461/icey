@@ -61,7 +61,7 @@ private:
       throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
     } else if (nodes.size() != 1) {
       throw std::runtime_error(
-          "More than one node was spawned, you need to use icey::node(<name>) when accessing the "
+          "More than one node was spawned, you need to use icey::node(<name>) instead of icey::node-> when accessing the "
           "node.");
     }
     //// Get the first node after having checked there is only one

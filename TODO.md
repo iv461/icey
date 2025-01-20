@@ -170,6 +170,7 @@ Sorted by decreasing priority.
 # Missing features
 
 - Only the SingleThreadedExecutor is supported currently. That is mainly because the MultiThreadedExecturos does not have a properly implemented scheduler and instead sufferts from a [starvation](https://github.com/ros2/rclcpp/pull/2702) [issue](https://github.com/ros2/rclcpp/issues/2402). I have no intereset in making the code thread-safe as long as there is no reliable MT-executor anyway. Note that this does not mean you cannot use multiple threads for your computation-heavy algorihtms: You can still use OpenMP to parallelize them, only all the callbacks will be called from a single (the same) thread. 
+
 - Code is not thread-safe ! So using only mutually exclusive callback groups is mandatory. 
 - Memory strategy is not implemented, but could be easily, simply add the arguments everywhere 
 - LifecycleNodes are currently not supported. Please open an issue if this is a blocker for you.

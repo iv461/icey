@@ -7,13 +7,14 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
 int main(int argc, char **argv) {
-
+    icey::icey_debug_print = true;
     auto timer_signal = icey::create_timer(1s);
 
     auto timed_request = timer_signal->then([](size_t ticks) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Preparing request... ");
         auto request = std::make_shared<ExampleService::Request>();
         request->data = 1;
+        RCLCPP_INFO_STREAM(icey::node("service_client_node")->get_logger(), "Timer ticked, sending request: " <<
+                request->data);
         return request;
     });
 
@@ -22,12 +23,28 @@ int main(int argc, char **argv) {
 
     service_response
         ->then([](ExampleService::Response::SharedPtr response) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response: " << response->success);
+        RCLCPP_INFO_STREAM(icey::node("service_client_node")->get_logger(), "Got response: " << response->success);
         });
 
     service_response->except([](rclcpp::FutureReturnCode retcode) {
         std::cout << "Service got error: " << retcode << std::endl;
     });
     
-    icey::spawn(argc, argv, "client_example"); 
+    auto service_client_node = icey::create_node(argc, argv, "service_client_node"); 
+
+    /// Now create the service node
+    auto service = icey::create_service<ExampleService>("set_bool_service");
+
+    service->then([](std::shared_ptr<ExampleService::Request> request,
+            std::shared_ptr<ExampleService::Response> response) {
+            response->success = !request->data;
+            RCLCPP_INFO_STREAM(icey::node("service_server_node")->get_logger(), 
+                "Got request: " << request->data 
+                << ", returning response: " << response->success);
+            
+    });
+
+    auto service_server_node = icey::create_node(argc, argv, "service_server_node"); 
+    
+    icey::spin_nodes({service_client_node, service_server_node});
 }
