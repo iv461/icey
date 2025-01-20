@@ -24,6 +24,7 @@
  <depend>std_srvs</depend>
  <depend>diagnostic_updater</depend>
  <depend>message_filters</depend>
+ <depend>image_transport</depend>
  
  <test_depend>ament_lint_auto</test_depend>
  <test_depend>ament_lint_common</test_depend>

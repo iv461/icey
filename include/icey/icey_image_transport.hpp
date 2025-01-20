@@ -97,4 +97,10 @@ struct CameraPublisher:
   std::function<void(ROSAdapter::NodeHandle &)> attach_;
 };
 
+auto create_camera_subscription(
+    const std::string& base_topic_name, const std::string &transport, const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQoS()) {
+  return g_state.get_context().create_camera_subscription(topic_name, transport, qos);
+};
+
+
 }

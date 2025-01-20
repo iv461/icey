@@ -28,6 +28,7 @@ include_directories(
 #ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
 #ament_auto_add_executable(message_filters_interoperability_example examples/message_filters_interoperability.cpp)
 
+ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
 ament_auto_add_executable(piping_example examples/piping.cpp)
 ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
 
