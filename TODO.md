@@ -4,14 +4,14 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
+- [X] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
-
+- [ ] Timeouted Service request cleanup (automatic, periodically ? also use the available API functions to ensure there is nothing left)
 - [X] Implement Promises properly, adhering to fallthrough
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
-- [ ] Unit-tests GraphEngine: topo order should lead to correct single-update behavior
+- [X] Unit-tests GraphEngine: topo order should lead to correct single-update behavior -> ditched, not for 0.1
 - [X] Unit-test promise behavior, fall-through etc. 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
@@ -33,14 +33,16 @@ Sorted by decreasing priority.
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> easy TODO
 - [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 
-- [ ] Remove MP11 as dependency
+- [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
+
+- [X] Remove MP11 as dependency
 - [ ] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved)
 - [ ] Forbid subscribing to the same topic that is published by the same node 
 - [X] Service: fix soundness issue of the DFG, we store request and response inside the same node.
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
-- [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer
+- [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
 - [ ] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
 - [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125)
 
@@ -51,12 +53,11 @@ Sorted by decreasing priority.
 
 ## Examples 
 
+- [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
 - [ ] icey::filter(msg) -> simple filtering, e.g. [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
-- [ ] Examples in separate package `icey_examples`
-- [ ] port a small autoware or nav2 node to find out how many line of code we save
+- [ ] Examples in separate package `icey_examples` -> TEST WHETHER WE CAN DEPEND ON THE ROS Package
 
 ## Other
-
 
 - [ ] Auto-pipelining ...
 - [ ] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it is only a constant delay, like 5 seconds. We could acutally support this by a Delay-node: It simply buffers everything by 5s ! (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)

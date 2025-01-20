@@ -149,7 +149,14 @@ public:
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
     assert_we_have_context();
+    static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, there is nothing to publish, you cannot call publish() on it.");
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
+  }
+
+  void publish_transform() {
+    assert_we_have_context();
+    static_assert(std::is_same_v < obs_msg<Self>, geometry_msgs::msg::TransformStamped >, "The observable must have a Value of geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call publish_transform() on it.");
+    return this->context.lock()->create_transform_publisher(this->shared_from_this());
   }
 
   std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
@@ -200,18 +207,20 @@ protected:
       std::cout << "[ParameterObservable] attaching parameter '" + parameter_name_ + "' to node ..."
                 << std::endl;
     /// Declare on change handler
+    auto this_obs = this->observable_;
     node_handle.declare_parameter<Value>(
         parameter_name_, default_value_,
-        [this](const rclcpp::Parameter &new_param) {
+        [this_obs](const rclcpp::Parameter &new_param) {
           Value new_value = new_param.get_value<Value>();
-          this->observable_->resolve(new_value);
+          this_obs->resolve(new_value);
         },
         parameter_descriptor_, ignore_override_);
+
     /// Set default value
     if (default_value_) {
       Value initial_value;
       node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-      this->observable_->resolve(initial_value);
+      this_obs->resolve(initial_value);
     }
   }
   std::string parameter_name_;
@@ -237,8 +246,9 @@ public:
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
     if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
+    auto this_obs = this->observable_;
     node_handle.add_subscription<Value>(
-        name_, [this](typename Message::SharedPtr new_value) { this->observable_->resolve(new_value); },
+        name_, [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); },
         qos_, options_);
   }
 
@@ -286,13 +296,14 @@ public:
   }
   
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
+    auto this_obs = this->observable_;
     try {
       // Note that this call does not wait, the transform must already have arrived. This works
       // because get_at_time() is called by the synchronizer
       auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
       return std::make_shared<Message>(tf_msg); // For the sake of consistency, messages are always returned as shared pointers. Since lookupTransform gives us a value, we copy it over to a shared pointer.
     } catch (tf2::TransformException &e) {
-      /// TODO notify except if registered
+      this_obs->reject(e.what());
       return {};
     }
   }
@@ -301,10 +312,11 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print)
       std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
+    auto this_obs = this->observable_;
     tf2_listener_ = node_handle.add_tf_subscription(
         target_frame_, source_frame_,
-        [this](const geometry_msgs::msg::TransformStamped &new_value) {
-          this->observable_->resolve(std::make_shared<Message>(new_value));
+        [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
+          this_obs->resolve(std::make_shared<Message>(new_value));
         });
   }
 
@@ -327,17 +339,20 @@ struct TimerObservable : public Observable<size_t> {
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[TimerObservable] attach_to_node()" << std::endl;
-    ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this]() {
-      this->observable_->resolve(ticks_counter_++);
-      if (is_one_off_timer_) ros_timer_->cancel();
+    auto this_obs = this->observable_;
+    /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
+    ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this, this_obs]() {
+      size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
+      this_obs->resolve(ticks_counter++);
+      if (is_one_off_timer_) 
+        ros_timer_->cancel();
     });
   }
 
   rclcpp::TimerBase::SharedPtr ros_timer_;
   ROSAdapter::Duration interval_;
   bool use_wall_time_{false};
-  bool is_one_off_timer_{false};
-  Value ticks_counter_{0};
+  bool is_one_off_timer_{false};  
 };
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message> 
@@ -363,10 +378,11 @@ protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
     auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
-    this->observable_->_register_handler([this, publisher]() { 
+    auto this_obs = this->observable_;
+    this_obs->_register_handler([this_obs, publisher]() { 
                 // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
         // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
-        const auto &new_value = this->observable_->value(); /// There can be no error
+        const auto &new_value = this_obs->value(); /// There can be no error
         if constexpr(is_shared_ptr<Value>)
           publisher(*new_value);
         else 
@@ -408,6 +424,7 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 template <typename... Messages>
 class SynchronizerObservable : public Observable<std::tuple<typename Messages::SharedPtr...>> {
 public:
+  using Base = Observable<std::tuple<typename Messages::SharedPtr...>>;
   using Self = SynchronizerObservable<Messages...>;
   using Value = std::tuple<typename Messages::SharedPtr...>;
   /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
@@ -428,24 +445,17 @@ public:
 
 private:
   void create_mfl_synchronizer() {
-    synchronizer_ = std::make_shared<Sync>(Policy(queue_size_));
+    auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
+    synchronizer_ = synchronizer;
     /// Connect with the input observables
-    std::apply([this](auto &...input_filters) { synchronizer_->connectInput(*input_filters...); },
+    std::apply([synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
                inputs_);
-    synchronizer_->setAgePenalty(
-        0.50);  /// TODO not sure why this is needed, present in example code
-    synchronizer_->registerCallback(&Self::sync_callback,
-                                    this);  /// That is the only overload that we can use here that
-                                            /// works with the legacy pre-variadic template code
+    synchronizer_->setAgePenalty(0.50);  /// TODO not sure why this is needed, present in example code
+    auto this_obs = this->observable_; /// Important: Do not capture this
+    synchronizer_->registerCallback(&Base::resolve_with_tuple, this_obs);  /// Register directly to impl::Observable
   }
-
-  void sync_callback(typename Messages::SharedPtr... messages) {
-    this->observable_->resolve(std::forward_as_tuple(messages...));
-  }
-
   /// The input filters
   uint32_t queue_size_{10};
-
   Inputs inputs_;
   std::shared_ptr<Sync> synchronizer_;
 };
@@ -462,8 +472,9 @@ protected:
     if (icey_debug_print)
       std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
     auto publish = node_handle.add_tf_broadcaster_if_needed();
-    this->observable_->_register_handler([this, publish]() { 
-        const auto &new_value = this->observable_->value(); /// There can be no error
+    auto this_obs = this->observable_;
+    this_obs->_register_handler([this_obs, publish]() { 
+        const auto &new_value = this_obs->value(); /// There can be no error
         publish(new_value); 
     });
   }
@@ -486,10 +497,11 @@ struct ServiceObservable
 protected:
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
     if (icey_debug_print) std::cout << "[ServiceObservable] attach_to_node()" << std::endl;
+    auto obs_impl = this->observable_;
     node_handle.add_service<_ServiceT>(
         service_name_,
-        [this](Request request, Response response) {
-          this->observable_->resolve(std::make_pair(request, response));
+        [obs_impl](Request request, Response response) {
+          obs_impl->resolve(std::make_pair(request, response));
         },
         qos_);
   }
@@ -503,7 +515,7 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
-  using OutputObservable = Observable <Response, rclcpp::FutureReturnCode>;
+  using OutputObservable = Observable <Response, std::string>;
 
   ServiceClientComputation(const std::string &service_name, const ROSAdapter::Duration &timeout)
       : service_name_(service_name), timeout_(timeout) {
@@ -516,7 +528,7 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
       using Future = typename Client::SharedFutureWithRequest;
       auto output_obs = this->output_->observable_;
       if(!client_->wait_for_service(timeout_)) {
-        output_obs->reject(rclcpp::FutureReturnCode::TIMEOUT);
+        output_obs->reject("SERVICE_UNAVAILABLE");
         return;
       }
       client_->async_send_request(
@@ -524,8 +536,12 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
           if(response_futur.valid()) {
             output_obs->resolve(response_futur.get().second);
           } else {
-            /// TOOD
-            output_obs->reject(rclcpp::FutureReturnCode::TIMEOUT);
+            /// TODO the FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values. 
+            /// I think since the async_send_request waits on the executor, we cannot interrupt it except with Ctrl-C
+            if(!rclcpp::ok())
+              output_obs->reject("rclcpp::FutureReturnCode::INTERRUPTED");
+            else 
+              output_obs->reject("rclcpp::FutureReturnCode::TIMEOUT");
             /// TODO Do the weird cleanup thing
           }
 
@@ -977,6 +993,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
               return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
         });
+        /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject 
         return hana::prepend(parent_maybe_values, new_value);
     });
 

@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node("service_client_node")->get_logger(), "Got response: " << response->success);
         });
 
-    service_response->except([](rclcpp::FutureReturnCode retcode) {
-        std::cout << "Service got error: " << retcode << std::endl;
+    service_response->except([](std::string error_code) {
+        std::cout << "Service got error: " << error_code << std::endl;
     });
     
     auto service_client_node = icey::create_node(argc, argv, "service_client_node"); 
