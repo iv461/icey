@@ -109,10 +109,6 @@ public:
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue =  typename Impl::ErrorValue;
   using Self = Observable<_Value, _ErrorValue>;
-  using PImpl = std::shared_ptr<Impl>;
-
-  template<class T>
-  using DerivedFromImpl =  Observable < obs_val<T>, obs_err<T> >;
 
   /// Pattern-maching factory function that creates a New Self with different value and error types 
   // based on the passed Impl. Needed for then and except

@@ -65,7 +65,7 @@ This is where we use the `SynchExactTime` filter, which always outputs something
 auto camera_feed = icey::create_subscription("camera_front");
 auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
 
-icey::SyncExactTime(camera_feed, cam_to_map_signal)->then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map) {
+icey::synchronize(camera_feed, cam_to_map_signal)->then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map) {
 
 });
 
@@ -105,7 +105,7 @@ You can also use the TF-buffer directly inside callbacks since it offers useful 
 auto camera_feed = icey::create_subscription("camera_front");
 auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
 
-icey::SyncExactTime(camera_feed, cam_to_map_transfom)->then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map_tf) {
+icey::synchronize(camera_feed, cam_to_map_transfom)->then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map_tf) {
 
     icey::node->tf_buffer_->transform(...);
 });

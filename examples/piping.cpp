@@ -21,12 +21,6 @@ int main(int argc, char **argv) {
 
     auto cam_sync = icey::sync_with_reference(camera_image, map_base_link_tf);
 
-        /*
-    got_tf->then([](std_msgs::msg::Float32::SharedPtr float_val, 
-            std::optional<geometry_msgs::msg::TransformStamped::SharedPtr> tf_val)  {
-            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got from sync with ref");
-    });
-        */
 
     /// Synchronize, uses approx time
     auto float_tfed = icey::synchronize(float_sig, map_base_link_tf);

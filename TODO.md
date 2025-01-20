@@ -4,49 +4,44 @@
 
 Sorted by decreasing priority. 
 
-- [X] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
+- [ ] Up-to-date docs 
 - [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 - [ ] Timeouted Service request cleanup (automatic, periodically ? also use the available API functions to ensure there is nothing left)
-- [X] Implement Promises properly, adhering to fallthrough
-- [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
-
-- [X] Unit-tests GraphEngine: topo order should lead to correct single-update behavior -> ditched, not for 0.1
-- [X] Unit-test promise behavior, fall-through etc. 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
+
 - [ ] Unit-test that no dead-locks occur, use example from the official docu where a timer drives the service client
 - [ ] Unit-test the synchronizers, is the lookupTransform correct ?
-- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid 
 
-- [ ] .catch() promise fo TF buffer, would be useful to print the lookup error
+- [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
+
+- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
+- [ ] Result-type for error handling example
+
+- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
+- [ ] unpack tuple of obs to multiple obs, this is easy 
+- [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
+
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
 - [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported
 
-- [ ] unpack tuple of obs to multiple obs, this is easy 
 - [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
 
 - [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 - [ ] Maybe support cascading the synchronizers 
 
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> easy TODO
-- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 
-- [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
-
-- [X] Remove MP11 as dependency
 - [ ] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved)
-- [ ] Forbid subscribing to the same topic that is published by the same node 
-- [X] Service: fix soundness issue of the DFG, we store request and response inside the same node.
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
-- [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
 - [ ] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
+
 - [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125)
 
-- [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
 
 - [ ] Custom buffers: https://github.com/autowarefoundation/autoware.universe/blob/main/localization/autoware_ekf_localizer/include/autoware/ekf_localizer/ekf_localizer.hpp#L128
 ## Error-handling
@@ -57,14 +52,16 @@ Sorted by decreasing priority.
 - [ ] icey::filter(msg) -> simple filtering, e.g. [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] Examples in separate package `icey_examples` -> TEST WHETHER WE CAN DEPEND ON THE ROS Package
 
-## Other
+## Other nice-to-have features, not for 0.1
 
+- [X] Forbid subscribing to the same topic that is published by the same node -> not doing, resp of the user
+- [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
+- [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
 - [ ] Auto-pipelining ...
 - [ ] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it deals only with a constant delay, like 5 seconds. We could acutally support this by a Delay-node: It simply buffers everything by 5s ! (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
 
-## Other nice-to-have features, not for 0.1
 
 - [ ] Message converters to subscribe directly to https://github.com/ros2/examples/blob/rolling/rclcpp/topics/minimal_publisher/member_function_with_type_adapter.cpp
 - [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
@@ -160,6 +157,13 @@ Sorted by decreasing priority.
 - [X] Promise-API: .catch(), finally mostly important for timeout detection of service call 
 - [X] ->then() as member
 
+- [X] Implement Promises properly, adhering to fallthrough
+- [X] Service client implementation  https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L97
+- [X] Unit-tests GraphEngine: topo order should lead to correct single-update behavior -> ditched, not for 0.1
+- [X] Unit-test promise behavior, fall-through etc. 
+- [X] .catch() promise fo TF buffer, would be useful to print the lookup error
+- [X] Remove MP11 as dependency
+- [X] Service: fix soundness issue of the DFG, we store request and response inside the same node.
 ### Code 
 
 - [X] Use Result https://github.com/bitwizeshift/result

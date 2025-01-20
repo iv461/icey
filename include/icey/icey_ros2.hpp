@@ -168,7 +168,6 @@ public:
                            bool ignore_override = false) {
       rclcpp::ParameterValue v =
           default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
-
       auto param = static_cast<Base &>(*this).declare_parameter(name, v, parameter_descriptor,
                                                                 ignore_override);
       auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(this);
@@ -180,24 +179,12 @@ public:
     template <class Msg, class F>
     void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                           const rclcpp::SubscriptionOptions &options) {
-      if (my_subscribers_.count(topic) != 0) {
-        /// TODO throw topic already exists
-      }
-      if (my_publishers_.count(topic) != 0) {
-        /// TODO throw cannot subscribe on a topic that is being published at the same time
-      }
       my_subscribers_[topic] = create_subscription<Msg>(topic, qos, cb, options);
     }
 
     template <class Msg>
     auto add_publication(const std::string &topic, const QoS &qos = DefaultQoS(),
                          std::optional<double> max_frequency = std::nullopt) {
-      if (my_publishers_.count(topic) != 0) {
-        /// TODO throw topic already exists
-      }
-      if (my_subscribers_.count(topic) != 0) {
-        /// TODO throw cannot publish on a topic that is being subscribed at the same time
-      }
       auto publisher = create_publisher<Msg>(topic, qos);
       my_publishers_.emplace(topic, publisher);
 
