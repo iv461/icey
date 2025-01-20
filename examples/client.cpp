@@ -17,7 +17,8 @@ int main(int argc, char **argv) {
         return request;
     });
 
-    auto service_response = icey::create_client<ExampleService>(timed_request, "set_bool_service");
+    /// 1s timeout
+    auto service_response = icey::create_client<ExampleService>(timed_request, "set_bool_service", 1s);
 
     service_response
         ->then([](ExampleService::Response::SharedPtr response) {

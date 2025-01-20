@@ -6,7 +6,6 @@
 #include <type_traits>
 #include <memory> 
 
-#include <boost/type_index.hpp>
 #include <boost/noncopyable.hpp>
 #include <icey/impl/bag_of_metaprogramming_tricks.hpp>
 
@@ -69,12 +68,9 @@ public:
 
   virtual bool has_error() { return value_.has_error(); }
   virtual bool has_value() const { return value_.has_value(); }
-
   virtual const Value &value() const { return value_.value(); }
   virtual const ErrorValue &error() const { return value_.error(); }
-
   void _register_handler(Handler cb) {handlers_.emplace_back(std::move(cb)); }
-
   /// Set without notify
   /// TODO this will destroy first, see behttps://stackoverflow.com/a/78894559
   void _set_value(const MaybeValue &x) { 
@@ -84,8 +80,6 @@ public:
         value_.set_none();
   }
   void _set_error(const ErrorValue &x) { value_.set_err(x); }
-
-
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
   void _notify() {
     if(this->has_value() || this->has_error()) {

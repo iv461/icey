@@ -125,8 +125,9 @@ auto create_service(const std::string& service_name,
 
 template <class ServiceT, class Parent>
 auto create_client(Parent parent, const std::string& service_name,
+                  const ROSAdapter::Duration &timeout,
                    const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
-  return g_state.get_context().create_client<ServiceT>(parent, service_name, qos);
+  return g_state.get_context().create_client<ServiceT>(parent, service_name, timeout, qos);
 }
 
 /// Register something that is called immediatelly after we received all paramters from ROS

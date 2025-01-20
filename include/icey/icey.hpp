@@ -515,8 +515,8 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
   using Client = rclcpp::Client<_ServiceT>;
   using OutputObservable = Observable <Response, rclcpp::FutureReturnCode>;
 
-  ServiceClientComputation(const std::string &service_name)
-      : service_name_(service_name ){
+  ServiceClientComputation(const std::string &service_name, const ROSAdapter::Duration &timeout)
+      : service_name_(service_name), timeout_(timeout) {
     this->attach_priority_ = 4;
     ///this->name = service_name_; TODO edge names
     this->requires_waiting_on_ros = true;
@@ -524,13 +524,19 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
 
   void call(Request request) const {
       using Future = typename Client::SharedFutureWithRequest;
+      auto output_obs = this->output_->observable_;
+      if(!client_->wait_for_service(timeout_)) {
+        output_obs->reject(rclcpp::FutureReturnCode::TIMEOUT);
+        return;
+      }
       client_->async_send_request(
-        request, [this](Future response_futur) { 
+        request, [output_obs](Future response_futur) { 
+          std::cout << "GoT async cB, futur valid: " << response_futur.valid() << std::endl;
           if(response_futur.valid()) {
-            this->output_->observable_->resolve(response_futur.get().second);
+            output_obs->resolve(response_futur.get().second);
           } else {
             /// TOOD
-            this->output_->observable_->reject(rclcpp::FutureReturnCode::TIMEOUT);
+            output_obs->reject(rclcpp::FutureReturnCode::TIMEOUT);
             /// TODO Do the weird cleanup thing
           }
 
@@ -544,6 +550,7 @@ protected:
   }
   typename Client::SharedPtr client_;
   std::string service_name_;
+  ROSAdapter::Duration timeout_;
   //ROSAdapter::QoS qos_; TODO add for Iron/Jazzy, Humble had still the old APIs (rmw_*)
 };
 
@@ -833,6 +840,10 @@ struct Context : public std::enable_shared_from_this<Context> {
       if (attachable->attach_priority() == 0) continue;
       attachable->attach_to_node(node);  /// Attach
     }
+
+    /// TODO hack
+    for(const auto &attachable : other_attachables_) attachable->attach_to_node(node);  /// Attach
+
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching finished, node starts... " << std::endl;
 
@@ -922,15 +933,18 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Add a service client
   template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name,
+                    const ROSAdapter::Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     observable_traits<Parent>{}; // obs_val since the Request must be a shared_ptr
     static_assert(std::is_same_v< obs_val<Parent>, typename ServiceT::Request::SharedPtr >, "The parent triggering the service must hold a value of type Request::SharedPtr");
     using Comp = ServiceClientComputation<ServiceT>;
-    auto child = create_observable< typename Comp::OutputObservable >();
+    using OutputObs = typename Comp::OutputObservable;
+    auto child = create_observable<OutputObs>();
     register_trigger_vertex(child->index.value());
-    Comp comp(service_name);
-    comp.output_ = child;
-    parent->then([comp](auto req) { comp.call(req); }); // TODO maybe only register
+    auto comp = std::make_shared<Comp>(service_name, timeout);
+    other_attachables_.push_back(comp);
+    comp->output_ = child;
+    parent->then([comp](auto req) { comp->call(req); }); // TODO maybe only register
     return child;
   }
 
@@ -1145,6 +1159,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// The data-flow graph that this context creates. Everyghing is stored and owned by this graph. 
   std::shared_ptr<DataFlowGraph> data_flow_graph_{std::make_shared<DataFlowGraph>()};
 
+  std::vector< std::shared_ptr<NodeAttachable> > other_attachables_;
   std::shared_ptr<GraphEngine> graph_engine_;
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;
