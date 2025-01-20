@@ -466,9 +466,13 @@ private:
 
 // A transform broadcaster observable
 class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
-  friend class Context;
 
+  friend class Context;
 public:
+  TransformPublisherObservable() {
+      this->attach_priority_ = 5;
+      this->name = "tf_pub";
+  }
   using Value = geometry_msgs::msg::TransformStamped;
 
 protected:
