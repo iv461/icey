@@ -426,9 +426,8 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 /// synchronization still works. I would guess it works if the lowest frequency topic has a
 /// frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
 template <typename... Messages>
-class SynchronizerObservable : public Observable<std::tuple<typename Messages::SharedPtr...>> {
+class SynchronizerObservable : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string> {
 public:
-  using Base = Observable<std::tuple<typename Messages::SharedPtr...>>;
   using Self = SynchronizerObservable<Messages...>;
   using Value = std::tuple<typename Messages::SharedPtr...>;
   /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
@@ -448,6 +447,11 @@ public:
   const auto &inputs() const { return inputs_; }
 
 private:
+
+  void on_messages(typename Messages::SharedPtr ...msgs) {
+    this->observable_->resolve(std::forward_as_tuple(msgs...));
+  }
+  
   void create_mfl_synchronizer() {
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
@@ -456,7 +460,7 @@ private:
                inputs_);
     synchronizer_->setAgePenalty(0.50);  /// TODO not sure why this is needed, present in example code
     auto this_obs = this->observable_; /// Important: Do not capture this
-    synchronizer_->registerCallback(&Base::resolve_with_tuple, this_obs);  /// Register directly to impl::Observable
+    synchronizer_->registerCallback(&Self::on_messages, this);  /// Register directly to impl::Observable
   }
   /// The input filters
   uint32_t queue_size_{10};
@@ -984,7 +988,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// TOOD somehow does not work
     //auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return hana_is_interpolatable(t); }); 
     //static_assert(all_are_interpolatables, "All inputs must be interpolatable when using the sync_with_reference");
-    return reference.then([parents_tuple](const obs_val<Reference> &new_value) {
+    return reference->then([parents_tuple](const obs_val<Reference> &new_value) {
         auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
               return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
         });
@@ -1010,15 +1014,16 @@ struct Context : public std::enable_shared_from_this<Context> {
     observable_traits<Parents...>{};
     //auto parents_tuple = std::make_tuple(parents...);
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
-
+    using namespace hana::literals;
     uint32_t queue_size = 10;
     auto synchronizer = create_observable<SynchronizerObservable< obs_msg<Parents>...>>(queue_size);
-
-    hana::for_each(hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs()), 
+    auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs());
+    hana::for_each(zipped, 
         [](auto &input_output_tuple) {
-              auto &[parent, synchronizer_input] = input_output_tuple;
+              auto &parent = input_output_tuple[0_c];
+              auto &synchronizer_input = input_output_tuple[1_c];
               /// TODO add to graph, i.e. this->then(parent, f)
-              parent.then([synchronizer_input](const auto &x) { synchronizer_input.resolve(x); }); 
+              parent->then([synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); }); 
         });
 
     /*std::vector<size_t> parent_ids{parents->index.value()...};
@@ -1035,7 +1040,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
-    static_assert(sizeof...(Parents) >= 2, "You need to synchronize at least two inputs.");
+    static_assert(sizeof...(Parents) >= 2, "You need to have at least two inputs for synchronization.");
     auto parents_tuple = std::make_tuple(parents...);
     
     auto interpolatables = hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
@@ -1043,11 +1048,11 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
-    static_assert(num_interpolatables > 0 && num_non_interpolatables == 0,
+    static_assert(not (num_interpolatables > 0 && num_non_interpolatables == 0),
                   "You are trying to synchronize only interpolatable signals. This does not work, "
                   "you need to "
                   "have at least one non-interpolatable signal that is the common time for all the "
-                  "interpolatables.");
+                  "interpolatable signals.");
     // This can only either be one or more than one. Precondition is that we synchronize at least
     // two entities. Given the condition above, the statement follows.
     if constexpr (num_non_interpolatables > 1) {
@@ -1080,7 +1085,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     hana::for_each(std::forward_as_tuple(parents...), 
         [child](auto &parent) {
               /// TODO add to graph, i.e. this->then(parent, f)
-              parent.then([child](const auto &x) { child.resolve(x); }); 
+              parent->then([child](const auto &x) { child->observable_->resolve(x); }); 
         });
     return child;
   }
@@ -1102,7 +1107,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto get_nth(Parent &parent) {
     assert_observable_holds_tuple<Parent>();
     /// TODO add to graph, i.e. this->then(parent, f)
-    return parent.then([](const auto &...args) {  /// Need to take variadic because then()
+    return parent->then([](const auto &...args) {  /// Need to take variadic because then()
                                                    /// automatically unpacks tuples
       return std::get<index>(
           std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple and get the index.

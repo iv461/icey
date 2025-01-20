@@ -30,7 +30,6 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Parameters arrived");
         /// We can simply pass here the parameter so that the frame_id of the published message 
         // gets updated when the parameter updated dynamically.
-        
         create_yaw_rotation(base_frame_param)->publish_transform();
     });
     icey::spawn(argc, argv, "tf_broadcaster_example"); /// Create and start node

@@ -91,12 +91,6 @@ public:
     this->_set_value(x);
     this->_notify();
   }
-  
-  /// If the Value is a tuple, we can alternatively resolve with a foldable (required by synchronizer)
-  template<typename ...Args>
-  void resolve_with_tuple(Args &&...args) {
-    this->resolve(std::forward_as_tuple(args...));
-  }
 
   void reject(const ErrorValue &x) {
     this->_set_error(x);
