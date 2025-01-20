@@ -45,7 +45,7 @@ template<class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
 namespace impl {
-/// Creates a new observable of type O by passing the args to the constructor. Observables are always reference counted by using shared pointers
+/// Creates a new observable of type O by passing the args to the constructor. Observables are always reference counted, currently implemented with std::shared_ptr.
 template <class O, typename... Args>
 static std::shared_ptr<O> create_observable(Args &&...args) {
     auto observable = std::make_shared<O>(std::forward<Args>(args)...);

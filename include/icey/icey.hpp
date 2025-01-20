@@ -147,7 +147,7 @@ public:
 
   /// Create a ROS publisher and publish this observable.
   void publish(const std::string &topic_name,
-               const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+               const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS()) {
     assert_we_have_context();
     static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, there is nothing to publish, you cannot call publish() on it.");
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
@@ -317,6 +317,9 @@ protected:
         target_frame_, source_frame_,
         [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
           this_obs->resolve(std::make_shared<Message>(new_value));
+        },
+        [this_obs](const tf2::TransformException &ex) {
+          this_obs->reject(ex.what());
         });
   }
 
@@ -369,7 +372,7 @@ public:
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
 
   PublisherObservable(const std::string &topic_name,
-                      const ROSAdapter::QoS qos = ROS2Adapter::DefaultQos())
+                      const ROSAdapter::QoS qos = ROS2Adapter::DefaultQoS())
       : topic_name_(topic_name), qos_(qos) {
     this->attach_priority_ = 1;
     this->name = topic_name;
@@ -392,7 +395,7 @@ protected:
   }
 
   std::string topic_name_;
-  ROSAdapter::QoS qos_{ROS2Adapter::DefaultQos()};
+  ROSAdapter::QoS qos_{ROS2Adapter::DefaultQoS()};
 };
 
 struct AnyComputation {
@@ -841,9 +844,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
 
     if (icey_debug_print) std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;
-    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
     /// If additional vertices have been added to the DFG, attach it as well
-
     for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
       const auto &attachable = data_flow_graph_->graph_[i_vertex];
       if (attachable->attach_priority() == 0) continue;
@@ -900,7 +901,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
   template <typename MessageT>
   auto create_subscription(
-      const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos(),
+      const std::string &name, const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
     auto observable = create_observable<SubscriptionObservable<MessageT>>(name, qos, options);
     return observable;
@@ -913,7 +914,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
   template <class Parent>
   void create_publisher(Parent parent, const std::string &topic_name,
-                        const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQos()) {
+                        const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS()) {
     observable_traits<Parent>{};
     using MessageT = typename remove_shared_ptr_t<Parent>::Value;
     auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
@@ -1139,7 +1140,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     assert_icey_was_not_initialized();
     auto observable = impl::create_observable<O>(args...);
     data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
-    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
     observable->context = shared_from_this();
     observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
     return observable;
@@ -1211,16 +1211,18 @@ void spawn(std::shared_ptr<ROSAdapter::Node> node) {
 void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
   /// This is how nodes should be composed according to ROS maintainer wjwwood:
-  /// https://robotics.stackexchange.com/a/89767 He references
+  /// https://robotics.stackexchange.com/a/89767. He references
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
-  // rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), num_threads);
   for (const auto &node : nodes) executor.add_node(node);
   executor.spin();
   rclcpp::shutdown();
 }
 
-/// API aliases
+/// Public API aliases:
 using Node = ROSNodeWithDFG;
+template<class T>
+using Parameter = ParameterObservable<T>;
+
 
 }  // namespace icey
 

@@ -1,11 +1,7 @@
 #pragma once
 
-#include <fmt/core.h>
-#include <fmt/ostream.h>
-
 #include <any>
 #include <functional>
-#include <iostream>
 #include <map>
 #include <optional>
 #include <tuple>
@@ -27,7 +23,6 @@
 namespace icey {
 
 /// A ROS adapter, abstracting ROS 1 and ROS 2, so that everything works with both
-
 class ROS2Adapter {
 public:
   template <class Msg>
@@ -49,7 +44,7 @@ public:
   using _Node = rclcpp::Node;  /// Underlying Node type
 
   using QoS = rclcpp::QoS;
-  using DefaultQos = rclcpp::SystemDefaultsQoS;
+  using DefaultQoS = rclcpp::SystemDefaultsQoS;
   using ServiceQoS = rclcpp::ServicesQoS;
 
   /// A modified listener that can notify when a single transform changes.
@@ -62,58 +57,66 @@ public:
   /// tf2::BufferCore::_chainAsVector however, I need to look into it
   struct TFListener {
     using TransformMsg = geometry_msgs::msg::TransformStamped;
+    using OnTransform = std::function<void(const TransformMsg &)>;
+    using OnError = std::function<void(const tf2::TransformException &)>;
 
     TFListener(NodePtr node, tf2_ros::Buffer &buffer) : node_(node), buffer_(buffer) { init(node); }
 
     /// Add notification for a single transform.
-    template <class CallbackT>
+    
     void add_subscription(std::string target_frame, std::string source_frame,
-                          CallbackT &&callback) {
+                          const OnTransform &on_transform, 
+                          const OnError &on_error) {
       subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), std::nullopt,
-                                          std::move(callback));
+                                          on_transform, 
+                                          on_error);
     }
   
     tf2_ros::Buffer  &buffer_;
 
   private:
     using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
-    using NotifyCB = std::function<void(const TransformMsg &)>;
+    /// A tf subctiption, the frames, last received transform, and the notify CB
+    using FrameNames = std::pair<std::string, std::string>;
+    using TFSubscriptionInfo = std::tuple<FrameNames, std::optional<TransformMsg>, OnTransform, OnError>;
 
     void on_tf_message(TransformsMsg msg, bool is_static) {
+      std::cout << "on_tf_message(TransformsMsg " << std::endl;
       store_in_buffer(*msg, is_static);
       notify_if_any_relevant_transform_was_received();
     }
 
     void notify_if_any_relevant_transform_was_received() {
-      for (const auto &[transform_id, last_received_transform, notify_cb] :
-           subscribed_transforms_) {
-        auto maybe_new_transform = get_maybe_new_transform(transform_id.first, transform_id.second,
-                                                           last_received_transform);
-        if (maybe_new_transform) {
-          notify_cb(*maybe_new_transform);
-        }
+      for (auto &tf_info : subscribed_transforms_) {
+        maybe_notify(tf_info);
       }
     }
 
     /// This simply looks up the transform in the buffer at the latest stamp and checks if it
     /// changed with respect to the previously received one. If the transform has changed, we know
     /// we have to notify
-    std::optional<geometry_msgs::msg::TransformStamped> get_maybe_new_transform(
-        std::string target_frame, std::string source_frame,
-        std::optional<geometry_msgs::msg::TransformStamped> last_received_tf) {
-      std::optional<geometry_msgs::msg::TransformStamped> tf_msg;
+    void maybe_notify(TFSubscriptionInfo &sub) {
+      auto &[frame_names, last_received_transform, on_transform, on_error] = sub;
+      const auto &[target_frame, source_frame] = frame_names;
+          std::cout << "maybe notify" << std::endl;
       try {
-        tf_msg = buffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+        /// Lookup the latest transform in the buffer to see if we got something new in the buffer 
+        geometry_msgs::msg::TransformStamped tf_msg = buffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+        /// Now check if it is the same as the last one, in this case we return nothing since the
+        /// transform did not change. (Instead, we received on /tf some other, unrelated transforms.)
+        if (!last_received_transform || tf_msg != *last_received_transform)  {
+          last_received_transform = tf_msg;
+          on_transform(tf_msg);
+        } else {
+          std::cout << "Did not change" << std::endl;
+        }
       } catch (tf2::TransformException &e) {
         /// Simply ignore. Because we are requesting the latest transform in the buffer, the only
         /// exception we can get is that there is no transform available yet.
         /// TODO duble-check if there is reallly nothing to do here.
-        // std::cout << "Lookup failed: " << e.what() << std::endl;
+        std::cout << "LOOKUP EX" << std::endl;
+        on_error(e);
       }
-      /// Now check if it is the same as the last one, in this case we return nothing since the
-      /// transform did not change. (Instead, we received on /tf some other, unrelated transforms.)
-      if (last_received_tf && tf_msg && *tf_msg == *last_received_tf) return {};
-      return tf_msg;
     }
 
     /// Store the received transforms in the buffer.
@@ -141,17 +144,12 @@ public:
       message_subscription_tf_static_ = node->create_subscription<tf2_msgs::msg::TFMessage>(
           "/tf_static", static_qos, [this](TransformsMsg msg) { on_tf_message(msg, true); });
     }
-
-    using TFId = std::pair<std::string, std::string>;
-    /// A tf subctiption, the frames, last received transform, and the notify CB
-    using SubTF = std::tuple<TFId, std::optional<TransformMsg>, NotifyCB>;
-
     NodePtr node_;  /// Stored for logging
 
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
 
-    std::vector<SubTF> subscribed_transforms_;
+    std::vector<TFSubscriptionInfo> subscribed_transforms_;
   };
 
   /// A node interface, wrapping to some common functions
@@ -192,7 +190,7 @@ public:
     }
 
     template <class Msg>
-    auto add_publication(const std::string &topic, const QoS &qos = DefaultQos(),
+    auto add_publication(const std::string &topic, const QoS &qos = DefaultQoS(),
                          std::optional<double> max_frequency = std::nullopt) {
       if (my_publishers_.count(topic) != 0) {
         /// TODO throw topic already exists
@@ -238,11 +236,12 @@ public:
     }
 
     /// Subscribe to a transform on tf between two frames
-    template <class CallbackT>
+    template <class OnTransform, class OnError>
     auto add_tf_subscription(std::string target_frame, std::string source_frame,
-                             CallbackT &&callback) {
+                             OnTransform &&on_transform,
+                             OnError &&on_error) {
       add_tf_listener_if_needed();
-      tf2_listener_->add_subscription(target_frame, source_frame, std::move(callback));
+      tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
       return tf2_listener_;
     }
 

@@ -97,7 +97,7 @@ auto declare_parameter(const std::string& name,
 }
 template <class MessageT>
 auto create_subscription(
-    const std::string& topic_name, const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQos(),
+    const std::string& topic_name, const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQoS(),
     const rclcpp::SubscriptionOptions& options = rclcpp::SubscriptionOptions()) {
   return g_state.get_context().create_subscription<MessageT>(topic_name, qos, options);
 };
