@@ -359,7 +359,6 @@ protected:
 template <typename _Value>
 class PublisherObservable : public Observable<_Value> {
   friend class Context;
-
 public:
   using Value = _Value;
   using Base = Observable<_Value>;
