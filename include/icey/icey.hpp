@@ -343,7 +343,8 @@ protected:
     /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
     ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this, this_obs]() {
       size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
-      this_obs->resolve(ticks_counter++);
+      ticks_counter++;
+      this_obs->resolve(ticks_counter);
       if (is_one_off_timer_) 
         ros_timer_->cancel();
     });
@@ -818,15 +819,6 @@ struct Context : public std::enable_shared_from_this<Context> {
       return data_flow_graph_->graph_[v1]->attach_priority() <
              data_flow_graph_->graph_[v2]->attach_priority();
     };
-
-    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
-    for (size_t i_vertex = 0; i_vertex < num_vertices(data_flow_graph_->graph_); i_vertex++) {
-      auto att = data_flow_graph_->graph_[i_vertex];
-      std::cout << "Vertex " << i_vertex << " has prio: " << 
-      att->attach_priority() << " and class name: " << att->class_name 
-          << " and neme: " << att->name  << std::endl;
-    }
-
     /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
     /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
     /// parameters immediatelly have their values.
@@ -842,8 +834,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
-      
-    std::cout << "G has num verts: " << num_vertices(data_flow_graph_->graph_) << std::endl;
+  
     if (after_parameter_initialization_cb_)
       after_parameter_initialization_cb_();  /// Call user callback. Here, more vertices may be
                                              /// added
@@ -875,7 +866,6 @@ struct Context : public std::enable_shared_from_this<Context> {
       // so when the nodes are notified, they can only notify the context. So we have to direct through the context 
       /// the action to the graph 
       register_source_verices();
-      
     }
   }
 
