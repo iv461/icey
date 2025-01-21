@@ -146,6 +146,19 @@ public:
     return this->context.lock()->create_transform_publisher(this->shared_from_this());
   }
 
+  
+  /// Create a new ServiceClient observable, this observable holds the request.
+  template<class ServiceT>
+  auto call_service(const std::string &service_name,
+                     const ROSAdapter::Duration &timeout,
+                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    assert_we_have_context();
+    static_assert(not std::is_same_v<Value, Nothing>,
+                  "This observable does not have a value, there is nothing to publish, you cannot "
+                  "call publish() on it.");
+    return this->context.lock()->template create_client<ServiceT>(this->shared_from_this(), service_name, timeout, qos);
+  }
+
   // protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed pointer to the implentation-Promise. Needed for then and except
@@ -478,7 +491,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
     maybe_pending_request_ = 
       client_->async_send_request(request, [this, output_obs](Future response_futur){
       if (response_futur.valid()) {
-        
+        maybe_pending_request_ = {};
         output_obs->resolve(response_futur.get().second);
       } else {
         /// The FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
@@ -492,6 +505,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
         /// Now do the weird cleanup thing that the API-user definitely neither does need to care
         /// nor know about:
         client_->remove_pending_request(maybe_pending_request_.value());
+        maybe_pending_request_ = {};
       }
     });
   }

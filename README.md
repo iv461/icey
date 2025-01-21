@@ -46,11 +46,15 @@ ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anythin
 
 # Key features: 
 
+- Because ICEY removes unccesesary boolerplate code
+- Easy asynchronous programming using promises, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html) or spawning extra threads
+- It automatically computes the data-flow synchronously to the data it depents on: No more `received_x`-flags and asynchronously spinning in timers, waiting to something to arrive 
 - Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types
+
 
 ## Parameters 
 
-Paramters are persisted, but updates are communicated similar to topics. That is why they are very similar to states:
+Parameters are persisted, but updates are communicated similar to topics. That is why they are very similar to states:
 
 ```cpp
 auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
@@ -66,7 +70,7 @@ TODO
 # Dependencies: 
 
 - needs ROS 2 (tested on Humble)
-- Boost (Hana, Graph Library)
+- Boost (Hana)
 
 # Build and test 
 
@@ -76,15 +80,6 @@ colcon test --packages-select icey
 # Run test
 build/icey./promise_test
 ```
-# Why should I use ICEY: 
-
-TODO more convincing 
-
-If the examples did not yet convince you: 
-
-- Because ICEY removes unccesesary boolerplate code
-- It automatically computes the data-flow synchronously to the data it depents on: No more `received_x`-flags and asynchronously spinning in timers, waiting to something to arrive 
-- 
 
 # Robustness 
 

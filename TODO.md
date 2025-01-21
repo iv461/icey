@@ -5,7 +5,6 @@
 Sorted by decreasing priority. 
 
 - [ ] Up-to-date docs 
-- [ ] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack
 - [ ] Timeouted Service request cleanup (automatic, periodically ? also use the available API functions to ensure there is nothing left)
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
@@ -21,6 +20,7 @@ Sorted by decreasing priority.
 - [ ] unpack tuple of obs to multiple obs, this is easy 
 - [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
 
+- [ ] Test with clang and build with ASAN(`-DCMAKE_CXX_FLAGS=-fsanitize=address`).
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
 - [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported. Generally, we have to use everywhere `rclcpp::NodebaseInterfaces`, another issue is that image_transport does not support LifeCycleNodes: https://github.com/ros-perception/image_common/pull/304
@@ -165,6 +165,11 @@ Sorted by decreasing priority.
 - [X] .catch() promise fo TF buffer, would be useful to print the lookup error
 - [X] Remove MP11 as dependency
 - [X] Service: fix soundness issue of the DFG, we store request and response inside the same node.
+- [X] Re-throw exceptions if the promise holds an object of type exception as an ErrorValue and if no promise rejection handlers are registered.
+- [X] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
+
+- [X] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack -> https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html this was only for synchronous call. We do not need to create the callback groups if we are only using the async_call
+- [X] Service client as member function, `call_service`
 ### Code 
 
 - [X] Use Result https://github.com/bitwizeshift/result
@@ -173,8 +178,6 @@ Sorted by decreasing priority.
 - [X] Use boost hana instead fo rolling our own bag of meta-programming tricks
 - [X] Look at https://github.com/xhawk18/promise-cpp
 
-- [X] Re-throw exceptions if the promise holds an object of type exception as an ErrorValue and if no promise rejection handlers are registered.
-- [X] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 
 # Missing features
 
