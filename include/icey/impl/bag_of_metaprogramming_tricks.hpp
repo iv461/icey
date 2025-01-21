@@ -4,11 +4,11 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <tuple>
 #include <type_traits>
 #include <variant>
-#include <memory>
 namespace icey {
 
 template <class T>

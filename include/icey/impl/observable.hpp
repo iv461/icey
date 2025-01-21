@@ -87,6 +87,12 @@ public:
   void _set_error(const ErrorValue &x) { value_.set_err(x); }
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
   void _notify() {
+    if constexpr(std::is_base_of_v<std::runtime_error, ErrorValue>) {
+      if(this->has_error() && handlers_.empty()) { // If we have an error and the chain stops, we re-throw the error to not leave the error unhandled.
+          //std::cout << "Unhandled promise rejection with an ErrorValue  that is an exception, re-throwing .." << std::endl;
+          throw this->error();
+      }
+    }
     if (this->has_value() || this->has_error()) {
       for (auto cb : handlers_) cb();
     }

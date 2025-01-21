@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     /// The second argument is the transport, i.e. the compression algorithm to use. Common ones are "raw", 
     /// Compressed, ffmpeg etc.
     /// Note to class-based API users: call "icey().create_observable<CameraSubscriber>("camera_center", "raw")" (this API is somewhat rough, it might change in the future).
-    auto camera_center_sub = icey::create_camera_subscription("camera_center", "raw", rclcpp::SensorDataQoS());
+    auto camera_center_sub = icey::create_camera_subscription("camera_center", "ffmpeg", rclcpp::SensorDataQoS());
 
     camera_center_sub->then([](sensor_msgs::msg::Image::ConstSharedPtr image, 
                                     sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info){
