@@ -109,7 +109,7 @@ public:
   template <typename F>
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
-                  "This observable cannot have errors, so you cannot register .except() on it.");
+                  "This observable cannot have errors, so you cannot register except() on it.");
     auto child = Self::create_from_impl(observable_->except(f));
     child->context = this->context;
     return child;
