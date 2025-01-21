@@ -31,6 +31,8 @@ include_directories(
 ament_auto_add_executable(service_client_example examples/service_client.cpp)
 ament_auto_add_executable(service_server_example examples/service_server.cpp)
 
+ament_auto_add_executable(service_client_class_api_example examples/service_client_class_api.cpp)
+
 #ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
 #ament_auto_add_executable(piping_example examples/piping.cpp)
 #ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)

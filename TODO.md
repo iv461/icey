@@ -50,6 +50,8 @@ Sorted by decreasing priority.
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
 - [ ] icey::filter(msg) -> simple filtering, e.g. [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] Examples in separate package `icey_examples` -> TEST WHETHER WE CAN DEPEND ON THE ROS Package
+- [ ] https://github.com/ros-perception/imu_pipeline
+- [ ] PCL isn't ported yet: https://github.com/ros-perception/perception_pcl/issues/225
 
 ## Other nice-to-have features, not for 0.1
 
@@ -63,7 +65,8 @@ Sorted by decreasing priority.
 
 
 - [ ] Message converters to subscribe directly to https://github.com/ros2/examples/blob/rolling/rclcpp/topics/minimal_publisher/member_function_with_type_adapter.cpp, 
-[ ] Existing converters for pointcloud and Image to `cv::Mat`: https://github.com/roncapat/ros2_native_adapters
+- [ ] See also https://github.com/CursedRock17/ros2_common_type_adaptations
+- [ ] Existing converters for pointcloud and Image to `cv::Mat`: https://github.com/roncapat/ros2_native_adapters
 - [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
 
 - [X] A way to enable/disable the node -> Lifecycle node

@@ -94,7 +94,7 @@ public:
       }
     }
     if (this->has_value() || this->has_error()) {
-      for (auto cb : handlers_) cb();
+      for (const auto &cb : handlers_) cb();
     }
   }
 

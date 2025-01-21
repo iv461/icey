@@ -564,6 +564,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     for (const auto &attachable : attachables_) {
       if (!attachable->is_parameter()) attachable->attach_to_node(node);
     }
+    if (icey_debug_print)
+      std::cout << "[icey::Context] Attaching finished. " << std::endl;
   }
 
   /// Creates a new observable of type O by passing the args to the constructor. It also adds it as
@@ -636,7 +638,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_observable<ServiceClient<ServiceT>>(service_name, timeout);
-    parent->then([&] (auto req) { service_client->call(req); });
+    parent->then([service_client] (auto req) { service_client->call(req); });
     return service_client;
   }
 

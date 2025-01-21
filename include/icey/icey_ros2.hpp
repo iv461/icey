@@ -43,6 +43,11 @@ public:
   using DefaultQoS = rclcpp::SystemDefaultsQoS;
   using ServiceQoS = rclcpp::ServicesQoS;
 
+/// There is a NodeInterfaces class that abstracts Nodes and Lifecycly-nodes: https://github.com/ros2/rclcpp/pull/2041
+/// but it's not coming for Humble: 
+/// and also it is not yet supported by geometry2/TF: https://github.com/ros2/geometry2/issues/698
+/// So we will have to use the template parameter "Node" approach.
+
   /// A modified listener that can notify when a single transform changes.
   /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate node.
   /// TODO this simple implementation currently checks every time a new message is receved on /tf
