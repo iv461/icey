@@ -53,7 +53,6 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 }
 
 /// An observable. Similar to a promise in JavaScript.
-/// TODO consider CRTP, would also be beneficial for PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable :         
         private boost::noncopyable, 
@@ -71,8 +70,6 @@ public:
   const Value &value() const { return value_.value(); }
   const ErrorValue &error() const { return value_.error(); }
   void _register_handler(Handler cb) {handlers_.emplace_back(std::move(cb)); }
-  /// Set without notify
-  /// TODO this will destroy first, see behttps://stackoverflow.com/a/78894559
   void _set_value(const MaybeValue &x) { 
       if(x) 
         value_.set_ok(*x);
@@ -97,6 +94,25 @@ public:
     this->_notify();
   }
 
+  /// Returns a function that calls the passed user callback and then writes the result in the passed output Observable (that is captured by value)
+  template <bool resolve, class Output, class F>
+  auto call_depending_on_signature(Output output, F &&f) {  
+    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
+    // TODO use std::invoke_result
+    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
+    return [output, f = std::move(f)](const FunctionArgument &x) {
+        if constexpr (std::is_void_v<ReturnType>) {
+            apply_if_tuple(f, x);
+        } else if constexpr(is_result<ReturnType>) { /// support callbacks that at runtime may return value or error
+          output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant but differentiate and set error or value
+          output->_notify();
+        } else { /// Other return types are interpreted as values that resolve the promise. Here, we also support returning std::optional.
+          ReturnType ret = apply_if_tuple(f, x);
+          output->resolve(ret); 
+        }
+    };
+  }
+
   /// @brief This function creates a handler for the promise and returns it as a function object. 
   /// It' behvarior closely matches promises in JavaScript.
   /// It is basis for implementing the .then() function but it does three things differently: 
@@ -110,22 +126,7 @@ public:
   template <bool resolve, class Output, class F>
   Handler create_handler(Output output, F &&f, bool register_it) {
     auto input = this->shared_from_this(); // strong reference to this for binding, instead of only weak if we would bind this
-    //observable_traits<Output>{}; TODO 
-    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue >;
-    // TODO use std::invoke_result
-    using ReturnType = decltype(apply_if_tuple(f, std::declval< FunctionArgument >()));
-    auto call_depending_on_signature = [output, f = std::move(f)](const FunctionArgument &x) {
-        if constexpr (std::is_void_v<ReturnType>) {
-            apply_if_tuple(f, x);
-        } else if constexpr(is_result<ReturnType>) { /// support callbacks that at runtime may return value or error
-          output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant but differentiate and set error or value
-          output->_notify();
-        } else { /// Other return types are interpreted as values that resolve the promise. Here, we also support returning std::optional.
-          ReturnType ret = apply_if_tuple(f, x);
-          output->resolve(ret); 
-        }
-    };
-    auto handler = [input, output, call_and_resolve=std::move(call_depending_on_signature)]() {
+    auto handler = [input, output, call_and_resolve=std::move(call_depending_on_signature<resolve>(output, f))]() {
       if constexpr (resolve) { /// If we handle values with .then()
         if(input->has_value()) { 
           call_and_resolve(input->value());
@@ -138,7 +139,7 @@ public:
         } /// Else do nothing
       }
     };
-    if (register_it) 
+    if (register_it)
       input->_register_handler(handler);
     return handler;
   }
@@ -173,12 +174,12 @@ public:
     template <class F> auto then(F &&f) { 
       /// Note that it may only have errors
       static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, so you cannot register .then() on it.");
-      return std::get<0>(this->template done<true>(f, true)); 
+      return std::get<0>(this->done<true>(f, true)); 
     }
     template <class F> 
     auto except(F &&f) { 
         static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
-        return std::get<0>(this-> template done<false>(f, true)); 
+        return std::get<0>(this->done<false>(f, true)); 
     }
 
 
