@@ -16,7 +16,6 @@ public:
     MyNode(std::string name) : Base(name) {
 
        auto timer_signal = icey().create_timer(500ms);
-
         
         timer_signal->then([this](size_t ticks) {
             RCLCPP_INFO_STREAM(get_logger(), "Timer ticked: " << ticks);

@@ -2,7 +2,7 @@
 #pragma once 
 
 #ifndef ICEY_ROS2_WAS_INCLUDED
-#error "You must include first the <icey/icey_ros2.hpp> header before you can include the icey_image_transport.hpp header."
+#error "You must first include the <icey/icey_ros2.hpp> header before you can include the <icey/icey_image_transport.hpp> header."
 #endif
 
 #include <functional>
