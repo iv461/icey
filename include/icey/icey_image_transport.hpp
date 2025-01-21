@@ -1,6 +1,10 @@
 //// Support for the image_transport subscribers and publishers. 
 #pragma once 
 
+#ifndef ICEY_ROS2_WAS_INCLUDEC
+#error "You must include first the <icey/icey_ros2.hpp> header before you can include the icey_image_transport.hpp header."
+#endif
+
 #include <functional>
 #include <tuple>
 

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         return request;
     });
 
-    /// 1s timeout
+    /// Create a service client, the service is called every time the timer ticks. We set additionally a timeout for waiting untill the service becomes available.
     auto service_response = icey::create_client<ExampleService>(timed_request, "set_bool_service", 1s);
 
     service_response
@@ -26,7 +26,9 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node("service_client_node")->get_logger(), "Got response: " << response->success);
         });
 
+    /// Here we catch timeout errors as well as unavailability of the service
     service_response->except([](std::string error_code) {
+        /// Possible values for error_code are "SERVICE_UNAVAILABLE", "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
         std::cout << "Service got error: " << error_code << std::endl;
     });
     

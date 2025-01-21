@@ -19,7 +19,7 @@ Sorted by decreasing priority.
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
 - [ ] Result-type for error handling example
 
-- [ ] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
+- [X] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 - [ ] unpack tuple of obs to multiple obs, this is easy 
 - [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
 
@@ -40,7 +40,7 @@ Sorted by decreasing priority.
 
 - [X] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
 
-- [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125)
+- [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125) -> maybe "lazy" parameter on publish() ? 
 
 - [ ] Code simplicity: consider holding the baggage that is currently in the ROSNode wrapper in the Context. Right now we essentially have two contexts.
 - [ ] Custom buffers: https://github.com/autowarefoundation/autoware.universe/blob/main/localization/autoware_ekf_localizer/include/autoware/ekf_localizer/ekf_localizer.hpp#L128

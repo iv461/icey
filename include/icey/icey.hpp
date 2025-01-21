@@ -9,9 +9,6 @@
 
 /// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a
 /// dependecy of one of our deps. It's not rclcpp and not message_filters.
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/strong_components.hpp>
-#include <boost/graph/topological_sort.hpp>
 #include <boost/hana.hpp>
 #include <boost/hana/ext/std/tuple.hpp> /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
 #include <boost/type_index.hpp>
@@ -576,228 +573,6 @@ protected:
   //ROSAdapter::QoS qos_; TODO add for Iron/Jazzy, Humble had still the old APIs (rmw_*)
 };
 
-/// A graph, owning the observables TODO decide on base-class, since the graph only needs to own the
-/// data, we could even use std::any
-struct DataFlowGraph {
-  /// TODO store the computation
-  using EdgeData = AnyComputation;
-  using VertexData = std::shared_ptr<GraphObservableBase>;
-  /// vecS needed so that the vertex id's are consecutive integers
-  using Graph =
-      boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, EdgeData>;
-
-  void add_v(VertexData vertex_data) {
-    if (vertex_data->index.has_value())
-      throw std::invalid_argument(
-          "[DataFlowGraph::add_v] This vertex was already added to the graph, since it's index was "
-          "set. Observables must be added only once to the graph");
-    vertex_data->index = add_vertex(vertex_data,
-                                    graph_);  /// TODO Obs needs to know the index so we can connect
-                                              /// them here, can we do better ?
-  }
-
-  /// Create new edges from a child node to multiple parent nodes. Parent nodes must have been
-  /// inserted already
-  /// TODO we can accept a std::array here actually and avoid the dynamic mem alloc
-  void add_edges(size_t child_id, const std::vector<size_t> &parent_ids,
-                 const std::vector<EdgeData> &edges_data) {
-    for (size_t i = 0; i < parent_ids.size(); i++) {
-      const auto &parent_id = parent_ids.at(i);
-      const auto &edge_data = edges_data.at(i);
-      add_edge(parent_id, child_id, edge_data, graph_);
-    }
-  }
-
-  // Returns an index remapping for the indices that sort them by a predicate. You should
-  // never mutate the order of the vertices, meaning sorting them directly, but instead use this function. 
-  //This is because the vertex data (the Observables) reference their index in the list of vertices.
-  std::vector<size_t> get_vertices_ordered_by(std::function<bool(size_t, size_t)> predicate) {
-    auto vertex_index_range = boost::make_iterator_range(vertices(graph_));
-    std::vector<size_t> vertex_index_range_copy(vertex_index_range.begin(),
-                                                vertex_index_range.end());
-    std::sort(vertex_index_range_copy.begin(), vertex_index_range_copy.end(), predicate);
-    return vertex_index_range_copy;
-  }
-
-  /// Returns an iterable of all the vertices
-  auto get_vertices_index_range() { return boost::make_iterator_range(vertices(graph_)); }
-
-  bool empty() const { return num_vertices(graph_) == 0; }
-  void clear() { graph_.clear(); }
-
-  // In case the graph is not a DAG, we compute the strong components to display to the user the
-  // vertices that form loops
-  std::vector<std::set<int>> compute_strong_components() {
-    // Compute strongly connected components
-    auto &g = graph_;
-    std::vector<int> component(num_vertices(g));  // Component indices
-    int num_scc = boost::strong_components(g, &component[0]);
-
-    // Map each component to its vertices
-    std::vector<std::set<int>> components(num_scc);
-    for (size_t v = 0; v < component.size(); ++v) {
-      components[component[v]].insert(v);
-    }
-    return components;
-  }
-
-  void print_strong_components(const std::vector<std::set<int>> &components) {
-    // Identify and print vertices in cycles
-    std::cout << "Vertices in cycles (including self-loops):" << std::endl;
-    for (const auto &comp : components) {
-      if (comp.size() > 1 ||
-          (comp.size() == 1 && boost::edge(*comp.begin(), *comp.begin(), graph_).second)) {
-        for (int v : comp) {
-          std::cout << v << " ";
-        }
-        std::cout << std::endl;
-      }
-    }
-  }
-
-  std::optional<std::vector<size_t>> try_topological_sorting() {
-    std::vector<size_t> topological_order;
-    try {
-      topological_sort(graph_, std::back_inserter(topological_order));
-      /// Boost outputs the topological order in reversed order. ..
-      std::reverse(topological_order.begin(), topological_order.end());
-      return topological_order;
-    } catch (const boost::not_a_dag &) {
-      return {};
-    }
-  }
-
-  void print() {
-    auto &g = graph_;
-
-    std::cout << "Created data-flow graph:\nVertices:" << std::endl;
-    for (auto v : boost::make_iterator_range(vertices(g))) {
-      std::cout << "Vertex " << v << ": " << g[v]->class_name << ": " << g[v]->name << std::endl;
-    }
-
-    // Print adjacency list
-    std::cout << "\nAdjacency List:" << std::endl;
-    for (auto e : boost::make_iterator_range(edges(g))) {
-      auto source_vertex = source(e, g);
-      auto target_vertex = target(e, g);
-      std::cout << "Edge from Vertex " << source_vertex << " (" << g[source_vertex]->name
-                << ") to Vertex " << target_vertex << " (" << g[target_vertex]->name << ")"
-                << std::endl;
-    }
-  }
-
-  Graph graph_;
-};
-
-
- /// Graph engine, it executes the event propagation in graph mode given a data-flow graph.
- /// This event propagation executes computations over the eges. It is designed so that edges can contain Service calls 
- /// and therefore during the propagation, the GraphEngine can hand over to ROS at any time. When encountering an edge 
- /// that requries waiting on ROS, the propagation returns, remembering which edges it already propagated. When ROS triggers 
- /// an observable the next time, it continues to propagate.
-struct GraphEngine {
-  explicit GraphEngine(std::shared_ptr<DataFlowGraph>  graph) : data_flow_graph_(graph), 
-        propagation_state_(graph) {}
-
-  void analyze_data_flow_graph() {
-    auto maybe_topological_order = data_flow_graph_->try_topological_sorting();
-    if (!maybe_topological_order) {
-      auto components = data_flow_graph_->compute_strong_components();
-      data_flow_graph_->print_strong_components(components);
-      throw std::runtime_error(
-          "The graph created is not a directed acyclic graph (DAG), meaning it has loops. Please "
-          "review the created vertices and remove the loops.");
-    }
-    topological_order_ = maybe_topological_order.value();
-    if (icey_debug_print)
-      data_flow_graph_->print();
-  }
-
-   /// Executes the graph mode. This function gets called if some of the inputs change and propagates
-  /// the result. TODO Add literature reference, how is this algorithm called ? Found nothing in Tardos and Kleinberg
-  void run_graph_mode(size_t signaling_vertex_id) {
-    if (icey_debug_print)
-      std::cout << "[icey::GraphEngine] Got event from vertex " << signaling_vertex_id
-                << ", graph execution starts ..." << std::endl;
-
-    auto &graph_ = data_flow_graph_->graph_;
-    /// We traverse the vertices in the topological order and check which value changed.
-    /// If a value changed, then for all its outgoing edges the computation is executed and these
-    /// vertices are marked as changed.
-    propagation_state_.vertex_changed_.at(signaling_vertex_id) = 1;
-    size_t edge_index = 0;
-    auto &v = propagation_state_.index_in_topo_order_;
-    for (; v < topological_order_.size(); v++) {
-
-      if (!propagation_state_.vertex_changed_.at(v)) {
-        if (icey_debug_print)
-          std::cout << "Vertex " << v << " did not change, skipping ..." << std::endl;
-        continue;
-      }
-      if (icey_debug_print) std::cout << "Vertex " << v << " changed, propagating ..." << std::endl;
-
-      for (auto edge : boost::make_iterator_range(out_edges(v, graph_))) {
-        if(propagation_state_.propagated_edges_.at(edge_index) == 1) { /// TODO consider pre-computing CSR edges list.
-          continue; /// Skip edges that were previously already propagated
-        }
-        edge_index++;
-        auto target_vertex = target(edge, graph_);  // Get the target vertex
-        auto &edge_data = graph_[edge];         // Access edge data
-
-        /// Now this edge counts a propagated, regardless of whether we have to wait on ROS or not because when at the time ROS notifies us, the edge was already propagated.
-        propagation_state_.propagated_edges_.at(edge_index) = 1;
-        if(edge_data.requires_waiting_on_ros) {
-          if (icey_debug_print)
-            std::cout << "Edge execution requires waiting on ROS, returning...  " << target_vertex << " ..." << std::endl;  
-          return; /// We return here, we will be called again when ROS is done
-        } else {
-          if (icey_debug_print)
-            std::cout << "Executing edge to  " << target_vertex << " ..." << std::endl;
-          if(edge_data.f) {
-            edge_data.f();  /// Execute the computation, pass over the value
-            /// And not notify ROS (Call this to enable publishers to work. Only publishers have something in the notify
-            /// list)
-          }
-          propagation_state_.vertex_changed_.at(target_vertex) = 1; /// After executing the computation, the targed vertex changed.
-        }
-      }
-    }
-    propagation_state_.reset(); /// If we finished propagation, reset the state of the algorithm 
-    if (icey_debug_print) std::cout << "Propagation finished. " << std::endl;
-  }
-
-
-  /// The propagation state remembers how far the propagation mode got the last time in case 
-  /// we need to interrupt the propagation to wait on ROS. 
-  struct PropagationState {
-    explicit PropagationState(std::shared_ptr<DataFlowGraph> graph) {
-      vertex_changed_.resize(num_vertices(graph->graph_), 0);
-      propagated_edges_.resize(num_edges(graph->graph_), 0); 
-    }
-
-    /// When propagation finishes, this state is reset so that next time something changes, it is propagated again.
-    void reset()  {
-      index_in_topo_order_ = 0;
-      std::fill(vertex_changed_.begin(), vertex_changed_.end(), 0);
-      std::fill(propagated_edges_.begin(), propagated_edges_.end(), 0);
-    }
-
-    size_t index_in_topo_order_{0}; // The index of the element in the topological_order_ array we were iterating last time
-    std::vector<int> vertex_changed_; /// Which vertex index, i.e. observable 
-    std::vector<int> propagated_edges_; /// A boolean vector that indicates which edges where propagated (1 if yes, 0 otherwise). This is an edge list as in CSR storage.
-
-  };
-
-
-  /// The data-flow graph the graph engine operates on. It contains observables as vertices and computations as edges.
-  std::shared_ptr<DataFlowGraph> data_flow_graph_;
-
-  PropagationState propagation_state_;
-  /// The pre-computed topological order of vertex indices.
-  std::vector<size_t> topological_order_;
-};
-
-
 /// Creates the data-flow graph and asserts that it is not edited one obtain() is called
 /// A context, creates and manages the data-flow graph. Basis for the class-based API of ICEY.
 struct Context : public std::enable_shared_from_this<Context> {
@@ -1000,14 +775,6 @@ struct Context : public std::enable_shared_from_this<Context> {
         return hana::prepend(parent_maybe_values, new_value);
     });
 
-    /*
-    std::vector<size_t> parent_ids{reference->index.value(), parents->index.value()...};
-    /// The interpolatable topics do not update. (they also do not register with the graph) So we create empty computations for them.
-    std::vector<AnyComputation> edges_data(parent_ids.size());
-    edges_data.at(0) = computation;
-    data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
-    return child;
-    */
   }
 
   // ID: [](auto &&x) { return std::move(x); }
@@ -1029,15 +796,6 @@ struct Context : public std::enable_shared_from_this<Context> {
               /// TODO add to graph, i.e. this->then(parent, f)
               parent->then([synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); }); 
         });
-
-    /*std::vector<size_t> parent_ids{parents->index.value()...};
-    /// Connect the parents to the inputs of the synchronizer
-    std::vector<AnyComputation> edges_data =
-        create_identity_computation_mimo(std::forward_as_tuple(parents...), synchronizer->inputs());
-    /// We add it manually to the graph since we want to represent the topology that is required for
-    /// the dependency analysis. The synchronizer is a single node, altough it has N input observables
-    data_flow_graph_->add_edges(synchronizer->index.value(), parent_ids, edges_data);
-    */
     return synchronizer;
   }
 
@@ -1094,18 +852,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     return child;
   }
 
-  /// Promise done, but registers additionally with graph.
-  /*
-  template <bool resolve, typename Parent, typename F>
-  auto done(Parent parent, F &&f) {
-    auto [child, handler] = parent->template done<resolve>(f, this->use_eager_mode_);
-    register_observable_in_graph(child);
-    register_handler_in_graph(handler);
-    return child;
-  }*/
-
   /// Now we can construct higher-order filters.
-
   /// For a tuple-observable, get it's N'th element
   template <int index, class Parent>
   auto get_nth(Parent &parent) {
@@ -1158,37 +905,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     return observable;
   }
 
-  
-  
-  /// Creates a computation object that is stored in the edges of the graph for the graph mode.
-  /// If eager mode is enabled, it additionally registers the computation so that it is immediatelly
-  /// run
- 
-
-  /// Makes a connection from parent to child with the given function F and adds it to the data-flow
-  /// graph.
-  /*
-  template <class Child, class Parent>
-  void register_handler_in_graph(Child child, Parent parent, std::function<void()> handler, bool 
-    requires_waiting_on_ros) {
-    // TODO assert parent has index
-    std::vector<size_t> parent_ids;
-    parent_ids.push_back(parent->index.value());
-    std::vector<AnyComputation> edges_data;
-    AnyComputation computation;
-    computation.f = handler;
-    computation.requires_waiting_on_ros = requires_waiting_on_ros;
-    edges_data.push_back(computation);
-    /// Add connections to the graph
-    data_flow_graph_->add_edges(child->index.value(), parent_ids, edges_data);
-  }
-  */
-
-  /// The data-flow graph that this context creates. Everyghing is stored and owned by this graph. 
-  std::shared_ptr<DataFlowGraph> data_flow_graph_{std::make_shared<DataFlowGraph>()};
-
-  std::vector< std::shared_ptr<NodeAttachable> > other_attachables_;
-  std::shared_ptr<GraphEngine> graph_engine_;
+  std::vector< std::shared_ptr<NodeAttachable> > other_attachables_;  
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;
 };
