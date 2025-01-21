@@ -505,6 +505,12 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
         /// Now do the weird cleanup thing that the API-user definitely neither does need to care
         /// nor know about:
         client_->remove_pending_request(maybe_pending_request_.value());
+        /// TODO I'm not sure this will still not leak memory smh: https://github.com/ros2/rclcpp/issues/1697
+        /// Some ROS examples use stuff like timers that poll for dead request and clean them up.
+        /// That's why I'll put this assertion here:
+        if(size_t num_requests_pruned = client_->prune_pending_requests() != 0) {
+            throw std::runtime_error("Pruned some more requests even after calling remove_pending_request(), you should buy a new RPC library.");
+        }
         maybe_pending_request_ = {};
       }
     });

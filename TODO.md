@@ -5,7 +5,6 @@
 Sorted by decreasing priority. 
 
 - [ ] Up-to-date docs 
-- [ ] Timeouted Service request cleanup (automatic, periodically ? also use the available API functions to ensure there is nothing left)
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
@@ -170,6 +169,7 @@ Sorted by decreasing priority.
 
 - [X] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack -> https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html this was only for synchronous call. We do not need to create the callback groups if we are only using the async_call
 - [X] Service client as member function, `call_service`
+- [X] Timeouted Service request cleanup (automatic, periodically ? also use the available API functions to ensure there is nothing left)
 ### Code 
 
 - [X] Use Result https://github.com/bitwizeshift/result
