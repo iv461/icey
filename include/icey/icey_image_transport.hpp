@@ -1,7 +1,7 @@
 //// Support for the image_transport subscribers and publishers. 
 #pragma once 
 
-#ifndef ICEY_ROS2_WAS_INCLUDEC
+#ifndef ICEY_ROS2_WAS_INCLUDED
 #error "You must include first the <icey/icey_ros2.hpp> header before you can include the icey_image_transport.hpp header."
 #endif
 
@@ -29,7 +29,6 @@ struct ImageTransportSubscriber : public Observable <sensor_msgs::msg::Image::Co
                       const std::string &transport,
                       const ROSAdapter::QoS qos,
                       const rclcpp::SubscriptionOptions &options) {
-        this->attach_priority_ = 4;
         this->name = base_topic_name;
         
         auto this_obs = this->observable_;
@@ -55,7 +54,6 @@ struct ImageTransportPublisher: public Observable<sensor_msgs::msg::Image::Share
     ImageTransportPublisher(const std::string &base_topic_name,
                       const ROSAdapter::QoS qos,
                       const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
-        this->attach_priority_ = 1;
         this->name = base_topic_name;
         
         auto this_obs = this->observable_;
@@ -89,7 +87,6 @@ struct CameraSubscriber :
     CameraSubscriber(const std::string &base_topic_name,
                       const std::string &transport,
                       const ROSAdapter::QoS qos) {
-        this->attach_priority_ = 4;
         this->name = base_topic_name;
         auto this_obs = this->observable_;
         const auto cb = [this_obs](sensor_msgs::msg::Image::ConstSharedPtr image, 
@@ -116,7 +113,6 @@ struct CameraPublisher:
 
     CameraPublisher(const std::string &base_topic_name,
                       const ROSAdapter::QoS qos) {
-        this->attach_priority_ = 1;
         this->name = base_topic_name;
         
         auto this_obs = this->observable_;

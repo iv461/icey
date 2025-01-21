@@ -24,50 +24,33 @@ bool icey_debug_print = false;
 using Time = ROS2Adapter::Time;
 class Context;
 
-/// A node in the DFG-graph
-class DFGNode {
+/// Everything that can be "attached" to a ROS node, publishers, subscribers, clients, TF subscriber
+/// etc.
+class NodeAttachable  {
 public:
-  /// For building the tree
+  /// For creating new Observables, we need a reference to the context
   std::weak_ptr<Context> context;
-  /// The index of this observable in list of vertices in the data-flow graph. We have
-  /// to store it here because of cyclic dependency. It is None if this node was not
-  /// attached to the graph yet.
-  std::optional<size_t> index;
   // The class name, i.e. the name of the type, for example "SubscriberObservable<std::string>"
   std::string class_name;
   /// A name to identify this node among multiple ones with the same type, usually the topic
   /// or service name
   std::string name;
 
-  /// TODO this looks clean but it really isn't, nodes should not know whether they are run in graph mode or not.
-  using RunGraphEngineCb = std::function<void(size_t)>;
-  void register_run_graph_engine(RunGraphEngineCb cb) { run_graph_engine_ = cb; }
-  RunGraphEngineCb run_graph_engine_;
-};
-
-/// Everything that can be "attached" to a node, publishers, subscribers, clients, TF subscriber
-/// etc.
-class NodeAttachable  {
-public:
-  virtual void attach_to_node(ROSAdapter::NodeHandle &) {
-    if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
-    
+  void attach_to_node(ROSAdapter::NodeHandle &node_handle) { 
+    if (this->was_attached_) 
+      throw std::invalid_argument("NodeAttachable was already attached");
+    if(icey_debug_print)
+      std::cout << "Attaching " << class_name << ", " << name << " ..." << std::endl;
+    attach_(node_handle); 
     was_attached_ = true;
   }
-  /// Priority at which to attach this, needed to implement an order of initialization:
-  // 0: parameters
-  // 1: publishers
-  // 2: services
-  // 3: subscribers
-  // 4: clients
-  // 5: timers
-  size_t attach_priority() const { return attach_priority_; }
-  size_t attach_priority_{0};
+  
+  /// Needed to initialize parameters first
+  bool is_parameter() const { return is_parameter_; }
+  bool is_parameter_{false};
   bool was_attached_{false};
+  std::function<void(ROSAdapter::NodeHandle &)> attach_;
 };
-
-/// Needed for storing in the graph as well as to let the compiler check for correct types
-struct GraphObservableBase : public DFGNode, public NodeAttachable {};
 
 struct ObservableTag{}; /// A tag to be able to recognize the type "Observeble" using traits
 template <typename... Args>
@@ -84,7 +67,6 @@ constexpr void assert_observable_holds_tuple() {
   static_assert(is_tuple_v<obs_msg<T>>, "The Observable must hold a tuple as a value for unpacking.");
 }
 
-
 // Assert that all Observables types hold the same value
 template <typename First, typename... Rest>
 constexpr void assert_all_observable_values_are_same() {
@@ -97,7 +79,7 @@ constexpr void assert_all_observable_values_are_same() {
 /// An observable. Similar to a promise in JavaScript.
 /// TODO Do not create shared_ptr, we finally have PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : public ObservableTag, public GraphObservableBase,
+class Observable : public ObservableTag, public NodeAttachable,
     public std::enable_shared_from_this< Observable<_Value, _ErrorValue > >  {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
@@ -165,8 +147,7 @@ public:
   std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
 };
 
-/// An observable that holds the last received value. Fires initially an event if a default_value is
-/// set
+/// An observable for ROS parameters. Fires initially an event if a default_value set
 template <typename _Value>
 class ParameterObservable : public Observable<_Value> {
 public:
@@ -174,62 +155,39 @@ public:
   using Base = Observable<_Value>;
   using MaybeValue = typename Base::MaybeValue;
 
-  /// TODO FIX ARG DUP, capture hana sequence maybe in cb maybe
   ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value,
                       const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                           rcl_interfaces::msg::ParameterDescriptor(),
-                      bool ignore_override = false)
-      : parameter_name_(parameter_name),
-        default_value_(default_value),
-        parameter_descriptor_(parameter_descriptor),
-        ignore_override_(ignore_override) {
-    this->attach_priority_ = 0;
-    this->name = parameter_name_;
+                      bool ignore_override = false) {
+    this->is_parameter_ = true;
+    this->name = parameter_name;
+    auto this_obs = this->observable_;
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      node.declare_parameter<_Value>(
+        parameter_name, default_value,
+        [this_obs](const rclcpp::Parameter &new_param) {
+          Value new_value = new_param.get_value<_Value>();
+          this_obs->resolve(new_value);
+        },parameter_descriptor, ignore_override);
+      /// Set default value if there is one
+      if (default_value) {
+        Value initial_value;
+        node.get_parameter_or(parameter_name, initial_value, *default_value);
+        this_obs->resolve(initial_value);
+      }
+    };
   }
 
   /// Parameters are initialized always at the beginning, so we can provide getters for the value.
-  /// Note that has_value() must be checked beforehand since if no default value was provided, this
-  /// function will throw std::bad_optional_access()
   const Value &value() const {
-    /// TODO do we want to allow this if the user provided a default value ? I think not, since it
-    /// adds conceptual inconcistency to the otherwise inaccessible Observables
-    if (!this->observable_->has_value()) {  /// First, check if this observable was accessed before spawning. This
-                              /// is needed to provide a nice  error message since confusing
-                              /// syncronous code will likely happen for users.
+    if (!this->observable_->has_value()) {
       throw std::runtime_error(
-          "[parameter '" + parameter_name_ +
-          "'] You cannot access the parameters before spawning the node, you can only access them "
+          "Parameter '" + this->name +
+          "' cannot be accessed before spawning the node. You can only access parameters "
           "inside callbacks (which are triggered after calling icey::spawn())");
     }
     return this->observable_->value();
   }
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
-    if (icey_debug_print)
-      std::cout << "[ParameterObservable] attaching parameter '" + parameter_name_ + "' to node ..."
-                << std::endl;
-    /// Declare on change handler
-    auto this_obs = this->observable_;
-    node_handle.declare_parameter<Value>(
-        parameter_name_, default_value_,
-        [this_obs](const rclcpp::Parameter &new_param) {
-          Value new_value = new_param.get_value<Value>();
-          this_obs->resolve(new_value);
-        },
-        parameter_descriptor_, ignore_override_);
-
-    /// Set default value
-    if (default_value_) {
-      Value initial_value;
-      node_handle.get_parameter_or(parameter_name_, initial_value, *default_value_);
-      this_obs->resolve(initial_value);
-    }
-  }
-  std::string parameter_name_;
-  MaybeValue default_value_;
-  rcl_interfaces::msg::ParameterDescriptor parameter_descriptor_;
-  bool ignore_override_;
 };
 
 /// A subscriber observable, always stores a shared pointer to the message as it's value
@@ -239,43 +197,23 @@ class SubscriptionObservable : public Observable < typename _Message::SharedPtr 
 public:
   using Value = typename _Message::SharedPtr;
   using Message = _Message;
-  SubscriptionObservable(const std::string &name, const ROSAdapter::QoS &qos,
-                         const rclcpp::SubscriptionOptions &options)
-      : name_(name), qos_(qos), options_(options) {
-    this->attach_priority_ = 3;
-    this->name = name_;
+  SubscriptionObservable(const std::string &topic_name, const ROSAdapter::QoS &qos,
+                         const rclcpp::SubscriptionOptions &options) {
+    this->name = topic_name;
+    auto this_obs = this->observable_;  
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      node.add_subscription<Value>(
+          topic_name, [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); },
+          qos, options);
+    };
   }
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) override {
-    if (icey_debug_print) std::cout << "[SubscriptionObservable] attach_to_node()" << std::endl;
-    auto this_obs = this->observable_;
-    node_handle.add_subscription<Value>(
-        name_, [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); },
-        qos_, options_);
-  }
-
-  std::string name_;
-  ROSAdapter::QoS qos_;
-  const rclcpp::SubscriptionOptions options_;
 };
 
 /// An interpolatable observable is one that buffers the incoming messages using a circular buffer and
-/// allows to query the message at a given point, using interpolation. It is an essential
-/// for using lookupTransform with TF. It is used by synchronizers to synchronize a topic exactly at
-/// a given time point.
-struct InterpolateableObservableBase {}; // TODO basically only there to be able to recognize observables in the synchronizer
-
-template <typename T>
-constexpr auto hana_is_interpolatable(T) {
-    if constexpr(std::is_base_of_v<InterpolateableObservableBase, T>)
-        return hana::bool_c<true>;
-    else 
-        return hana::bool_c<false>;    
-}
-
+/// allows to query the message at a given point, using interpolation. 
+struct InterpolateableObservableTag {};
 template <typename _Message>
-struct InterpolateableObservable : public InterpolateableObservableBase,
+struct InterpolateableObservable : public InterpolateableObservableTag,
                                    public Observable < typename _Message::SharedPtr, std::string > {
   
   using MaybeValue = std::optional < typename _Message::SharedPtr >;
@@ -283,6 +221,15 @@ struct InterpolateableObservable : public InterpolateableObservableBase,
   /// an extrapolation would be required.
   virtual MaybeValue get_at_time(const rclcpp::Time &time) const = 0;
 };
+
+
+template <typename T>
+constexpr auto hana_is_interpolatable(T) {
+    if constexpr(std::is_base_of_v<InterpolateableObservableTag, T>)
+        return hana::bool_c<true>;
+    else 
+        return hana::bool_c<false>;    
+}
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
@@ -294,10 +241,19 @@ public:
 
   TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame)
       : target_frame_(target_frame), source_frame_(source_frame) {
-    this->attach_priority_ = 3;
     this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      auto this_obs = this->observable_;
+      tf2_listener_ = node.add_tf_subscription(
+          target_frame, source_frame,
+          [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
+            this_obs->resolve(std::make_shared<Message>(new_value));
+          },
+          [this_obs](const tf2::TransformException &ex) {
+            this_obs->reject(ex.what());
+          });
+    };
   }
-  
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
     auto this_obs = this->observable_;
     try {
@@ -310,56 +266,30 @@ public:
       return {};
     }
   }
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
-    if (icey_debug_print)
-      std::cout << "[TransformSubscriptionObservable] attach_to_node()" << std::endl;
-    auto this_obs = this->observable_;
-    tf2_listener_ = node_handle.add_tf_subscription(
-        target_frame_, source_frame_,
-        [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-          this_obs->resolve(std::make_shared<Message>(new_value));
-        },
-        [this_obs](const tf2::TransformException &ex) {
-          this_obs->reject(ex.what());
-        });
-  }
-
-  std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
   std::string target_frame_;
   std::string source_frame_;
+  std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
 };
-
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
 /// the callback
 struct TimerObservable : public Observable<size_t> {
   using Value = size_t;
-  TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer)
-      : interval_(interval), use_wall_time_(use_wall_time), is_one_off_timer_(is_one_off_timer) {
-    this->attach_priority_ = 5;
+  TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) {
     this->name = "timer";
-  }
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
-    if (icey_debug_print) std::cout << "[TimerObservable] attach_to_node()" << std::endl;
     auto this_obs = this->observable_;
-    /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
-    ros_timer_ = node_handle.add_timer(interval_, use_wall_time_, [this, this_obs]() {
-      size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
-      ticks_counter++;
-      this_obs->resolve(ticks_counter);
-      if (is_one_off_timer_) 
-        ros_timer_->cancel();
-    });
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
+      timer = node.add_timer(interval, use_wall_time, [this, this_obs, is_one_off_timer]() {
+        size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
+        ticks_counter++;
+        this_obs->resolve(ticks_counter);
+        if (is_one_off_timer) 
+          timer->cancel();
+      });
+    };
   }
-
-  rclcpp::TimerBase::SharedPtr ros_timer_;
-  ROSAdapter::Duration interval_;
-  bool use_wall_time_{false};
-  bool is_one_off_timer_{false};  
+  rclcpp::TimerBase::SharedPtr timer;
 };
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message> 
@@ -372,38 +302,23 @@ public:
   using Message = remove_shared_ptr_t<Value>; 
   static_assert(rclcpp::is_ros_compatible_type< Message >::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-
   PublisherObservable(const std::string &topic_name,
-                      const ROSAdapter::QoS qos = ROS2Adapter::DefaultQoS())
-      : topic_name_(topic_name), qos_(qos) {
-    this->attach_priority_ = 1;
+                      const ROSAdapter::QoS qos = ROS2Adapter::DefaultQoS()) {
     this->name = topic_name;
-  }
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
-    if (icey_debug_print) std::cout << "[PublisherObservable] attach_to_node()" << std::endl;
-    auto publisher = node_handle.add_publication<Message>(topic_name_, qos_);
     auto this_obs = this->observable_;
-    this_obs->_register_handler([this_obs, publisher]() { 
-                // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
-        // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
-        const auto &new_value = this_obs->value(); /// There can be no error
-        if constexpr(is_shared_ptr<Value>)
-          publisher(*new_value);
-        else 
-          publisher(new_value);
-    });
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      auto publisher = node.add_publication<Message>(topic_name, qos);
+      this_obs->_register_handler([this_obs, publisher] () { 
+          // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
+          // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
+          const auto &new_value = this_obs->value(); /// There can be no error
+          if constexpr(is_shared_ptr<Value>)
+            publisher(*new_value);
+          else 
+            publisher(new_value);
+      });
+    };
   }
-
-  std::string topic_name_;
-  ROSAdapter::QoS qos_{ROS2Adapter::DefaultQoS()};
-};
-
-struct AnyComputation {
-  /// executes and notifies
-  std::function<void()> f;
-  bool requires_waiting_on_ros{false}; /// Is this computation a service call currently. 
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -437,7 +352,6 @@ public:
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Sync = message_filters::Synchronizer<Policy>;
   using Inputs = std::tuple<std::shared_ptr<SimpleFilterAdapter<Messages>>...>;
-
   SynchronizerObservable(uint32_t queue_size)
       : inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...),  /// They are dynamically
                                                                         /// allocated as is every
@@ -445,15 +359,12 @@ public:
         queue_size_(queue_size) {
     this->create_mfl_synchronizer();
   }
-
   const auto &inputs() const { return inputs_; }
-
 private:
-
   void on_messages(typename Messages::SharedPtr ...msgs) {
     this->observable_->resolve(std::forward_as_tuple(msgs...));
   }
-  
+
   void create_mfl_synchronizer() {
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
@@ -472,29 +383,23 @@ private:
 
 // A transform broadcaster observable
 class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
-
   friend class Context;
 public:
-  TransformPublisherObservable() {
-      this->attach_priority_ = 5;
-      this->name = "tf_pub";
-  }
   using Value = geometry_msgs::msg::TransformStamped;
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
-    if (icey_debug_print)
-      std::cout << "[TransformPublisherObservable] attach_to_node()" << std::endl;
-    auto publish = node_handle.add_tf_broadcaster_if_needed();
-    auto this_obs = this->observable_;
-    this_obs->_register_handler([this_obs, publish]() { 
-        const auto &new_value = this_obs->value(); /// There can be no error
-        publish(new_value); 
-    });
+  TransformPublisherObservable() {
+      this->name = "tf_pub";
+      auto this_obs = this->observable_;
+      this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+        auto publish = node.add_tf_broadcaster_if_needed();
+        this_obs->_register_handler([this_obs, publish]() { 
+            const auto &new_value = this_obs->value(); /// There can be no error
+            publish(new_value); 
+        });
+      };
   }
 };
 
-/// A service observable, storing
+/// A service observable, storing it's request and response 
 template <typename _ServiceT>
 struct ServiceObservable
     : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>,
@@ -503,44 +408,34 @@ struct ServiceObservable
   using Response = std::shared_ptr<typename _ServiceT::Response>;
   using Value = std::pair<Request, Response>;
 
-  ServiceObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : service_name_(service_name), qos_(qos) {
-    this->attach_priority_ = 2;
+  ServiceObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+      auto this_obs = this->observable_;
+      this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+        node.add_service<_ServiceT>(service_name,
+            [this_obs](Request request, Response response) {
+              this_obs->resolve(std::make_pair(request, response));
+            }, qos);
+      };
   }
-
-protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
-    if (icey_debug_print) std::cout << "[ServiceObservable] attach_to_node()" << std::endl;
-    auto obs_impl = this->observable_;
-    node_handle.add_service<_ServiceT>(
-        service_name_,
-        [obs_impl](Request request, Response response) {
-          obs_impl->resolve(std::make_pair(request, response));
-        },
-        qos_);
-  }
-  std::string service_name_;
-  ROSAdapter::QoS qos_;
 };
 
 /// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in the DFG
 template <typename _ServiceT>
-struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
+struct ServiceClient : public Observable <typename _ServiceT::Response::SharedPtr, std::string>{
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
-  using OutputObservable = Observable <Response, std::string>;
-
-  ServiceClientComputation(const std::string &service_name, const ROSAdapter::Duration &timeout)
-      : service_name_(service_name), timeout_(timeout) {
-    this->attach_priority_ = 4;
-    ///this->name = service_name_; TODO edge names
-    this->requires_waiting_on_ros = true;
+  ServiceClient(const std::string &service_name, const ROSAdapter::Duration &timeout): timeout_(timeout) {
+      this->name = service_name; 
+      auto this_obs = this->observable_;
+      this->attach_ = [this, service_name](ROSAdapter::NodeHandle &node) {
+        client_ = node.add_client<_ServiceT>(service_name);
+      };
   }
 
   void call(Request request) const {
       using Future = typename Client::SharedFutureWithRequest;
-      auto output_obs = this->output_->observable_;
+      auto output_obs = this->observable_;
       if(!client_->wait_for_service(timeout_)) {
         output_obs->reject("SERVICE_UNAVAILABLE");
         return;
@@ -558,19 +453,11 @@ struct ServiceClientComputation : public AnyComputation, public NodeAttachable {
               output_obs->reject("rclcpp::FutureReturnCode::TIMEOUT");
             /// TODO Do the weird cleanup thing
           }
-
       });
   }
-  std::shared_ptr<OutputObservable> output_;
 protected:
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
-    if (icey_debug_print) std::cout << "[ClientObservable] attach_to_node()" << std::endl;
-    client_ = node_handle.add_client<_ServiceT>(service_name_);
-  }
-  typename Client::SharedPtr client_;
-  std::string service_name_;
+  typename Client::SharedPtr client_;  
   ROSAdapter::Duration timeout_;
-  //ROSAdapter::QoS qos_; TODO add for Iron/Jazzy, Humble had still the old APIs (rmw_*)
 };
 
 /// Creates the data-flow graph and asserts that it is not edited one obtain() is called
@@ -589,8 +476,8 @@ struct Context : public std::enable_shared_from_this<Context> {
   void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = cb; }
 
   void initialize(ROSAdapter::NodeHandle &node) {
-    if (data_flow_graph_->empty()) {
-      std::cout << "WARNING: Nothing to spawn, try first to create some signals/states"
+    if (attachables_.empty()) {
+      std::cout << "WARNING: Nothing to spawn, try first to create some Observables"
                 << std::endl;
       return;
     }
@@ -599,82 +486,35 @@ struct Context : public std::enable_shared_from_this<Context> {
   }
 
   void attach_graph_to_node(ROSAdapter::NodeHandle &node) {
-    if (icey_debug_print)
-      std::cout << "[icey::Context] attach_graph_to_node() start" << std::endl;
-
-    /// First, sort the attachables by priority: first parameters, then publishers, services,
-    /// subsribers etc. We could do bin-sort here which runs in linear time, but the standard
-    /// library does not have an implementation for it. 
-    // TODO honoring this order is not needed in ROS 2 anymore since there is an executor
-    const auto attach_priority_order = [this](size_t v1, size_t v2) {
-      return data_flow_graph_->graph_[v1]->attach_priority() <
-             data_flow_graph_->graph_[v2]->attach_priority();
-    };
     /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
     /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
     /// parameters immediatelly have their values.
     if (icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
 
-    for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
-      const auto &attachable = data_flow_graph_->graph_[i_vertex]; 
-      if (attachable->attach_priority() != 0) 
-        continue;
-      attachable->attach_to_node(node);  /// Attach
+    for (const auto &attachable: attachables_) {
+      if (attachable->is_parameter()) attachable->attach_to_node(node);
     }
-
-
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
   
     if (after_parameter_initialization_cb_)
-      after_parameter_initialization_cb_();  /// Call user callback. Here, more vertices may be
-                                             /// added
-
-
-    if (icey_debug_print) std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;
-    /// If additional vertices have been added to the DFG, attach it as well
-    for (auto i_vertex : data_flow_graph_->get_vertices_ordered_by(attach_priority_order)) {
-      const auto &attachable = data_flow_graph_->graph_[i_vertex];
-      if (attachable->attach_priority() == 0) continue;
-      attachable->attach_to_node(node);  /// Attach
-    }
-
-    /// TODO hack
-    for(const auto &attachable : other_attachables_) attachable->attach_to_node(node);  /// Attach
-
-    if (icey_debug_print)
-      std::cout << "[icey::Context] Attaching finished, node starts... " << std::endl;
-
-    if(!use_eager_mode_) {
-      if (icey_debug_print)
-        std::cout << "[icey::Context] Creating graph engine  ... " << std::endl;
-
-      graph_engine_ = std::make_shared<GraphEngine>(data_flow_graph_);
-      graph_engine_->analyze_data_flow_graph();
-      /// TODO maybe solve better, the nodes only know about the context. The context owns the graph engine, 
-      // so when the nodes are notified, they can only notify the context. So we have to direct through the context 
-      /// the action to the graph 
-      register_source_verices();
+      after_parameter_initialization_cb_(); 
+    if (icey_debug_print) std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;    
+    for (const auto &attachable: attachables_) {
+      if (!attachable->is_parameter()) attachable->attach_to_node(node);
     }
   }
 
-  /// Registers the run_graph_mode callback for every source vertex in the DFG so that the graph engine is triggered if a subsriber delivers something 
-  void register_trigger_vertex(size_t vertex_id) {
-      auto source_vertex = data_flow_graph_->graph_[vertex_id];
-      source_vertex->register_run_graph_engine([source_vertex](size_t node_id) {
-        source_vertex->context.lock()->graph_engine_->run_graph_mode(node_id);
-      });
-  }
-
-  void register_source_verices() {
-    const auto N = num_vertices(data_flow_graph_->graph_);
-    for(size_t i_vertex = 0; i_vertex < N; i_vertex++) {
-      /// TODO register by flag
-      bool is_source = in_degree(i_vertex, data_flow_graph_->graph_) == 0;
-      if(is_source) {
-        register_trigger_vertex(i_vertex);
-      }
-    }
+  /// Creates a new observable of type O by passing the args to the constructor. It also adds it as
+  /// a vertex to the graph.
+  template <class O, typename... Args>
+  std::shared_ptr<O> create_observable(Args &&...args) {
+    assert_icey_was_not_initialized();
+    auto observable = impl::create_observable<O>(args...);
+    attachables_.push_back(observable);  /// Register with graph to obtain a vertex ID
+    observable->context = shared_from_this();
+    observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
+    return observable;
   }
 
   template <typename ParameterT>
@@ -733,19 +573,9 @@ struct Context : public std::enable_shared_from_this<Context> {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     observable_traits<Parent>{}; // obs_val since the Request must be a shared_ptr
     static_assert(std::is_same_v< obs_val<Parent>, typename ServiceT::Request::SharedPtr >, "The parent triggering the service must hold a value of type Request::SharedPtr");
-    using Comp = ServiceClientComputation<ServiceT>;
-    using OutputObs = typename Comp::OutputObservable;
-    /// TODO fix here code dup. We cannot call create_obs since it registers with graph (service violates design that every obs is a attachable)
-    auto child = impl::create_observable<OutputObs>();
-    child->context = shared_from_this();
-    child->class_name = boost::typeindex::type_id_runtime(*child).pretty_name();
-
-    //register_trigger_vertex(child->index.value()); Add but do not attach !
-    auto comp = std::make_shared<Comp>(service_name, timeout);
-    other_attachables_.push_back(comp);
-    comp->output_ = child;
-    parent->then([comp](auto req) { comp->call(req); }); // TODO maybe only register
-    return child;
+    auto service_client = create_observable<ServiceClient<ServiceT>>(service_name, timeout);
+    parent->then([service_client](auto req) { service_client->call(req); }); 
+    return service_client;
   }
 
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
@@ -753,17 +583,12 @@ struct Context : public std::enable_shared_from_this<Context> {
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
   // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to know the node's clock (that may be simulated time, i.e sub on /clock)
   template<class Reference, class... Parents> 
-  auto sync_with_reference(Reference reference, Parents ...parents) {
+  static auto sync_with_reference(Reference reference, Parents ...parents) {
     observable_traits<Reference>{};
-    observable_traits<Parents...>{};
-    /// TODO consider hana as well auto has_header = hana::is_valid([](auto&& x) -> decltype((void)x.header) { });
+    observable_traits<Parents...>{};    
     using namespace message_filters::message_traits;
     static_assert(HasHeader<obs_msg<Reference>>::value, "The ROS message type must have a header with the timestamp to be synchronized");
-
-    //using Output = std::tuple< obs_val<Reference>, std::optional< obs_val<Parents> >...>;
     auto parents_tuple = std::make_tuple(parents...);
-    //auto child = create_observable< Observable<Output> >();
-
     /// TOOD somehow does not work
     //auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return hana_is_interpolatable(t); }); 
     //static_assert(all_are_interpolatables, "All inputs must be interpolatable when using the sync_with_reference");
@@ -774,26 +599,24 @@ struct Context : public std::enable_shared_from_this<Context> {
         /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject 
         return hana::prepend(parent_maybe_values, new_value);
     });
-
   }
 
-  // ID: [](auto &&x) { return std::move(x); }
+  // TODO ID: [](auto &&x) { return std::move(x); }
+
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
   template <typename... Parents>
   auto synchronize_approx_time(Parents... parents) {
     observable_traits<Parents...>{};
-    //auto parents_tuple = std::make_tuple(parents...);
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
     auto synchronizer = create_observable<SynchronizerObservable< obs_msg<Parents>...>>(queue_size);
     auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs());
-    hana::for_each(zipped, 
+    hana::for_each(zipped,
         [](auto &input_output_tuple) {
               auto &parent = input_output_tuple[0_c];
               auto &synchronizer_input = input_output_tuple[1_c];
-              /// TODO add to graph, i.e. this->then(parent, f)
               parent->then([synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); }); 
         });
     return synchronizer;
@@ -807,7 +630,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     
     auto interpolatables = hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
     auto non_interpolatables = hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
-
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
     static_assert(not (num_interpolatables > 0 && num_non_interpolatables == 0),
@@ -829,7 +651,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     } else {
       // Otherwise, we only need a sync with reference
       return hana::unpack(hana::prepend(interpolatables, std::get<0>(non_interpolatables)), 
-        [this](auto ref, auto ...ints) { return sync_with_reference(ref, ints...); });
+          [](auto ref, auto ...ints) { return sync_with_reference(ref, ints...); });
     }
   }
 
@@ -846,7 +668,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), 
         [child](auto &parent) {
-              /// TODO add to graph, i.e. this->then(parent, f)
               parent->then([child](const auto &x) { child->observable_->resolve(x); }); 
         });
     return child;
@@ -876,16 +697,10 @@ struct Context : public std::enable_shared_from_this<Context> {
   // timeout
   // Crates a new timer that sync_with_reference, matching exactly an output frequency. Input must be interpolatable.
   // throttle
+  
+  bool empty() const { return attachables_.empty(); }
+  void clear() { attachables_.clear(); }
 
-  // TODO maybe rem, derive from graph
-  bool empty() const { return data_flow_graph_->empty(); }
-  void clear() { data_flow_graph_->clear(); }
-
-
-  bool use_eager_mode_{true};  // Use eager mode or graph mode TODO rem, do the wiring in the executor
-  bool was_initialized_{false};
-
-//protected: TODO for testing
   void assert_icey_was_not_initialized() {
     if (was_initialized_)
       throw std::invalid_argument(
@@ -893,19 +708,8 @@ struct Context : public std::enable_shared_from_this<Context> {
           "static");
   }
 
-  /// Creates a new observable of type O by passing the args to the constructor. It also adds it as
-  /// a vertex to the graph.
-  template <class O, typename... Args>
-  std::shared_ptr<O> create_observable(Args &&...args) {
-    assert_icey_was_not_initialized();
-    auto observable = impl::create_observable<O>(args...);
-    data_flow_graph_->add_v(observable);  /// Register with graph to obtain a vertex ID
-    observable->context = shared_from_this();
-    observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
-    return observable;
-  }
-
-  std::vector< std::shared_ptr<NodeAttachable> > other_attachables_;  
+  bool was_initialized_{false};
+  std::vector< std::shared_ptr<NodeAttachable> > attachables_;  
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;
 };
@@ -921,11 +725,8 @@ public:
   /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It
   /// initializes everything in a pre-defined order.
   void icey_initialize() { icey().initialize(*this); }
-
   /// Returns the context that is needed to create ICEY observables
   Context &icey() { return *this->icey_context_; }
-
-
   std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
 };
 
@@ -952,8 +753,7 @@ void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
 using Node = ROSNodeWithDFG;
 template<class T>
 using Parameter = ParameterObservable<T>;
-
-
 }  // namespace icey
 
 #include <icey/functional_api.hpp>
+#define ICEY_ROS2_WAS_INCLUDED

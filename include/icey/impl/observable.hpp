@@ -196,7 +196,7 @@ public:
     }
 
 
-  /// The last received value, it is buffered. It is buffered only to be able to do graph mode.
+  /// The last received value, it is buffered.
   State value_; 
   std::vector<Handler> handlers_;
 };
