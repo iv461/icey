@@ -18,8 +18,6 @@ Sorted by decreasing priority.
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
 - [ ] Result-type for error handling example
-
-- [X] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 - [ ] unpack tuple of obs to multiple obs, this is easy 
 - [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
 
@@ -174,6 +172,9 @@ Sorted by decreasing priority.
 - [X] More FP
 - [X] Use boost hana instead fo rolling our own bag of meta-programming tricks
 - [X] Look at https://github.com/xhawk18/promise-cpp
+
+- [X] Re-throw exceptions if the promise holds an object of type exception as an ErrorValue and if no promise rejection handlers are registered.
+- [X] Support Custom subscriber/publisher objects (with global state), mostly image_transport -> isn't a simple argument "subsriber type" enough ?
 
 # Missing features
 

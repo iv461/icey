@@ -9,8 +9,6 @@
 #include <functional>
 #include <tuple>
 
-#include "image_transport/camera_publisher.hpp"
-#include "image_transport/camera_subscriber.hpp"
 #include "image_transport/image_transport.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
@@ -106,9 +104,8 @@ struct CameraPublisher
       this_obs->_register_handler([this_obs, publisher]() {
         const auto &new_value = this_obs->value();  /// There can be no error
         const auto &[image_msg, camera_info_msg] = new_value;
-        publisher.publish(
-            image_msg,
-            camera_info_msg);  /// TODO don't we need to copy here, why does this compile ??
+        /// TODO don't we need to copy here, why does this compile ??
+        publisher.publish(image_msg, camera_info_msg);
       });
     };
   }

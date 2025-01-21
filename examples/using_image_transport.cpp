@@ -13,13 +13,13 @@
 // clang-format on
 
 int main(int argc, char **argv) {
-  /// Create an image_transport::CameraSubsciber. The second argument is the transport, i.e. the
-  /// compression algorithm to use. Common ones are "raw" "theora" etc.
+  /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
+  /// compression algorithm to use. Common ones are "raw", "theora" etc.
   // Note to class-based API users: call
   /// "icey().create_observable<icey::CameraSubscriber>("camera_center", "raw")" (this API is
   /// somewhat rough, it might change in the future).
   auto camera_center_sub =
-      icey::create_camera_subscription("camera_center", "ffmpeg", rclcpp::SensorDataQoS());
+      icey::create_camera_subscription("camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
       ->then([](sensor_msgs::msg::Image::ConstSharedPtr image,
@@ -37,14 +37,15 @@ int main(int argc, char **argv) {
   auto camera_left_sub =
       icey::create_image_transport_subscription("camera_left", "raw", rclcpp::SensorDataQoS());
 
-  /// And now publish again compressed
   camera_left_sub
+      /// We receive here the image after image_transport has decompressed it:
       ->then([](sensor_msgs::msg::Image::ConstSharedPtr image) {
         /// Process your image, e.g. paint it here:
         // As an example, we simply copy the image, output must be a shared_ptr
         return std::make_shared<sensor_msgs::msg::Image>(*image);
       })
-      ->publish<icey::ImageTransportPublisher>("camera_left", rclcpp::SensorDataQoS());
+      /// And now publish again using image_transport, creating an image_transport::Publisher:
+      ->publish<icey::ImageTransportPublisher>("camera_left_painted", rclcpp::SensorDataQoS());
 
-  icey::spawn(argc, argv, "camera_subscriber_example");  /// Create and start node
+  icey::spawn(argc, argv, "icey_image_transport_example");  /// Create and start node
 }
