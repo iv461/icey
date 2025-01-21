@@ -54,6 +54,7 @@ class NodeAttachable  {
 public:
   virtual void attach_to_node(ROSAdapter::NodeHandle &) {
     if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
+    
     was_attached_ = true;
   }
   /// Priority at which to attach this, needed to implement an order of initialization:
@@ -110,16 +111,6 @@ public:
   using ErrorValue =  typename Impl::ErrorValue;
   using Self = Observable<_Value, _ErrorValue>;
 
-  /// Pattern-maching factory function that creates a New Self with different value and error types 
-  // based on the passed Impl. Needed for then and except
-  template<class NewVal, class NewErr>
-  static std::shared_ptr < Observable<NewVal, NewErr> >
-     create_from_impl(std::shared_ptr < impl::Observable<NewVal, NewErr> > obs_impl) {  
-    auto new_obs = impl::create_observable<Observable<NewVal, NewErr>>();
-    new_obs->observable_ = obs_impl;
-    return new_obs;
-  }
-
   void assert_we_have_context() {  //Cpp is great, but Java still has a NullPtrException more...
     if(!this->context.lock()) throw std::runtime_error("This observable does not have context, we cannot do stuff with it that depends on the context.");
   }
@@ -141,7 +132,16 @@ public:
     return child;
   }
 
-  /// Create a ROS publisher and publish this observable.
+  /// Create a ROS publisher by creating a new observable of type T and connecting it to this observable.
+  template <class T, typename ...Args>
+  void publish(Args &&... args) {
+    assert_we_have_context();
+    static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, there is nothing to publish, you cannot call publish() on it.");
+    auto child = this->context.lock()->template create_observable<T>(args...);
+    this->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
+  }
+
+  /// Create a ROS normal publisher.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS()) {
     assert_we_have_context();
@@ -155,6 +155,16 @@ public:
     return this->context.lock()->create_transform_publisher(this->shared_from_this());
   }
 
+//protected:
+  /// Pattern-maching factory function that creates a New Self with different value and error types 
+  /// based on the passed pointer to the implentation-Promise. Needed for then and except
+  template<class NewVal, class NewErr>
+  static std::shared_ptr < Observable<NewVal, NewErr> >
+     create_from_impl(std::shared_ptr < impl::Observable<NewVal, NewErr> > obs_impl) {  
+    auto new_obs = impl::create_observable<Observable<NewVal, NewErr>>();
+    new_obs->observable_ = obs_impl;
+    return new_obs;
+  }
   std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
 };
 
@@ -915,12 +925,11 @@ struct Context : public std::enable_shared_from_this<Context> {
     return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
   }
 
-  template <class Parent>
+  template <class Parent> 
   void create_publisher(Parent parent, const std::string &topic_name,
                         const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS()) {
     observable_traits<Parent>{};
-    using MessageT = typename remove_shared_ptr_t<Parent>::Value;
-    auto child = create_observable<PublisherObservable<MessageT>>(topic_name, qos);
+    auto child = create_observable<PublisherObservable<obs_val<Parent>>>(topic_name, qos);
     parent->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
   }
 

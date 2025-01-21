@@ -11,64 +11,92 @@
 
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
+
 namespace icey {
 
 /// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport for API docs.
 /// and https://github.com/ros-perception/image_common/blob/humble/image_transport
 /// Note that we do not create a image_transport::ImageTransport object to avoid circular dependency: 
 /// https://github.com/ros-perception/image_common/issues/311
-/*struct ImageTransportSupport {
-    using QoS = rclcpp::QoS;
-    using DefaultQoS = rclcpp::SystemDefaultsQoS;
-    explicit ImageTransportSupport(rclcpp::Node::SharedPtr node) : node_(node), 
-        image_transport_(node_) {
-    }
-    
-    void add_publication(std::string topic_name, const QoS &qos = DefaultQoS()) {
-        publishers_.emplace(topic_name, image_transport_.advertise(topic_name, qos));
+
+// An observable representing a camera image subscriber. 
+struct ImageTransportSubscriber : public Observable <sensor_msgs::msg::Image::ConstSharedPtr > {
+    ImageTransportSubscriber(const std::string &base_topic_name,
+                      const std::string &transport,
+                      const ROSAdapter::QoS qos,
+                      const rclcpp::SubscriptionOptions &options) {
+        this->attach_priority_ = 4;
+        this->name = base_topic_name;
+        
+        auto this_obs = this->observable_;
+        const auto cb = [this_obs](sensor_msgs::msg::Image::ConstSharedPtr image) {
+                this_obs->resolve(image);
+        };
+        /// TODO do not capture this, save sub somewhere else
+        attach_ = [this, this_obs, base_topic_name, transport, qos, cb, options]
+            (ROSAdapter::NodeHandle &node) {
+            subscriber_ = image_transport::create_subscription(&node, 
+                base_topic_name, cb,transport,
+            qos.get_rmw_qos_profile(), options);
+        };
     }
 
-    void add_subscriber(std::string &topic_name, const QoS &qos = DefaultQoS()) {
-        publishers_.emplace(topic_name, image_transport_.advertise(topic_name, qos));
-    }
+  void attach_to_node(ROSAdapter::NodeHandle &node) { attach_(node); }
+  std::function<void(ROSAdapter::NodeHandle &)> attach_;
+  image_transport::Subscriber subscriber_; /// The image_transport sub/pub use PIMPL, so we can hold them by value.
+};
 
-    std::map<std::string, image_transport::Publisher> publishers_;
-    std::map<std::string, image_transport::Subscriber> subscribers_;
-    std::map<std::string, image_transport::CameraPublisher> camera_publishers_;
-    std::map<std::string, image_transport::CameraSubscriber> camera_subscribers_;
-    
-    rclcpp::Node::SharedPtr node_;
-    image_transport::ImageTransport image_transport_;
-};*/
+struct ImageTransportPublisher: public Observable<sensor_msgs::msg::Image::SharedPtr> {
 
+    ImageTransportPublisher(const std::string &base_topic_name,
+                      const ROSAdapter::QoS qos,
+                      const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
+        this->attach_priority_ = 1;
+        this->name = base_topic_name;
+        
+        auto this_obs = this->observable_;
+        attach_ = [this_obs, base_topic_name, qos, options](ROSAdapter::NodeHandle &node) {
+            /// TODO We could handle here the exception and show it to the user, but currently it would be invisible in case .except is not declared
+            /// This requires a change in the promises to differentiate on error and on value handles and re-throw the error in case no error handlers are registered
+            image_transport::Publisher publisher;
+            /*try {
+                    publisher = image_transport::create_camera_publisher(&node, base_topic_name,
+                qos.get_rmw_qos_profile()); 
+            } catch(const image_transport::TransportLoadException &exception) {
+                this_obs->reject(exception);
+            }*/
+             publisher = image_transport::create_publisher(&node, base_topic_name, qos.get_rmw_qos_profile());  /// TODO Humble did accept options
+            this_obs->_register_handler([this_obs, publisher]() { 
+                const auto &image_msg = this_obs->value(); /// There can be no error
+                publisher.publish(image_msg);
+            });
+        };
+   }
+  void attach_to_node(ROSAdapter::NodeHandle &node_handle) { attach_(node_handle); }
+  std::function<void(ROSAdapter::NodeHandle &)> attach_;
+};
 
 // An observable representing a camera subscriber. 
 struct CameraSubscriber : 
     public Observable < 
-        std::tuple < std::shared_ptr<const sensor_msgs::msg::Image>, 
-                     std::shared_ptr<const sensor_msgs::msg::CameraInfo> > > {
+        std::tuple < sensor_msgs::msg::Image::ConstSharedPtr, 
+                     sensor_msgs::msg::CameraInfo::ConstSharedPtr > > {
 
     CameraSubscriber(const std::string &base_topic_name,
                       const std::string &transport,
                       const ROSAdapter::QoS qos) {
         this->attach_priority_ = 4;
         this->name = base_topic_name;
-        
         auto this_obs = this->observable_;
-        const auto cb = [this_obs](std::shared_ptr<const sensor_msgs::msg::Image> image, 
-                                    std::shared_ptr<const sensor_msgs::msg::CameraInfo> camera_info) {
+        const auto cb = [this_obs](sensor_msgs::msg::Image::ConstSharedPtr image, 
+                                    sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
                 this_obs->resolve(std::make_tuple(image, camera_info));
         };
         /// TODO do not capture this, save sub somewhere else
         attach_ = [this, this_obs, base_topic_name, transport, qos, cb](ROSAdapter::NodeHandle &node) {
-
-            if (icey_debug_print) 
-                std::cout << "[CameraSubscriber] attach_to_node()" << std::endl;
-
             /// TODO pass QoS with the qos.getInternalNoTWrapPedRMWAPIThing 
             subscriber_ = image_transport::create_camera_subscription(&node, 
-                base_topic_name, cb,transport,
-            qos.get_rmw_qos_profile());
+                base_topic_name, cb,transport, qos.get_rmw_qos_profile());
         };
     }
 
@@ -89,11 +117,16 @@ struct CameraPublisher:
         
         auto this_obs = this->observable_;
         attach_ = [this_obs, base_topic_name, qos](ROSAdapter::NodeHandle &node) {
-            if (icey_debug_print) 
-                std::cout << "[CameraSubscriber] attach_to_node()" << std::endl;
-            
-            image_transport::CameraPublisher publisher = image_transport::create_camera_publisher(&node, base_topic_name,
+            /// TODO We could handle here the exception and show it to the user, but currently it would be invisible in case .except is not declared
+            /// This requires a change in the promises to differentiate on error and on value handles and re-throw the error in case no error handlers were registered.
+            image_transport::CameraPublisher publisher;
+            /*try {
+                    publisher = image_transport::create_camera_publisher(&node, base_topic_name,
                 qos.get_rmw_qos_profile()); 
+            } catch(const image_transport::TransportLoadException &exception) {
+                this_obs->reject(exception);
+            }*/
+             publisher = image_transport::create_camera_publisher(&node, base_topic_name, qos.get_rmw_qos_profile()); 
             this_obs->_register_handler([this_obs, publisher]() { 
                 const auto &new_value = this_obs->value(); /// There can be no error
                 const auto &[image_msg, camera_info_msg] = new_value;
@@ -103,6 +136,19 @@ struct CameraPublisher:
    }
   void attach_to_node(ROSAdapter::NodeHandle &node_handle) { attach_(node_handle); }
   std::function<void(ROSAdapter::NodeHandle &)> attach_;
+};
+
+
+auto create_image_transport_subscription(
+    const std::string& base_topic_name, const std::string &transport, 
+    const ROS2Adapter::QoS& qos, const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
+  return g_state.get_context().create_observable<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
+};
+
+auto create_image_transport_publisher(
+    const std::string& base_topic_name, const std::string &transport, 
+    const ROS2Adapter::QoS& qos, const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
+  return g_state.get_context().create_observable<ImageTransportPublisher>(base_topic_name, qos, options);
 };
 
 auto create_camera_subscription(

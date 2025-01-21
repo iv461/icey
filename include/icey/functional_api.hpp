@@ -107,11 +107,6 @@ auto create_transform_subscription(const std::string& target_frame,
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-template <class Parent>
-void create_transform_publisher(Parent parent) {
-  g_state.get_context().create_transform_publisher(parent);
-}
-
 auto create_timer(const ROSAdapter::Duration& interval, bool use_wall_time = false,
                   bool is_one_off_timer = false) {
   return g_state.get_context().create_timer(interval, use_wall_time, is_one_off_timer);

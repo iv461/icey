@@ -22,5 +22,14 @@ int main(int argc, char **argv) {
 
     });
 
+    auto camera_left_sub = icey::create_image_transport_subscription("camera_left", "raw", rclcpp::SensorDataQoS());
+
+    /// And now publish again compressed
+    camera_left_sub->then([](sensor_msgs::msg::Image::ConstSharedPtr image) {
+        /// Process your image, e.g. paint it here:
+        /// 
+        return std::make_shared<sensor_msgs::msg::Image>(*image); // As an example, simply copy the image, output must be a shared_ptr
+    })->publish<icey::ImageTransportPublisher>("camera_left", rclcpp::SensorDataQoS());
+
     icey::spawn(argc, argv, "camera_subscriber_example"); /// Create and start node
 }
