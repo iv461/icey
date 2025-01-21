@@ -10,11 +10,10 @@
 /// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a
 /// dependecy of one of our deps. It's not rclcpp and not message_filters.
 #include <boost/hana.hpp>
-#include <boost/hana/ext/std/tuple.hpp> /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
+#include <boost/hana/ext/std/tuple.hpp>  /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
 #include <boost/type_index.hpp>
-
-#include <icey/impl/observable.hpp>
 #include <icey/impl/bag_of_metaprogramming_tricks.hpp>
+#include <icey/impl/observable.hpp>
 
 namespace hana = boost::hana;
 
@@ -26,7 +25,7 @@ class Context;
 
 /// Everything that can be "attached" to a ROS node, publishers, subscribers, clients, TF subscriber
 /// etc.
-class NodeAttachable  {
+class NodeAttachable {
 public:
   /// For creating new Observables, we need a reference to the context
   std::weak_ptr<Context> context;
@@ -36,15 +35,14 @@ public:
   /// or service name
   std::string name;
 
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) { 
-    if (this->was_attached_) 
-      throw std::invalid_argument("NodeAttachable was already attached");
-    if(icey_debug_print)
+  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
+    if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
+    if (icey_debug_print)
       std::cout << "Attaching " << class_name << ", " << name << " ..." << std::endl;
-    attach_(node_handle); 
+    attach_(node_handle);
     was_attached_ = true;
   }
-  
+
   /// Needed to initialize parameters first
   bool is_parameter() const { return is_parameter_; }
   bool is_parameter_{false};
@@ -52,7 +50,7 @@ public:
   std::function<void(ROSAdapter::NodeHandle &)> attach_;
 };
 
-struct ObservableTag{}; /// A tag to be able to recognize the type "Observeble" using traits
+struct ObservableTag {};  /// A tag to be able to recognize the type "Observeble" using traits
 template <typename... Args>
 struct observable_traits {
   static_assert(
@@ -64,7 +62,8 @@ struct observable_traits {
 
 template <class T>
 constexpr void assert_observable_holds_tuple() {
-  static_assert(is_tuple_v<obs_msg<T>>, "The Observable must hold a tuple as a value for unpacking.");
+  static_assert(is_tuple_v<obs_msg<T>>,
+                "The Observable must hold a tuple as a value for unpacking.");
 }
 
 // Assert that all Observables types hold the same value
@@ -72,26 +71,30 @@ template <typename First, typename... Rest>
 constexpr void assert_all_observable_values_are_same() {
   observable_traits<First, Rest...>{};  /// Only Observables are expected to have ::Value
   // Static assert that each T::Value is the same as First::Value
-  static_assert((std::is_same_v< obs_msg<First>, obs_msg<Rest>> && ...),
+  static_assert((std::is_same_v<obs_msg<First>, obs_msg<Rest>> && ...),
                 "The values of all the observables must be the same");
 }
 
 /// An observable. Similar to a promise in JavaScript.
 /// TODO Do not create shared_ptr, we finally have PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
-class Observable : public ObservableTag, public NodeAttachable,
-    public std::enable_shared_from_this< Observable<_Value, _ErrorValue > >  {
+class Observable : public ObservableTag,
+                   public NodeAttachable,
+                   public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
   friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
                          /// register_on_change_cb callbacks
 public:
   using Impl = impl::Observable<_Value, _ErrorValue>;
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
-  using ErrorValue =  typename Impl::ErrorValue;
+  using ErrorValue = typename Impl::ErrorValue;
   using Self = Observable<_Value, _ErrorValue>;
 
-  void assert_we_have_context() {  //Cpp is great, but Java still has a NullPtrException more...
-    if(!this->context.lock()) throw std::runtime_error("This observable does not have context, we cannot do stuff with it that depends on the context.");
+  void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
+    if (!this->context.lock())
+      throw std::runtime_error(
+          "This observable does not have context, we cannot do stuff with it that depends on the "
+          "context.");
   }
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
@@ -104,42 +107,51 @@ public:
   }
 
   template <typename F>
-  auto except(F &&f) { 
-    static_assert(not std::is_same_v < ErrorValue, Nothing >, "This observable cannot have errors, so you cannot register .except() on it.");
+  auto except(F &&f) {
+    static_assert(not std::is_same_v<ErrorValue, Nothing>,
+                  "This observable cannot have errors, so you cannot register .except() on it.");
     auto child = Self::create_from_impl(observable_->except(f));
     child->context = this->context;
     return child;
   }
 
-  /// Create a ROS publisher by creating a new observable of type T and connecting it to this observable.
-  template <class T, typename ...Args>
-  void publish(Args &&... args) {
+  /// Create a ROS publisher by creating a new observable of type T and connecting it to this
+  /// observable.
+  template <class T, typename... Args>
+  void publish(Args &&...args) {
     assert_we_have_context();
-    static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, there is nothing to publish, you cannot call publish() on it.");
+    static_assert(not std::is_same_v<Value, Nothing>,
+                  "This observable does not have a value, there is nothing to publish, you cannot "
+                  "call publish() on it.");
     auto child = this->context.lock()->template create_observable<T>(args...);
-    this->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
+    this->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
   }
 
   /// Create a ROS normal publisher.
   void publish(const std::string &topic_name,
                const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS()) {
     assert_we_have_context();
-    static_assert(not std::is_same_v < Value, Nothing >, "This observable does not have a value, there is nothing to publish, you cannot call publish() on it.");
+    static_assert(not std::is_same_v<Value, Nothing>,
+                  "This observable does not have a value, there is nothing to publish, you cannot "
+                  "call publish() on it.");
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
 
   void publish_transform() {
     assert_we_have_context();
-    static_assert(std::is_same_v < obs_msg<Self>, geometry_msgs::msg::TransformStamped >, "The observable must hold a Value of type geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call publish_transform() on it.");
+    static_assert(std::is_same_v<obs_msg<Self>, geometry_msgs::msg::TransformStamped>,
+                  "The observable must hold a Value of type "
+                  "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
+                  "publish_transform() on it.");
     return this->context.lock()->create_transform_publisher(this->shared_from_this());
   }
 
-//protected:
-  /// Pattern-maching factory function that creates a New Self with different value and error types 
+  // protected:
+  /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed pointer to the implentation-Promise. Needed for then and except
-  template<class NewVal, class NewErr>
-  static std::shared_ptr < Observable<NewVal, NewErr> >
-     create_from_impl(std::shared_ptr < impl::Observable<NewVal, NewErr> > obs_impl) {  
+  template <class NewVal, class NewErr>
+  static std::shared_ptr<Observable<NewVal, NewErr>> create_from_impl(
+      std::shared_ptr<impl::Observable<NewVal, NewErr>> obs_impl) {
     auto new_obs = impl::create_observable<Observable<NewVal, NewErr>>();
     new_obs->observable_ = obs_impl;
     return new_obs;
@@ -164,11 +176,12 @@ public:
     auto this_obs = this->observable_;
     this->attach_ = [=](ROSAdapter::NodeHandle &node) {
       node.declare_parameter<_Value>(
-        parameter_name, default_value,
-        [this_obs](const rclcpp::Parameter &new_param) {
-          Value new_value = new_param.get_value<_Value>();
-          this_obs->resolve(new_value);
-        },parameter_descriptor, ignore_override);
+          parameter_name, default_value,
+          [this_obs](const rclcpp::Parameter &new_param) {
+            Value new_value = new_param.get_value<_Value>();
+            this_obs->resolve(new_value);
+          },
+          parameter_descriptor, ignore_override);
       /// Set default value if there is one
       if (default_value) {
         Value initial_value;
@@ -192,43 +205,43 @@ public:
 
 /// A subscriber observable, always stores a shared pointer to the message as it's value
 template <typename _Message>
-class SubscriptionObservable : public Observable < typename _Message::SharedPtr > {
+class SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
   friend class Context;
+
 public:
   using Value = typename _Message::SharedPtr;
   using Message = _Message;
   SubscriptionObservable(const std::string &topic_name, const ROSAdapter::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->name = topic_name;
-    auto this_obs = this->observable_;  
+    auto this_obs = this->observable_;
     this->attach_ = [=](ROSAdapter::NodeHandle &node) {
       node.add_subscription<Value>(
-          topic_name, [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); },
-          qos, options);
+          topic_name,
+          [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); }, qos,
+          options);
     };
   }
 };
 
-/// An interpolatable observable is one that buffers the incoming messages using a circular buffer and
-/// allows to query the message at a given point, using interpolation. 
+/// An interpolatable observable is one that buffers the incoming messages using a circular buffer
+/// and allows to query the message at a given point, using interpolation.
 struct InterpolateableObservableTag {};
 template <typename _Message>
 struct InterpolateableObservable : public InterpolateableObservableTag,
-                                   public Observable < typename _Message::SharedPtr, std::string > {
-  
-  using MaybeValue = std::optional < typename _Message::SharedPtr >;
+                                   public Observable<typename _Message::SharedPtr, std::string> {
+  using MaybeValue = std::optional<typename _Message::SharedPtr>;
   /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
   virtual MaybeValue get_at_time(const rclcpp::Time &time) const = 0;
 };
 
-
 template <typename T>
 constexpr auto hana_is_interpolatable(T) {
-    if constexpr(std::is_base_of_v<InterpolateableObservableTag, T>)
-        return hana::bool_c<true>;
-    else 
-        return hana::bool_c<false>;    
+  if constexpr (std::is_base_of_v<InterpolateableObservableTag, T>)
+    return hana::bool_c<true>;
+  else
+    return hana::bool_c<false>;
 }
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
@@ -247,11 +260,11 @@ public:
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
           [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-          this_obs->resolve(std::make_shared<Message>(new_value)); /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in which we are going to write
+            this_obs->resolve(std::make_shared<Message>(
+                new_value));  /// TODO fix dynamic allocation on every call, instead allocate one
+                              /// object at the beginning in which we are going to write
           },
-          [this_obs](const tf2::TransformException &ex) {
-            this_obs->reject(ex.what());
-          });
+          [this_obs](const tf2::TransformException &ex) { this_obs->reject(ex.what()); });
     };
   }
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
@@ -260,8 +273,11 @@ public:
       // Note that this call does not wait, the transform must already have arrived. This works
       // because get_at_time() is called by the synchronizer
       auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
-      /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in which we are going to write
-      return std::make_shared<Message>(tf_msg); // For the sake of consistency, messages are always returned as shared pointers. Since lookupTransform gives us a value, we copy it over to a shared pointer.
+      /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in
+      /// which we are going to write
+      return std::make_shared<Message>(
+          tf_msg);  // For the sake of consistency, messages are always returned as shared pointers.
+                    // Since lookupTransform gives us a value, we copy it over to a shared pointer.
     } catch (tf2::TransformException &e) {
       this_obs->reject(e.what());
       return {};
@@ -285,23 +301,23 @@ struct TimerObservable : public Observable<size_t> {
         size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
         ticks_counter++;
         this_obs->resolve(ticks_counter);
-        if (is_one_off_timer) 
-          timer->cancel();
+        if (is_one_off_timer) timer->cancel();
       });
     };
   }
   rclcpp::TimerBase::SharedPtr timer;
 };
 
-/// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message> 
+/// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
 class PublisherObservable : public Observable<_Value> {
   friend class Context;
+
 public:
   using Value = _Value;
   using Base = Observable<_Value>;
-  using Message = remove_shared_ptr_t<Value>; 
-  static_assert(rclcpp::is_ros_compatible_type< Message >::value,
+  using Message = remove_shared_ptr_t<Value>;
+  static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
   PublisherObservable(const std::string &topic_name,
                       const ROSAdapter::QoS qos = ROS2Adapter::DefaultQoS()) {
@@ -309,14 +325,16 @@ public:
     auto this_obs = this->observable_;
     this->attach_ = [=](ROSAdapter::NodeHandle &node) {
       auto publisher = node.add_publication<Message>(topic_name, qos);
-      this_obs->_register_handler([this_obs, publisher] () { 
-          // We cannot pass over the pointer since publish expects a unique ptr and we got a shared_ptr. 
-          // We cannot just create a unique_ptr because we cannot ensure we won't use the message even if use_count is one because use_count is meaningless in a multithreaded program. 
-          const auto &new_value = this_obs->value(); /// There can be no error
-          if constexpr(is_shared_ptr<Value>)
-            publisher(*new_value);
-          else 
-            publisher(new_value);
+      this_obs->_register_handler([this_obs, publisher]() {
+        // We cannot pass over the pointer since publish expects a unique ptr and we got a
+        // shared_ptr. We cannot just create a unique_ptr because we cannot ensure we won't use the
+        // message even if use_count is one because use_count is meaningless in a multithreaded
+        // program.
+        const auto &new_value = this_obs->value();  /// There can be no error
+        if constexpr (is_shared_ptr<Value>)
+          publisher(*new_value);
+        else
+          publisher(new_value);
       });
     };
   }
@@ -328,12 +346,12 @@ public:
 /// what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 // We neeed the base to be able to recognize interpolatable nodes for example
-template <typename _Message, class _Base = Observable< typename _Message::SharedPtr >>
+template <typename _Message, class _Base = Observable<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
     this->observable_->_register_handler([this]() {
       using Event = message_filters::MessageEvent<const _Message>;
-      const auto &new_value = this->observable_->value(); /// There can be no error
+      const auto &new_value = this->observable_->value();  /// There can be no error
       this->signalMessage(Event(new_value));
     });
   }
@@ -344,7 +362,8 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 /// synchronization still works. I would guess it works if the lowest frequency topic has a
 /// frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
 template <typename... Messages>
-class SynchronizerObservable : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string> {
+class SynchronizerObservable
+    : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string> {
 public:
   using Self = SynchronizerObservable<Messages...>;
   using Value = std::tuple<typename Messages::SharedPtr...>;
@@ -361,8 +380,9 @@ public:
     this->create_mfl_synchronizer();
   }
   const auto &inputs() const { return inputs_; }
+
 private:
-  void on_messages(typename Messages::SharedPtr ...msgs) {
+  void on_messages(typename Messages::SharedPtr... msgs) {
     this->observable_->resolve(std::forward_as_tuple(msgs...));
   }
 
@@ -370,11 +390,14 @@ private:
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
     /// Connect with the input observables
-    std::apply([synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
-               inputs_);
-    synchronizer_->setAgePenalty(0.50);  /// TODO not sure why this is needed, present in example code
-    auto this_obs = this->observable_; /// Important: Do not capture this
-    synchronizer_->registerCallback(&Self::on_messages, this);  /// Register directly to impl::Observable
+    std::apply(
+        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
+        inputs_);
+    synchronizer_->setAgePenalty(
+        0.50);  /// TODO not sure why this is needed, present in example code
+    auto this_obs = this->observable_;  /// Important: Do not capture this
+    synchronizer_->registerCallback(&Self::on_messages,
+                                    this);  /// Register directly to impl::Observable
   }
   /// The input filters
   uint32_t queue_size_{10};
@@ -385,22 +408,23 @@ private:
 // A transform broadcaster observable
 class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
   friend class Context;
+
 public:
   using Value = geometry_msgs::msg::TransformStamped;
   TransformPublisherObservable() {
-      this->name = "tf_pub";
-      auto this_obs = this->observable_;
-      this->attach_ = [=](ROSAdapter::NodeHandle &node) {
-        auto publish = node.add_tf_broadcaster_if_needed();
-        this_obs->_register_handler([this_obs, publish]() { 
-            const auto &new_value = this_obs->value(); /// There can be no error
-            publish(new_value); 
-        });
-      };
+    this->name = "tf_pub";
+    auto this_obs = this->observable_;
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      auto publish = node.add_tf_broadcaster_if_needed();
+      this_obs->_register_handler([this_obs, publish]() {
+        const auto &new_value = this_obs->value();  /// There can be no error
+        publish(new_value);
+      });
+    };
   }
 };
 
-/// A service observable, storing it's request and response 
+/// A service observable, storing it's request and response
 template <typename _ServiceT>
 struct ServiceObservable
     : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>,
@@ -409,55 +433,61 @@ struct ServiceObservable
   using Response = std::shared_ptr<typename _ServiceT::Response>;
   using Value = std::pair<Request, Response>;
 
-  ServiceObservable(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-      auto this_obs = this->observable_;
-      this->attach_ = [=](ROSAdapter::NodeHandle &node) {
-        node.add_service<_ServiceT>(service_name,
-            [this_obs](Request request, Response response) {
-              this_obs->resolve(std::make_pair(request, response));
-            }, qos);
-      };
+  ServiceObservable(const std::string &service_name,
+                    const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    auto this_obs = this->observable_;
+    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+      node.add_service<_ServiceT>(
+          service_name,
+          [this_obs](Request request, Response response) {
+            this_obs->resolve(std::make_pair(request, response));
+          },
+          qos);
+    };
   }
 };
 
-/// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in the DFG
+/// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in
+/// the DFG
 template <typename _ServiceT>
-struct ServiceClient : public Observable <typename _ServiceT::Response::SharedPtr, std::string>{
+struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr, std::string> {
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
-  ServiceClient(const std::string &service_name, const ROSAdapter::Duration &timeout): timeout_(timeout) {
-      this->name = service_name; 
-      auto this_obs = this->observable_;
-      this->attach_ = [this, service_name](ROSAdapter::NodeHandle &node) {
-        client_ = node.add_client<_ServiceT>(service_name);
-      };
+  ServiceClient(const std::string &service_name, const ROSAdapter::Duration &timeout)
+      : timeout_(timeout) {
+    this->name = service_name;
+    auto this_obs = this->observable_;
+    this->attach_ = [this, service_name](ROSAdapter::NodeHandle &node) {
+      client_ = node.add_client<_ServiceT>(service_name);
+    };
   }
 
   void call(Request request) const {
-      using Future = typename Client::SharedFutureWithRequest;
-      auto output_obs = this->observable_;
-      if(!client_->wait_for_service(timeout_)) {
-        output_obs->reject("SERVICE_UNAVAILABLE");
-        return;
+    using Future = typename Client::SharedFutureWithRequest;
+    auto output_obs = this->observable_;
+    if (!client_->wait_for_service(timeout_)) {
+      output_obs->reject("SERVICE_UNAVAILABLE");
+      return;
+    }
+    client_->async_send_request(request, [output_obs](Future response_futur) {
+      if (response_futur.valid()) {
+        output_obs->resolve(response_futur.get().second);
+      } else {
+        /// TODO the FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
+        /// I think since the async_send_request waits on the executor, we cannot interrupt it
+        /// except with Ctrl-C
+        if (!rclcpp::ok())
+          output_obs->reject("rclcpp::FutureReturnCode::INTERRUPTED");
+        else
+          output_obs->reject("rclcpp::FutureReturnCode::TIMEOUT");
+        /// TODO Do the weird cleanup thing
       }
-      client_->async_send_request(
-        request, [output_obs](Future response_futur) { 
-          if(response_futur.valid()) {
-            output_obs->resolve(response_futur.get().second);
-          } else {
-            /// TODO the FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values. 
-            /// I think since the async_send_request waits on the executor, we cannot interrupt it except with Ctrl-C
-            if(!rclcpp::ok())
-              output_obs->reject("rclcpp::FutureReturnCode::INTERRUPTED");
-            else 
-              output_obs->reject("rclcpp::FutureReturnCode::TIMEOUT");
-            /// TODO Do the weird cleanup thing
-          }
-      });
+    });
   }
+
 protected:
-  typename Client::SharedPtr client_;  
+  typename Client::SharedPtr client_;
   ROSAdapter::Duration timeout_;
 };
 
@@ -478,8 +508,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
   void initialize(ROSAdapter::NodeHandle &node) {
     if (attachables_.empty()) {
-      std::cout << "WARNING: Nothing to spawn, try first to create some Observables"
-                << std::endl;
+      std::cout << "WARNING: Nothing to spawn, try first to create some Observables" << std::endl;
       return;
     }
     attach_everything_to_node(node);
@@ -492,16 +521,16 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// parameters immediatelly have their values.
     if (icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
 
-    for (const auto &attachable: attachables_) {
+    for (const auto &attachable : attachables_) {
       if (attachable->is_parameter()) attachable->attach_to_node(node);
     }
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
-  
-    if (after_parameter_initialization_cb_)
-      after_parameter_initialization_cb_(); 
-    if (icey_debug_print) std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;    
-    for (const auto &attachable: attachables_) {
+
+    if (after_parameter_initialization_cb_) after_parameter_initialization_cb_();
+    if (icey_debug_print)
+      std::cout << "[icey::Context] Attaching maybe new vertices  ... " << std::endl;
+    for (const auto &attachable : attachables_) {
       if (!attachable->is_parameter()) attachable->attach_to_node(node);
     }
   }
@@ -541,19 +570,19 @@ struct Context : public std::enable_shared_from_this<Context> {
     return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
   }
 
-  template <class Parent> 
+  template <class Parent>
   void create_publisher(Parent parent, const std::string &topic_name,
                         const ROS2Adapter::QoS &qos = ROS2Adapter::DefaultQoS()) {
     observable_traits<Parent>{};
     auto child = create_observable<PublisherObservable<obs_val<Parent>>>(topic_name, qos);
-    parent->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
+    parent->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
   }
 
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
     auto child = create_observable<TransformPublisherObservable>();
-    parent->observable_->then([child](const auto &x) {child->observable_->resolve(x);});
+    parent->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
   }
 
   auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false,
@@ -570,35 +599,39 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Add a service client
   template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name,
-                    const ROSAdapter::Duration &timeout,
+                     const ROSAdapter::Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    observable_traits<Parent>{}; // obs_val since the Request must be a shared_ptr
-    static_assert(std::is_same_v< obs_val<Parent>, typename ServiceT::Request::SharedPtr >, "The parent triggering the service must hold a value of type Request::SharedPtr");
+    observable_traits<Parent>{};  // obs_val since the Request must be a shared_ptr
+    static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
+                  "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_observable<ServiceClient<ServiceT>>(service_name, timeout);
-    parent->then([service_client](auto req) { service_client->call(req); }); 
+    parent->then([service_client](auto req) { service_client->call(req); });
     return service_client;
   }
 
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
   // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
-  // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to know the node's clock (that may be simulated time, i.e sub on /clock)
-  template<class Reference, class... Parents> 
-  static auto sync_with_reference(Reference reference, Parents ...parents) {
+  // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to
+  // know the node's clock (that may be simulated time, i.e sub on /clock)
+  template <class Reference, class... Parents>
+  static auto sync_with_reference(Reference reference, Parents... parents) {
     observable_traits<Reference>{};
-    observable_traits<Parents...>{};    
+    observable_traits<Parents...>{};
     using namespace message_filters::message_traits;
-    static_assert(HasHeader<obs_msg<Reference>>::value, "The ROS message type must have a header with the timestamp to be synchronized");
+    static_assert(HasHeader<obs_msg<Reference>>::value,
+                  "The ROS message type must have a header with the timestamp to be synchronized");
     auto parents_tuple = std::make_tuple(parents...);
     /// TOOD somehow does not work
-    //auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return hana_is_interpolatable(t); }); 
-    //static_assert(all_are_interpolatables, "All inputs must be interpolatable when using the sync_with_reference");
+    // auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return
+    // hana_is_interpolatable(t); }); static_assert(all_are_interpolatables, "All inputs must be
+    // interpolatable when using the sync_with_reference");
     return reference->then([parents_tuple](const obs_val<Reference> &new_value) {
-        auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
-              return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
-        });
-        /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject 
-        return hana::prepend(parent_maybe_values, new_value);
+      auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
+        return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
+      });
+      /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject
+      return hana::prepend(parent_maybe_values, new_value);
     });
   }
 
@@ -612,28 +645,31 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
-    auto synchronizer = create_observable<SynchronizerObservable< obs_msg<Parents>...>>(queue_size);
+    auto synchronizer = create_observable<SynchronizerObservable<obs_msg<Parents>...>>(queue_size);
     auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs());
-    hana::for_each(zipped,
-        [](auto &input_output_tuple) {
-              auto &parent = input_output_tuple[0_c];
-              auto &synchronizer_input = input_output_tuple[1_c];
-              parent->then([synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); }); 
-        });
+    hana::for_each(zipped, [](auto &input_output_tuple) {
+      auto &parent = input_output_tuple[0_c];
+      auto &synchronizer_input = input_output_tuple[1_c];
+      parent->then(
+          [synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); });
+    });
     return synchronizer;
   }
 
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
-    static_assert(sizeof...(Parents) >= 2, "You need to have at least two inputs for synchronization.");
+    static_assert(sizeof...(Parents) >= 2,
+                  "You need to have at least two inputs for synchronization.");
     auto parents_tuple = std::make_tuple(parents...);
-    
-    auto interpolatables = hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
-    auto non_interpolatables = hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
+
+    auto interpolatables =
+        hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
+    auto non_interpolatables =
+        hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
-    static_assert(not (num_interpolatables > 0 && num_non_interpolatables == 0),
+    static_assert(not(num_interpolatables > 0 && num_non_interpolatables == 0),
                   "You are trying to synchronize only interpolatable signals. This does not work, "
                   "you need to "
                   "have at least one non-interpolatable signal that is the common time for all the "
@@ -642,17 +678,21 @@ struct Context : public std::enable_shared_from_this<Context> {
     // two entities. Given the condition above, the statement follows.
     if constexpr (num_non_interpolatables > 1) {
       /// We need the ApproxTime
-      auto approx_time_output = hana::unpack(non_interpolatables, [this](auto ...parents) { return synchronize_approx_time(parents...);});
+      auto approx_time_output = hana::unpack(non_interpolatables, [this](auto... parents) {
+        return synchronize_approx_time(parents...);
+      });
       if constexpr (num_interpolatables > 1) {
         /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
-        return hana::unpack(hana::prepend(interpolatables, approx_time_output), [this](auto ref, auto ...ints) { return sync_with_reference(ref, ints...); });
+        return hana::unpack(
+            hana::prepend(interpolatables, approx_time_output),
+            [this](auto ref, auto... ints) { return sync_with_reference(ref, ints...); });
       } else {
         return approx_time_output;
       }
     } else {
       // Otherwise, we only need a sync with reference
-      return hana::unpack(hana::prepend(interpolatables, std::get<0>(non_interpolatables)), 
-          [](auto ref, auto ...ints) { return sync_with_reference(ref, ints...); });
+      return hana::unpack(hana::prepend(interpolatables, std::get<0>(non_interpolatables)),
+                          [](auto ref, auto... ints) { return sync_with_reference(ref, ints...); });
     }
   }
 
@@ -667,10 +707,9 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// First, create a new observable
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
-    hana::for_each(std::forward_as_tuple(parents...), 
-        [child](auto &parent) {
-              parent->then([child](const auto &x) { child->observable_->resolve(x); }); 
-        });
+    hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
+      parent->then([child](const auto &x) { child->observable_->resolve(x); });
+    });
     return child;
   }
 
@@ -682,10 +721,9 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// TODO add to graph, i.e. this->then(parent, f)
     return parent->then([](const auto &...args) {  /// Need to take variadic because then()
                                                    /// automatically unpacks tuples
-      return std::get<index>(
-          std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple and get the index.
+      return std::get<index>(std::forward_as_tuple(
+          args...));  /// So we need to pack this again in a tuple and get the index.
     });
-
   }
 
   /// Unpacks a observables of tuple into multiple observables
@@ -696,9 +734,9 @@ struct Context : public std::enable_shared_from_this<Context> {
   */
   /// Then's on timeout. Creates a new timer.
   // timeout
-  // Crates a new timer that sync_with_reference, matching exactly an output frequency. Input must be interpolatable.
-  // throttle
-  
+  // Crates a new timer that sync_with_reference, matching exactly an output frequency. Input must
+  // be interpolatable. throttle
+
   bool empty() const { return attachables_.empty(); }
   void clear() { attachables_.clear(); }
 
@@ -710,11 +748,10 @@ struct Context : public std::enable_shared_from_this<Context> {
   }
 
   bool was_initialized_{false};
-  std::vector< std::shared_ptr<NodeAttachable> > attachables_;  
+  std::vector<std::shared_ptr<NodeAttachable>> attachables_;
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;
 };
-
 
 /// The ROS node, additionally owning the data-flow graph (DFG) that contains the observables.
 /// This class is needed to ensure that the context lives for as long as the node lives.
@@ -752,7 +789,7 @@ void spin_nodes(const std::vector<std::shared_ptr<ROSNodeWithDFG>> &nodes) {
 
 /// Public API aliases:
 using Node = ROSNodeWithDFG;
-template<class T>
+template <class T>
 using Parameter = ParameterObservable<T>;
 }  // namespace icey
 

@@ -25,9 +25,6 @@ namespace icey {
 /// A ROS adapter, abstracting ROS 1 and ROS 2, so that everything works with both
 class ROS2Adapter {
 public:
-  template <class Msg>
-  using MsgPtr = std::shared_ptr<Msg>;
-
   /// TODO should be compatible with the templates, but check
   using Clock = std::chrono::system_clock;
   using Time = std::chrono::time_point<Clock>;
@@ -58,24 +55,27 @@ public:
     using TransformMsg = geometry_msgs::msg::TransformStamped;
     using OnTransform = std::function<void(const TransformMsg &)>;
     using OnError = std::function<void(const tf2::TransformException &)>;
-    TFListener(std::weak_ptr<rclcpp::Node> node, tf2_ros::Buffer &buffer) : node_(node), buffer_(buffer) { init(node); }
+    TFListener(std::weak_ptr<rclcpp::Node> node, tf2_ros::Buffer &buffer)
+        : node_(node), buffer_(buffer) {
+      init(node);
+    }
 
     /// Add notification for a single transform.
     void add_subscription(std::string target_frame, std::string source_frame,
-                          const OnTransform &on_transform, 
-                          const OnError &on_error) {
+                          const OnTransform &on_transform, const OnError &on_error) {
       subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), std::nullopt,
-                                          on_transform, 
-                                          on_error);
+                                          on_transform, on_error);
     }
 
-    std::weak_ptr<rclcpp::Node> node_;  
-    tf2_ros::Buffer  &buffer_;
+    std::weak_ptr<rclcpp::Node> node_;
+    tf2_ros::Buffer &buffer_;
+
   private:
     using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
     /// A tf subctiption, the frames, last received transform, and the notify CB
     using FrameNames = std::pair<std::string, std::string>;
-    using TFSubscriptionInfo = std::tuple<FrameNames, std::optional<TransformMsg>, OnTransform, OnError>;
+    using TFSubscriptionInfo =
+        std::tuple<FrameNames, std::optional<TransformMsg>, OnTransform, OnError>;
 
     void init(std::weak_ptr<rclcpp::Node> node) {
       const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
@@ -110,11 +110,13 @@ public:
       auto &[frame_names, last_received_transform, on_transform, on_error] = sub;
       const auto &[target_frame, source_frame] = frame_names;
       try {
-        /// Lookup the latest transform in the buffer to see if we got something new in the buffer 
-        geometry_msgs::msg::TransformStamped tf_msg = buffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+        /// Lookup the latest transform in the buffer to see if we got something new in the buffer
+        geometry_msgs::msg::TransformStamped tf_msg =
+            buffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
         /// Now check if it is the same as the last one, in this case we return nothing since the
-        /// transform did not change. (Instead, we received on /tf some other, unrelated transforms.)
-        if (!last_received_transform || tf_msg != *last_received_transform)  {
+        /// transform did not change. (Instead, we received on /tf some other, unrelated
+        /// transforms.)
+        if (!last_received_transform || tf_msg != *last_received_transform) {
           last_received_transform = tf_msg;
           on_transform(tf_msg);
         }
@@ -144,7 +146,7 @@ public:
   class Node : public rclcpp::Node {
   public:
     using Base = rclcpp::Node;
-    using Base::Base; // Take over all base class constructors
+    using Base::Base;  // Take over all base class constructors
     using ParameterUpdateCB = std::function<void(const rclcpp::Parameter &)>;
 
     template <class ParameterT, class CallbackT>
@@ -212,8 +214,7 @@ public:
     /// Subscribe to a transform on tf between two frames
     template <class OnTransform, class OnError>
     auto add_tf_subscription(std::string target_frame, std::string source_frame,
-                             OnTransform &&on_transform,
-                             OnError &&on_error) {
+                             OnTransform &&on_transform, OnError &&on_error) {
       add_tf_listener_if_needed();
       tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
       return tf2_listener_;

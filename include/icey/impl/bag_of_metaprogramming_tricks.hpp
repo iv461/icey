@@ -37,13 +37,13 @@ struct is_optional<std::optional<T>> : std::true_type {};
 template <class T>
 constexpr bool is_optional_v = is_optional<T>::value;
 
-template <typename ... Args>
+template <typename... Args>
 struct is_variant : std::false_type {};
 
-template <typename ... Args>
+template <typename... Args>
 struct is_variant<std::variant<Args...>> : std::true_type {};
 
-template <typename ... Args>
+template <typename... Args>
 constexpr bool is_variant_v = is_variant<Args...>::value;
 
 template <class T>

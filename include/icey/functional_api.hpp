@@ -25,7 +25,7 @@ struct GlobalState {
   /// derives from rclrpp::Node
   operator ROSNodeWithDFG*() { return get_node(); }
 
-  auto create_new_node(const std::string& name) {    
+  auto create_new_node(const std::string& name) {
     nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));
     auto node = nodes.at(name);
     currently_initializing_node_ =
@@ -61,7 +61,8 @@ private:
       throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
     } else if (nodes.size() != 1) {
       throw std::runtime_error(
-          "More than one node was spawned, you need to use icey::node(<name>) instead of icey::node-> when accessing the "
+          "More than one node was spawned, you need to use icey::node(<name>) instead of "
+          "icey::node-> when accessing the "
           "node.");
     }
     //// Get the first node after having checked there is only one
@@ -120,7 +121,7 @@ auto create_service(const std::string& service_name,
 
 template <class ServiceT, class Parent>
 auto create_client(Parent parent, const std::string& service_name,
-                  const ROSAdapter::Duration &timeout,
+                   const ROSAdapter::Duration& timeout,
                    const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
   return g_state.get_context().create_client<ServiceT>(parent, service_name, timeout, qos);
 }
@@ -140,8 +141,8 @@ auto synchronize(Parents... parents) {
   return g_state.get_context().synchronize(parents...);
 }
 
-template<class Reference, class... Parents> 
-  auto sync_with_reference(Reference reference, Parents && ... parents) {
+template <class Reference, class... Parents>
+auto sync_with_reference(Reference reference, Parents&&... parents) {
   return g_state.get_context().sync_with_reference(reference, parents...);
 }
 
@@ -163,8 +164,8 @@ void spawn(int argc, char** argv, std::string node_name) {
   spawn(g_state.create_new_node(node_name));
 }
 
-/// Create a node from the staged global context. Clears the global context so that multiple nodes can
-/// be created later.
+/// Create a node from the staged global context. Clears the global context so that multiple nodes
+/// can be created later.
 auto create_node(int argc, char** argv, std::string node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn

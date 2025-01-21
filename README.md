@@ -44,7 +44,9 @@ This not only simplifies the code, but prevents dead-lock bugs.ICEY automaticall
 
 ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anything or use private implementation details.
 
-TODO more 
+# Key features: 
+
+- Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types
 
 ## Parameters 
 
