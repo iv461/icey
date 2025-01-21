@@ -247,7 +247,7 @@ constexpr auto hana_is_interpolatable(T) {
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
 struct TransformSubscriptionObservable
-    : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
+    : public InterpolateableObservable< geometry_msgs::msg::TransformStamped > {
 public:
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = InterpolateableObservable<Message>::MaybeValue;
@@ -255,14 +255,14 @@ public:
   TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame)
       : target_frame_(target_frame), source_frame_(source_frame) {
     this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
+    auto this_obs = this->observable_;
+    
     this->attach_ = [=](ROSAdapter::NodeHandle &node) {
-      auto this_obs = this->observable_;
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
-          [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-            this_obs->resolve(std::make_shared<Message>(
-                new_value));  /// TODO fix dynamic allocation on every call, instead allocate one
-                              /// object at the beginning in which we are going to write
+          [this, this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
+            *shared_value_ = new_value; /// TODO use the value in the variant
+            this_obs->resolve(shared_value_);  
           },
           [this_obs](const tf2::TransformException &ex) { this_obs->reject(ex.what()); });
     };
@@ -272,12 +272,10 @@ public:
     try {
       // Note that this call does not wait, the transform must already have arrived. This works
       // because get_at_time() is called by the synchronizer
-      auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
+      *shared_value_ = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
       /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in
       /// which we are going to write
-      return std::make_shared<Message>(
-          tf_msg);  // For the sake of consistency, messages are always returned as shared pointers.
-                    // Since lookupTransform gives us a value, we copy it over to a shared pointer.
+      return shared_value_;
     } catch (tf2::TransformException &e) {
       this_obs->reject(e.what());
       return {};
@@ -285,6 +283,7 @@ public:
   }
   std::string target_frame_;
   std::string source_frame_;
+  std::shared_ptr<Message> shared_value_{std::make_shared<Message>()};
   std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
 };
 
