@@ -247,7 +247,7 @@ constexpr auto hana_is_interpolatable(T) {
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
 struct TransformSubscriptionObservable
-    : public InterpolateableObservable< geometry_msgs::msg::TransformStamped > {
+    : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
 public:
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = InterpolateableObservable<Message>::MaybeValue;
@@ -256,13 +256,13 @@ public:
       : target_frame_(target_frame), source_frame_(source_frame) {
     this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
     auto this_obs = this->observable_;
-    
+
     this->attach_ = [=](ROSAdapter::NodeHandle &node) {
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
           [this, this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-            *shared_value_ = new_value; /// TODO use the value in the variant
-            this_obs->resolve(shared_value_);  
+            *shared_value_ = new_value;  /// TODO use the value in the variant
+            this_obs->resolve(shared_value_);
           },
           [this_obs](const tf2::TransformException &ex) { this_obs->reject(ex.what()); });
     };
@@ -462,25 +462,36 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
     };
   }
 
-  void call(Request request) const {
+  void call(Request request) {
     using Future = typename Client::SharedFutureWithRequest;
     auto output_obs = this->observable_;
     if (!client_->wait_for_service(timeout_)) {
-      output_obs->reject("SERVICE_UNAVAILABLE");
+      // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+      if (!rclcpp::ok()){
+        output_obs->reject("INTERRUPTED");
+      } else {
+        output_obs->reject("SERVICE_UNAVAILABLE");
+      }
       return;
     }
-    client_->async_send_request(request, [output_obs](Future response_futur) {
+    /// TODO this is captured here 
+    maybe_pending_request_ = 
+      client_->async_send_request(request, [this, output_obs](Future response_futur){
       if (response_futur.valid()) {
+        
         output_obs->resolve(response_futur.get().second);
       } else {
-        /// TODO the FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
-        /// I think since the async_send_request waits on the executor, we cannot interrupt it
-        /// except with Ctrl-C
-        if (!rclcpp::ok())
+        /// The FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
+        /// Since the async_send_request waits on the executor, we cannot only interrupt it with Ctrl-C
+        // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+        if (!rclcpp::ok()) {
           output_obs->reject("rclcpp::FutureReturnCode::INTERRUPTED");
-        else
+        } else {
           output_obs->reject("rclcpp::FutureReturnCode::TIMEOUT");
-        /// TODO Do the weird cleanup thing
+        }
+        /// Now do the weird cleanup thing that the API-user definitely neither does need to care
+        /// nor know about:
+        client_->remove_pending_request(maybe_pending_request_.value());
       }
     });
   }
@@ -488,6 +499,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
 protected:
   typename Client::SharedPtr client_;
   ROSAdapter::Duration timeout_;
+  std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request_;
 };
 
 /// Creates the data-flow graph and asserts that it is not edited one obtain() is called
@@ -604,7 +616,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_observable<ServiceClient<ServiceT>>(service_name, timeout);
-    parent->then([service_client](auto req) { service_client->call(req); });
+    parent->then([&] (auto req) { service_client->call(req); });
     return service_client;
   }
 

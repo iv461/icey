@@ -66,8 +66,8 @@ struct LoadParameters
 
 # Subscribers 
 
-TODO 
-A note to the message type: In ICEY, you always receive in the callback a regular C++ reference. 
+> [!NOTE]
+> A note to the message type: In ICEY, you always receive in the callback a regular C++ reference. 
 Under the hood, ICEY always receives to allow for zero-overhead message passing when using intra-process communication, it simply dereferences the shared pointer before passing it to the user callback. 
 
 
