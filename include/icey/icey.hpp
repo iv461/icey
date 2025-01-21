@@ -130,7 +130,7 @@ public:
 
   void publish_transform() {
     assert_we_have_context();
-    static_assert(std::is_same_v < obs_msg<Self>, geometry_msgs::msg::TransformStamped >, "The observable must have a Value of geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call publish_transform() on it.");
+    static_assert(std::is_same_v < obs_msg<Self>, geometry_msgs::msg::TransformStamped >, "The observable must hold a Value of type geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call publish_transform() on it.");
     return this->context.lock()->create_transform_publisher(this->shared_from_this());
   }
 
@@ -247,7 +247,7 @@ public:
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
           [this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-            this_obs->resolve(std::make_shared<Message>(new_value));
+          this_obs->resolve(std::make_shared<Message>(new_value)); /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in which we are going to write
           },
           [this_obs](const tf2::TransformException &ex) {
             this_obs->reject(ex.what());
@@ -260,6 +260,7 @@ public:
       // Note that this call does not wait, the transform must already have arrived. This works
       // because get_at_time() is called by the synchronizer
       auto tf_msg = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
+      /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in which we are going to write
       return std::make_shared<Message>(tf_msg); // For the sake of consistency, messages are always returned as shared pointers. Since lookupTransform gives us a value, we copy it over to a shared pointer.
     } catch (tf2::TransformException &e) {
       this_obs->reject(e.what());
@@ -481,11 +482,11 @@ struct Context : public std::enable_shared_from_this<Context> {
                 << std::endl;
       return;
     }
-    attach_graph_to_node(node);
+    attach_everything_to_node(node);
     was_initialized_ = true;
   }
 
-  void attach_graph_to_node(ROSAdapter::NodeHandle &node) {
+  void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
     /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
     /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
     /// parameters immediatelly have their values.

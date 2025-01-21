@@ -60,6 +60,7 @@ public:
     using OnTransform = std::function<void(const TransformMsg &)>;
     using OnError = std::function<void(const tf2::TransformException &)>;
 
+    /// TODO do not store strong reference to node since this is held by Node ! (circular dep)
     TFListener(NodePtr node, tf2_ros::Buffer &buffer) : node_(node), buffer_(buffer) { init(node); }
 
     /// Add notification for a single transform.

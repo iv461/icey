@@ -66,10 +66,10 @@ public:
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
 
-  virtual bool has_error() { return value_.has_error(); }
-  virtual bool has_value() const { return value_.has_value(); }
-  virtual const Value &value() const { return value_.value(); }
-  virtual const ErrorValue &error() const { return value_.error(); }
+  bool has_error() { return value_.has_error(); }
+  bool has_value() const { return value_.has_value(); }
+  const Value &value() const { return value_.value(); }
+  const ErrorValue &error() const { return value_.error(); }
   void _register_handler(Handler cb) {handlers_.emplace_back(std::move(cb)); }
   /// Set without notify
   /// TODO this will destroy first, see behttps://stackoverflow.com/a/78894559
@@ -97,22 +97,8 @@ public:
     this->_notify();
   }
 
-  /// @brief Returns the given function, but if called with a tuple, the tuple is first unpacked and passed as multiple arguments
-  /// TODO use hana::unpack
-  /// @param f an arbitrary callable
-  template <class F>
-  static auto apply_if_needed(F && f) {
-    return[f = std::move(f)](const auto &x){
-      using ReturnType = decltype(apply_if_tuple(f, x));
-      if constexpr (std::is_void_v<ReturnType>) {
-        apply_if_tuple(f, x);
-      } else {
-        return apply_if_tuple(f, x);
-      }
-    };
-  }
-
   /// @brief This function creates a handler for the promise and returns it as a function object. 
+  /// It' behvarior closely matches promises in JavaScript.
   /// It is basis for implementing the .then() function but it does three things differently: 
   /// First, it does not create the new promise, the output prmise. 
   /// Second, it only optionally registers this handler, it must not be registered for the graph mode.
@@ -134,21 +120,21 @@ public:
         } else if constexpr(is_result<ReturnType>) { /// support callbacks that at runtime may return value or error
           output->value_ = apply_if_tuple(f, x); /// TODO maybe do not overwrite whole variant but differentiate and set error or value
           output->_notify();
-        } else { /// Other return types are interpreted as value, i.e. resolving the promise. We also support returning std::optional
+        } else { /// Other return types are interpreted as values that resolve the promise. Here, we also support returning std::optional.
           ReturnType ret = apply_if_tuple(f, x);
           output->resolve(ret); 
         }
     };
-    auto handler = [input, output, f=std::move(call_depending_on_signature)]() {
+    auto handler = [input, output, call_and_resolve=std::move(call_depending_on_signature)]() {
       if constexpr (resolve) { /// If we handle values with .then()
         if(input->has_value()) { 
-          f(input->value());
+          call_and_resolve(input->value());
         } else if (input->has_error()) {
           output->reject(input->error()); /// Do not execute f, but propagate the error
         }
       } else { /// if we handle errors with .except()
         if(input->has_error())  { /// Then only resolve with the error if there is one
-          f(input->error());
+          call_and_resolve(input->error());
         } /// Else do nothing
       }
     };
