@@ -498,13 +498,8 @@ public:
 
 /// An observable for ROS parameters. Fires initially an event if a default_value set
 template <typename _Value>
-class ParameterObservable : public Observable<_Value> {
-public:
-  using Value = _Value;
-  using Base = Observable<_Value>;
-  using MaybeValue = typename Base::MaybeValue;
-
-  ParameterObservable(const std::string &parameter_name, const MaybeValue &default_value,
+struct ParameterObservable : public Observable<_Value> {
+  ParameterObservable(const std::string &parameter_name, const std::optional<_Value> &default_value,
                       const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                           rcl_interfaces::msg::ParameterDescriptor(),
                       bool ignore_override = false) {
@@ -515,7 +510,7 @@ public:
       node.add_parameter<_Value>(
           parameter_name, default_value,
           [this_obs](const rclcpp::Parameter &new_param) {
-            Value new_value = new_param.get_value<_Value>();
+            _Value new_value = new_param.get_value<_Value>();
             this_obs->resolve(new_value);
           },
           parameter_descriptor, ignore_override);
@@ -528,9 +523,8 @@ public:
       }
     };
   }
-
   /// Parameters are initialized always at the beginning, so we can provide a getter for the value so that they can be used conveniently in callbacks.
-  const Value &value() const {
+  const _Value &value() const {
     if (!this->observable_->has_value()) {
       throw std::runtime_error(
           "Parameter '" + this->name +
@@ -544,7 +538,6 @@ public:
 /// A subscriber observable, always stores a shared pointer to the message as it's value
 template <typename _Message>
 struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
-  using Value = typename _Message::SharedPtr;
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->name = topic_name;
@@ -582,7 +575,6 @@ constexpr auto hana_is_interpolatable(T) {
 /// lookupTransform, not an own buffer
 struct TransformSubscriptionObservable
     : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
-public:
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = InterpolateableObservable<Message>::MaybeValue;
 
@@ -622,7 +614,6 @@ public:
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
 /// the callback
 struct TimerObservable : public Observable<size_t> {
-  using Value = size_t;
   TimerObservable(const Duration &interval, bool use_wall_time, bool is_one_off_timer) {
     this->name = "timer";
     auto this_obs = this->observable_;
@@ -641,13 +632,8 @@ struct TimerObservable : public Observable<size_t> {
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
-class PublisherObservable : public Observable<_Value> {
-  friend class Context;
-
-public:
-  using Value = _Value;
-  using Base = Observable<_Value>;
-  using Message = remove_shared_ptr_t<Value>;
+struct PublisherObservable : public Observable<_Value> {
+  using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
   PublisherObservable(const std::string &topic_name,
@@ -665,7 +651,7 @@ public:
         /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
         /// Therefore, we have to copy the message for publishing.
         const auto &new_value = this_obs->value();  /// There can be no error
-        if constexpr (is_shared_ptr<Value>)
+        if constexpr (is_shared_ptr<_Value>)
           publisher->publish(*new_value);
         else
           publisher->publish(new_value);
@@ -786,6 +772,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
+
   ServiceClient(const std::string &service_name, const Duration &timeout)
       : timeout_(timeout) {
     this->name = service_name;
