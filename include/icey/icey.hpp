@@ -59,6 +59,19 @@ struct NodeInterfaces {
     node_parameters_(node->get_node_parameters_interface()),
     node_time_source_(node->get_node_time_source_interface())
     {}
+    /// This getter is needed for ParameterEventHandler. Other functions likely require this interface too.
+    auto get_node_base_interface() { return node_base_; }
+    auto get_node_graph_interface() { return node_graph_; }
+    auto get_node_clock_interface() { return node_clock_; }
+    auto get_node_logging_interface() { return node_logging_; }
+
+    auto get_node_timers_interface() { return node_timers_; }
+    auto get_node_topics_interface() { return node_topics_; }
+
+    auto get_node_services_interface() { return node_services_; }
+    auto get_node_parameters_interface() { return node_parameters_; }
+    auto get_node_time_source_interface() { return node_time_source_; }
+
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_;
@@ -82,7 +95,7 @@ struct NodeInterfaces {
     using OnTransform = std::function<void(const TransformMsg &)>;
     using OnError = std::function<void(const tf2::TransformException &)>;
     
-    explicit TFListener(std::weak_ptr<NodeInterfaces> node) : node_(node) {
+    explicit TFListener(const NodeInterfaces &node) : node_(node) {
       init();
     }
 
@@ -92,7 +105,7 @@ struct NodeInterfaces {
       subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
     }
 
-    std::weak_ptr<NodeInterfaces> node_;
+    NodeInterfaces node_;
     /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's what tf2_ros::Buffer does in addition to tf2::BufferImpl).
     std::shared_ptr<tf2_ros::Buffer> buffer_;
 
@@ -114,7 +127,7 @@ struct NodeInterfaces {
       init_tf_buffer();
       const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
       const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
-      auto topics_if = node_.lock()->node_topics_;
+      auto topics_if = node_.node_topics_;
       message_subscription_tf_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(topics_if,
           "/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
       message_subscription_tf_static_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(topics_if,
@@ -131,9 +144,9 @@ struct NodeInterfaces {
       /// https://answers.ros.org/question/372608/?sort=votes
       /// https://github.com/ros-navigation/navigation2/issues/1182
       /// https://github.com/ros2/geometry2/issues/446
-      buffer_ = std::make_shared<tf2_ros::Buffer>(node_.lock()->node_clock_->get_clock());
+      buffer_ = std::make_shared<tf2_ros::Buffer>(node_.node_clock_->get_clock());
       auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-          node_.lock()->node_base_, node_.lock()->node_timers_);
+          node_.node_base_, node_.node_timers_);
       buffer_->setCreateTimerInterface(timer_interface);
     }
 
@@ -146,7 +159,7 @@ struct NodeInterfaces {
         } catch (const tf2::TransformException &ex) {
           // /\todo Use error reporting
           std::string temp = ex.what();
-          RCLCPP_ERROR(node_.lock()->node_logging_->get_logger(),
+          RCLCPP_ERROR(node_.node_logging_->get_logger(),
                        "Failure to set received transform from %s to %s with error: %s\n",
                        msg_in.transforms[i].child_frame_id.c_str(),
                        msg_in.transforms[i].header.frame_id.c_str(), temp.c_str());
@@ -218,9 +231,9 @@ struct NodeInterfaces {
       std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     };
     
-    explicit NodeBookkeeping(std::weak_ptr<NodeInterfaces> node) : node_(node) {}
+    explicit NodeBookkeeping(const NodeInterfaces &node) : node_(node) {}
 
-    std::weak_ptr<NodeInterfaces> node_;
+    NodeInterfaces node_;
     IceyBook book_;
     /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
     /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have to apply it here as well. 
@@ -245,9 +258,9 @@ struct NodeInterfaces {
       rclcpp::ParameterValue v =
           default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
           /// TODO The rclcpp::Node class does a 
-      auto param = node_.lock()->node_parameters_->declare_parameter(name, v, parameter_descriptor,
+      auto param = node_.node_parameters_->declare_parameter(name, v, parameter_descriptor,
                                                                 ignore_override);
-      auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(this);
+      auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(node_);
       auto cb_handle = param_subscriber->add_parameter_callback(name, std::move(update_callback));
       book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
       return param;
@@ -257,12 +270,12 @@ struct NodeInterfaces {
     void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                           const rclcpp::SubscriptionOptions &options) {
 /// TODO extend_name_with_sub_namespace(topic_name, this->get_sub_namespace())
-      book_.subscribers_[topic] = rclcpp::create_subscription<Msg>(node_.lock()->node_topics_, topic, qos, cb, options);
+      book_.subscribers_[topic] = rclcpp::create_subscription<Msg>(node_.node_topics_, topic, qos, cb, options);
     }
 
     template <class Msg>
     auto add_publisher(const std::string &topic, const rclcpp::QoS &qos) {
-      auto publisher = rclcpp::create_publisher<Msg>(node_.lock()->node_topics_, topic, qos);
+      auto publisher = rclcpp::create_publisher<Msg>(node_.node_topics_, topic, qos);
       book_.publishers_.emplace(topic, publisher);
       return publisher;
     }
@@ -272,7 +285,7 @@ struct NodeInterfaces {
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
       /// TODO no normal timer in humble, also no autostart flag was present in Humble
       rclcpp::TimerBase::SharedPtr timer = rclcpp::create_wall_timer(time_interval, std::move(callback),
-                group, node_.lock()->node_base_.get(), node_.lock()->node_timers_.get());
+                group, node_.node_base_.get(), node_.node_timers_.get());
       book_.timers_.push_back(timer);
       return timer;
     }
@@ -282,8 +295,8 @@ struct NodeInterfaces {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
       auto service = rclcpp::create_service<ServiceT>(
-        node_.lock()->node_base_,
-          node_.lock()->node_services_,
+        node_.node_base_,
+          node_.node_services_,
           service_name, std::move(callback));  /// TODO In humble, we cannot pass QoS, only in Jazzy
                                                /// (the API wasn't ready yet, it needs rmw_*-stuff)
       book_.services_.emplace(service_name, service);
@@ -295,10 +308,11 @@ struct NodeInterfaces {
         rclcpp::CallbackGroup::SharedPtr group = nullptr) {
        /// TODO extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
       auto client = rclcpp::create_client<Service>(
-          node_.lock()->node_base_,
-          node_.lock()->node_graph_,
-          node_.lock()->node_services_,
+          node_.node_base_,
+          node_.node_graph_,
+          node_.node_services_,
           service_name, 
+          rclcpp::ServicesQoS().get_rmw_qos_profile(), /// TODO get_rmw_qos_profile only needed for Humble
           group);
       book_.services_clients_.emplace(service_name, client);
       return client;
@@ -315,7 +329,7 @@ struct NodeInterfaces {
 
     auto add_tf_broadcaster_if_needed() {
       if (!book_.tf_broadcaster_)
-        book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
+        book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_.node_topics_);
       return book_.tf_broadcaster_;
     }
 
@@ -653,9 +667,9 @@ public:
         /// Therefore, we have to copy the message for publishing.
         const auto &new_value = this_obs->value();  /// There can be no error
         if constexpr (is_shared_ptr<Value>)
-          publisher(*new_value);
+          publisher->publish(*new_value);
         else
-          publisher(new_value);
+          publisher->publish(new_value);
       });
     };
   }
@@ -1100,25 +1114,35 @@ struct Context : public std::enable_shared_from_this<Context> {
   std::function<void()> on_node_destruction_cb_;
 };
 
+struct ICEYNodeBase  {
+  /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It
+  /// initializes everything in a pre-defined order.
+  virtual void icey_initialize() = 0;
+  /// Returns the context that is needed to create ICEY observables
+  Context &icey() { return *this->icey_context_; }
+  std::shared_ptr<NodeBookkeeping> book_;
+  std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
+};
+
 /// The ROS node, additionally owning the context that contains the observables.
 /// The template argument is used to support lifecycle_nodes
 template<class NodeType>
-class NodeWithIceyContext : public NodeType, public NodeBookkeeping {
+class NodeWithIceyContext : public NodeType, public ICEYNodeBase {
 public:
   using Base = NodeType;
   using Base::Base;  // Take over all base class constructors
 
-  /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It
-  /// initializes everything in a pre-defined order.
-  void icey_initialize() { icey().initialize(*this); }
-  /// Returns the context that is needed to create ICEY observables
-  Context &icey() { return *this->icey_context_; }
-  std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
+  void icey_initialize() override { 
+      NodeInterfaces node_interfaces(this->shared_from_this());
+      this->book_ = std::make_shared<NodeBookkeeping>(node_interfaces);
+      icey().initialize(*this->book_);
+    }
+
 };
 
 /// Blocking spawn of an existing node.
-template<class NodeType>
-void spawn(std::shared_ptr<NodeWithIceyContext<NodeType>> node) {
+template<class Node>
+void spawn(Node node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
@@ -1126,10 +1150,13 @@ void spawn(std::shared_ptr<NodeWithIceyContext<NodeType>> node) {
   rclcpp::shutdown();
 }
 
-template<class NodeType>
-void spin_nodes(const std::vector< std::shared_ptr<NodeWithIceyContext<NodeType>> > &nodes) {
+/// Public API aliases:
+using Node = NodeWithIceyContext<rclcpp::Node>;
+using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
+
+void spin_nodes(const std::vector< std::shared_ptr< Node > > &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
-  /// This is how nodes should be composed according to ROS maintainer wjwwood:
+  /// This is how nodes should be composed according to ROS guru wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
   for (const auto &node : nodes) executor.add_node(node);
@@ -1137,9 +1164,7 @@ void spin_nodes(const std::vector< std::shared_ptr<NodeWithIceyContext<NodeType>
   rclcpp::shutdown();
 }
 
-/// Public API aliases:
-using Node = NodeWithIceyContext<rclcpp::Node>;
-using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
+
 template <class T>
 using Parameter = ParameterObservable<T>;
 

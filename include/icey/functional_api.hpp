@@ -1,4 +1,4 @@
-/// Provides purely functional API to ROS.
+/// Provides purely functional API to ROS. Currently only regular nodes, no lifecycle nodes (they are only supported via the class-based API)
 #pragma once
 
 namespace icey {
@@ -10,7 +10,7 @@ namespace icey {
 struct GlobalState {
   /// Access an already spawned node by it's name, icey::node(<name>). This method is usefull when
   /// multiple nodes are spawned in the same process.
-  std::shared_ptr<NodeWithIceyContext> operator()(const std::string& node_name) {
+  std::shared_ptr<Node> operator()(const std::string& node_name) {
     if (!nodes.count(node_name)) {
       throw std::runtime_error(
           "There is no node called '" + node_name +
@@ -21,12 +21,12 @@ struct GlobalState {
 
   /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
   Node* operator->() { return get_node(); }
-  /// Allow using this node in a context where a rclrpp::Node is needed, mind that NodeWithIceyContext
+  /// Allow using this node in a context where a rclrpp::Node is needed, mind that Node
   /// derives from rclrpp::Node
-  operator NodeWithIceyContext*() { return get_node(); }
+  operator Node*() { return get_node(); }
 
   auto create_new_node(const std::string& name) {
-    nodes.emplace(name, std::make_shared<NodeWithIceyContext>(name));
+    nodes.emplace(name, std::make_shared<Node>(name));
     auto node = nodes.at(name);
     currently_initializing_node_ =
         node;  /// Assign so that adding new vertices in icey_initialize() uses the existing context
@@ -56,7 +56,7 @@ struct GlobalState {
 
 private:
   // Access the node, in case only one was spawned
-  NodeWithIceyContext* get_node() {
+  Node* get_node() {
     if (nodes.empty()) {
       throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
     } else if (nodes.size() != 1) {
@@ -69,12 +69,12 @@ private:
     return nodes.begin()->second.get();
   }
 
-  std::unordered_map<std::string, std::shared_ptr<NodeWithIceyContext>> nodes;
+  std::unordered_map<std::string, std::shared_ptr<Node>> nodes;
   /// The context that saves all the observables before the node is created, i.e. the observables
   /// are staged
   std::shared_ptr<Context> staged_context{
       std::make_shared<Context>()};  /// Must be a shared_ptr because of observables reference it
-  std::shared_ptr<NodeWithIceyContext>
+  std::shared_ptr<Node>
       currently_initializing_node_;  /// The node that is currently in the initialization phase
                                      /// after the ROS-parameters have been obtained but adding
                                      /// stuff to the graph is still possible.
@@ -108,7 +108,7 @@ auto create_transform_subscription(const std::string& target_frame,
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-auto create_timer(const ROSAdapter::Duration& interval, bool use_wall_time = false,
+auto create_timer(const Duration& interval, bool use_wall_time = false,
                   bool is_one_off_timer = false) {
   return g_state.get_context().create_timer(interval, use_wall_time, is_one_off_timer);
 }
@@ -121,7 +121,7 @@ auto create_service(const std::string& service_name,
 
 template <class ServiceT, class Parent>
 auto create_client(Parent parent, const std::string& service_name,
-                   const ROSAdapter::Duration& timeout,
+                   const Duration& timeout,
                    const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
   return g_state.get_context().create_client<ServiceT>(parent, service_name, timeout, qos);
 }
