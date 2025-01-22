@@ -41,10 +41,37 @@ using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
 
-/// There is a NodeInterfaces class that abstracts Nodes and Lifecycly-nodes: https://github.com/ros2/rclcpp/pull/2041
-/// but it's not coming for Humble: 
-/// and also it is not yet supported by geometry2/TF: https://github.com/ros2/geometry2/issues/698
-/// So we will have to use the template parameter "Node" approach.
+/// A helper to abstract regular rclrpp::Nodes and LifecycleNodes. 
+/// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
+/// but it's not coming for Humble. So I did something similar.
+/// Mind also that NodeInterfaces is not yet supported by geometry2/TF: https://github.com/ros2/geometry2/issues/698
+/// TODO pull them all in via multiple inheritance ?
+struct NodeInterfaces {
+  using Node = _Node;
+  template<class _Node>
+  explicit NodeInterfaces(std::shared_ptr<_Node> node) :
+    node_base_(node->get_node_base_interface()),
+    node_graph_(node->get_node_graph_interface()),
+    node_clock_(node->get_node_clock_interface()),
+    node_logging_(node->get_node_logging_interface()),
+    node_timers_(node->get_node_timers_interface()),
+    node_topics_(node->get_node_topics_interface()),
+    node_services_(node->get_node_services_interface()),
+    node_parameters_(node->get_node_parameters_interface()),
+    node_time_source_(node->get_node_time_source_interface())
+    {}
+  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_;
+  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
+  rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_;
+  rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_;
+  rclcpp::node_interfaces::NodeTimersInterface::SharedPtr node_timers_;
+  rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr node_topics_;
+  rclcpp::node_interfaces::NodeServicesInterface::SharedPtr node_services_;
+  rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters_;
+  rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
+  //rclcpp::node_interfaces::NodeTypeDescriptionsInterface::SharedPtr node_type_descriptions_;
+  //rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_;
+};
 
   /// A modified listener that can notify when a single transform changes.
   /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate node.
@@ -54,13 +81,12 @@ using Duration = Clock::duration;
   /// in the heapstack. But without knowing the path in the TF-tree that connects our transforms
   /// that we are looking for, we cannot do bettter. Update: We could obtain the path with
   /// tf2::BufferCore::_chainAsVector however, I need to look into it
-  template<class Node>
   struct TFListener {
     using TransformMsg = geometry_msgs::msg::TransformStamped;
     using OnTransform = std::function<void(const TransformMsg &)>;
     using OnError = std::function<void(const tf2::TransformException &)>;
     
-    TFListener(std::weak_ptr<Node> node, std::shared_ptr<tf2_ros::Buffer> &buffer)
+    TFListener(std::weak_ptr<NodeInterfaces> node, std::shared_ptr<tf2_ros::Buffer> &buffer)
         : node_(node), buffer_(buffer) {
       init(node);
     }
@@ -72,7 +98,7 @@ using Duration = Clock::duration;
                                           on_transform, on_error);
     }
 
-    std::weak_ptr<Node> node_;
+    std::weak_ptr<NodeInterfaces> node_;
     /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's what tf2_ros::Buffer does in addition to tf2::BufferImpl).
     std::shared_ptr<tf2_ros::Buffer> buffer_;
 
@@ -86,9 +112,9 @@ using Duration = Clock::duration;
     void init(std::weak_ptr<rclcpp::Node> node) {
       const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
       const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
-      message_subscription_tf_ = node.lock()->create_subscription<tf2_msgs::msg::TFMessage>(
+      message_subscription_tf_ = node.lock()->node_topics_->create_subscription<tf2_msgs::msg::TFMessage>(
           "/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
-      message_subscription_tf_static_ = node.lock()->create_subscription<tf2_msgs::msg::TFMessage>(
+      message_subscription_tf_static_ = node.lock()->node_topics_->create_subscription<tf2_msgs::msg::TFMessage>(
           "/tf_static", static_qos, [this](TransformsMsg msg) { on_tf_message(msg, true); });
     }
 
@@ -97,11 +123,11 @@ using Duration = Clock::duration;
       std::string authority = "Authority undetectable";
       for (size_t i = 0u; i < msg_in.transforms.size(); i++) {
         try {
-          buffer_.setTransform(msg_in.transforms[i], authority, is_static);
+          buffer_->setTransform(msg_in.transforms[i], authority, is_static);
         } catch (const tf2::TransformException &ex) {
           // /\todo Use error reporting
           std::string temp = ex.what();
-          RCLCPP_ERROR(node_.lock()->get_logger(),
+          RCLCPP_ERROR(node_.lock()->node_logging_->get_logger(),
                        "Failure to set received transform from %s to %s with error: %s\n",
                        msg_in.transforms[i].child_frame_id.c_str(),
                        msg_in.transforms[i].header.frame_id.c_str(), temp.c_str());
@@ -118,7 +144,7 @@ using Duration = Clock::duration;
       try {
         /// Lookup the latest transform in the buffer to see if we got something new in the buffer
         geometry_msgs::msg::TransformStamped tf_msg =
-            buffer_.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+            buffer_->lookupTransform(target_frame, source_frame, tf2::TimePointZero);
         /// Now check if it is the same as the last one, in this case we return nothing since the
         /// transform did not change. (Instead, we received on /tf some other, unrelated
         /// transforms.)
@@ -148,13 +174,35 @@ using Duration = Clock::duration;
     std::vector<TFSubscriptionInfo> subscribed_transforms_;
   };
 
-  /// A level 1 API wrap, implementing the lower level boilerplate-code
-  template<class NodeType>
-  class NodeLevel1Wrap : public NodeType {
+  /// A level 1 API wrap, implementing the lower level boilerplate-code and the bookkeeping 
+  /// TODO get rid of this maybe, pull direcly in Obs
+  class NodeLevel1Wrap {
   public:
-    using Base = NodeType;
-    using Base::Base;  // Take over all base class constructors
-    using ParameterUpdateCB = std::function<void(const rclcpp::Parameter &)>;
+    /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
+    struct IceyBook {
+      std::map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
+                                      std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
+          parameters_;
+
+      /// TODO we don't need any, there is a *Base actually
+      std::map<std::string, std::any> subscribers_;
+      std::map<std::string, std::shared_ptr<rclcpp::PublisherBase>> publishers_;
+      std::map<std::string, std::any> services_;
+      std::map<std::string, std::any> services_clients_;
+      std::vector<rclcpp::TimerBase::SharedPtr> timers_;
+      std::vector<rclcpp::CallbackGroup::SharedPtr> callback_groups_;
+
+      /// TF Support
+      std::shared_ptr<TFListener> tf2_listener_;
+      /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
+      /// hood of tf2_ros::TransformBroadcaster
+      std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+    };
+    
+    explicit NodeLevel1Wrap(std::weak_ptr<NodeInterfaces> node) node_(node) {}
+
+    std::weak_ptr<NodeInterfaces> node_;
+    IceyBook book_;
 
     template <class ParameterT, class CallbackT>
     auto declare_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
@@ -164,58 +212,53 @@ using Duration = Clock::duration;
                            bool ignore_override = false) {
       rclcpp::ParameterValue v =
           default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
-      auto param = static_cast<Base &>(*this).declare_parameter(name, v, parameter_descriptor,
+      auto param = node_.lock()->node_parameters_.declare_parameter(name, v, parameter_descriptor,
                                                                 ignore_override);
       auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(this);
       auto cb_handle = param_subscriber->add_parameter_callback(name, std::move(update_callback));
-      my_parameters_stuff_.emplace(name, std::make_pair(param_subscriber, cb_handle));
+      book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
       return param;
     }
 
     template <class Msg, class F>
     void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                           const rclcpp::SubscriptionOptions &options) {
-      my_subscribers_[topic] = create_subscription<Msg>(topic, qos, cb, options);
+                            /// TODO not overwrite silently
+      book_.subscribers_[topic] = node_.lock()->node_topics_->create_subscription<Msg>(topic, qos, cb, options);
     }
 
     template <class Msg>
-    auto add_publication(const std::string &topic, const QoS &qos = DefaultQoS(),
-                         std::optional<double> max_frequency = std::nullopt) {
-      auto publisher = create_publisher<Msg>(topic, qos);
-      my_publishers_.emplace(topic, publisher);
-
-      auto const publish = [this, publisher, topic, max_frequency](const Msg &msg) {
-        publisher->publish(msg);
-      };
-      return publish;
+    auto add_publisher(const std::string &topic, const QoS &qos) {
+      auto publisher = node_.lock()->node_topics_->create_publisher<Msg>(topic, qos);
+      book_.publishers_.emplace(topic, publisher);
+      return publisher;
     }
 
     template <class CallbackT>
     auto add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&cb) {
       rclcpp::TimerBase::SharedPtr timer =
           use_wall_time
-              ? create_wall_timer(time_interval, std::move(cb))
-              : create_wall_timer(time_interval, std::move(cb));  /// TODO no normal timer in humble
-
-      my_timers_.push_back(timer);
+              ? node_.lock()->node_timers_->create_wall_timer(time_interval, std::move(cb))
+              : node_.lock()->node_timers_->create_wall_timer(time_interval, std::move(cb));  /// TODO no normal timer in humble
+      book_.timers_.push_back(timer);
       return timer;
     }
 
     template <class ServiceT, class CallbackT>
     void add_service(const std::string &service_name, CallbackT &&callback,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-      auto service = this->create_service<ServiceT>(
+      auto service = node_.lock()->node_services_->create_service<ServiceT>(
           service_name, std::move(callback));  /// TODO In humble, we cannot pass QoS, only in Jazzy
                                                /// (the API wasn't ready yet, it needs rmw_*-stuff)
-      my_services_.emplace(service_name, service);
+      book_.services_.emplace(service_name, service);
     }
 
     /// TODO cb groups !!
     template <class Service>
     auto add_client(const std::string &service_name) {
-      auto client = this->create_client<Service>(service_name);
-      my_services_clients_.emplace(service_name, client);
-      return client;
+      auto client = node_.lock()->node_services_->create_client<Service>(service_name);
+      book_.services_clients_.emplace(service_name, client);
+      return book_.client;
     }
 
     /// Subscribe to a transform on tf between two frames
@@ -223,28 +266,23 @@ using Duration = Clock::duration;
     auto add_tf_subscription(std::string target_frame, std::string source_frame,
                              OnTransform &&on_transform, OnError &&on_error) {
       add_tf_listener_if_needed();
-      tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
-      return tf2_listener_;
+      book_.tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
+      return book_.tf2_listener_;
     }
 
     auto add_tf_broadcaster_if_needed() {
-      if (!tf_broadcaster_)
-        tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
-      const auto publish = [this](const geometry_msgs::msg::TransformStamped &msg) {
-        tf_broadcaster_->sendTransform(msg);
-      };
-      return publish;
+      if (!book_.tf_broadcaster_)
+        book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
+      return book_.tf_broadcaster_;
     }
-
-    std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;  /// Public for using other functions
 
   private:
     void add_tf_listener_if_needed() {
-      if (tf2_listener_)  /// We need only one subscription on /tf, but can have multiple transforms
+      if (book_.tf2_listener_)  /// We need only one subscription on /tf, but can have multiple transforms
                           /// on which we listen
         return;
       init_tf_buffer();
-      tf2_listener_ = std::make_shared<TFListener>(shared_from_this(), tf2_buffer_);
+      book_.tf2_listener_ = std::make_shared<TFListener>(node_, tf2_buffer_);
     }
 
     void init_tf_buffer() {
@@ -257,30 +295,11 @@ using Duration = Clock::duration;
       /// https://answers.ros.org/question/372608/?sort=votes
       /// https://github.com/ros-navigation/navigation2/issues/1182
       /// https://github.com/ros2/geometry2/issues/446
-      tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+      book_.tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(node_.lock()->node_clock_->get_clock());
       auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-          this->get_node_base_interface(), this->get_node_timers_interface());
-      tf2_buffer_->setCreateTimerInterface(timer_interface);
+          node_.lock()->node_base_, node_.lock()->node_timers_);
+      book_.tf2_buffer_->setCreateTimerInterface(timer_interface);
     }
-
-    /// Do not force the user to do the bookkeeping itself: Do it instead automatically
-    std::map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
-                                    std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
-        my_parameters_stuff_;
-
-    std::vector<rclcpp::TimerBase::SharedPtr> my_timers_;
-    std::map<std::string, std::any> my_subscribers_;
-    std::map<std::string, std::shared_ptr<rclcpp::PublisherBase>> my_publishers_;
-    std::map<std::string, std::any> my_services_;
-    std::map<std::string, std::any> my_services_clients_;
-
-    std::vector<rclcpp::CallbackGroup::SharedPtr> my_callback_groups_;
-
-    /// TF stuff
-    std::shared_ptr<TFListener> tf2_listener_;
-    /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
-    /// hood of tf2_ros::TransformBroadcaster
-    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   };
 
 class Context;
@@ -690,10 +709,10 @@ public:
   TransformPublisherObservable() {
     this->name = "tf_pub";
     this->attach_ = [this_obs = this->observable_](ROSAdapter::NodeHandle &node) {
-      auto publish = node.add_tf_broadcaster_if_needed();
-      this_obs->_register_handler([this_obs, publish]() {
+      auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
+      this_obs->_register_handler([this_obs, tf_broadcaster]() {
         const auto &new_value = this_obs->value();  /// There can be no error
-        publish(new_value);
+        tf_broadcaster.sendTransform(new_value);
       });
     };
   }
