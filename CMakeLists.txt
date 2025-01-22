@@ -18,8 +18,8 @@ include_directories(
 # Add examples 
 
 #ament_auto_add_executable(listener_example examples/listener.cpp)
-#ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
-#ament_auto_add_executable(tf_broadcaster_example examples/tf_broadcaster.cpp)
+ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
+ament_auto_add_executable(tf_broadcaster_example examples/tf_broadcaster.cpp)
 #ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
 #ament_auto_add_executable(multi_node_example examples/multi_node.cpp)
 #ament_auto_add_executable(parameter_based_initialization_example examples/parameter_based_initialization.cpp)
@@ -33,7 +33,7 @@ ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp
 
 ament_auto_add_executable(service_client_class_api_example examples/service_client_class_api.cpp)
 
-#ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
+ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
 #ament_auto_add_executable(piping_example examples/piping.cpp)
 #ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
 

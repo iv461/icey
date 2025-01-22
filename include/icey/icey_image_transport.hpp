@@ -16,16 +16,21 @@
 
 namespace icey {
 
+/// Image_transport does not yet support lifecycle_nodes: 
+void assert_is_not_lifecycle_node(const NodeBookkeeping &book) {
+    if(book.node_.maybe_regular_node == nullptr)
+        throw std::runtime_error("You tried to use image_transport with a lifecycle node, unfortunately ROS Humble does not currently support image_transport with lifecycle nodes.");
+}
+
 /// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport for API docs.
 /// and https://github.com/ros-perception/image_common/blob/humble/image_transport
 /// Note that we do not create a image_transport::ImageTransport object to avoid circular
 /// dependency: https://github.com/ros-perception/image_common/issues/311
-
 // An observable representing a camera image subscriber.
 struct ImageTransportSubscriber : public Observable<sensor_msgs::msg::Image::ConstSharedPtr,
                                                     image_transport::TransportLoadException> {
   ImageTransportSubscriber(const std::string &base_topic_name, const std::string &transport,
-                           const ROSAdapter::QoS qos, const rclcpp::SubscriptionOptions &options) {
+                           const rclcpp::QoS qos, const rclcpp::SubscriptionOptions &options) {
     this->name = base_topic_name;
     auto this_obs = this->observable_;
     const auto cb = [this_obs](sensor_msgs::msg::Image::ConstSharedPtr image) {
@@ -33,9 +38,10 @@ struct ImageTransportSubscriber : public Observable<sensor_msgs::msg::Image::Con
     };
     /// TODO do not capture this, save sub somewhere else
     this->attach_ = [this, this_obs, base_topic_name, transport, qos, cb,
-                     options](ROSAdapter::NodeHandle &node) {
+                     options](NodeBookkeeping &node) {
+                        assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
       try {
-        subscriber_ = image_transport::create_subscription(&node, base_topic_name, cb, transport,
+        subscriber_ = image_transport::create_subscription(node.node_.maybe_regular_node, base_topic_name, cb, transport,
                                                            qos.get_rmw_qos_profile(), options);
       } catch (const image_transport::TransportLoadException &exception) {
         this_obs->reject(exception);
@@ -47,13 +53,14 @@ struct ImageTransportSubscriber : public Observable<sensor_msgs::msg::Image::Con
 };
 
 struct ImageTransportPublisher : public Observable<sensor_msgs::msg::Image::SharedPtr> {
-  ImageTransportPublisher(const std::string &base_topic_name, const ROSAdapter::QoS qos,
+  ImageTransportPublisher(const std::string &base_topic_name, const rclcpp::QoS qos,
                           const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
     this->name = base_topic_name;
     auto this_obs = this->observable_;
-    this->attach_ = [this_obs, base_topic_name, qos, options](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [this_obs, base_topic_name, qos, options](NodeBookkeeping &node) {
+      assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
       image_transport::Publisher publisher = image_transport::create_publisher(
-          &node, base_topic_name, qos.get_rmw_qos_profile());  /// TODO Humble did accept options
+          node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());  /// TODO Humble did accept options
       this_obs->_register_handler([this_obs, publisher]() {
         const auto &image_msg = this_obs->value();  /// There can be no error
         publisher.publish(image_msg);
@@ -68,7 +75,7 @@ struct CameraSubscriber
                                    sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
                         image_transport::TransportLoadException> {
   CameraSubscriber(const std::string &base_topic_name, const std::string &transport,
-                   const ROSAdapter::QoS qos) {
+                   const rclcpp::QoS qos) {
     this->name = base_topic_name;
     auto this_obs = this->observable_;
     const auto cb = [this_obs](sensor_msgs::msg::Image::ConstSharedPtr image,
@@ -77,10 +84,11 @@ struct CameraSubscriber
     };
     /// TODO do not capture this, save sub somewhere else
     this->attach_ = [this, this_obs, base_topic_name, transport, qos,
-                     cb](ROSAdapter::NodeHandle &node) {
+                     cb](NodeBookkeeping &node) {
+                         assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
       try {
         subscriber_ = image_transport::create_camera_subscription(
-            &node, base_topic_name, cb, transport, qos.get_rmw_qos_profile());
+            node.node_.maybe_regular_node, base_topic_name, cb, transport, qos.get_rmw_qos_profile());
       } catch (const image_transport::TransportLoadException &exception) {
         this_obs->reject(exception);
       }
@@ -94,13 +102,14 @@ struct CameraSubscriber
 struct CameraPublisher
     : public Observable<
           std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>> {
-  CameraPublisher(const std::string &base_topic_name, const ROSAdapter::QoS qos) {
+  CameraPublisher(const std::string &base_topic_name, const rclcpp::QoS qos) {
     this->name = base_topic_name;
 
     auto this_obs = this->observable_;
-    this->attach_ = [this_obs, base_topic_name, qos](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [this_obs, base_topic_name, qos](NodeBookkeeping &node) {
+        assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
       image_transport::CameraPublisher publisher = image_transport::create_camera_publisher(
-          &node, base_topic_name, qos.get_rmw_qos_profile());
+          node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
       this_obs->_register_handler([this_obs, publisher]() {
         const auto &new_value = this_obs->value();  /// There can be no error
         const auto &[image_msg, camera_info_msg] = new_value;

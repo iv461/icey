@@ -57,7 +57,12 @@ struct NodeInterfaces {
     node_services_(node->get_node_services_interface()),
     node_parameters_(node->get_node_parameters_interface()),
     node_time_source_(node->get_node_time_source_interface())
-    {}
+    {
+      if constexpr(std::is_same_v<_Node, rclcpp_lifecycle::LifecycleNode>)
+        maybe_lifecycle_node = node;
+      else 
+        maybe_regular_node = node;
+    }
     /// This getter is needed for ParameterEventHandler. Other functions likely require this interface too.
     auto get_node_base_interface() { return node_base_; }
     auto get_node_graph_interface() { return node_graph_; }
@@ -79,6 +84,10 @@ struct NodeInterfaces {
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
   //rclcpp::node_interfaces::NodeTypeDescriptionsInterface::SharedPtr node_type_descriptions_;
   //rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_;
+  /// This is set to either of the two, depending on which node we got.
+  /// It has to be a raw pointer since this nodeInterface is needed during node construction
+  rclcpp::Node *maybe_regular_node{nullptr};
+  rclcpp_lifecycle::LifecycleNode *maybe_lifecycle_node{nullptr};
 };
 
   /// A transform listener that allows to subscribe on a single transform between two coordinate systems.
@@ -398,8 +407,6 @@ template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : public ObservableTag,
                    public NodeAttachable,
                    public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
-  friend class Context;  /// To prevent misuse, only the Context is allowed to call set or
-                         /// register_on_change_cb callbacks
 public:
   using Impl = impl::Observable<_Value, _ErrorValue>;
   using Value = typename Impl::Value;
@@ -514,10 +521,10 @@ public:
           parameter_descriptor, ignore_override);
       /// Set default value if there is one
       if (default_value) {
-        Value initial_value;
+        //Value initial_value;
         /// TODO I think I added this to crash in case no default is there
         //node.get_parameter_or(parameter_name, initial_value, *default_value);
-        this_obs->resolve(initial_value);
+        this_obs->resolve(*default_value);
       }
     };
   }
@@ -536,20 +543,16 @@ public:
 
 /// A subscriber observable, always stores a shared pointer to the message as it's value
 template <typename _Message>
-class SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
-  friend class Context;
-
-public:
+struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
   using Value = typename _Message::SharedPtr;
-  using Message = _Message;
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->name = topic_name;
     auto this_obs = this->observable_;
     this->attach_ = [=](NodeBookkeeping &node) {
-      node.add_subscription<Value>(
+      node.add_subscription<_Message>(
           topic_name,
-          [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); }, qos,
+          [this_obs](typename _Message::SharedPtr new_value) { this_obs->resolve(new_value); }, qos,
           options);
     };
   }
@@ -690,8 +693,8 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 
 /// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
 /// TODO adapt queue size automatically if we detect very different frequencies so that
-/// synchronization still works. I would guess it works if the lowest frequency topic has a
-/// frequency of at least 1/queue_size, if the highest frequency topic has a frequency of one.
+/// synchronization still works. I would guess currently it works only if the lowest frequency topic has a
+/// frequency of at least 1/queue_size, given the highest frequency topic has a frequency of one.
 template <typename... Messages>
 class SynchronizerObservable
     : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string> {
