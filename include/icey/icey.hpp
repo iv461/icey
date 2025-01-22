@@ -76,7 +76,7 @@ struct NodeInterfaces {
   /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate node.
   /// The implementation currently checks for relevant transforms (i.e. ones we subscribed) every time a new message is receved on /tf.
   /// TODO: To speed up the code a bit (not sure if significanlty), we could obtain the path in the TF tree between the source- and target-frame using 
-  /// tf2::BufferCore::_chainAsVector and then only react if any transform was received that is part of the path.
+  /// tf2::BufferCore::_chainAsVector and then only react if any transform was received that is part of this path.
   struct TFListener {
     using TransformMsg = geometry_msgs::msg::TransformStamped;
     using OnTransform = std::function<void(const TransformMsg &)>;
@@ -218,10 +218,23 @@ struct NodeInterfaces {
       std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     };
     
-    explicit NodeBookkeeping(std::weak_ptr<NodeInterfaces> node) node_(node) {}
+    explicit NodeBookkeeping(std::weak_ptr<NodeInterfaces> node) : node_(node) {}
 
     std::weak_ptr<NodeInterfaces> node_;
     IceyBook book_;
+    /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
+    /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have to apply it here as well. 
+    /// This is unfortunate, but needed to support both lifecycle nodes and regular nodes without templates
+    inline
+    std::string
+    extend_name_with_sub_namespace(const std::string & name, const std::string & sub_namespace)
+    {
+      std::string name_with_sub_namespace(name);
+      if (sub_namespace != "" && name.front() != '/' && name.front() != '~') {
+        name_with_sub_namespace = sub_namespace + "/" + name;
+      }
+      return name_with_sub_namespace;
+    }
 
     template <class ParameterT, class CallbackT>
     auto add_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
@@ -231,7 +244,8 @@ struct NodeInterfaces {
                            bool ignore_override = false) {
       rclcpp::ParameterValue v =
           default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
-      auto param = node_.lock()->node_parameters_.declare_parameter(name, v, parameter_descriptor,
+          /// TODO The rclcpp::Node class does a 
+      auto param = node_.lock()->node_parameters_->declare_parameter(name, v, parameter_descriptor,
                                                                 ignore_override);
       auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(this);
       auto cb_handle = param_subscriber->add_parameter_callback(name, std::move(update_callback));
@@ -242,31 +256,34 @@ struct NodeInterfaces {
     template <class Msg, class F>
     void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                           const rclcpp::SubscriptionOptions &options) {
-                            /// TODO not overwrite silently
+/// TODO extend_name_with_sub_namespace(topic_name, this->get_sub_namespace())
       book_.subscribers_[topic] = rclcpp::create_subscription<Msg>(node_.lock()->node_topics_, topic, qos, cb, options);
     }
 
     template <class Msg>
-    auto add_publisher(const std::string &topic, const QoS &qos) {
-      auto publisher = node_.lock()->node_topics_->create_publisher<Msg>(topic, qos);
+    auto add_publisher(const std::string &topic, const rclcpp::QoS &qos) {
+      auto publisher = rclcpp::create_publisher<Msg>(node_.lock()->node_topics_, topic, qos);
       book_.publishers_.emplace(topic, publisher);
       return publisher;
     }
 
     template <class CallbackT>
-    auto add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&cb) {
-      rclcpp::TimerBase::SharedPtr timer =
-          use_wall_time
-              ? node_.lock()->node_timers_->create_wall_timer(time_interval, std::move(cb))
-              : node_.lock()->node_timers_->create_wall_timer(time_interval, std::move(cb));  /// TODO no normal timer in humble
+    auto add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&callback,
+                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+      /// TODO no normal timer in humble, also no autostart flag was present in Humble
+      rclcpp::TimerBase::SharedPtr timer = rclcpp::create_wall_timer(time_interval, std::move(callback),
+                group, node_.lock()->node_base_.get(), node_.lock()->node_timers_.get());
       book_.timers_.push_back(timer);
       return timer;
     }
 
     template <class ServiceT, class CallbackT>
     void add_service(const std::string &service_name, CallbackT &&callback,
-                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-      auto service = node_.lock()->node_services_->create_service<ServiceT>(
+                     const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+      auto service = rclcpp::create_service<ServiceT>(
+        node_.lock()->node_base_,
+          node_.lock()->node_services_,
           service_name, std::move(callback));  /// TODO In humble, we cannot pass QoS, only in Jazzy
                                                /// (the API wasn't ready yet, it needs rmw_*-stuff)
       book_.services_.emplace(service_name, service);
@@ -274,10 +291,17 @@ struct NodeInterfaces {
 
     /// TODO cb groups !!
     template <class Service>
-    auto add_client(const std::string &service_name) {
-      auto client = node_.lock()->node_services_->create_client<Service>(service_name);
+    auto add_client(const std::string &service_name,
+        rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+       /// TODO extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
+      auto client = rclcpp::create_client<Service>(
+          node_.lock()->node_base_,
+          node_.lock()->node_graph_,
+          node_.lock()->node_services_,
+          service_name, 
+          group);
       book_.services_clients_.emplace(service_name, client);
-      return book_.client;
+      return client;
     }
 
     /// Subscribe to a transform on tf between two frames
@@ -433,7 +457,7 @@ public:
   /// Create a new ServiceClient observable, this observable holds the request.
   template<class ServiceT>
   auto call_service(const std::string &service_name,
-                     const ROSAdapter::Duration &timeout,
+                     const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     assert_we_have_context();
     static_assert(not std::is_same_v<Value, Nothing>,
@@ -481,7 +505,8 @@ public:
       /// Set default value if there is one
       if (default_value) {
         Value initial_value;
-        node.get_parameter_or(parameter_name, initial_value, *default_value);
+        /// TODO I think I added this to crash in case no default is there
+        //node.get_parameter_or(parameter_name, initial_value, *default_value);
         this_obs->resolve(initial_value);
       }
     };
@@ -507,7 +532,7 @@ class SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
 public:
   using Value = typename _Message::SharedPtr;
   using Message = _Message;
-  SubscriptionObservable(const std::string &topic_name, const ROSAdapter::QoS &qos,
+  SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->name = topic_name;
     auto this_obs = this->observable_;
@@ -585,7 +610,7 @@ public:
 /// the callback
 struct TimerObservable : public Observable<size_t> {
   using Value = size_t;
-  TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) {
+  TimerObservable(const Duration &interval, bool use_wall_time, bool is_one_off_timer) {
     this->name = "timer";
     auto this_obs = this->observable_;
     this->attach_ = [=](NodeBookkeeping &node) {
@@ -613,11 +638,11 @@ public:
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
   PublisherObservable(const std::string &topic_name,
-                      const ROSAdapter::QoS qos = rclcpp::SystemDefaultsQoS()) {
+                      const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->name = topic_name;
     auto this_obs = this->observable_;
     this->attach_ = [=](NodeBookkeeping &node) {
-      auto publisher = node.add_publication<Message>(topic_name, qos);
+      auto publisher = node.add_publisher<Message>(topic_name, qos);
       this_obs->_register_handler([this_obs, publisher]() {
         // We cannot pass over the pointer since publish expects a unique ptr and we got a
         // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
@@ -712,7 +737,7 @@ public:
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
       this_obs->_register_handler([this_obs, tf_broadcaster]() {
         const auto &new_value = this_obs->value();  /// There can be no error
-        tf_broadcaster.sendTransform(new_value);
+        tf_broadcaster->sendTransform(new_value);
       });
     };
   }
@@ -747,7 +772,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
-  ServiceClient(const std::string &service_name, const ROSAdapter::Duration &timeout)
+  ServiceClient(const std::string &service_name, const Duration &timeout)
       : timeout_(timeout) {
     this->name = service_name;
     auto this_obs = this->observable_;
@@ -799,7 +824,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
 
 protected:
   typename Client::SharedPtr client_;
-  ROSAdapter::Duration timeout_;
+  Duration timeout_;
   std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request_;
 };
 
@@ -899,7 +924,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     parent->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
   }
 
-  auto create_timer(const ROSAdapter::Duration &interval, bool use_wall_time = false,
+  auto create_timer(const Duration &interval, bool use_wall_time = false,
                     bool is_one_off_timer = false) {
     return create_observable<TimerObservable>(interval, use_wall_time, is_one_off_timer);
   }
@@ -913,7 +938,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Add a service client
   template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name,
-                     const ROSAdapter::Duration &timeout,
+                     const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     observable_traits<Parent>{};  // obs_val since the Request must be a shared_ptr
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
@@ -1092,7 +1117,8 @@ public:
 };
 
 /// Blocking spawn of an existing node.
-void spawn(std::shared_ptr<ROSAdapter::Node> node) {
+template<class NodeType>
+void spawn(std::shared_ptr<NodeWithIceyContext<NodeType>> node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
@@ -1100,7 +1126,8 @@ void spawn(std::shared_ptr<ROSAdapter::Node> node) {
   rclcpp::shutdown();
 }
 
-void spin_nodes(const std::vector<std::shared_ptr<NodeWithIceyContext>> &nodes) {
+template<class NodeType>
+void spin_nodes(const std::vector< std::shared_ptr<NodeWithIceyContext<NodeType>> > &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
   /// This is how nodes should be composed according to ROS maintainer wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references
