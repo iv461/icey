@@ -45,7 +45,6 @@ using Duration = Clock::duration;
 /// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
 /// but it's not coming for Humble. So I did something similar.
 /// Mind also that NodeInterfaces is not yet supported by geometry2/TF: https://github.com/ros2/geometry2/issues/698
-/// TODO pull them all in via multiple inheritance ?
 struct NodeInterfaces {  
   template<class _Node>
   explicit NodeInterfaces(std::shared_ptr<_Node> node) :
