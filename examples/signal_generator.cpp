@@ -5,10 +5,8 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-    icey::icey_debug_print = true;
     auto period_time = 100ms;
 
-    getchar();
     auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
     auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
 

@@ -52,6 +52,12 @@ ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anythin
 - Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types
 
 
+# Not supported yet
+
+- Only the SingleThreadedExecutor is supported currently. That is mainly because the MultiThreadedExecturos does not have a properly implemented scheduler and instead sufferts from a [starvation](https://github.com/ros2/rclcpp/pull/2702) [issue](https://github.com/ros2/rclcpp/issues/2402). I have no intereset in making the code thread-safe as long as there is no reliable MT-executor anyway. Note that this does not mean you cannot use multiple threads for your computation-heavy algorihtms: You can still use OpenMP to parallelize them, only all the callbacks will be called from a single (the same) thread. 
+- Memory strategy is not implemented, but could be easily, simply add the arguments everywhere 
+- Sub-nodes
+
 ## Parameters 
 
 Parameters are persisted, but updates are communicated similar to topics. That is why they are very similar to states:
@@ -69,8 +75,8 @@ TODO
 
 # Dependencies: 
 
-- needs ROS 2 (tested on Humble)
-- Boost (Hana)
+- ROS 2 (tested on Humble)
+- Boost Hana
 
 # Build and test 
 

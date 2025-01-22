@@ -77,18 +77,28 @@ public:
   bool has_value() const { return value_.has_value(); }
   const Value &value() const { return value_.value(); }
   const ErrorValue &error() const { return value_.error(); }
-  void _register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
-  void _set_value(const MaybeValue &x) {
+
+  void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
+
+  void set_value(const MaybeValue &x) {
+    static_assert(not std::is_same_v<Value, Nothing>,
+                  "This observable does not have a value, so you cannot call set_value() on it.");
     if (x)
       value_.set_ok(*x);
     else
       value_.set_none();
   }
-  void _set_error(const ErrorValue &x) { value_.set_err(x); }
+  void set_error(const ErrorValue &x) { 
+      static_assert(not std::is_same_v<ErrorValue, Nothing>,
+                  "This observable does not have a rrror value, so you cannot call set_error() on it.");
+      value_.set_err(x); 
+  }
+
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
-  void _notify() {
+  void notify() {
     if constexpr(std::is_base_of_v<std::runtime_error, ErrorValue>) {
-      if(this->has_error() && handlers_.empty()) { // If we have an error and the chain stops, we re-throw the error to not leave the error unhandled.
+      // If we have an error and the chain stops, we re-throw the error so that we do not leave the error unhandled.
+      if(this->has_error() && handlers_.empty()) { 
           //std::cout << "Unhandled promise rejection with an ErrorValue  that is an exception, re-throwing .." << std::endl;
           throw this->error();
       }
@@ -99,15 +109,30 @@ public:
   }
 
   void resolve(const MaybeValue &x) {
-    this->_set_value(x);
-    this->_notify();
+    this->set_value(x);
+    this->notify();
   }
 
   void reject(const ErrorValue &x) {
-    this->_set_error(x);
-    this->_notify();
+    this->set_error(x);
+    this->notify();
   }
 
+  template <class F>
+  auto then(F &&f) {
+    /// Note that it may only have errors
+    static_assert(not std::is_same_v<Value, Nothing>,
+                  "This observable does not have a value, so you cannot register .then() on it.");
+    return std::get<0>(this->done<true>(f, true));
+  }
+  template <class F>
+  auto except(F &&f) {
+    static_assert(not std::is_same_v<ErrorValue, Nothing>,
+                  "This observable cannot have errors, so you cannot register .except() on it.");
+    return std::get<0>(this->done<false>(f, true));
+  }
+
+protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Observable (that is captured by value)
   template <bool resolve, class Output, class F>
@@ -122,7 +147,7 @@ public:
         /// support callbacks that at runtime may return value or error
         output->value_ = apply_if_tuple(f, x);  /// TODO maybe do not overwrite whole variant but
                                                 /// differentiate and set error or value
-        output->_notify();
+        output->notify();
       } else {  /// Other return types are interpreted as values that resolve the promise. Here, we
                 /// also support returning std::optional.
         ReturnType ret = apply_if_tuple(f, x);
@@ -161,7 +186,7 @@ public:
         }  /// Else do nothing
       }
     };
-    if (register_it) input->_register_handler(handler);
+    if (register_it) input->register_handler(handler);
     return handler;
   }
 
@@ -195,20 +220,7 @@ public:
     }
   }
 
-  /// These functions are for testing the promises stand-alone, i.e. in eager-mode.
-  template <class F>
-  auto then(F &&f) {
-    /// Note that it may only have errors
-    static_assert(not std::is_same_v<Value, Nothing>,
-                  "This observable does not have a value, so you cannot register .then() on it.");
-    return std::get<0>(this->done<true>(f, true));
-  }
-  template <class F>
-  auto except(F &&f) {
-    static_assert(not std::is_same_v<ErrorValue, Nothing>,
-                  "This observable cannot have errors, so you cannot register .except() on it.");
-    return std::get<0>(this->done<false>(f, true));
-  }
+  
 
   /// The last received value, it is buffered.
   State value_;

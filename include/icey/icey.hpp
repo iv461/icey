@@ -93,7 +93,7 @@ struct NodeInterfaces {
   /// A transform listener that allows to subscribe on a single transform between two coordinate systems.
   /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate node.
   /// The implementation currently checks for relevant transforms (i.e. ones we subscribed) every time a new message is receved on /tf.
-  /// TODO: To speed up the code a bit (not sure if significanlty), we could obtain the path in the TF tree between the source- and target-frame using 
+  /// TODO: To speed up the code a bit (not sure if significantly), we could obtain the path in the TF tree between the source- and target-frame using 
   /// tf2::BufferCore::_chainAsVector and then only react if any transform was received that is part of this path.
   struct TFListener {
     using TransformMsg = geometry_msgs::msg::TransformStamped;
@@ -175,7 +175,7 @@ struct NodeInterfaces {
     /// This simply looks up the transform in the buffer at the latest stamp and checks if it
     /// changed with respect to the previously received one. If the transform has changed, we know
     /// we have to notify.
-    void maybe_notify(TFSubscriptionInfo &info) {
+    void maybenotify(TFSubscriptionInfo &info) {
       try {
         /// Lookup the latest transform in the buffer to see if we got something new in the buffer.
         /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a std::vector/tree.
@@ -197,7 +197,7 @@ struct NodeInterfaces {
 
     void notify_if_any_relevant_transform_was_received() {
       for (auto &tf_info : subscribed_transforms_) {
-        maybe_notify(tf_info);
+        maybenotify(tf_info);
       }
     }
 
@@ -212,7 +212,6 @@ struct NodeInterfaces {
   };
 
   /// A level 1 API wrap, implementing the lower level boilerplate-code and the bookkeeping 
-  /// TODO get rid of this maybe, pull direcly in Obs
   class NodeBookkeeping {
   public:
     /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
@@ -307,7 +306,6 @@ struct NodeInterfaces {
       book_.services_.emplace(service_name, service);
     }
 
-    /// TODO cb groups !!
     template <class Service>
     auto add_client(const std::string &service_name,
         rclcpp::CallbackGroup::SharedPtr group = nullptr) {
@@ -642,7 +640,7 @@ struct PublisherObservable : public Observable<_Value> {
     auto this_obs = this->observable_;
     this->attach_ = [=](NodeBookkeeping &node) {
       auto publisher = node.add_publisher<Message>(topic_name, qos);
-      this_obs->_register_handler([this_obs, publisher]() {
+      this_obs->register_handler([this_obs, publisher]() {
         // We cannot pass over the pointer since publish expects a unique ptr and we got a
         // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
         /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
@@ -669,7 +667,7 @@ struct PublisherObservable : public Observable<_Value> {
 template <typename _Message, class _Base = Observable<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->observable_->_register_handler([this]() {
+    this->observable_->register_handler([this]() {
       using Event = message_filters::MessageEvent<const _Message>;
       const auto &new_value = this->observable_->value();  /// There can be no error
       this->signalMessage(Event(new_value));
@@ -734,7 +732,7 @@ public:
     this->name = "tf_pub";
     this->attach_ = [this_obs = this->observable_](NodeBookkeeping &node) {
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
-      this_obs->_register_handler([this_obs, tf_broadcaster]() {
+      this_obs->register_handler([this_obs, tf_broadcaster]() {
         const auto &new_value = this_obs->value();  /// There can be no error
         tf_broadcaster->sendTransform(new_value);
       });

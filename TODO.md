@@ -58,8 +58,6 @@ Sorted by decreasing priority.
 - [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
 - [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
 - [ ] Auto-pipelining ...
-- [X] Forbid subscribing to the same topic that is published by the same node -> not doing, resp of the user
-- [X] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it deals only with a constant delay, like 5 seconds. We could acutally support this by a Delay-node (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
 
@@ -69,7 +67,6 @@ Sorted by decreasing priority.
 - [ ] Existing converters for pointcloud and Image to `cv::Mat`: https://github.com/roncapat/ros2_native_adapters
 - [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
 
-- [X] A way to enable/disable the node -> Lifecycle node
 - [ ] Maybe Simulink-style blocks, i.e. constant, step, function etc.
 - [ ] tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
 - [ ] `StaticTransformBroadcaster` -> low prio since even the official do mentions you should use the executable instead of writing this code yourself: https://docs.ros.org/en/foxy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Static-Broadcaster-Cpp.html#the-proper-way-to-publish-static-transforms
@@ -177,9 +174,13 @@ Sorted by decreasing priority.
 
 - [X] Code simplicity: consider holding the baggage that is currently in the ROSNode wrapper in the Context. Right now we essentially have two contexts.
 
-
 - [X] Test with clang and build with ASAN(`-DCMAKE_CXX_FLAGS=-fsanitize=address`). -> unusable because ROS triggers new-delete-mismatch
 - [X] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
+
+
+- [X] Forbid subscribing to the same topic that is published by the same node -> not doing, resp of the user
+- [X] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it deals only with a constant delay, like 5 seconds. We could acutally support this by a Delay-node (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)
+- [X] A way to enable/disable the node -> Lifecycle node
 
 ### Code 
 
@@ -189,11 +190,3 @@ Sorted by decreasing priority.
 - [X] Use boost hana instead fo rolling our own bag of meta-programming tricks
 - [X] Look at https://github.com/xhawk18/promise-cpp
 
-
-# Missing features
-
-- Only the SingleThreadedExecutor is supported currently. That is mainly because the MultiThreadedExecturos does not have a properly implemented scheduler and instead sufferts from a [starvation](https://github.com/ros2/rclcpp/pull/2702) [issue](https://github.com/ros2/rclcpp/issues/2402). I have no intereset in making the code thread-safe as long as there is no reliable MT-executor anyway. Note that this does not mean you cannot use multiple threads for your computation-heavy algorihtms: You can still use OpenMP to parallelize them, only all the callbacks will be called from a single (the same) thread. 
-
-- Code is not thread-safe ! So using only mutually exclusive callback groups is mandatory. 
-- Memory strategy is not implemented, but could be easily, simply add the arguments everywhere 
-- LifecycleNodes are currently not supported. Please open an issue if this is a blocker for you.

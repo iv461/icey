@@ -61,7 +61,7 @@ struct ImageTransportPublisher : public Observable<sensor_msgs::msg::Image::Shar
       assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
       image_transport::Publisher publisher = image_transport::create_publisher(
           node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());  /// TODO Humble did accept options
-      this_obs->_register_handler([this_obs, publisher]() {
+      this_obs->register_handler([this_obs, publisher]() {
         const auto &image_msg = this_obs->value();  /// There can be no error
         publisher.publish(image_msg);
       });
@@ -110,7 +110,7 @@ struct CameraPublisher
         assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
       image_transport::CameraPublisher publisher = image_transport::create_camera_publisher(
           node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
-      this_obs->_register_handler([this_obs, publisher]() {
+      this_obs->register_handler([this_obs, publisher]() {
         const auto &new_value = this_obs->value();  /// There can be no error
         const auto &[image_msg, camera_info_msg] = new_value;
         /// TODO don't we need to copy here, why does this compile ??
@@ -123,25 +123,23 @@ struct CameraPublisher
 auto create_image_transport_subscription(
     const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
     const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-  return g_state.get_context().create_observable<ImageTransportSubscriber>(base_topic_name,
-                                                                           transport, qos, options);
+  return create_observable<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
 };
 
 auto create_image_transport_publisher(
     const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
     const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
-  return g_state.get_context().create_observable<ImageTransportPublisher>(base_topic_name, qos,
-                                                                          options);
+  return create_observable<ImageTransportPublisher>(base_topic_name, qos, options);
 };
 
 auto create_camera_subscription(const std::string &base_topic_name, const std::string &transport,
                                 const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
-  return g_state.get_context().create_observable<CameraSubscriber>(base_topic_name, transport, qos);
+  return create_observable<CameraSubscriber>(base_topic_name, transport, qos);
 };
 
 auto create_camera_publisher(const std::string &base_topic_name,
                              const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
-  return g_state.get_context().create_observable<CameraPublisher>(base_topic_name, qos);
+  return create_observable<CameraPublisher>(base_topic_name, qos);
 };
 
 }  // namespace icey
