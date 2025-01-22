@@ -785,6 +785,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
+  using Future = typename Client::SharedFutureWithRequest;
   ServiceClient(const std::string &service_name, const Duration &timeout)
       : timeout_(timeout) {
     this->name = service_name;
@@ -795,31 +796,41 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   }
 
   void call(Request request) {
-    using Future = typename Client::SharedFutureWithRequest;
-    auto output_obs = this->observable_;
+    if(!wait_for_service())
+        return;
+    /// TODO this is captured here 
+    maybe_pending_request_ = 
+      client_->async_send_request(request, [this](Future response_futur) {
+            on_response(response_futur);
+      });
+  }
+
+protected:
+  bool wait_for_service() {
     if (!client_->wait_for_service(timeout_)) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()){
-        output_obs->reject("INTERRUPTED");
+        this->observable_->reject("INTERRUPTED");
       } else {
-        output_obs->reject("SERVICE_UNAVAILABLE");
+        this->observable_->reject("SERVICE_UNAVAILABLE");
       }
-      return;
+      return false;
     }
-    /// TODO this is captured here 
-    maybe_pending_request_ = 
-      client_->async_send_request(request, [this, output_obs](Future response_futur){
+    return true;
+  }
+
+  void on_response(Future response_futur) {
       if (response_futur.valid()) {
         maybe_pending_request_ = {};
-        output_obs->resolve(response_futur.get().second);
+        this->observable_->resolve(response_futur.get().second);
       } else {
         /// The FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
         /// Since the async_send_request waits on the executor, we cannot only interrupt it with Ctrl-C
         // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
         if (!rclcpp::ok()) {
-          output_obs->reject("rclcpp::FutureReturnCode::INTERRUPTED");
+          this->observable_->reject("rclcpp::FutureReturnCode::INTERRUPTED");
         } else {
-          output_obs->reject("rclcpp::FutureReturnCode::TIMEOUT");
+          this->observable_->reject("rclcpp::FutureReturnCode::TIMEOUT");
         }
         /// Now do the weird cleanup thing that the API-user definitely neither does need to care
         /// nor know about:
@@ -831,11 +842,9 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
             throw std::runtime_error("Pruned some more requests even after calling remove_pending_request(), you should buy a new RPC library.");
         }
         maybe_pending_request_ = {};
-      }
-    });
+    }
   }
 
-protected:
   typename Client::SharedPtr client_;
   Duration timeout_;
   std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request_;
