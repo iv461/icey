@@ -46,8 +46,7 @@ using Duration = Clock::duration;
 /// but it's not coming for Humble. So I did something similar.
 /// Mind also that NodeInterfaces is not yet supported by geometry2/TF: https://github.com/ros2/geometry2/issues/698
 /// TODO pull them all in via multiple inheritance ?
-struct NodeInterfaces {
-  using Node = _Node;
+struct NodeInterfaces {  
   template<class _Node>
   explicit NodeInterfaces(std::shared_ptr<_Node> node) :
     node_base_(node->get_node_base_interface()),
@@ -73,21 +72,18 @@ struct NodeInterfaces {
   //rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_;
 };
 
-  /// A modified listener that can notify when a single transform changes.
+  /// A transform listener that allows to subscribe on a single transform between two coordinate systems.
   /// It is implemented similarly to the tf2_ros::TransformListener, but without a separate node.
-  /// TODO this simple implementation currently checks every time a new message is receved on /tf
-  /// for every trnasform we are looking for. If /tf is high-frequency topic, this can become a
-  /// performance problem. i.e., the more transforms, the more this becomes a search for the needle
-  /// in the heapstack. But without knowing the path in the TF-tree that connects our transforms
-  /// that we are looking for, we cannot do bettter. Update: We could obtain the path with
-  /// tf2::BufferCore::_chainAsVector however, I need to look into it
+  /// The implementation currently checks for relevant transforms (i.e. ones we subscribed) every time a new message is receved on /tf.
+  /// TODO: To speed up the code a bit (not sure if significanlty), we could obtain the path in the TF tree between the source- and target-frame using 
+  /// tf2::BufferCore::_chainAsVector and then only react if any transform was received that is part of the path.
   struct TFListener {
     using TransformMsg = geometry_msgs::msg::TransformStamped;
     using OnTransform = std::function<void(const TransformMsg &)>;
     using OnError = std::function<void(const tf2::TransformException &)>;
     
     explicit TFListener(std::weak_ptr<NodeInterfaces> node) : node_(node) {
-      init(node);
+      init();
     }
 
     /// Add notification for a single transform.
@@ -114,14 +110,14 @@ struct NodeInterfaces {
       OnError on_error;
     };
         
-
-    void init(std::weak_ptr<rclcpp::Node> node) {
+    void init() {
       init_tf_buffer();
       const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
       const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
-      message_subscription_tf_ = node.lock()->node_topics_->create_subscription<tf2_msgs::msg::TFMessage>(
+      auto topics_if = node_.lock()->node_topics_;
+      message_subscription_tf_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(topics_if,
           "/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
-      message_subscription_tf_static_ = node.lock()->node_topics_->create_subscription<tf2_msgs::msg::TFMessage>(
+      message_subscription_tf_static_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(topics_if,
           "/tf_static", static_qos, [this](TransformsMsg msg) { on_tf_message(msg, true); });
     }
 
@@ -160,10 +156,11 @@ struct NodeInterfaces {
 
     /// This simply looks up the transform in the buffer at the latest stamp and checks if it
     /// changed with respect to the previously received one. If the transform has changed, we know
-    /// we have to notify
+    /// we have to notify.
     void maybe_notify(TFSubscriptionInfo &info) {
       try {
-        /// Lookup the latest transform in the buffer to see if we got something new in the buffer
+        /// Lookup the latest transform in the buffer to see if we got something new in the buffer.
+        /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a std::vector/tree.
         geometry_msgs::msg::TransformStamped tf_msg =
             buffer_->lookupTransform(info.target_frame, info.source_frame, tf2::TimePointZero);
         /// Now check if it is the same as the last one, in this case we return nothing since the
@@ -171,12 +168,12 @@ struct NodeInterfaces {
         /// transforms.)
         if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
           info.last_received_transform = tf_msg;
-          on_transform(tf_msg);
+          info.on_transform(tf_msg);
         }
       } catch (const tf2::TransformException &e) {
         /// Simply ignore. Because we are requesting the latest transform in the buffer, the only
         /// exception we can get is that there is no transform available yet.
-        on_error(e);
+        info.on_error(e);
       }
     }
 
@@ -185,6 +182,7 @@ struct NodeInterfaces {
         maybe_notify(tf_info);
       }
     }
+
     void on_tf_message(TransformsMsg msg, bool is_static) {
       store_in_buffer(*msg, is_static);
       notify_if_any_relevant_transform_was_received();
@@ -245,7 +243,7 @@ struct NodeInterfaces {
     void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                           const rclcpp::SubscriptionOptions &options) {
                             /// TODO not overwrite silently
-      book_.subscribers_[topic] = node_.lock()->node_topics_->create_subscription<Msg>(topic, qos, cb, options);
+      book_.subscribers_[topic] = rclcpp::create_subscription<Msg>(node_.lock()->node_topics_, topic, qos, cb, options);
     }
 
     template <class Msg>
@@ -566,23 +564,21 @@ public:
     };
   }
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
-    auto this_obs = this->observable_;
     try {
-      // Note that this call does not wait, the transform must already have arrived. This works
-      // because get_at_time() is called by the synchronizer
-      *shared_value_ = tf2_listener_->buffer_.lookupTransform(target_frame_, source_frame_, time);
-      /// TODO fix dynamic allocation on every call, instead allocate one object at the beginning in
-      /// which we are going to write
+      // Note that this call does not wait, the transform must already have arrived.
+      *shared_value_ = tf2_listener_.lock()->buffer_->lookupTransform(target_frame_, source_frame_, time);
       return shared_value_;
-    } catch (tf2::TransformException &e) {
-      this_obs->reject(e.what());
+    } catch (const tf2::TransformException &e) {
+      this->observable_->reject(e.what());
       return {};
     }
   }
   std::string target_frame_;
   std::string source_frame_;
+  /// We allocate a single message since we need to pass shared 
   std::shared_ptr<Message> shared_value_{std::make_shared<Message>()};
-  std::shared_ptr<ROSAdapter::TFListener> tf2_listener_;
+  /// We do not own the listener, the Book owns it
+  std::weak_ptr<TFListener> tf2_listener_;
 };
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
@@ -1081,8 +1077,8 @@ struct Context : public std::enable_shared_from_this<Context> {
 
 /// The ROS node, additionally owning the context that contains the observables.
 /// The template argument is used to support lifecycle_nodes
-template<class NodeType = rclcpp::Node>
-class NodeWithIceyContext : public NodeType {
+template<class NodeType>
+class NodeWithIceyContext : public NodeType, public NodeBookkeeping {
 public:
   using Base = NodeType;
   using Base::Base;  // Take over all base class constructors
@@ -1117,9 +1113,9 @@ void spin_nodes(const std::vector<std::shared_ptr<NodeWithIceyContext>> &nodes) 
 /// Public API aliases:
 using Node = NodeWithIceyContext<rclcpp::Node>;
 using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
-
 template <class T>
 using Parameter = ParameterObservable<T>;
+
 }  // namespace icey
 
 #include <icey/functional_api.hpp>
