@@ -47,7 +47,7 @@ using Duration = Clock::duration;
 /// Mind also that NodeInterfaces is not yet supported by geometry2/TF: https://github.com/ros2/geometry2/issues/698
 struct NodeInterfaces {  
   template<class _Node>
-  explicit NodeInterfaces(std::shared_ptr<_Node> node) :
+  explicit NodeInterfaces(_Node *node) :
     node_base_(node->get_node_base_interface()),
     node_graph_(node->get_node_graph_interface()),
     node_clock_(node->get_node_clock_interface()),
@@ -63,14 +63,11 @@ struct NodeInterfaces {
     auto get_node_graph_interface() { return node_graph_; }
     auto get_node_clock_interface() { return node_clock_; }
     auto get_node_logging_interface() { return node_logging_; }
-
     auto get_node_timers_interface() { return node_timers_; }
     auto get_node_topics_interface() { return node_topics_; }
-
     auto get_node_services_interface() { return node_services_; }
     auto get_node_parameters_interface() { return node_parameters_; }
     auto get_node_time_source_interface() { return node_time_source_; }
-
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_;
@@ -613,7 +610,7 @@ public:
   }
   std::string target_frame_;
   std::string source_frame_;
-  /// We allocate a single message since we need to pass shared 
+  /// We allocate a single message that we share with the other observables when notifying them
   std::shared_ptr<Message> shared_value_{std::make_shared<Message>()};
   /// We do not own the listener, the Book owns it
   std::weak_ptr<TFListener> tf2_listener_;
@@ -1132,7 +1129,7 @@ public:
   using Base::Base;  // Take over all base class constructors
 
   void icey_initialize() override { 
-      NodeInterfaces node_interfaces(this->shared_from_this());
+      NodeInterfaces node_interfaces(this); /// do not call shared_from_this, since in the class-based API we call icey_initialize in the ctor, meaning the ctor is not finished yet.
       this->book_ = std::make_shared<NodeBookkeeping>(node_interfaces);
       icey().initialize(*this->book_);
     }
