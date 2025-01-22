@@ -1,4 +1,4 @@
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 
 #include "std_msgs/msg/string.hpp"
 

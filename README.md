@@ -9,7 +9,7 @@ The real power in ICEY is that you can declare computations, that will  be publi
 
 [Signal generator example](examples/signal_generator.cpp)
 ```cpp
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 int main(int argc, char **argv) {
 
     auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s

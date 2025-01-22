@@ -1,5 +1,5 @@
 /// A more complex mutliple-input, multiple-output (MIMO) example
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int32.hpp"

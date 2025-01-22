@@ -2,7 +2,7 @@
 /// using the functional API. It also shows how every member you would put in your node class
 /// you can simply have as a local variable and capture it. 
 
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include "std_msgs/msg/float32.hpp"
 

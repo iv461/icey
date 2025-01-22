@@ -1,6 +1,6 @@
 /// This example demonstrates how to use the class-based API of ICEY:
 /// It is a thin wrapper around the rclrpp::Node 
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"

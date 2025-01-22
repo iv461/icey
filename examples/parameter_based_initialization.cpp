@@ -1,6 +1,6 @@
 /// This example shows how to initialize the data flow graph based on 
 /// parameters, and managing algorithm state, for example loading a neural network model from file
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 #include "std_msgs/msg/float32.hpp"
 
 /// Here, you could load your neural network model from file, from ONNX, TFLite etc.

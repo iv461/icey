@@ -1,5 +1,5 @@
 
-#include <icey/icey_ros2.hpp>
+#include <icey/icey.hpp>
 #include <iostream>
 #include <gtest/gtest.h>
 

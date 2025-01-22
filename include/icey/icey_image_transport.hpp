@@ -3,7 +3,7 @@
 
 #ifndef ICEY_ROS2_WAS_INCLUDED
 #error \
-    "You must first include the <icey/icey_ros2.hpp> header before you can include the <icey/icey_image_transport.hpp> header."
+    "You must first include the <icey/icey.hpp> header before you can include the <icey/icey_image_transport.hpp> header."
 #endif
 
 #include <functional>
@@ -112,26 +112,26 @@ struct CameraPublisher
 };
 
 auto create_image_transport_subscription(
-    const std::string &base_topic_name, const std::string &transport, const ROS2Adapter::QoS &qos,
+    const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
     const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
   return g_state.get_context().create_observable<ImageTransportSubscriber>(base_topic_name,
                                                                            transport, qos, options);
 };
 
 auto create_image_transport_publisher(
-    const std::string &base_topic_name, const std::string &transport, const ROS2Adapter::QoS &qos,
+    const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
     const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
   return g_state.get_context().create_observable<ImageTransportPublisher>(base_topic_name, qos,
                                                                           options);
 };
 
 auto create_camera_subscription(const std::string &base_topic_name, const std::string &transport,
-                                const ROS2Adapter::QoS &qos = rclcpp::SensorDataQoS()) {
+                                const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
   return g_state.get_context().create_observable<CameraSubscriber>(base_topic_name, transport, qos);
 };
 
 auto create_camera_publisher(const std::string &base_topic_name,
-                             const ROS2Adapter::QoS &qos = rclcpp::SensorDataQoS()) {
+                             const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
   return g_state.get_context().create_observable<CameraPublisher>(base_topic_name, qos);
 };
 

@@ -10,7 +10,7 @@ namespace icey {
 struct GlobalState {
   /// Access an already spawned node by it's name, icey::node(<name>). This method is usefull when
   /// multiple nodes are spawned in the same process.
-  std::shared_ptr<ROSNodeWithDFG> operator()(const std::string& node_name) {
+  std::shared_ptr<NodeWithIceyContext> operator()(const std::string& node_name) {
     if (!nodes.count(node_name)) {
       throw std::runtime_error(
           "There is no node called '" + node_name +
@@ -21,12 +21,12 @@ struct GlobalState {
 
   /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
   Node* operator->() { return get_node(); }
-  /// Allow using this node in a context where a rclrpp::Node is needed, mind that ROSNodeWithDFG
+  /// Allow using this node in a context where a rclrpp::Node is needed, mind that NodeWithIceyContext
   /// derives from rclrpp::Node
-  operator ROSNodeWithDFG*() { return get_node(); }
+  operator NodeWithIceyContext*() { return get_node(); }
 
   auto create_new_node(const std::string& name) {
-    nodes.emplace(name, std::make_shared<ROSNodeWithDFG>(name));
+    nodes.emplace(name, std::make_shared<NodeWithIceyContext>(name));
     auto node = nodes.at(name);
     currently_initializing_node_ =
         node;  /// Assign so that adding new vertices in icey_initialize() uses the existing context
@@ -56,7 +56,7 @@ struct GlobalState {
 
 private:
   // Access the node, in case only one was spawned
-  ROSNodeWithDFG* get_node() {
+  NodeWithIceyContext* get_node() {
     if (nodes.empty()) {
       throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
     } else if (nodes.size() != 1) {
@@ -69,12 +69,12 @@ private:
     return nodes.begin()->second.get();
   }
 
-  std::unordered_map<std::string, std::shared_ptr<ROSNodeWithDFG>> nodes;
+  std::unordered_map<std::string, std::shared_ptr<NodeWithIceyContext>> nodes;
   /// The context that saves all the observables before the node is created, i.e. the observables
   /// are staged
   std::shared_ptr<Context> staged_context{
       std::make_shared<Context>()};  /// Must be a shared_ptr because of observables reference it
-  std::shared_ptr<ROSNodeWithDFG>
+  std::shared_ptr<NodeWithIceyContext>
       currently_initializing_node_;  /// The node that is currently in the initialization phase
                                      /// after the ROS-parameters have been obtained but adding
                                      /// stuff to the graph is still possible.
@@ -98,7 +98,7 @@ auto declare_parameter(const std::string& name,
 }
 template <class MessageT>
 auto create_subscription(
-    const std::string& topic_name, const ROS2Adapter::QoS& qos = ROS2Adapter::DefaultQoS(),
+    const std::string& topic_name, const rclcpp::QoS& qos = rclcpp::SystemDefaultsQoS(),
     const rclcpp::SubscriptionOptions& options = rclcpp::SubscriptionOptions()) {
   return g_state.get_context().create_subscription<MessageT>(topic_name, qos, options);
 };

@@ -4,6 +4,20 @@
 
 Sorted by decreasing priority. 
 
+- [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported. Generally, we have to use everywhere `rclcpp::NodebaseInterfaces`, another issue is that image_transport does not support LifeCycleNodes: https://github.com/ros-perception/image_common/pull/304
+
+- [ ] Code simplicity: consider holding the baggage that is currently in the ROSNode wrapper in the Context. Right now we essentially have two contexts.
+
+- [ ] `unpack` tuple of obs to multiple obs, this is easy 
+- [ ] Buffer: Basis for `delay`-filter
+- [ ] `delay` with 
+- [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
+- [ ] `timeout` filter
+
+- [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
+
+- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
+
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
@@ -16,22 +30,19 @@ Sorted by decreasing priority.
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
 - [ ] Result-type for error handling example
-- [ ] unpack tuple of obs to multiple obs, this is easy 
 - [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
 
-- [ ] Test with clang and build with ASAN(`-DCMAKE_CXX_FLAGS=-fsanitize=address`).
+- [X] Test with clang and build with ASAN(`-DCMAKE_CXX_FLAGS=-fsanitize=address`). -> unusable because ROS triggers new-delete-mismatch
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
-- [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported. Generally, we have to use everywhere `rclcpp::NodebaseInterfaces`, another issue is that image_transport does not support LifeCycleNodes: https://github.com/ros-perception/image_common/pull/304
-
-- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
 
 - [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 - [ ] Maybe support cascading the synchronizers 
 
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> easy TODO
 
-- [ ] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved)
+- [ ] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved) -> we already have with 
+
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
@@ -41,24 +52,21 @@ Sorted by decreasing priority.
 
 - [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
 
-- [ ] Code simplicity: consider holding the baggage that is currently in the ROSNode wrapper in the Context. Right now we essentially have two contexts.
-- [ ] Custom buffers: https://github.com/autowarefoundation/autoware.universe/blob/main/localization/autoware_ekf_localizer/include/autoware/ekf_localizer/ekf_localizer.hpp#L128
 ## Error-handling
 
 ## Examples 
 
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
-- [ ] icey::filter(msg) -> simple filtering, e.g. [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] Examples in separate package `icey_examples` -> TEST WHETHER WE CAN DEPEND ON THE ROS Package
 - [ ] https://github.com/ros-perception/imu_pipeline
 - [ ] PCL isn't ported yet: https://github.com/ros-perception/perception_pcl/issues/225
 
 ## Other nice-to-have features, not for 0.1
 
-- [X] Forbid subscribing to the same topic that is published by the same node -> not doing, resp of the user
 - [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
 - [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
 - [ ] Auto-pipelining ...
+- [X] Forbid subscribing to the same topic that is published by the same node -> not doing, resp of the user
 - [X] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it deals only with a constant delay, like 5 seconds. We could acutally support this by a Delay-node (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
