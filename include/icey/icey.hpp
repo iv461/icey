@@ -638,7 +638,15 @@ struct Context : public std::enable_shared_from_this<Context> {
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_observable<ServiceClient<ServiceT>>(service_name, timeout);
+    /// TODO maybe solve better. We would need to implement then(Promise<A>, F<A, Promise<B>>)->Promise<B>, 
+    /// where the service call behaves already like F<A, Promise<B>>: Just return self.
+    /// We would also need to accumulate all kinds of errors, i.e. ErrorValue must become a sum type of all the possible 
+    /// ErrorValues of the chain.
     parent->then([service_client] (auto req) { service_client->call(req); });
+    /// Pass the error since service calls are chainable
+    if constexpr(not std::is_same_v < obs_err <Parent>, Nothing >) {
+      parent->except([service_client] (auto err) { service_client->observable_->reject(err); });
+    }
     return service_client;
   }
 
