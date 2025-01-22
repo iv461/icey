@@ -86,16 +86,14 @@ struct NodeInterfaces {
     using OnTransform = std::function<void(const TransformMsg &)>;
     using OnError = std::function<void(const tf2::TransformException &)>;
     
-    TFListener(std::weak_ptr<NodeInterfaces> node, std::shared_ptr<tf2_ros::Buffer> &buffer)
-        : node_(node), buffer_(buffer) {
+    explicit TFListener(std::weak_ptr<NodeInterfaces> node) : node_(node) {
       init(node);
     }
 
     /// Add notification for a single transform.
     void add_subscription(std::string target_frame, std::string source_frame,
                           const OnTransform &on_transform, const OnError &on_error) {
-      subscribed_transforms_.emplace_back(std::make_pair(target_frame, source_frame), std::nullopt,
-                                          on_transform, on_error);
+      subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
     }
 
     std::weak_ptr<NodeInterfaces> node_;
@@ -104,18 +102,43 @@ struct NodeInterfaces {
 
   private:
     using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
-    /// A tf subctiption, the frames, last received transform, and the notify CB
-    using FrameNames = std::pair<std::string, std::string>;
-    using TFSubscriptionInfo =
-        std::tuple<FrameNames, std::optional<TransformMsg>, OnTransform, OnError>;
+
+    struct TFSubscriptionInfo {
+      TFSubscriptionInfo(std::string target_frame, std::string source_frame, const OnTransform &on_transform, 
+        const OnError &on_error) : target_frame(target_frame), source_frame(source_frame), 
+        on_transform(on_transform), on_error(on_error) {}
+      std::string target_frame;
+      std::string source_frame;
+      std::optional<TransformMsg> last_received_transform;
+      OnTransform on_transform;
+      OnError on_error;
+    };
+        
 
     void init(std::weak_ptr<rclcpp::Node> node) {
+      init_tf_buffer();
       const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
       const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
       message_subscription_tf_ = node.lock()->node_topics_->create_subscription<tf2_msgs::msg::TFMessage>(
           "/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
       message_subscription_tf_static_ = node.lock()->node_topics_->create_subscription<tf2_msgs::msg::TFMessage>(
           "/tf_static", static_qos, [this](TransformsMsg msg) { on_tf_message(msg, true); });
+    }
+
+    void init_tf_buffer() {
+      /// This code is a bit tricky. It's about asynchronous programming essentially. The official
+      /// example is rather incomplete
+      /// ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html))
+      /// . I'm following this example instead:
+      /// https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
+      /// See also the follwing discussions:
+      /// https://answers.ros.org/question/372608/?sort=votes
+      /// https://github.com/ros-navigation/navigation2/issues/1182
+      /// https://github.com/ros2/geometry2/issues/446
+      buffer_ = std::make_shared<tf2_ros::Buffer>(node_.lock()->node_clock_->get_clock());
+      auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
+          node_.lock()->node_base_, node_.lock()->node_timers_);
+      buffer_->setCreateTimerInterface(timer_interface);
     }
 
     /// Store the received transforms in the buffer.
@@ -138,21 +161,19 @@ struct NodeInterfaces {
     /// This simply looks up the transform in the buffer at the latest stamp and checks if it
     /// changed with respect to the previously received one. If the transform has changed, we know
     /// we have to notify
-    void maybe_notify(TFSubscriptionInfo &sub) {
-      auto &[frame_names, last_received_transform, on_transform, on_error] = sub;
-      const auto &[target_frame, source_frame] = frame_names;
+    void maybe_notify(TFSubscriptionInfo &info) {
       try {
         /// Lookup the latest transform in the buffer to see if we got something new in the buffer
         geometry_msgs::msg::TransformStamped tf_msg =
-            buffer_->lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+            buffer_->lookupTransform(info.target_frame, info.source_frame, tf2::TimePointZero);
         /// Now check if it is the same as the last one, in this case we return nothing since the
         /// transform did not change. (Instead, we received on /tf some other, unrelated
         /// transforms.)
-        if (!last_received_transform || tf_msg != *last_received_transform) {
-          last_received_transform = tf_msg;
+        if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
+          info.last_received_transform = tf_msg;
           on_transform(tf_msg);
         }
-      } catch (tf2::TransformException &e) {
+      } catch (const tf2::TransformException &e) {
         /// Simply ignore. Because we are requesting the latest transform in the buffer, the only
         /// exception we can get is that there is no transform available yet.
         on_error(e);
@@ -176,7 +197,7 @@ struct NodeInterfaces {
 
   /// A level 1 API wrap, implementing the lower level boilerplate-code and the bookkeeping 
   /// TODO get rid of this maybe, pull direcly in Obs
-  class NodeLevel1Wrap {
+  class NodeBookkeeping {
   public:
     /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
     struct IceyBook {
@@ -199,13 +220,13 @@ struct NodeInterfaces {
       std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     };
     
-    explicit NodeLevel1Wrap(std::weak_ptr<NodeInterfaces> node) node_(node) {}
+    explicit NodeBookkeeping(std::weak_ptr<NodeInterfaces> node) node_(node) {}
 
     std::weak_ptr<NodeInterfaces> node_;
     IceyBook book_;
 
     template <class ParameterT, class CallbackT>
-    auto declare_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
+    auto add_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
                            CallbackT &&update_callback,
                            const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                                rcl_interfaces::msg::ParameterDescriptor(),
@@ -281,24 +302,7 @@ struct NodeInterfaces {
       if (book_.tf2_listener_)  /// We need only one subscription on /tf, but can have multiple transforms
                           /// on which we listen
         return;
-      init_tf_buffer();
-      book_.tf2_listener_ = std::make_shared<TFListener>(node_, tf2_buffer_);
-    }
-
-    void init_tf_buffer() {
-      /// This code is a bit tricky. It's about asynchronous programming essentially. The official
-      /// example is rather incomplete
-      /// ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html))
-      /// . I'm following instead this example
-      /// https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
-      /// See also the follwing discussions:
-      /// https://answers.ros.org/question/372608/?sort=votes
-      /// https://github.com/ros-navigation/navigation2/issues/1182
-      /// https://github.com/ros2/geometry2/issues/446
-      book_.tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(node_.lock()->node_clock_->get_clock());
-      auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-          node_.lock()->node_base_, node_.lock()->node_timers_);
-      book_.tf2_buffer_->setCreateTimerInterface(timer_interface);
+      book_.tf2_listener_ = std::make_shared<TFListener>(node_);
     }
   };
 
@@ -316,7 +320,7 @@ public:
   /// or service name
   std::string name;
 
-  void attach_to_node(ROSAdapter::NodeHandle &node_handle) {
+  void attach_to_node(NodeBookkeeping &node_handle) {
     if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
     if (icey_debug_print)
       std::cout << "Attaching " << class_name << ", " << name << " ..." << std::endl;
@@ -328,7 +332,7 @@ public:
   bool is_parameter() const { return is_parameter_; }
   bool is_parameter_{false};
   bool was_attached_{false};
-  std::function<void(ROSAdapter::NodeHandle &)> attach_;
+  std::function<void(NodeBookkeeping &)> attach_;
 };
 
 struct ObservableTag {};  /// A tag to be able to recognize the type "Observeble" using traits
@@ -402,7 +406,7 @@ public:
   void publish(Args &&...args) {
     assert_we_have_context();
     static_assert(not std::is_same_v<Value, Nothing>,
-                  "This observable does not have a value, there is nothing to publish, you cannot "
+                  "This observable does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     auto child = this->context.lock()->template create_observable<T>(args...);
     this->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
@@ -413,7 +417,7 @@ public:
                const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     assert_we_have_context();
     static_assert(not std::is_same_v<Value, Nothing>,
-                  "This observable does not have a value, there is nothing to publish, you cannot "
+                  "This observable does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
   }
@@ -442,7 +446,7 @@ public:
 
   // protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
-  /// based on the passed pointer to the implentation-Promise. Needed for then and except
+  /// based on the passed implementation pointer. 
   template <class NewVal, class NewErr>
   static std::shared_ptr<Observable<NewVal, NewErr>> create_from_impl(
       std::shared_ptr<impl::Observable<NewVal, NewErr>> obs_impl) {
@@ -468,8 +472,8 @@ public:
     this->is_parameter_ = true;
     this->name = parameter_name;
     auto this_obs = this->observable_;
-    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
-      node.declare_parameter<_Value>(
+    this->attach_ = [=](NodeBookkeeping &node) {
+      node.add_parameter<_Value>(
           parameter_name, default_value,
           [this_obs](const rclcpp::Parameter &new_param) {
             Value new_value = new_param.get_value<_Value>();
@@ -485,7 +489,7 @@ public:
     };
   }
 
-  /// Parameters are initialized always at the beginning, so we can provide getters for the value.
+  /// Parameters are initialized always at the beginning, so we can provide a getter for the value so that they can be used conveniently in callbacks.
   const Value &value() const {
     if (!this->observable_->has_value()) {
       throw std::runtime_error(
@@ -509,7 +513,7 @@ public:
                          const rclcpp::SubscriptionOptions &options) {
     this->name = topic_name;
     auto this_obs = this->observable_;
-    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [=](NodeBookkeeping &node) {
       node.add_subscription<Value>(
           topic_name,
           [this_obs](typename Message::SharedPtr new_value) { this_obs->resolve(new_value); }, qos,
@@ -551,7 +555,7 @@ public:
     this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
     auto this_obs = this->observable_;
 
-    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [=](NodeBookkeeping &node) {
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
           [this, this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
@@ -588,7 +592,7 @@ struct TimerObservable : public Observable<size_t> {
   TimerObservable(const ROSAdapter::Duration &interval, bool use_wall_time, bool is_one_off_timer) {
     this->name = "timer";
     auto this_obs = this->observable_;
-    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [=](NodeBookkeeping &node) {
       /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
       timer = node.add_timer(interval, use_wall_time, [this, this_obs, is_one_off_timer]() {
         size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
@@ -616,7 +620,7 @@ public:
                       const ROSAdapter::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->name = topic_name;
     auto this_obs = this->observable_;
-    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [=](NodeBookkeeping &node) {
       auto publisher = node.add_publication<Message>(topic_name, qos);
       this_obs->_register_handler([this_obs, publisher]() {
         // We cannot pass over the pointer since publish expects a unique ptr and we got a
@@ -708,7 +712,7 @@ public:
   using Value = geometry_msgs::msg::TransformStamped;
   TransformPublisherObservable() {
     this->name = "tf_pub";
-    this->attach_ = [this_obs = this->observable_](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [this_obs = this->observable_](NodeBookkeeping &node) {
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
       this_obs->_register_handler([this_obs, tf_broadcaster]() {
         const auto &new_value = this_obs->value();  /// There can be no error
@@ -730,7 +734,7 @@ struct ServiceObservable
   ServiceObservable(const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     auto this_obs = this->observable_;
-    this->attach_ = [=](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [=](NodeBookkeeping &node) {
       node.add_service<_ServiceT>(
           service_name,
           [this_obs](Request request, Response response) {
@@ -751,7 +755,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
       : timeout_(timeout) {
     this->name = service_name;
     auto this_obs = this->observable_;
-    this->attach_ = [this, service_name](ROSAdapter::NodeHandle &node) {
+    this->attach_ = [this, service_name](NodeBookkeeping &node) {
       client_ = node.add_client<_ServiceT>(service_name);
     };
   }
@@ -818,7 +822,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
   void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = cb; }
 
-  void initialize(ROSAdapter::NodeHandle &node) {
+  void initialize(NodeBookkeeping &node) {
     if (attachables_.empty()) {
       std::cout << "WARNING: Nothing to spawn, try first to create some Observables" << std::endl;
       return;
@@ -827,7 +831,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     was_initialized_ = true;
   }
 
-  void attach_everything_to_node(ROSAdapter::NodeHandle &node) {
+  void attach_everything_to_node(NodeBookkeeping &node) {
     /// Now attach everything to the ROS-Node, this creates the parameters, publishers etc.
     /// Now, allow for attaching additional nodes after we got the parameters. After attaching,
     /// parameters immediatelly have their values.
