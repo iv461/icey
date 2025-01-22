@@ -1016,17 +1016,20 @@ struct Context : public std::enable_shared_from_this<Context> {
     return synchronizer;
   }
 
+  
+  /// Synchronize a variable amount of Observables. Uses a Approx-Time synchronizer if the inputs are not 
+  /// interpolatable or an interpolation-based synchronizer based on a given (non-interpolatable) reference. 
+  /// Or, a combination of both, this is decided at compile-time.
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
     static_assert(sizeof...(Parents) >= 2,
                   "You need to have at least two inputs for synchronization.");
     auto parents_tuple = std::make_tuple(parents...);
-
     auto interpolatables =
         hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
     auto non_interpolatables =
-        hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
+        hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });    
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
     static_assert(not(num_interpolatables > 0 && num_non_interpolatables == 0),
@@ -1041,7 +1044,7 @@ struct Context : public std::enable_shared_from_this<Context> {
       auto approx_time_output = hana::unpack(non_interpolatables, [this](auto... parents) {
         return synchronize_approx_time(parents...);
       });
-      if constexpr (num_interpolatables > 1) {
+      if constexpr (num_interpolatables  > 1) {
         /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
         return hana::unpack(
             hana::prepend(interpolatables, approx_time_output),

@@ -4,9 +4,6 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported. Generally, we have to use everywhere `rclcpp::NodebaseInterfaces`, another issue is that image_transport does not support LifeCycleNodes: https://github.com/ros-perception/image_common/pull/304
-
-- [ ] Code simplicity: consider holding the baggage that is currently in the ROSNode wrapper in the Context. Right now we essentially have two contexts.
 
 - [ ] `unpack` tuple of obs to multiple obs, this is easy 
 - [ ] Buffer: Basis for `delay`-filter
@@ -30,9 +27,6 @@ Sorted by decreasing priority.
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
 - [ ] Result-type for error handling example
-- [ ] Timeout of subscribers -> .timeout -> impl via simple additional timer -> maybe document how to do manually 
-
-- [X] Test with clang and build with ASAN(`-DCMAKE_CXX_FLAGS=-fsanitize=address`). -> unusable because ROS triggers new-delete-mismatch
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
 
@@ -45,8 +39,6 @@ Sorted by decreasing priority.
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
-
-- [X] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
 
 - [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125) -> maybe "lazy" parameter on publish() ? 
 
@@ -181,6 +173,14 @@ Sorted by decreasing priority.
 - [X] Automatic creation of callback groups for timer->client sequence ! otherwise deadlock ! (only if we support client/service) -> see maybe client example in nav2_stack -> https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html this was only for synchronous call. We do not need to create the callback groups if we are only using the async_call
 - [X] Service client as member function, `call_service`
 - [X] Timeouted Service request cleanup (automatic, periodically ? also use the available API functions to ensure there is nothing left)
+- [X] Lifecycle nodes -> Template for the base class, sub/pub are essentially the same, maybe get the Nav2 wrapper -> we should not make the impression they are not supported. Generally, we have to use everywhere `rclcpp::NodebaseInterfaces`, another issue is that image_transport does not support LifeCycleNodes: https://github.com/ros-perception/image_common/pull/304
+
+- [X] Code simplicity: consider holding the baggage that is currently in the ROSNode wrapper in the Context. Right now we essentially have two contexts.
+
+
+- [X] Test with clang and build with ASAN(`-DCMAKE_CXX_FLAGS=-fsanitize=address`). -> unusable because ROS triggers new-delete-mismatch
+- [X] Image-transport pub [is common](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L111)
+
 ### Code 
 
 - [X] Use Result https://github.com/bitwizeshift/result

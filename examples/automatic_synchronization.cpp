@@ -1,4 +1,8 @@
-/// A more complex mutliple-input, multiple-output (MIMO) example
+/// This example shows how ICEY synchronizes topics automatically based the subscribed inputs.
+/// There is a single "icey::synchronize" function that is used both for approximate time synchronization, 
+/// as well as obtaining the transform from TF (via lookupTransform) for a given topic, which is another form 
+/// of synchronization. The synchronizer is chosen and wired at compile-time, so that no runtime-overhead occurs.
+
 #include <icey/icey.hpp>
 
 #include "std_msgs/msg/float32.hpp"
