@@ -5,9 +5,8 @@
 #include <icey/impl/reflect.hpp>
 #include <iostream>
 struct MyParameters {
-    //cey::DynParameter<float> max_velocity{2.f, icey::Interval(0.f, 25.f)};
-    int a{3}; 
-    float b{3.1415};
+    icey::DynParameter<float> max_velocity{2.f, icey::Interval(0.f, 25.f)};
+    icey::DynParameter<int> mode{3};
 };
 
 int main(int argc, char **argv) {
@@ -21,7 +20,7 @@ field_reflection::for_each_field(f, [](std::string_view field, auto& value) {
     // hello: Hello World
     // arr: [1, 2, 3]
     // map: {"one": 1, "two": 2}
-    std::cout << field << ", " << value << std::endl;
+    std::cout << field << ", " << value.get_value() << std::endl;
 });
     //icey::spawn(argc, argv, "tf_listener_example"); /// Create and start node
 }

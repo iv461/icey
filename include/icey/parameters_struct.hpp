@@ -79,15 +79,17 @@ namespace icey {
                     const Validator<Value> &validator = Validator<Value>(), 
                     const std::string &description = "", bool is_dynamic=true):
                     //parameter_name(parameter_name),
+                    value(default_value),
                     default_value(default_value),
                     validator(validator),
                     description(description),
                     is_dynamic(is_dynamic) {
-
-        }
+            
+        }   
 
         /// Allow implicit conversion to the stored value type
         operator Value() const { return value.value(); }
+        const Value &get_value() const  {return value.value();}
 
         std::optional<Value> value;
         std::string parameter_name; 

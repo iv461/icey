@@ -19,33 +19,6 @@
 #include <type_traits>
 #include <utility>
 
-// Some polyfills to support C++ 17...
-#include "source_location.hpp"
-////////
-/*
-namespace std {
-  namespace detail
-{
-    template< class T, class U >
-    concept SameHelper = std::is_same_v<T, U>;
-}
- 
-template< class T, class U >
-concept same_as = detail::SameHelper<T, U> && detail::SameHelper<U, T>;
-
-template<class T>
-struct remove_cvref
-{
-    using type = std::remove_cv_t<std::remove_reference_t<T>>;
-};
-
-template<class T>
-using  remove_cvref_t = typename remove_cvref<T>::type;
-} // end namespace std
-*/
-//////////
-
-
 namespace field_reflection
 {
     template <auto V>
@@ -640,7 +613,7 @@ namespace field_reflection
             // clang-cl returns function_name() as __FUNCTION__ instead of __PRETTY_FUNCTION__
             return std::string_view{__PRETTY_FUNCTION__};
 #else
-            return std::string_view{nostd::source_location::current().function_name()};
+            return std::string_view{std::source_location::current().function_name()};
 #endif
         }
 
@@ -651,7 +624,7 @@ namespace field_reflection
             // clang-cl returns function_name() as __FUNCTION__ instead of __PRETTY_FUNCTION__
             return std::string_view{__PRETTY_FUNCTION__};
 #else
-            return std::string_view{nostd::source_location::current().function_name()};
+            return std::string_view{std::source_location::current().function_name()};
 #endif
         }
 
@@ -745,36 +718,15 @@ namespace field_reflection
         template <typename T, typename Func, std::size_t... Is, field_referenceable U = std::remove_cvref_t<T>>
         void for_each_field_impl(T&& t, Func&& func, std::index_sequence<Is...>)
         {
-            /*if constexpr (requires { (func(get_field<Is>(t)), ...); })
-            {
-                (func(get_field<Is>(t)), ...);
-            }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t)), ...); })
-            {
-            }
-            else
-            {
-                static_assert([] { return false; }(), "invalid function object for call to for_each_field");
-            }*/
-                (func(field_name<U, Is>, get_field<Is>(t)), ...);
+            (func(field_name<U, Is>, get_field<Is>(t)), ...);
         }
 
         template <typename T1, typename T2, typename Func, std::size_t... Is,
                   field_referenceable U = std::remove_cvref_t<T1>>
         void for_each_field_impl(T1&& t1, T2&& t2, Func&& func, std::index_sequence<Is...>)
         {
-            /*if constexpr (requires { (func(get_field<Is>(t1), get_field<Is>(t2)), ...); })
-            {
-                (func(get_field<Is>(t1), get_field<Is>(t2)), ...);
-            }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)), ...); })
-            {
-            }
-            else
-            {
-                static_assert([] { return false; }(), "invalid function object for call to for_each_field");
-            }*/
-                (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)), ...);
+            
+            (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)), ...);
         }
 
 
