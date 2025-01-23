@@ -303,13 +303,13 @@ struct NodeInterfaces {
       auto service = rclcpp::create_service<ServiceT>(
         node_.node_base_,
           node_.node_services_,
-          service_name, std::move(callback));  /// TODO In humble, we cannot pass QoS, only in Jazzy
-                                               /// (the API wasn't ready yet, it needs rmw_*-stuff)
+          service_name, std::move(callback),qos.get_rmw_qos_profile(), group); /// TODO get_rmw_qos_profile only needed for Humble
       book_.services_.emplace(service_name, service);
     }
 
     template <class Service>
     auto add_client(const std::string &service_name,
+    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
         rclcpp::CallbackGroup::SharedPtr group = nullptr) {
        /// TODO extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
       auto client = rclcpp::create_client<Service>(
