@@ -683,8 +683,8 @@ namespace field_reflection
         using remove_rvalue_reference_t =
             std::conditional_t<std::is_rvalue_reference_v<T>, std::remove_reference_t<T>, T>;
 
-        template <field_namable T, std::size_t N>
-        constexpr std::string_view field_name = get_field_name<T, get_ptr<T, N>()>();
+        /*template <field_namable T, std::size_t N>
+        constexpr std::string_view field_name = get_field_name<T, get_ptr<T, N>()>();*/
 
         template <field_referenceable T, std::size_t N>
         using field_type = remove_rvalue_reference_t<decltype(std::get<N>(to_tuple(std::declval<T&>())))>;
@@ -745,113 +745,44 @@ namespace field_reflection
         template <typename T, typename Func, std::size_t... Is, field_referenceable U = std::remove_cvref_t<T>>
         void for_each_field_impl(T&& t, Func&& func, std::index_sequence<Is...>)
         {
-            if constexpr (requires { (func(get_field<Is>(t)), ...); })
+            /*if constexpr (requires { (func(get_field<Is>(t)), ...); })
             {
                 (func(get_field<Is>(t)), ...);
             }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t)), ...); })
+            else if constexpr (requires { (func(get_field_name<U, get_ptr<U, Is>()>(), get_field<Is>(t)), ...); })
             {
-                (func(field_name<U, Is>, get_field<Is>(t)), ...);
             }
             else
             {
                 static_assert([] { return false; }(), "invalid function object for call to for_each_field");
-            }
+            }*/
+                (func(get_field_name<U, get_ptr<U, Is>()>(), get_field<Is>(t)), ...);
         }
 
         template <typename T1, typename T2, typename Func, std::size_t... Is,
                   field_referenceable U = std::remove_cvref_t<T1>>
         void for_each_field_impl(T1&& t1, T2&& t2, Func&& func, std::index_sequence<Is...>)
         {
-            if constexpr (requires { (func(get_field<Is>(t1), get_field<Is>(t2)), ...); })
+            /*if constexpr (requires { (func(get_field<Is>(t1), get_field<Is>(t2)), ...); })
             {
                 (func(get_field<Is>(t1), get_field<Is>(t2)), ...);
             }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)), ...); })
+            else if constexpr (requires { (func( get_field_name<U, get_ptr<U, Is>()>(), get_field<Is>(t1), get_field<Is>(t2)), ...); })
             {
-                (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)), ...);
             }
             else
             {
                 static_assert([] { return false; }(), "invalid function object for call to for_each_field");
-            }
+            }*/
+                (func(get_field_name<U, get_ptr<U, Is>()>(), get_field<Is>(t1), get_field<Is>(t2)), ...);
         }
 
-        template <typename T, typename Func, std::size_t... Is, field_referenceable U = std::remove_cvref_t<T>>
-        bool all_of_field_impl(T&& t, Func&& func, std::index_sequence<Is...>)
-        {
-            if constexpr (requires { (func(get_field<Is>(t)) && ...); })
-            {
-                return (func(get_field<Is>(t)) && ...);
-            }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t)) && ...); })
-            {
-                return (func(field_name<U, Is>, get_field<Is>(t)) && ...);
-            }
-            else
-            {
-                static_assert([] { return false; }(), "invalid function object for call to all_of_field");
-            }
-        }
-
-        template <typename T1, typename T2, typename Func, std::size_t... Is,
-                  field_referenceable U = std::remove_cvref_t<T1>>
-        bool all_of_field_impl(T1&& t1, T2&& t2, Func&& func, std::index_sequence<Is...>)
-        {
-            if constexpr (requires { (func(get_field<Is>(t1), get_field<Is>(t2)) && ...); })
-            {
-                return (func(get_field<Is>(t1), get_field<Is>(t2)) && ...);
-            }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)) && ...); })
-            {
-                return (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)) && ...);
-            }
-            else
-            {
-                static_assert([] { return false; }(), "invalid function object for call to all_of_field");
-            }
-        }
-
-        template <typename T, typename Func, std::size_t... Is, field_referenceable U = std::remove_cvref_t<T>>
-        bool any_of_field_impl(T&& t, Func&& func, std::index_sequence<Is...>)
-        {
-            if constexpr (requires { (func(get_field<Is>(t)) || ...); })
-            {
-                return (func(get_field<Is>(t)) || ...);
-            }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t)) || ...); })
-            {
-                return (func(field_name<U, Is>, get_field<Is>(t)) || ...);
-            }
-            else
-            {
-                static_assert([] { return false; }(), "invalid function object for call to any_of_field");
-            }
-        }
-
-        template <typename T1, typename T2, typename Func, std::size_t... Is,
-                  field_referenceable U = std::remove_cvref_t<T1>>
-        bool any_of_field_impl(T1&& t1, T2&& t2, Func&& func, std::index_sequence<Is...>)
-        {
-            if constexpr (requires { (func(get_field<Is>(t1), get_field<Is>(t2)) || ...); })
-            {
-                return (func(get_field<Is>(t1), get_field<Is>(t2)) || ...);
-            }
-            else if constexpr (requires { (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)) || ...); })
-            {
-                return (func(field_name<U, Is>, get_field<Is>(t1), get_field<Is>(t2)) || ...);
-            }
-            else
-            {
-                static_assert([] { return false; }(), "invalid function object for call to any_of_field");
-            }
-        }
     }  // namespace detail
 
     using detail::field_count;
     using detail::field_countable;
     using detail::field_namable;
-    using detail::field_name;
+    //using detail::field_name;
     using detail::field_referenceable;
     using detail::field_type;
     using detail::get_field;
@@ -874,35 +805,5 @@ namespace field_reflection
                                     std::make_index_sequence<field_count<U>>());
     }
 
-    template <typename T1, typename T2, typename Func, field_referenceable U1 = std::remove_cvref_t<T1>,
-              field_referenceable U2 = std::remove_cvref_t<T2>>
-    requires std::is_same_v<U1, U2>
-    bool all_of_field(T1&& t1, T2&& t2, Func&& func)
-    {
-        return detail::all_of_field_impl(std::forward<T1>(t1), std::forward<T2>(t2), std::forward<Func>(func),
-                                         std::make_index_sequence<field_count<U1>>());
-    }
-
-    template <typename T, typename Func, field_referenceable U = std::remove_cvref_t<T>>
-    bool all_of_field(T&& t, Func&& func)
-    {
-        return detail::all_of_field_impl(std::forward<T>(t), std::forward<Func>(func),
-                                         std::make_index_sequence<field_count<U>>());
-    }
-
-    template <typename T1, typename T2, typename Func, field_referenceable U1 = std::remove_cvref_t<T1>,
-              field_referenceable U2 = std::remove_cvref_t<T2>>
-    requires std::is_same_v<U1, U2>
-    bool any_of_field(T1&& t1, T2&& t2, Func&& func)
-    {
-        return detail::any_of_field_impl(std::forward<T1>(t1), std::forward<T2>(t2), std::forward<Func>(func),
-                                         std::make_index_sequence<field_count<U1>>());
-    }
-
-    template <typename T, typename Func, field_referenceable U = std::remove_cvref_t<T>>
-    bool any_of_field(T&& t, Func&& func)
-    {
-        return detail::any_of_field_impl(std::forward<T>(t), std::forward<Func>(func),
-                                         std::make_index_sequence<field_count<U>>());
-    }
+  
 }  // namespace field_reflection
