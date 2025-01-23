@@ -80,17 +80,15 @@ public:
 
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
+  /// TODO disable_if these hold Nothing 
   void set_value(const MaybeValue &x) {
-    static_assert(not std::is_same_v<Value, Nothing>,
-                  "This observable does not have a value, so you cannot call set_value() on it.");
     if (x)
       value_.set_ok(*x);
     else
       value_.set_none();
   }
+
   void set_error(const ErrorValue &x) { 
-      static_assert(not std::is_same_v<ErrorValue, Nothing>,
-                  "This observable does not have a rrror value, so you cannot call set_error() on it.");
       value_.set_err(x); 
   }
 

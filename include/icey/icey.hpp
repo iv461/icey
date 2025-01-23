@@ -233,6 +233,8 @@ struct NodeInterfaces {
       /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
       /// hood of tf2_ros::TransformBroadcaster
       std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+      /// Some extra baggage we can have for the functional API as an extention point
+      std::unordered_map<std::string, std::any> extra_baggage_;
     };
     
     explicit NodeBookkeeping(const NodeInterfaces &node) : node_(node) {}

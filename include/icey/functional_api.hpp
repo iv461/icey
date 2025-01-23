@@ -127,9 +127,9 @@ auto create_client(Parent parent, const std::string& service_name,
 }
 
 /// Extention point: support creating custom Observables: 
-template <typename ...Args>
+template <class T, typename ...Args>
 auto create_observable(Args && ...args) {
-  return g_state.get_context().create_observable<T>(std::forward<Args>(args));
+  return g_state.get_context().template create_observable<T>(std::forward<Args>(args)...);
 }
 
 /// Register something that is called immediatelly after we received all paramters from ROS
