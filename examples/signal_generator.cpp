@@ -60,8 +60,7 @@ int main(int argc, char **argv) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Amplitude " << params.amplitude << " and frequency:  " << params.frequency);
-        double y = params.amplitude * std::sin((period_time_s * ticks) / params.frequency * 2 * M_PI);
+        double y = params.amplitude * std::sin((period_time_s * ticks) * params.frequency * 2 * M_PI);
         float_val.data = y;
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Publishing sine... " << y);
         return float_val;
