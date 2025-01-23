@@ -13,6 +13,9 @@
 #include <unordered_set>
 #include <optional>
 #include <string>
+
+#include <icey/impl/field_reflection.hpp>
+
 namespace icey {
     /// First, some constraints we can impose on parameters:
     /// A closed interval, meaning a value must be greater or equal to a minimum value 
@@ -20,6 +23,7 @@ namespace icey {
     template<class Value>
     struct Interval {
         static_assert(std::is_arithmetic_v<Value>, "The value type must be a number");
+        /// TODO make two template params and use common_type + CTAD to make a really nice UX
         Interval(Value minimum, Value maximum) : minimum(minimum), maximum(maximum) {}
         Value minimum;
         Value maximum;
@@ -74,32 +78,59 @@ namespace icey {
 
     template<class Value>
     struct DynParameter {
-
+        using type = Value;
         DynParameter(const std::optional<Value> &default_value,
                     const Validator<Value> &validator = Validator<Value>(), 
-                    const std::string &description = "", bool is_dynamic=true):
+                    const std::string &description = "", bool read_only=false):
                     //parameter_name(parameter_name),
                     value(default_value),
                     default_value(default_value),
                     validator(validator),
                     description(description),
-                    is_dynamic(is_dynamic) {
+                    read_only(read_only) {
             
         }   
 
-        /// Allow implicit conversion to the stored value type
-        operator Value() const { return value.value(); }
         const Value &get_value() const  {return value.value();}
+        
+        /// Allow implicit conversion to the stored value type
+        operator Value() const { return get_value(); }
 
         std::optional<Value> value;
         std::string parameter_name; 
         std::optional<Value> default_value;
         Validator<Value> validator;
         std::string description;
-        bool is_dynamic;
+        bool read_only;
     };
 
-    struct DynParameters {
-
+    template<class Derived>
+    struct ParametersStruct : public Derived {
+        friend std::ostream &operator<<(std::ostream &os, ParametersStruct &params) {
+            field_reflection::for_each_field(params, [&os](std::string_view field_name, auto& field_value) {
+                    os << field_name << ": " << field_value << std::endl;
+            });
+            return os;
+        }
     };
+
+template<class T>
+static void declare_parameter_struct(Context &ctx, T &params, std::function<void(const std::string&)> notify_callback) {
+    //auto parameters_struct_obs = ctx.create_observable<
+    field_reflection::for_each_field(params, [&ctx, &params, &notify_callback](std::string_view field_name, auto& field_value) {
+        using FieldT = typename std::remove_reference_t <decltype(field_value) >::type;
+        std::string field_name_r(field_name);
+        /// TODO register validator
+        rcl_interfaces::msg::ParameterDescriptor desc;
+        desc.description = field_value.description;
+        desc.read_only = field_value.read_only;
+        auto param_obs = ctx.declare_parameter<FieldT>(field_name_r, field_value.default_value);
+        param_obs->observable_->register_handler([&field_value, param_obs, field_name_r, &notify_callback]() {
+            std::cout << "Value of field " << field_name_r << " changed to " << field_value.get_value() << std::endl;
+            field_value.value = param_obs->value();
+            notify_callback(field_name_r);
+        });
+    });
+}
+
 }

@@ -21,14 +21,8 @@
 
 namespace field_reflection
 {
-    template <auto V>
-    static constexpr auto force_consteval = V;
-
     namespace detail
     {
-
-
-
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wundefined-inline"
