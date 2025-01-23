@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
   #add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
-  add_compile_options(-fconcepts)
+  add_compile_options(-fconcepts -fconcepts-ts)
 endif()
 
 find_package(ament_cmake_auto REQUIRED)

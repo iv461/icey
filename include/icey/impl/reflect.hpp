@@ -20,8 +20,10 @@
 #include <utility>
 
 // Some polyfills to support C++ 17...
-
 #include "source_location.hpp"
+////////
+/*
+*/
 namespace std {
   namespace detail
 {
@@ -41,6 +43,7 @@ struct remove_cvref
 template<class T>
 using  remove_cvref_t = typename remove_cvref<T>::type;
 } // end namespace std
+//////////
 
 
 namespace field_reflection
@@ -660,12 +663,12 @@ namespace field_reflection
                 void* dummy;
             };
 
-            constexpr auto detector_name = force_consteval < get_function_name<field_name_detector, get_ptr<field_name_detector, 0>()>() >;
+            constexpr auto detector_name = get_function_name<field_name_detector, get_ptr<field_name_detector, 0>()>();
             constexpr auto dummy_begin = detector_name.rfind(std::string_view("dummy"));
             constexpr auto suffix = detector_name.substr(dummy_begin + std::string_view("dummy").size());
             constexpr auto begin_sentinel = detector_name[dummy_begin - 1];
 
-            const auto field_name_raw = force_consteval < get_function_name<T, Ptr>() >;
+            const auto field_name_raw = get_function_name<T, Ptr>();
             const auto last = field_name_raw.rfind(suffix);
             const auto begin = field_name_raw.rfind(begin_sentinel, last - 1) + 1;
 
@@ -681,7 +684,7 @@ namespace field_reflection
             std::conditional_t<std::is_rvalue_reference_v<T>, std::remove_reference_t<T>, T>;
 
         template <field_namable T, std::size_t N>
-        constexpr std::string_view field_name = force_consteval < get_field_name<T, get_ptr<T, N>()>() >;
+        constexpr std::string_view field_name = get_field_name<T, get_ptr<T, N>()>();
 
         template <field_referenceable T, std::size_t N>
         using field_type = remove_rvalue_reference_t<decltype(std::get<N>(to_tuple(std::declval<T&>())))>;
@@ -691,24 +694,24 @@ namespace field_reflection
         };
 
         template <typename T>
-        consteval std::string_view get_type_name()
+        constexpr std::string_view get_type_name()
         {
 #if defined(__GNUC__) || defined(__clang__)
-            constexpr auto detector_name = force_consteval < get_function_name<type_name_detector>() >;
+            constexpr auto detector_name = get_function_name<type_name_detector>();
             constexpr auto dummy = std::string_view("T = ");
             constexpr auto dummy_begin = detector_name.find(dummy) + dummy.size();
             constexpr auto dummy2 = std::string_view("type_name_detector");
             constexpr auto dummy_suffix_length = detector_name.size() - detector_name.find(dummy2) - dummy2.size();
 
-            constexpr auto type_name_raw = force_consteval < get_function_name<T>() >;
+            constexpr auto type_name_raw = get_function_name<T>();
             return type_name_raw.substr(dummy_begin, type_name_raw.size() - dummy_begin - dummy_suffix_length);
 #else
-            constexpr auto detector_name = force_consteval < get_function_name<type_name_detector>() >;
+            constexpr auto detector_name = get_function_name<type_name_detector>();
             constexpr auto dummy = std::string_view("struct field_reflection::detail::type_name_detector");
             constexpr auto dummy_begin = detector_name.find(dummy);
             constexpr auto dummy_suffix_length = detector_name.size() - dummy_begin - dummy.size();
 
-            auto type_name_raw = force_consteval < get_function_name<T>() > ;
+            auto type_name_raw = get_function_name<T>();
             auto type_name =
                 type_name_raw.substr(dummy_begin, type_name_raw.size() - dummy_begin - dummy_suffix_length);
             if (auto s = std::string_view("struct "); type_name.starts_with(s))
