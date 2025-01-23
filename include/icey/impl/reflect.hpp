@@ -653,7 +653,7 @@ namespace field_reflection
         }
 
         template <typename T, auto Ptr>
-        consteval std::string_view get_field_name()
+        constexpr std::string_view get_field_name()
         {
             struct field_name_detector
             {
@@ -681,7 +681,7 @@ namespace field_reflection
             std::conditional_t<std::is_rvalue_reference_v<T>, std::remove_reference_t<T>, T>;
 
         template <field_namable T, std::size_t N>
-        constexpr std::string_view field_name = get_field_name<T, get_ptr<T, N>()>();
+        constexpr std::string_view field_name = force_consteval < get_field_name<T, get_ptr<T, N>()>() >;
 
         template <field_referenceable T, std::size_t N>
         using field_type = remove_rvalue_reference_t<decltype(std::get<N>(to_tuple(std::declval<T&>())))>;
