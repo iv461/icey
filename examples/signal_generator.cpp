@@ -6,8 +6,10 @@
 
 using namespace std::chrono_literals;
 
+/// All parameters of the node
 struct NodeParameters  {
-    icey::DynParameter<double> frequency{10., icey::Interval(0., 25.)};
+    /// We set a default value, allowed interval and a description
+    icey::DynParameter<double> frequency{10., icey::Interval(0., 25.), std::string("The frequency of the sine")};
     icey::DynParameter<double> amplitude{3};
 };
 
@@ -58,6 +60,7 @@ int main(int argc, char **argv) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Amplitude " << params.amplitude << " and frequency:  " << params.frequency);
         double y = params.amplitude * std::sin((period_time_s * ticks) / params.frequency * 2 * M_PI);
         float_val.data = y;
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Publishing sine... " << y);

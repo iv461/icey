@@ -17,6 +17,8 @@
 #include <icey/impl/field_reflection.hpp>
 
 namespace icey {
+    /// FOr API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
+    
     /// First, some constraints we can impose on parameters:
     /// A closed interval, meaning a value must be greater or equal to a minimum value 
     /// and less or equal to a maximal value.
@@ -54,8 +56,8 @@ namespace icey {
                 validate = [](const ROSValue &new_value) {return true;};
         }
 
-        /// Construct from an explicit validation predicate
-        Validator(const Validate &validate) : validate(validate) {}
+        /// Construct explicitly from a  validation predicate
+        explicit Validator(const Validate &validate) : validate(validate) {}
 
         /// Allow implicit conversion from some easy sets: 
         Validator(const Interval<Value> &interval) {
@@ -64,7 +66,7 @@ namespace icey {
             };
         }
         
-        /// Implicit conversion from 
+        /// Implicit conversion from a Set of values
         Validator(const Set<Value> &set) {
             validate = [set](const ROSValue &new_value) {
                     return set.count(new_value) > 0; /// contains is C++20 :(
