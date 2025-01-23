@@ -4,8 +4,8 @@ project(icey)
 set(CMAKE_CXX_STANDARD 20)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
-  #add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
+  #add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
+  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
 endif()
 
 find_package(ament_cmake_auto REQUIRED)

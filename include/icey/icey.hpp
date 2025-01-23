@@ -175,7 +175,7 @@ struct NodeInterfaces {
     /// This simply looks up the transform in the buffer at the latest stamp and checks if it
     /// changed with respect to the previously received one. If the transform has changed, we know
     /// we have to notify.
-    void maybenotify(TFSubscriptionInfo &info) {
+    void maybe_notify(TFSubscriptionInfo &info) {
       try {
         /// Lookup the latest transform in the buffer to see if we got something new in the buffer.
         /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a std::vector/tree.
@@ -197,7 +197,7 @@ struct NodeInterfaces {
 
     void notify_if_any_relevant_transform_was_received() {
       for (auto &tf_info : subscribed_transforms_) {
-        maybenotify(tf_info);
+        maybe_notify(tf_info);
       }
     }
 
@@ -1086,11 +1086,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   }
 
   /// Unpacks a observables of tuple into multiple observables
-  /*
-  template <class Parent>
-  auto unpack(Parent &parent) {
-  }
-  */
+
   /// Then's on timeout. Creates a new timer.
   // timeout
   // Crates a new timer that sync_with_reference, matching exactly an output frequency. Input must

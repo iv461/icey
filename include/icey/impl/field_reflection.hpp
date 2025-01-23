@@ -23,10 +23,10 @@ namespace field_reflection
 {
     namespace detail
     {
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wundefined-inline"
-#endif
+//#if defined(__GNUC__) || defined(__clang__)
+//#pragma GCC diagnostic push
+//#pragma GCC diagnostic ignored "-Wundefined-inline"
+//#endif
         template <typename T, std::size_t = 0>
         struct any_lref
         {
