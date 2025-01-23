@@ -6,8 +6,8 @@
 #include <iostream>
 struct MyParameters {
     //cey::DynParameter<float> max_velocity{2.f, icey::Interval(0.f, 25.f)};
-    int a{3}; 
-    float b{3.1415};
+    int a; 
+    float b;
 };
 
 int main(int argc, char **argv) {
