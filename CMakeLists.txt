@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(icey)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
@@ -27,7 +27,7 @@ include_directories(
 #ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
 #ament_auto_add_executable(message_filters_interoperability_example examples/message_filters_interoperability.cpp)
 #ament_auto_add_executable(service_client_and_server_example examples/service_client_and_server.cpp)
-ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
+#ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
 
 #ament_auto_add_executable(service_client_example examples/service_client.cpp)
 #ament_auto_add_executable(service_server_example examples/service_server.cpp)

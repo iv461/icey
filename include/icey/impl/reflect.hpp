@@ -20,6 +20,8 @@
 #include <utility>
 
 // Some polyfills to support C++ 17...
+/*
+#ifdef __cplusplus  == 201703L
 #include "source_location.hpp"
 namespace std {
   namespace detail
@@ -39,7 +41,9 @@ struct remove_cvref
 
 template<class T>
 using  remove_cvref_t = typename remove_cvref<T>::type;
-}
+} // end namespace std
+#endif
+*/
 
 namespace field_reflection
 {

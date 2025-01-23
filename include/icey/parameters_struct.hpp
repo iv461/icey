@@ -11,7 +11,8 @@
 #include <type_traits>
 #include <functional>
 #include <unordered_set>
-
+#include <optional>
+#include <string>
 namespace icey {
     /// First, some constraints we can impose on parameters:
     /// A closed interval, meaning a value must be greater or equal to a minimum value 
