@@ -13,8 +13,6 @@ Sorted by decreasing priority.
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
 
-- [ ] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
-
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
@@ -34,8 +32,6 @@ Sorted by decreasing priority.
 - [ ] Maybe support cascading the synchronizers 
 
 - [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> easy TODO
-
-- [ ] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved) -> we already have with 
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
@@ -181,6 +177,10 @@ Sorted by decreasing priority.
 - [X] Forbid subscribing to the same topic that is published by the same node -> not doing, resp of the user
 - [X] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it deals only with a constant delay, like 5 seconds. We could acutally support this by a Delay-node (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)
 - [X] A way to enable/disable the node -> Lifecycle node
+
+- [X] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved) -> we already have with 
+
+- [X] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
 
 ### Code 
 

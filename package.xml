@@ -15,6 +15,7 @@
  
  <depend>rclcpp</depend>
  <depend>rclcpp_components</depend>
+ <depend>rclcpp_lifecycle</depend>
 
  <depend>geometry_msgs</depend> 
  <depend>sensor_msgs</depend>
@@ -25,7 +26,6 @@
  <depend>diagnostic_updater</depend>
  <depend>message_filters</depend>
  <depend>image_transport</depend>
- <depend>rclcpp_lifecycle</depend>
  
  <test_depend>ament_lint_auto</test_depend>
  <test_depend>ament_lint_common</test_depend>

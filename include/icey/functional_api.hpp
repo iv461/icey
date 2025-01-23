@@ -54,7 +54,7 @@ struct GlobalState {
     }
   }
 
-private:
+
   // Access the node, in case only one was spawned
   Node* get_node() {
     if (nodes.empty()) {
@@ -168,6 +168,7 @@ void spawn(int argc, char** argv, std::string node_name) {
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
   spawn(g_state.create_new_node(node_name));
+  g_state.nodes.clear(); // Purge the nodes, the nodes must be destroyed before the global rclcpp context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
 }
 
 /// Create a node from the staged global context. Clears the global context so that multiple nodes

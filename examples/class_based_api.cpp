@@ -46,12 +46,13 @@ public:
     }
 };
 
+std::shared_ptr<MyNode> my_node;
 
 int main(int argc, char **argv) {
    rclcpp::init(argc, argv);
 
-   auto node = std::make_shared<MyNode>("class_based_node_example");
+   my_node = std::make_shared<MyNode>("class_based_node_example");
 
-   icey::spawn(node);
+   icey::spawn(my_node);
    return 0;           
 }
