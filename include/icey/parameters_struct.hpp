@@ -76,8 +76,9 @@ namespace icey {
         Validate validate;
     };
 
+    class DynParameterTag{};
     template<class Value>
-    struct DynParameter {
+    struct DynParameter : public DynParameterTag {
         using type = Value;
         DynParameter(const std::optional<Value> &default_value,
                     const Validator<Value> &validator = Validator<Value>(), 
@@ -118,17 +119,17 @@ template<class T>
 static void declare_parameter_struct(Context &ctx, T &params, const std::function<void(const std::string&)> &notify_callback) {
     //auto parameters_struct_obs = ctx.create_observable<
     field_reflection::for_each_field(params, [&ctx, &params, notify_callback](std::string_view field_name, auto& field_value) {
-        using FieldT = typename std::remove_reference_t <decltype(field_value) >::type;
+        using Field = std::remove_reference_t <decltype(field_value) >;
+        static_assert(std::is_base_of_v< DynParameterTag, Field>, "Every field of the parameters struct must be of type icey::DynParameter<T>");
+        using ParamValue = typename Field::type;
         std::string field_name_r(field_name);
         /// TODO register validator
         rcl_interfaces::msg::ParameterDescriptor desc;
         desc.description = field_value.description;
         desc.read_only = field_value.read_only;
-        auto param_obs = ctx.declare_parameter<FieldT>(field_name_r, field_value.default_value);
+        auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
         param_obs->observable_->register_handler([&field_value, param_obs, field_name_r, notify_callback]() {
-            std::cout << "Value of field " << field_name_r << " changed to " << field_value.get_value() << std::endl;
             field_value.value = param_obs->value();
-            std::cout << "NOtifying .." << std::endl;
             notify_callback(field_name_r);
         });
     });

@@ -9,13 +9,14 @@
 #include <variant>
 
 namespace icey {
+/// A special type that indicates that there is no value (note that using void causes many problems, defining an own struct is easier.)
 struct Nothing {};
+/// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we will generally use in the following to recognize (unspecialized) class templates.
+struct ResultTag {}; 
 /// A Result-type like in Rust, it is a sum type that can either hold Value or Error, or, different
-/// to Rust, none. We create a new type to be able to recognize it when it is returned from a user
-/// callback.
-struct ResultBase {};
+/// to Rust, none. 
 template <class _Value, class _ErrorValue>
-struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public ResultBase {
+struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public ResultTag {
   using Value = _Value;
   using ErrorValue = _ErrorValue;
   using Self = Result<_Value, _ErrorValue>;
@@ -40,7 +41,7 @@ struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public
 };
 
 template <class T>
-constexpr bool is_result = std::is_base_of_v<ResultBase, T>;
+constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 /// Some traits of the observables
 template <class T>
 using obs_val = typename remove_shared_ptr_t<T>::Value;
@@ -48,7 +49,7 @@ template <class T>
 using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
 template <class T>
 using obs_state = typename remove_shared_ptr_t<T>::State;
-/// By stripping the shared_ptr, we usually get the ROS message that a observable holds
+/// By stripping the shared_ptr, we usually get the ROS message that an observable holds
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
