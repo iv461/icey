@@ -31,8 +31,7 @@ int main(int argc, char **argv) {
             icey::PublisherObservable< std_msgs::msg::Float32 > >
             ("sine_signal", rclcpp::SystemDefaultsQoS());    
 
-    auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
-    node->icey_initialize();
+    auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");    
     node->create_executor_in_context();
 
     /// Main spinning loop

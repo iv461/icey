@@ -1175,9 +1175,15 @@ auto await(Obs obs) {
   }
   /// Return the value if there can be no error
   if constexpr(std::is_same_v< obs_err<Obs>, Nothing >) {
-    return promise->value();
+    auto result = promise->value();
+    /// Reset the state since we consumed this value
+    promise->set_none();
+    return result;
   } else {
-    return promise.get_state();
+    auto result = promise.get_state();
+    /// Reset the state since we consumed this value
+    promise->set_none();
+    return result;
   }
 }
 
