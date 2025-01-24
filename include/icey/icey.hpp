@@ -637,13 +637,14 @@ struct TimerObservable : public Observable<size_t> {
     this->attach_ = [=](NodeBookkeeping &node) {
       /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
       timer = node.add_timer(interval, use_wall_time, [this, this_obs, is_one_off_timer]() {
-        size_t ticks_counter = this_obs->has_value() ? this_obs->value() : 0;
-        ticks_counter++;
         this_obs->resolve(ticks_counter);
+        /// Needed as separate state as it might be resetted in async/await mode
+        this->ticks_counter++;
         if (is_one_off_timer) timer->cancel();
       });
     };
   }
+  size_t ticks_counter{0};
   rclcpp::TimerBase::SharedPtr timer;
 };
 
@@ -1170,8 +1171,10 @@ public:
 template<class Obs>
 auto await(Obs obs) {
   auto promise = obs->observable_;
-  while(!(promise->has_value() || promise->has_error())) {
-    obs->context.lock()->executor_->spin_once();
+  while(!(promise->has_value() || promise->has_error())) { 
+    /// Note that spinning once might not be enough, for example if we synchronize three topics and 
+    /// await the synchronizer output, we would need to spin at least three times.
+    obs->context.lock()->executor_->spin_once(); 
   }
   /// Return the value if there can be no error
   if constexpr(std::is_same_v< obs_err<Obs>, Nothing >) {
