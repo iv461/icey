@@ -208,3 +208,5 @@ This is especially important for conditional publishing
 # References 
 
 - [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
+- [2] Promise proposal by William Woodall and async/await discussion: https://github.com/ros2/ros2_documentation/issues/901
+- [3] Mozilla Promise implementation: https://firefox-source-docs.mozilla.org/xpcom/mozpromise.html

@@ -1,7 +1,7 @@
 # ICEY 
 
 A new, simple data-driven interface library for the Robot Operating System (ROS). 
-In Icey, you can rapidly prototype Nodes in data-flow oriented manner.
+In Icey, you can rapidly prototype Nodes that make the data-flow clear, using modern asynchronous programming techniques such as promises.
 
 # Features 
 

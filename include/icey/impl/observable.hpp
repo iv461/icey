@@ -16,7 +16,7 @@ struct ResultTag {};
 /// A Result-type like in Rust, it is a sum type that can either hold Value or Error, or, different
 /// to Rust, none. 
 template <class _Value, class _ErrorValue>
-struct Result : public std::variant<std::monostate, _Value, _ErrorValue>, public ResultTag {
+struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, public ResultTag {
   using Value = _Value;
   using ErrorValue = _ErrorValue;
   using Self = Result<_Value, _ErrorValue>;
@@ -63,6 +63,7 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 }
 
 /// An observable. Similar to a promise in JavaScript.
+/// See also https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : private boost::noncopyable,
                    public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
@@ -219,9 +220,6 @@ protected:
     }
   }
 
-  
-
-  /// The last received value, it is buffered.
   State state_;
   std::vector<Handler> handlers_;
 };

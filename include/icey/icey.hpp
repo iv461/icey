@@ -214,15 +214,15 @@ struct NodeInterfaces {
   public:
     /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
     struct IceyBook {
-      std::map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
+      std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
                                       std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
           parameters_;
 
       /// TODO we don't need any, there is a *Base actually
-      std::map<std::string, std::any> subscribers_;
-      std::map<std::string, std::shared_ptr<rclcpp::PublisherBase>> publishers_;
-      std::map<std::string, std::any> services_;
-      std::map<std::string, std::any> services_clients_;
+      std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
+      std::unordered_map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
+      std::unordered_map<std::string, rclcpp::ServiceBase::SharedPtr> services_;
+      std::unordered_map<std::string, rclcpp::ClientBase::SharedPtr> services_clients_;
       std::vector<rclcpp::TimerBase::SharedPtr> timers_;
       std::vector<rclcpp::CallbackGroup::SharedPtr> callback_groups_;
 

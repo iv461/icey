@@ -4,7 +4,7 @@ project(icey)
 set(CMAKE_CXX_STANDARD 20)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -Wno-strict-aliasing -fmax-errors=1 --verbose)
+  add_compile_options(-fcoroutines -Werror=return-type -Werror=return-local-addr -Werror=init-self -Wno-strict-aliasing -fmax-errors=1)
   #add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
 endif()
 
@@ -34,6 +34,9 @@ include_directories(
 #ament_auto_add_executable(service_client_class_api_example examples/service_client_class_api.cpp)
 
 #ament_auto_add_executable(parameters_struct_example examples/parameters_struct.cpp)
+
+ament_auto_add_executable(promise_test_async test/promise_test_async.cpp)
+ament_auto_add_executable(async_hello test/async_hello.cpp)
 
 
 #ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
