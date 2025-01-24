@@ -27,7 +27,9 @@ int main(int argc, char **argv) {
       request->data = 1;
       RCLCPP_INFO_STREAM(icey::node->get_logger(),
                           "Timer ticked, sending request: " << request->data);
-      auto result1 = icey::await(service1->call(request));
+      using Response = ExampleService::Response::SharedPtr;
+      
+      icey::Result<Response, std::string> result1 = icey::await(service1->call(request));
 
       if(result1.has_error()) {
           RCLCPP_INFO_STREAM(node->get_logger(), "Service1 got error: " << result1.error());

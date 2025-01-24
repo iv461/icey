@@ -157,14 +157,10 @@ auto serialize(Parents... parents) {
   return g_state.get_context().serialize(parents...);
 }
 
-template <int index, class Parent>
-auto get_nth(Parent& parent) {
-  return g_state.get_context().get_nth<index, Parent>(parent);
-}
-
 void destroy() {
   g_state.nodes.clear(); // Purge the nodes, the nodes must be destroyed before the global rclcpp context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
 }
+
 /// Blocking spawn of a node using the global context
 void spawn(int argc, char** argv, std::string node_name) {
   if (!rclcpp::contexts::get_global_default_context()

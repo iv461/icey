@@ -241,7 +241,7 @@ struct NodeInterfaces {
     IceyBook book_;
     /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
     /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have to apply it here as well. 
-    /// This is unfortunate, but needed to support both lifecycle nodes and regular nodes without templates
+    /// This is unfortunate, but needed to support both lifecycle nodes and regular nodes without templates.
     inline
     std::string
     extend_name_with_sub_namespace(const std::string & name, const std::string & sub_namespace)
@@ -1095,21 +1095,6 @@ struct Context : public std::enable_shared_from_this<Context> {
     return child;
   }
 
-  /// Now we can construct higher-order filters.
-  /// For a tuple-observable, get it's N'th element
-  template <int index, class Parent>
-  auto get_nth(Parent &parent) {
-    assert_observable_holds_tuple<Parent>();
-    /// TODO add to graph, i.e. this->then(parent, f)
-    return parent->then([](const auto &...args) {  /// Need to take variadic because then()
-                                                   /// automatically unpacks tuples
-      return std::get<index>(std::forward_as_tuple(
-          args...));  /// So we need to pack this again in a tuple and get the index.
-    });
-  }
-
-  /// Unpacks a observables of tuple into multiple observables
-
   /// Then's on timeout. Creates a new timer.
   // timeout
   // Crates a new timer that sync_with_reference, matching exactly an output frequency. Input must
@@ -1125,16 +1110,17 @@ struct Context : public std::enable_shared_from_this<Context> {
           "static");
   }
 
-  
-
   bool was_initialized_{false};
+
   std::vector<std::shared_ptr<NodeAttachable>> attachables_;
+
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
+// TODO simplify, I do not believe we need this 
 struct ICEYNodeBase  {
   /// This attaches all the ICEY signals to the node, meaning it creates the subcribes etc. It
   /// initializes everything in a pre-defined order.
@@ -1164,7 +1150,6 @@ public:
     this->icey_context_->executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
     this->icey_context_->executor_->add_node(this->shared_from_this());
   }
-
 };
 
 /// Await until a promise has a value by spinning the ROS executor for as long as needed. Returns the state 
@@ -1214,7 +1199,6 @@ void spin_nodes(const std::vector< std::shared_ptr< Node > > &nodes) {
   executor.spin();
   rclcpp::shutdown();
 }
-
 
 template <class T>
 using Parameter = ParameterObservable<T>;
