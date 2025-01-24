@@ -74,23 +74,23 @@ public:
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
 
-  bool has_error() { return value_.has_error(); }
-  bool has_value() const { return value_.has_value(); }
-  const Value &value() const { return value_.value(); }
-  const ErrorValue &error() const { return value_.error(); }
+  bool has_error() { return state_.has_error(); }
+  bool has_value() const { return state_.has_value(); }
+  const Value &value() const { return state_.value(); }
+  const ErrorValue &error() const { return state_.error(); }
 
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
   /// TODO disable_if these hold Nothing 
   void set_value(const MaybeValue &x) {
     if (x)
-      value_.set_ok(*x);
+      state_.set_ok(*x);
     else
-      value_.set_none();
+      state_.set_none();
   }
 
   void set_error(const ErrorValue &x) { 
-      value_.set_err(x); 
+      state_.set_err(x); 
   }
 
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
@@ -144,7 +144,7 @@ protected:
         apply_if_tuple(f, x);
       } else if constexpr (is_result<ReturnType>) { 
         /// support callbacks that at runtime may return value or error
-        output->value_ = apply_if_tuple(f, x);  /// TODO maybe do not overwrite whole variant but
+        output->state_ = apply_if_tuple(f, x);  /// TODO maybe do not overwrite whole variant but
                                                 /// differentiate and set error or value
         output->notify();
       } else {  /// Other return types are interpreted as values that resolve the promise. Here, we
@@ -222,7 +222,7 @@ protected:
   
 
   /// The last received value, it is buffered.
-  State value_;
+  State state_;
   std::vector<Handler> handlers_;
 };
 }  // namespace impl

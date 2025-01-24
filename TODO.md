@@ -10,7 +10,6 @@ Sorted by decreasing priority.
 - [ ] `timeout` filter
 
 - [ ] Fix segfault on termination with service example
-
 - [ ] `get_promise`-API needed intead of this->observable_ 
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
