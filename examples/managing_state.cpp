@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
     /// Register a callback that gets called in the Node's destructor
     icey::on_node_destruction([] {
-        // clean_up_c_library() 
+        // clean_up_C_library() 
     });
     icey::spawn(argc, argv, "managing_state_example"); 
 }

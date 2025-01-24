@@ -8,8 +8,6 @@
 #include <unordered_map>
 #include <any>
 
-/// TODO figure out where boost get's pulled in, we do not explicitly depend on it, but it's a
-/// dependecy of one of our deps. It's not rclcpp and not message_filters.
 #include <boost/hana.hpp>
 #include <boost/hana/ext/std/tuple.hpp>  /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
 #include <boost/type_index.hpp>
@@ -485,7 +483,8 @@ public:
 
   /// Unpacks an Observable holding a tuple as value to multiple Observables for each tuple element.
   auto unpack() {
-    static_assert(not std::is_same_v<Value, Nothing>,"This observable does not have a value, there is nothing to unpack().");
+    static_assert(!std::is_same_v<Value, Nothing>,"This observable does not have a value, there is nothing to unpack().");
+    static_assert(!std::is_same_v<Value, Nothing>,"This observable does not have a value, there is nothing to unpack().");
     //TODO assert_observable_holds_tuple<Parent>();
     constexpr size_t tuple_sz = std::tuple_size_v< obs_val<Self> >;
     /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see https://stackoverflow.com/a/33181700

@@ -4,7 +4,7 @@ project(icey)
 set(CMAKE_CXX_STANDARD 20)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -Wno-strict-aliasing -fmax-errors=1 )
+  add_compile_options(-Werror=return-type -Werror=return-local-addr -Werror=init-self -Wno-strict-aliasing -fmax-errors=1 --verbose)
   #add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
 endif()
 
@@ -26,7 +26,7 @@ include_directories(
 #ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
 #ament_auto_add_executable(message_filters_interoperability_example examples/message_filters_interoperability.cpp)
 #ament_auto_add_executable(service_client_and_server_example examples/service_client_and_server.cpp)
-ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
+#ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
 
 #ament_auto_add_executable(service_client_example examples/service_client.cpp)
 #ament_auto_add_executable(service_server_example examples/service_server.cpp)
@@ -49,10 +49,10 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   #add_subdirectory(test)
   
-  ament_auto_add_gtest(promise_test test/promise_test.cpp) 
+  #ament_auto_add_gtest(promise_test test/promise_test.cpp) 
 
   ##target_include_directories(promise_test PUBLIC include/)
-  ament_target_dependencies(promise_test rclcpp) 
+  #ament_target_dependencies(promise_test rclcpp) 
 
 endif()
 

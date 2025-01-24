@@ -26,6 +26,8 @@ struct NotDerived3 {
     int a{3};
 };
 
+
+
 template <typename T>
 //constexpr auto is_based(hana::basic_type<T>) { type version
 constexpr auto is_based(T) { /// value version
@@ -40,10 +42,12 @@ void f(int i) {
 }
 
 
+
 template<typename... Args> 
 void partition_tuple_hana(Args... args){
 
     // hana::unpack(3, f); 
+
 
     //auto Types = hana::tuple_t<Args...>;
     auto Types = std::make_tuple(args...);

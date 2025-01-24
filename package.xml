@@ -26,6 +26,8 @@
  <depend>diagnostic_updater</depend>
  <depend>message_filters</depend>
  <depend>image_transport</depend>
+
+ <depend>libboost-dev</depend>
  
  <test_depend>ament_lint_auto</test_depend>
  <test_depend>ament_lint_common</test_depend>
