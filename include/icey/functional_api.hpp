@@ -162,14 +162,18 @@ auto get_nth(Parent& parent) {
   return g_state.get_context().get_nth<index, Parent>(parent);
 }
 
+void destroy() {
+  g_state.nodes.clear(); // Purge the nodes, the nodes must be destroyed before the global rclcpp context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
+}
 /// Blocking spawn of a node using the global context
 void spawn(int argc, char** argv, std::string node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
   spawn(g_state.create_new_node(node_name));
-  g_state.nodes.clear(); // Purge the nodes, the nodes must be destroyed before the global rclcpp context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
+  destroy();
 }
+
 
 /// Create a node from the staged global context. Clears the global context so that multiple nodes
 /// can be created later.

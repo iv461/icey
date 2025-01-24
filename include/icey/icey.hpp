@@ -657,24 +657,27 @@ struct PublisherObservable : public Observable<_Value> {
                       const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->name = topic_name;
     auto this_obs = this->observable_;
-    this->attach_ = [=](NodeBookkeeping &node) {
-      auto publisher = node.add_publisher<Message>(topic_name, qos);
-      this_obs->register_handler([this_obs, publisher]() {
-        // We cannot pass over the pointer since publish expects a unique ptr and we got a
-        // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
-        /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
-        // This is because the use_count
-        /// can change in a multithreaded program immediatelly after it was retrieved, see: https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count
-        /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
-        /// Therefore, we have to copy the message for publishing.
-        const auto &new_value = this_obs->value();  /// There can be no error
-        if constexpr (is_shared_ptr<_Value>)
-          publisher->publish(*new_value);
-        else
-          publisher->publish(new_value);
+    this->attach_ = [this, topic_name, qos, this_obs](NodeBookkeeping &node) {
+      this->publisher = node.add_publisher<Message>(topic_name, qos);
+      this_obs->register_handler([this, this_obs]() {
+        this->publish(this_obs->value());
       });
     };
   }
+  void publish(const _Value &message) {
+      // We cannot pass over the pointer since publish expects a unique ptr and we got a
+      // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
+      /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
+      // This is because the use_count
+      /// can change in a multithreaded program immediatelly after it was retrieved, see: https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count
+      /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
+      /// Therefore, we have to copy the message for publishing.
+      if constexpr (is_shared_ptr<_Value>)
+        publisher->publish(*message);
+      else
+        publisher->publish(message);
+  }
+  typename rclcpp::Publisher<Message>::SharedPtr publisher;
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -1120,10 +1123,14 @@ struct Context : public std::enable_shared_from_this<Context> {
           "static");
   }
 
+  
+
   bool was_initialized_{false};
   std::vector<std::shared_ptr<NodeAttachable>> attachables_;
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;
+
+  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 struct ICEYNodeBase  {
@@ -1148,9 +1155,31 @@ public:
       NodeInterfaces node_interfaces(this); /// do not call shared_from_this, since in the class-based API we call icey_initialize in the ctor, meaning the ctor is not finished yet.
       this->book_ = std::make_shared<NodeBookkeeping>(node_interfaces);
       icey().initialize(*this->book_);
-    }
+  } 
+
+  /// TODO hacky, circular ref, mem leak !
+  void create_executor_in_context() {
+    this->icey_context_->executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+    this->icey_context_->executor_->add_node(this->shared_from_this());
+  }
 
 };
+
+/// Await until a promise has a value by spinning the ROS executor for as long as needed. Returns the state 
+/// of the promise, i.e. of type Result<V, E>
+template<class Obs>
+auto await(Obs obs) {
+  auto promise = obs->observable_;
+  while(!(promise->has_value() || promise->has_error())) {
+    obs->context.lock()->executor_->spin_once();
+  }
+  /// Return the value if there can be no error
+  if constexpr(std::is_same_v< obs_err<Obs>, Nothing >) {
+    return promise->value();
+  } else {
+    return promise.get_state();
+  }
+}
 
 /// Blocking spawn of an existing node.
 template<class Node>

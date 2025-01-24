@@ -27,14 +27,8 @@ struct AwaitablePromise  {
         return *this; 
     }
     /// We never already got something
-    std::suspend_never initial_suspend() { 
-        //std::cout << "initial_suspend  " << std::endl;
-        return {}; 
-    }
-    /// TODO enable if Value == Nothing
+    std::suspend_never initial_suspend() { return {}; }
     
-    //typename std::enable_if<std::is_same_v<Nothing, Value>, void>::type return_void() {}
-    /// TODO enable if Value != Nothing
     Value return_value() {
       return get_promise()->value();
     }
@@ -115,7 +109,7 @@ APromise test_async_await() {
     icey::Result<std::string, std::string> result = co_await my_sub;
     std::cout << "result: " << result.value() << std::endl;
   }
-  co_await my_sub ;
+  //co_await my_sub ;
 }
 
 int main(int argc, char **argv) {
