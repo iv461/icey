@@ -25,6 +25,7 @@ namespace field_reflection
     {
 //#if defined(__GNUC__) || defined(__clang__)
 //#pragma GCC diagnostic push
+/// TODO Ivo: This warning does not exist in GCC 11.4, so we get another warning trying to ingore this warning lol :D
 //#pragma GCC diagnostic ignored "-Wundefined-inline"
 //#endif
         template <typename T, std::size_t = 0>

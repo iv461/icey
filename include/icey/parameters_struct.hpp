@@ -2,7 +2,7 @@
 /// including constraints and get updates if of them changes. 
 /// This greatly simplifies the declaration of many parameters 
 /// and comes close to the dynamic_reconfigure package in ROS 1.
-/// The struct is declared at compile time and uses the Hana library to do static reflection in C++17.
+/// The struct is declared at compile time and uses the field-reflection library to do static reflection in C++20.
 /// We need the names of the fields and be able to access them by name (i.e. param.my_param) while knowing the type, and also 
 /// have the field names as runtime-strings.
 /// Note that in C++17 this is impossible to do without macros, only in C++20 it became possible.

@@ -4,12 +4,14 @@
 
 Sorted by decreasing priority. 
 
-
-- [ ] `unpack` tuple of obs to multiple obs, this is easy 
 - [ ] Buffer: Basis for `delay`-filter
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] `timeout` filter
+
+- [ ] Fix segfault on termination with service example
+
+- [ ] `get_promise`-API needed intead of this->observable_ 
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
 
@@ -26,12 +28,11 @@ Sorted by decreasing priority.
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
 - [ ] Result-type for error handling example
 
+
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
 
 - [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 - [ ] Maybe support cascading the synchronizers 
-
-- [ ] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) -> easy TODO
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
@@ -182,6 +183,8 @@ Sorted by decreasing priority.
 
 - [X] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
 
+- [X] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) 
+- [X] `unpack` tuple of obs to multiple obs, this is easy 
 ### Code 
 
 - [X] Use Result https://github.com/bitwizeshift/result

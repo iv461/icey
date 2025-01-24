@@ -483,6 +483,24 @@ public:
     return this->context.lock()->template create_client<ServiceT>(this->shared_from_this(), service_name, timeout, qos);
   }
 
+  /// Unpacks an Observable holding a tuple as value to multiple Observables for each tuple element.
+  auto unpack() {
+    static_assert(not std::is_same_v<Value, Nothing>,"This observable does not have a value, there is nothing to unpack().");
+    //TODO assert_observable_holds_tuple<Parent>();
+    constexpr size_t tuple_sz = std::tuple_size_v< obs_val<Self> >;
+    /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see https://stackoverflow.com/a/33181700
+    constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, tuple_sz>);
+    auto this_obs = this->observable_;
+    auto hana_tuple_output= hana::transform(indices, [&](auto I) {
+        return this_obs->then([I](const auto &...args) {  /// Need to take variadic because then()
+                                                   /// automatically unpacks tuples
+          return std::get<I>(std::forward_as_tuple(args...));  /// So we need to pack this again in a tuple and get the index.
+        });
+    });
+    /// Now create a std::tuple from the hana::tuple to be able to use structured bindings
+    return hana::unpack(hana_tuple_output, [](auto... args) { return std::make_tuple(args...);});
+  }
+
   // protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer. 
@@ -970,20 +988,20 @@ struct Context : public std::enable_shared_from_this<Context> {
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
   // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to
   // know the node's clock (that may be simulated time, i.e sub on /clock)
-  template <class Reference, class... Parents>
-  static auto sync_with_reference(Reference reference, Parents... parents) {
+  template <class Reference, class... Interpolatables>
+  static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
     observable_traits<Reference>{};
-    observable_traits<Parents...>{};
+    observable_traits<Interpolatables...>{};
     using namespace message_filters::message_traits;
     static_assert(HasHeader<obs_msg<Reference>>::value,
                   "The ROS message type must have a header with the timestamp to be synchronized");
-    auto parents_tuple = std::make_tuple(parents...);
+    auto interpolatables_tuple = std::make_tuple(interpolatables...);
     /// TOOD somehow does not work
     // auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return
     // hana_is_interpolatable(t); }); static_assert(all_are_interpolatables, "All inputs must be
     // interpolatable when using the sync_with_reference");
-    return reference->then([parents_tuple](const obs_val<Reference> &new_value) {
-      auto parent_maybe_values = hana::transform(parents_tuple, [&](auto parent) {
+    return reference->then([interpolatables_tuple](const obs_val<Reference> &new_value) {
+      auto parent_maybe_values = hana::transform(interpolatables_tuple, [&](auto parent) {
         return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
       });
       /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject
@@ -1016,6 +1034,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Synchronize a variable amount of Observables. Uses a Approx-Time synchronizer if the inputs are not 
   /// interpolatable or an interpolation-based synchronizer based on a given (non-interpolatable) reference. 
   /// Or, a combination of both, this is decided at compile-time.
+  /// TODO consider rafactoring using auto template arg to achieve constexpr passing
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};

@@ -69,12 +69,29 @@ void partition_tuple_hana(Args... args){
     std::cout << "Done. "<< std::endl;
 }
 
+void range_test() {
+    constexpr auto last_r = hana::int_c<5>;
+    
+    constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, 5>);
+    auto ret = hana::transform(indices, [&](auto I) {
+        std::cout << "index : " << I << std::endl;
+        return I;
+    });
+
+    hana::for_each(ret, [&](auto I) {
+        std::cout << "The Rettich is " << I << std::endl;
+    });
+    
+    
+}
+
 int main() {
     std::cout << "MP " << std::endl;
     std::tuple<Base, Derived1, NotDerived3, Derived2, NotDerived, NotDerived2> tup{};
 
     partition_tuple_hana(Base{}, Derived1{}, NotDerived3{}, Derived2{}, NotDerived{}, NotDerived2{});
 
+    range_test();
     //partition_args<Base, Derived1, Derived2, NotDerived>();
     return 0;
 }

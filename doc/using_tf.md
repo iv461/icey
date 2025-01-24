@@ -114,6 +114,13 @@ icey::synchronize(camera_feed, cam_to_map_transfom)->then([](sensor_msgs::Camera
 
 WARNING: Do not use the buffer however to call `lookupTransform` or `waitforTransform` under any circumstances. This will certainly lead to dead-locks and is also discouraged: You need to find a way to describe the data-flow statically, instead on relying on such asynchronous functions. 
 
+
+TODO mention that getting all TFs in a single node even though most are irrelevant is a known issue with solutions such as [2,3,4].
+
+
 # References: 
 
 - [1] REP 105: Coordinate System naming conventions, available online: https://www.ros.org/reps/rep-0105.html
+- [2] https://github.com/magazino/tf_service
+- [3] https://github.com/peci1/tf2_server
+- [4] https://github.com/bit-bots/bitbots_tf_buffer

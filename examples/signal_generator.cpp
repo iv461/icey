@@ -39,9 +39,10 @@ int main(int argc, char **argv) {
     auto timer_signal = icey::create_timer(period_time);
 
     /// Receive timer updates
-    timer_signal->then([](size_t ticks) {
+    const auto [a_float, a_strin, an_int] = timer_signal->then([](size_t ticks) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
-    });
+        return std::make_tuple(3., "hellooo", 66);
+    })->unpack();
 
     /// Optional publishing
     auto rectangle_sig = timer_signal->then([](size_t ticks) { 
