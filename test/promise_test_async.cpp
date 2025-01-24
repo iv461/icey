@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <thread>
-
+#include <type_traits>
 
 #include <chrono>
 
@@ -26,12 +26,14 @@ struct AwaitablePromise  {
         std::cout << "get_return_object called, this is " << std::hex << size_t(this) << std::endl;
         return *this; 
     }
+    /// We never already got something
     std::suspend_never initial_suspend() { 
-        std::cout << "initial_suspend  " << std::endl;
+        //std::cout << "initial_suspend  " << std::endl;
         return {}; 
     }
     /// TODO enable if Value == Nothing
-    //void return_void() {}
+    
+    //typename std::enable_if<std::is_same_v<Nothing, Value>, void>::type return_void() {}
     /// TODO enable if Value != Nothing
     Value return_value() {
       return get_promise()->value();
@@ -59,7 +61,7 @@ struct AwaitablePromise  {
   std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
   std::shared_ptr<Impl> get_promise() const {return this->observable_;}
 
-
+  size_t counter_{0};
   [[nodiscard]] auto operator co_await() const noexcept {
 			struct awaiter {
 				explicit awaiter(std::shared_ptr <Impl> state) : m_state(state) {}
@@ -68,24 +70,25 @@ struct AwaitablePromise  {
 				}
 				[[nodiscard]] bool await_suspend(std::coroutine_handle<AwaitablePromise> handle) noexcept {
 					
-					
+					auto &my_promise = handle.promise();
+          std:: cout << my_promise.counter_ << "Sleeping for 2s ... " << std::endl;
+          std::this_thread::sleep_for(200ms);
+          std:: cout << "Awake again ! " << std::endl;
+          m_state->resolve("success! " +std::to_string(my_promise.counter_++));
+          //return true;
+
 					if (m_state->has_value()) {
 						m_state->register_handler([]() { 
-              std:: cout << "Sleeping for 2s ... " << std::endl;
-                std::this_thread::sleep_for(2000ms);
-                std:: cout << "Awake again ! " << std::endl;
               });
-						return true;
 					}
 					return false;
 				}
-				[[nodiscard]] std::string await_resume() {
-					std:: cout << "Have value: "  << m_state->has_value() << std::endl;
-					if (m_state->has_value())
-						return m_state->value();
-          else if (m_state->has_error())
-            return m_state->error();
-          return "";
+				[[nodiscard]] auto await_resume() {
+					std:: cout << "await_resume Have value: "  << m_state->has_value() << std::endl;
+          auto state = m_state->get_state(); /// Copy over state 
+          /// and consume it
+          m_state->set_none();
+					return state;
 				}
 
 			private:
@@ -95,9 +98,9 @@ struct AwaitablePromise  {
  
 			return awaiter{observable_};
 		}
-
 };
 
+  using VoidPromise = AwaitablePromise<Nothing>;
 }
 
 using ResolveValue = std::string;
@@ -106,14 +109,26 @@ using APromise = icey::AwaitablePromise<ResolveValue, ErrorValue>;
 
 APromise test_async_await() {
   std::cout << "test_async_await  " << std::endl;
-  //co_return;
-  co_await APromise {};
+  APromise my_sub;
+  //co_return; NEeded when void
+  while(true) {
+    icey::Result<std::string, std::string> result = co_await my_sub;
+    std::cout << "result: " << result.value() << std::endl;
+  }
+  co_await my_sub ;
 }
 
 int main(int argc, char **argv) {
   
   std::cout << "Starting  " << std::endl;
   APromise demo_instance = test_async_await();
+
+  std::cout << "END: Have value: " << demo_instance.get_promise()->has_value() << std::endl;
+
+  if(demo_instance.get_promise()->has_value()) {
+    std::cout << "END value: " << demo_instance.get_promise()->value() << std::endl;
+    
+  }
   
 
 }
