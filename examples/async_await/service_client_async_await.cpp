@@ -9,19 +9,19 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
 int main(int argc, char **argv) {
-  auto service_response =
+  
   auto timer = icey::create_timer(1s);
 
-  auto service1 = create_observable<icey::ServiceClient<ExampleService>>("set_bool_service1", 1s);
-  auto service2 = create_observable<icey::ServiceClient<ExampleService>>("set_bool_service2", 1s);
-  auto service3 = create_observable<icey::ServiceClient<ExampleService>>("set_bool_service3", 1s);
+  auto service1 = icey::create_observable<icey::ServiceClient<ExampleService>>("set_bool_service1", 1s);
+  auto service2 = icey::create_observable<icey::ServiceClient<ExampleService>>("set_bool_service2", 1s);
+  auto service3 = icey::create_observable<icey::ServiceClient<ExampleService>>("set_bool_service3", 1s);
 
   auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");    
   node->create_executor_in_context();
   /// Main spinning loop
   while(rclcpp::ok()) {
       /// Receive timer updates
-      size_t ticks = icey::await(timer_signal);
+      size_t ticks = icey::await(timer);
       auto request = std::make_shared<ExampleService::Request>();
 
       request->data = 1;
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Got response1: " << result1.value()->success);
       }
 
-      auto result2 = icey::await(service2->>call(request));
+      auto result2 = icey::await(service2->call(request));
 
       if(result2.has_error()) {
           RCLCPP_INFO_STREAM(node->get_logger(), "Service2 got error: " << result2.error());

@@ -805,7 +805,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
 
   auto call(Request request) {
     if(!wait_for_service())
-        return;
+        return this->shared_from_this();
     /// TODO this is captured here 
     maybe_pending_request_ = 
       client_->async_send_request(request, [this](Future response_futur) {
@@ -1184,7 +1184,7 @@ auto await(Obs obs) {
     promise->set_none();
     return result;
   } else {
-    auto result = promise.get_state();
+    auto result = promise->get_state();
     /// Reset the state since we consumed this value
     promise->set_none();
     return result;
