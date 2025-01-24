@@ -9,6 +9,9 @@ Sorted by decreasing priority.
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] `timeout` filter
 
+- [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
+- [ ] [Async/Await] `async`: allow async routignes using C++20 coroutines
+
 - [ ] Fix segfault on termination with service example
 - [ ] `get_promise`-API needed intead of this->observable_ 
 

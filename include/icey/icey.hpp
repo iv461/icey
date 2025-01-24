@@ -803,7 +803,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
     };
   }
 
-  void call(Request request) {
+  auto call(Request request) {
     if(!wait_for_service())
         return;
     /// TODO this is captured here 
@@ -811,6 +811,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
       client_->async_send_request(request, [this](Future response_futur) {
             on_response(response_futur);
       });
+    return this->shared_from_this();
   }
 
 protected:
