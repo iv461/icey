@@ -22,26 +22,25 @@ struct AwaitablePromise : public PTag {
   using Self = AwaitablePromise<_Value, _ErrorValue>;
   
   using promise_type = Self;
-    Self get_return_object() { 
-      //auto child = Self::create_from_impl(observable_->then(f));
-        std::cout << "get_return_object called, this is " << std::hex << size_t(this) << std::endl;
-        return *this; 
-    }
-    /// We never already got something
+
+  Self get_return_object() { 
+    //auto child = Self::create_from_impl(observable_->then(f));
+    std::cout << "get_return_object called, this is " << std::hex << size_t(this) << std::endl;
+    return *this; 
+  }
+
+    /// We never already got something, we always first need to spin the ROS executor to get a message
     std::suspend_never initial_suspend() { return {}; }
     
     Value return_value() {
       return get_promise()->value();
     } 
 
-    /// I do not know what I'm doing ? 
     template<class ReturnType>
-    ReturnType return_value(ReturnType x) {
-      return x;
-      //return this->await_transform(x);
-    }
+    ReturnType return_value(ReturnType x) { return x; }
 
     void unhandled_exception() {}
+
     std::suspend_always final_suspend() noexcept { 
         std::cout << "final_suspend  " << std::endl;
         return {}; 
@@ -57,7 +56,14 @@ struct AwaitablePromise : public PTag {
     }
 
     AwaitablePromise() {
-      std::cout << "Ctor called , this is " << std::hex << size_t(this) << std::endl;
+      std::cout << "[AwaitablePromise @ 0x" << std::hex << size_t(this) << std::dec << 
+        " Constructor called" << std::endl;
+    }
+
+
+    ~AwaitablePromise() {
+      std::cout << "[AwaitablePromise @ 0x" << std::hex << size_t(this) << std::dec << 
+        " Destructor called" << std::endl;
     }
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer. 
@@ -78,7 +84,7 @@ struct AwaitablePromise : public PTag {
 					return this->observable_->has_value();
 				}
 
-    bool await_suspend(auto handle) noexcept {
+    bool await_suspend(auto handle) {
     std:: cout << this->counter_ << "Sleeping for 2s ... " << std::endl;
       std::this_thread::sleep_for(200ms);
       std:: cout << "Awake again ! " << std::endl;
@@ -88,14 +94,15 @@ struct AwaitablePromise : public PTag {
       else 
         this->observable_->resolve("success! " +std::to_string(this->counter_++));
       
-      return false;
+      return false; /// Resume the current coroutine, see https://en.cppreference.com/w/cpp/language/coroutines
     }
+
+    /// This is called after await_suspend returned. Meaning, after we got the value.
     auto await_resume() {
       auto promise = this->observable_;
-      std:: cout << "await_resume Have value: "  << promise->has_value() << std::endl;
       if constexpr(std::is_same_v< _ErrorValue, Nothing >) {
         auto result = promise->value();
-            /// Reset the state since we consumed this value
+          /// Reset the state since we consumed this value
           promise->set_none();
           return result;
         } else {
@@ -106,8 +113,6 @@ struct AwaitablePromise : public PTag {
         }
     }
 };
-
-  using VoidPromise = AwaitablePromise<Nothing>;
 }
 
 using ResolveValue = std::string;
@@ -124,6 +129,7 @@ icey::AwaitablePromise<int, icey::Nothing> test_async_await() {
   icey::AwaitablePromise<int, icey::Nothing> sub2;
   int result2 = co_await sub2;
   co_return result2;
+  
   //co_return 3;
 }
 

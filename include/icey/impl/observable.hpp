@@ -63,7 +63,11 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 }
 
 /// An observable. Similar to a promise in JavaScript.
-/// See also https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
+/// I saw that these implementations are very close to mine:
+/// [1] https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
+/// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
+/// And for a thread-safe implementation at the cost of insane complexity, see this:
+/// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : private boost::noncopyable,
                    public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
@@ -162,11 +166,10 @@ protected:
 
   /// @brief This function creates a handler for the promise and returns it as a function object.
   /// It' behvarior closely matches promises in JavaScript.
-  /// It is basis for implementing the .then() function but it does three things differently:
-  /// First, it does not create the new promise, the output prmise.
-  /// Second, it only optionally registers this handler, it must not be registered for the graph
-  /// mode. Third, we only can register on resolve or on reject, not both. on resolve is implemented
-  /// such that implicitly the on reject handler passes over the error.
+  /// It is basis for implementing the .then() function but it does two things differently:
+  /// First, it does not create the new promise, it receives an already created "output" promise.
+  /// Second, we can only register a "onResolve"- or an "onReject"-handler, not both. But "onResolve" is already implemented
+  /// such that implicitly the "onReject"-handler passes over the error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.
   /// @param this (implicit): Observable<V, E>* The input promise
   /// @param output: SharedPtr< Observable<V2, E> > or derived, the resulting promise
   /// @param f:  (V) -> V2 The user callback function to call when the input promises resolves or
