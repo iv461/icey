@@ -30,6 +30,8 @@
 /// Support for lifecycle nodes:
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
+#include <coroutine>
+
 namespace icey {
 
 namespace hana = boost::hana;
@@ -498,6 +500,71 @@ public:
     });
     /// Now create a std::tuple from the hana::tuple to be able to use structured bindings
     return hana::unpack(hana_tuple_output, [](auto... args) { return std::make_tuple(args...);});
+  }
+
+  std::shared_ptr<Impl> get_promise() const {return this->observable_;}
+
+  ///// Everything that follows is to satisfy the interface for C++20's coroutines. 
+  
+  using promise_type = Self; /// We are a promise
+  Self get_return_object() { return *this; }
+  /// We never already got something, we always first need to spin the ROS executor to get a message
+  std::suspend_never initial_suspend() { return {}; }
+  Value return_value() { return get_promise()->value(); } 
+  template<class ReturnType>
+  ReturnType return_value(ReturnType x) { return x; }
+  void unhandled_exception() {}
+  std::suspend_always final_suspend() noexcept { 
+    std::cout << "final_suspend  " << std::endl;
+    return {}; 
+  }
+    
+  /// Promisify a value if needed, meaning if it is not already a promise
+  template<class ReturnType>
+  auto await_transform(ReturnType x) {
+    if constexpr(std::is_base_of_v<ObservableTag, ReturnType>)
+      return x;
+    else
+      return Observable<ReturnType, Nothing>{};
+  }
+  
+
+  /// Run the ROS executor untils this Promise is fulfilled. This function can be called normally
+  auto await() {
+    spin_executor();
+    return await_resume();
+  }
+
+  /// Spin the event loop, (the ROS executor) until this Promise is fulfilled
+  void spin_executor() {
+    auto promise = this->get_promise();
+    while(!(promise->has_value() || promise->has_error())) { 
+      /// Note that spinning once might not be enough, for example if we synchronize three topics and 
+      /// await the synchronizer output, we would need to spin at least three times.
+      this->context.lock()->executor_->spin_once(); 
+    }
+  }
+
+  //// Now the Awaiter interface for C++20 coroutines:
+  bool await_ready() { return !this->get_promise()->has_none(); }
+  bool await_suspend(auto coroutine_handle) {
+    this->spin_executor();
+    return false; /// Resume the current coroutine, see https://en.cppreference.com/w/cpp/language/coroutines
+  }
+  auto await_resume() {
+    auto promise = this->get_promise();
+    /// Return the value if there can be no error
+    if constexpr(std::is_same_v< ErrorValue, Nothing >) {
+      auto result = promise->value();
+      /// Reset the state since we consumed this value
+      promise->set_none();
+      return result;
+    } else {
+      auto result = promise->get_state();
+      /// Reset the state since we consumed this value
+      promise->set_none();
+      return result;
+    }
   }
 
   // protected:
@@ -1156,24 +1223,7 @@ public:
 /// of the promise, i.e. of type Result<V, E>
 template<class Obs>
 auto await(Obs obs) {
-  auto promise = obs->observable_;
-  while(!(promise->has_value() || promise->has_error())) { 
-    /// Note that spinning once might not be enough, for example if we synchronize three topics and 
-    /// await the synchronizer output, we would need to spin at least three times.
-    obs->context.lock()->executor_->spin_once(); 
-  }
-  /// Return the value if there can be no error
-  if constexpr(std::is_same_v< obs_err<Obs>, Nothing >) {
-    auto result = promise->value();
-    /// Reset the state since we consumed this value
-    promise->set_none();
-    return result;
-  } else {
-    auto result = promise->get_state();
-    /// Reset the state since we consumed this value
-    promise->set_none();
-    return result;
-  }
+  return obs->await();
 }
 
 /// Blocking spawn of an existing node.

@@ -31,8 +31,9 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
     ret.template emplace<2>(x);
     return ret;
   }
+  bool has_none() const { return this->index() == 0; }
   bool has_value() const { return this->index() == 1; }
-  bool has_error() { return this->index() == 2; }
+  bool has_error() const { return this->index() == 2; }
   const Value &value() const { return std::get<1>(*this); }
   const ErrorValue &error() const { return std::get<2>(*this); }
   void set_none() { this->template emplace<0>(std::monostate{}); }
@@ -79,8 +80,9 @@ public:
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
 
-  bool has_error() { return state_.has_error(); }
+  bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }
+  bool has_error() const { return state_.has_error(); }
   const Value &value() const { return state_.value(); }
   const ErrorValue &error() const { return state_.error(); }
 
