@@ -1,4 +1,8 @@
-//// Support for the image_transport subscribers and publishers.
+/// Support for the image_transport subscribers and publishers.
+/// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport and 
+/// https://github.com/ros-perception/image_common/blob/humble/image_transport for API docs.
+/// Note that we do not create a image_transport::ImageTransport object to avoid circular
+/// dependency: https://github.com/ros-perception/image_common/issues/311
 #pragma once
 
 #ifndef ICEY_ROS2_WAS_INCLUDED
@@ -22,10 +26,6 @@ void assert_is_not_lifecycle_node(const NodeBookkeeping &book) {
         throw std::runtime_error("You tried to use image_transport with a lifecycle node, unfortunately ROS Humble does not currently support image_transport with lifecycle nodes.");
 }
 
-/// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport for API docs.
-/// and https://github.com/ros-perception/image_common/blob/humble/image_transport
-/// Note that we do not create a image_transport::ImageTransport object to avoid circular
-/// dependency: https://github.com/ros-perception/image_common/issues/311
 // An observable representing a camera image subscriber.
 struct ImageTransportSubscriber : public Observable<sensor_msgs::msg::Image::ConstSharedPtr,
                                                     image_transport::TransportLoadException> {

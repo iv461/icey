@@ -194,8 +194,8 @@ protected:
     return handler;
   }
 
-  /// Common function for both then and .except. bool resolve says whether f is the resolve or the
-  /// reject handler (Unlike JS, we can only register one at the time)
+  /// Common function for both .then and .except. The template argument "resolve" says whether f is the resolve or the
+  /// reject handler (Unlike JS, we can only register one at the time, this is for better code generation)
   template <bool resolve, typename F>
   auto done(F &&f, bool register_handler) {
     /// TODO static_assert here signature for better error messages

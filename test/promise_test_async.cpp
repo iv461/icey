@@ -11,8 +11,9 @@ using namespace std::chrono_literals;
  
 namespace icey {
 
+struct PTag{};
 template <typename _Value, typename _ErrorValue = Nothing>
-struct AwaitablePromise  {
+struct AwaitablePromise : public PTag {
 
   using Impl = impl::Observable<_Value, _ErrorValue>;
   using Value = typename Impl::Value;
@@ -31,13 +32,29 @@ struct AwaitablePromise  {
     
     Value return_value() {
       return get_promise()->value();
+    } 
+
+    /// I do not know what I'm doing ? 
+    template<class ReturnType>
+    ReturnType return_value(ReturnType x) {
+      return x;
+      //return this->await_transform(x);
     }
+
     void unhandled_exception() {}
     std::suspend_always final_suspend() noexcept { 
         std::cout << "final_suspend  " << std::endl;
         return {}; 
     }
     
+    /// Promisify a value if needed, meaning if it is not already a promise
+    template<class ReturnType>
+    auto await_transform(ReturnType x) {
+      if constexpr(std::is_base_of_v<PTag, ReturnType>)
+        return x;
+      else
+       return AwaitablePromise<ReturnType, Nothing>{};
+    }
 
     AwaitablePromise() {
       std::cout << "Ctor called , this is " << std::hex << size_t(this) << std::endl;
@@ -56,42 +73,38 @@ struct AwaitablePromise  {
   std::shared_ptr<Impl> get_promise() const {return this->observable_;}
 
   size_t counter_{0};
-  [[nodiscard]] auto operator co_await() const noexcept {
-			struct awaiter {
-				explicit awaiter(std::shared_ptr <Impl> state) : m_state(state) {}
-				[[nodiscard]] bool await_ready() noexcept {
-					return m_state->has_value();
-				}
-				[[nodiscard]] bool await_suspend(std::coroutine_handle<AwaitablePromise> handle) noexcept {
-					
-					auto &my_promise = handle.promise();
-          std:: cout << my_promise.counter_ << "Sleeping for 2s ... " << std::endl;
-          std::this_thread::sleep_for(200ms);
-          std:: cout << "Awake again ! " << std::endl;
-          m_state->resolve("success! " +std::to_string(my_promise.counter_++));
-          //return true;
 
-					if (m_state->has_value()) {
-						m_state->register_handler([]() { 
-              });
-					}
-					return false;
-				}
-				[[nodiscard]] auto await_resume() {
-					std:: cout << "await_resume Have value: "  << m_state->has_value() << std::endl;
-          auto state = m_state->get_state(); /// Copy over state 
-          /// and consume it
-          m_state->set_none();
-					return state;
+    bool await_ready() noexcept {
+					return this->observable_->has_value();
 				}
 
-			private:
-				std::shared_ptr <Impl> m_state;
-			};
-
- 
-			return awaiter{observable_};
-		}
+    bool await_suspend(auto handle) noexcept {
+    std:: cout << this->counter_ << "Sleeping for 2s ... " << std::endl;
+      std::this_thread::sleep_for(200ms);
+      std:: cout << "Awake again ! " << std::endl;
+      
+      if constexpr(std::is_same_v< Value, int>)
+        this->observable_->resolve(this->counter_++);
+      else 
+        this->observable_->resolve("success! " +std::to_string(this->counter_++));
+      
+      return false;
+    }
+    auto await_resume() {
+      auto promise = this->observable_;
+      std:: cout << "await_resume Have value: "  << promise->has_value() << std::endl;
+      if constexpr(std::is_same_v< _ErrorValue, Nothing >) {
+        auto result = promise->value();
+            /// Reset the state since we consumed this value
+          promise->set_none();
+          return result;
+        } else {
+          auto result = promise->get_state();
+          /// Reset the state since we consumed this value
+          promise->set_none();
+          return result;
+        }
+    }
 };
 
   using VoidPromise = AwaitablePromise<Nothing>;
@@ -101,29 +114,30 @@ using ResolveValue = std::string;
 using ErrorValue = std::string;
 using APromise = icey::AwaitablePromise<ResolveValue, ErrorValue>;
 
-APromise test_async_await() {
+icey::AwaitablePromise<int, icey::Nothing> test_async_await() {
   std::cout << "test_async_await  " << std::endl;
   APromise my_sub;
-  //co_return; NEeded when void
-  while(true) {
-    icey::Result<std::string, std::string> result = co_await my_sub;
-    std::cout << "result: " << result.value() << std::endl;
-  }
-  //co_await my_sub ;
+  
+  icey::Result<std::string, std::string> result = co_await my_sub;
+  std::cout << "result: " << result.value() << std::endl;
+
+  icey::AwaitablePromise<int, icey::Nothing> sub2;
+  int result2 = co_await sub2;
+  co_return result2;
+  //co_return 3;
 }
 
 int main(int argc, char **argv) {
   
   std::cout << "Starting  " << std::endl;
-  APromise demo_instance = test_async_await();
+  auto promise_ret = test_async_await();
 
-  std::cout << "END: Have value: " << demo_instance.get_promise()->has_value() << std::endl;
+  std::cout << "END: Have value: " << promise_ret.get_promise()->has_value() << std::endl;
 
-  if(demo_instance.get_promise()->has_value()) {
-    std::cout << "END value: " << demo_instance.get_promise()->value() << std::endl;
+  if(promise_ret.get_promise()->has_value()) {
+    std::cout << "END value: " << promise_ret.get_promise()->value() << std::endl;
     
-  }
-  
+  }  
 
 }
 
