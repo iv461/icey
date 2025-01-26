@@ -405,14 +405,16 @@ constexpr void assert_all_observable_values_are_same() {
 /// TODO Do not create shared_ptr, we finally have PIMPL
 template <typename _Value, typename _ErrorValue = Nothing>
 class Observable : public ObservableTag,
-                   public NodeAttachable,
-                   public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+                   public NodeAttachable {
 public:
   using Impl = impl::Observable<_Value, _ErrorValue>;
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
   using Self = Observable<_Value, _ErrorValue>;
+
+  /// TODO hack 
+  Observable* operator->() { return this; }
 
   void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
     if (!this->context.lock())
@@ -447,6 +449,7 @@ public:
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
+    /// We create this through the context to register it for attachment to the ROS node
     auto child = this->context.lock()->template create_observable<T>(args...);
     this->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
   }
@@ -976,10 +979,10 @@ struct Context : public std::enable_shared_from_this<Context> {
   template <class O, typename... Args>
   std::shared_ptr<O> create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
-    auto observable = impl::create_observable<O>(args...);
+    O observable{args...};
     attachables_.push_back(observable);  /// Register 
-    observable->context = shared_from_this();
-    observable->class_name = boost::typeindex::type_id_runtime(*observable).pretty_name();
+    observable.context = shared_from_this();
+    observable.class_name = boost::typeindex::type_id_runtime(observable).pretty_name();
     return observable;
   }
 
