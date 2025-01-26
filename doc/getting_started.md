@@ -210,3 +210,5 @@ This is especially important for conditional publishing
 - [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
 - [2] Promise proposal by William Woodall and async/await discussion: https://github.com/ros2/ros2_documentation/issues/901
 - [3] Mozilla Promise implementation: https://firefox-source-docs.mozilla.org/xpcom/mozpromise.html
+- [4] std::future lacks continuation, current (2024) state of the art: https://ikriv.com/blog/?p=4916
+- [5] https://engineering.fb.com/2015/06/19/developer-tools/futures-for-c-11-at-facebook/

@@ -528,7 +528,6 @@ public:
       return Observable<ReturnType, Nothing>{};
   }
   
-
   /// Run the ROS executor untils this Promise is fulfilled. This function can be called normally
   auto await() {
     spin_executor();

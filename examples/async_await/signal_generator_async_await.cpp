@@ -13,7 +13,8 @@ struct NodeParameters  {
     icey::DynParameter<double> amplitude{3};
 };
 
-int main(int argc, char **argv) {
+icey::Observable<int, icey::Nothing> create_and_spin_node(int argc, char **argv) {
+
     auto period_time = 100ms;
     NodeParameters params;
     /// Declare parameter struct and receive updates each time 
@@ -38,7 +39,8 @@ int main(int argc, char **argv) {
     while(rclcpp::ok()) {
         
         /// Receive timer updates
-        size_t ticks = icey::await(timer_signal);
+        //size_t ticks = icey::await(timer_signal);
+        size_t ticks = co_await timer_signal;
 
         RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
 
@@ -58,6 +60,11 @@ int main(int argc, char **argv) {
         sine_pub->publish(float_val);
 
     }
+    co_return 0;
+}
+
+int main(int argc, char **argv) {
+
     /// TODO do not store the node in the context so that this is not needed
     icey::destroy();
 }
