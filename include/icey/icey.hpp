@@ -640,18 +640,19 @@ struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> 
   }
 };
 
-/// An interpolatable observable is one that buffers the incoming messages using a circular buffer
-/// and allows to query the message at a given point, using interpolation.
+/// TODO rem RTTI, recognize differently, use concepts for iface def for example.
 struct InterpolateableObservableTag {};
-template <typename _Message>
+template <typename _Message, typename DerivedImpl>
 struct InterpolateableObservable : public InterpolateableObservableTag,
-                                   public Observable<typename _Message::SharedPtr, std::string> {
+                                   public Observable<typename _Message::SharedPtr, std::string, DerivedImpl> {
   using MaybeValue = std::optional<typename _Message::SharedPtr>;
   /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
   virtual MaybeValue get_at_time(const rclcpp::Time &time) const = 0;
 };
 
+/// An interpolatable observable is one that buffers the incoming messages using a circular buffer
+/// and allows to query the message at a given point, using interpolation.
 template <typename T>
 constexpr auto hana_is_interpolatable(T) {
   if constexpr (std::is_base_of_v<InterpolateableObservableTag, T>)
@@ -662,37 +663,8 @@ constexpr auto hana_is_interpolatable(T) {
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
-struct TransformSubscriptionObservable
-    : public InterpolateableObservable<geometry_msgs::msg::TransformStamped> {
+struct TransformSubscriptionObservableImpl: public NodeAttachable {
   using Message = geometry_msgs::msg::TransformStamped;
-  using MaybeValue = InterpolateableObservable<Message>::MaybeValue;
-
-  TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame)
-      : target_frame_(target_frame), source_frame_(source_frame) {
-    this->impl()->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
-    auto this_obs = this->observable_;
-
-    this->impl()->attach_ = [=](NodeBookkeeping &node) {
-      tf2_listener_ = node.add_tf_subscription(
-          target_frame, source_frame,
-          [this, this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-            *shared_value_ = new_value;
-            this_obs->resolve(shared_value_);
-          },
-          [this_obs](const tf2::TransformException &ex) { this_obs->reject(ex.what()); });
-    };
-  }
-  MaybeValue get_at_time(const rclcpp::Time &time) const override {
-    try {
-      // Note that this call does not wait, the transform must already have arrived.
-      *shared_value_ =
-          tf2_listener_.lock()->buffer_->lookupTransform(target_frame_, source_frame_, time);
-      return shared_value_;
-    } catch (const tf2::TransformException &e) {
-      this->impl()->reject(e.what());
-      return {};
-    }
-  }
   std::string target_frame_;
   std::string source_frame_;
   /// We allocate a single message that we share with the other observables when notifying them.
@@ -700,6 +672,38 @@ struct TransformSubscriptionObservable
   std::shared_ptr<Message> shared_value_{std::make_shared<Message>()};
   /// We do not own the listener, the Book owns it
   std::weak_ptr<TFListener> tf2_listener_;
+};
+struct TransformSubscriptionObservable
+    : public InterpolateableObservable<geometry_msgs::msg::TransformStamped,
+    TransformSubscriptionObservableImpl> {
+  using Message = geometry_msgs::msg::TransformStamped;
+  using MaybeValue = InterpolateableObservable<Message, TransformSubscriptionObservableImpl>::MaybeValue;
+
+  TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) {
+    this->impl()->target_frame_ = target_frame;
+    this->impl()->source_frame_ = source_frame;
+    this->impl()->name = "source_frame: " + source_frame + ", target_frame: " + target_frame;
+    this->impl()->attach_ = [impl = this->impl()](NodeBookkeeping &node) {
+      impl->tf2_listener_ = node.add_tf_subscription(
+          impl->target_frame_, impl->source_frame_,
+          [impl](const geometry_msgs::msg::TransformStamped &new_value) {
+            *impl->shared_value_ = new_value;
+            impl->resolve(impl->shared_value_);
+          },
+          [impl](const tf2::TransformException &ex) { impl->reject(ex.what()); });
+    };
+  }
+  MaybeValue get_at_time(const rclcpp::Time &time) const override {
+    try {
+      // Note that this call does not wait, the transform must already have arrived.
+      *this->impl()->shared_value_ =
+          this->impl()->tf2_listener_.lock()->buffer_->lookupTransform(this->impl()->target_frame_, this->impl()->source_frame_, time);
+      return this->impl()->shared_value_;
+    } catch (const tf2::TransformException &e) {
+      this->impl()->reject(e.what());
+      return {};
+    }
+  }
 };
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
