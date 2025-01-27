@@ -3,73 +3,75 @@
 
 #include "std_msgs/msg/float32.hpp"
 
-
 using namespace std::chrono_literals;
 
 /// All parameters of the node
-struct NodeParameters  {
-    /// We set a default value, allowed interval and a description
-    icey::DynParameter<double> frequency{10., icey::Interval(0., 25.), std::string("The frequency of the sine")};
-    icey::DynParameter<double> amplitude{3};
+struct NodeParameters {
+  /// We set a default value, allowed interval and a description
+  icey::DynParameter<double> frequency{10., icey::Interval(0., 25.),
+                                       std::string("The frequency of the sine")};
+  icey::DynParameter<double> amplitude{3};
 };
 
 int main(int argc, char **argv) {
-    auto period_time = 100ms;
+  auto period_time = 100ms;
 
+  NodeParameters params;
+  /// Declare parameter struct and receive updates each time
+  icey::declare_parameter_struct(
+      icey::get_global_context(), params, [](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(),
+                           "Parameter " << changed_parameter << " changed, params are now:\n");
+      });
 
-    NodeParameters params;
-    /// Declare parameter struct and receive updates each time 
-    icey::declare_parameter_struct(icey::get_global_context(), params, 
-            [](const std::string &changed_parameter) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Parameter " << changed_parameter << " changed, params are now:\n");
-    });
-    
+  /*
+  Or you can declare single parameters and get updates on them:
+  auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
+  auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
+  /// Receive parameter updates
+  amplitude->then([](double new_value) {
+      RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
+  });
+  */
 
-    /*
-    Or you can declare single parameters and get updates on them:
-    auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
-    auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
-    /// Receive parameter updates
-    amplitude->then([](double new_value) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
-    });
-    */
+  /// You cannot use parameters yet, this will throw an exception:
+  // std::cout << "parameter  frequency is:: " << frequency->get() << std::endl;
+  auto timer_signal = icey::create_timer(period_time);
 
+  /// Receive timer updates
+  const auto [a_float, a_strin, an_int] =
+      timer_signal
+          .then([](size_t ticks) {
+            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
+            return std::make_tuple(3., "hellooo", 66);
+          })
+          ->unpack();
 
-    /// You cannot use parameters yet, this will throw an exception:
-    // std::cout << "parameter  frequency is:: " << frequency->get() << std::endl;
-    auto timer_signal = icey::create_timer(period_time);
+  /// Optional publishing
+  auto rectangle_sig = timer_signal.then([](size_t ticks) {
+    std::optional<std_msgs::msg::Float32> result;
+    if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
+      result = std_msgs::msg::Float32();
+      result->data = (ticks % 20 == 0) ? 1.f : 0.f;
+    }
 
-    /// Receive timer updates
-    const auto [a_float, a_strin, an_int] = timer_signal.then([](size_t ticks) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
-        return std::make_tuple(3., "hellooo", 66);
-    })->unpack();
+    return result;
+  });
+  rectangle_sig.publish("rectangle_signal");
 
-    /// Optional publishing
-    auto rectangle_sig = timer_signal.then([](size_t ticks) { 
-        std::optional<std_msgs::msg::Float32> result; 
-        if(ticks % 10 == 0) { /// Publish with 1/10th of the frequency
-            result = std_msgs::msg::Float32();
-            result->data = (ticks % 20 == 0) ? 1.f : 0.f;
-        }
-        
-        return result;        
-    });
-    rectangle_sig.publish("rectangle_signal");
+  /// Add another computation for the timer
+  auto sine_signal = timer_signal.then([&](size_t ticks) {
+    std_msgs::msg::Float32 float_val;
+    double period_time_s = 0.1;
+    /// We can access parameters in callbacks using .value() because parameters are always
+    /// initialized first.
+    double y = params.amplitude * std::sin((period_time_s * ticks) * params.frequency * 2 * M_PI);
+    float_val.data = y;
+    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Publishing sine... " << y);
+    return float_val;
+  });
 
-    /// Add another computation for the timer
-    auto sine_signal = timer_signal.then([&](size_t ticks) {
-        std_msgs::msg::Float32 float_val;
-        double period_time_s = 0.1;
-        /// We can access parameters in callbacks using .value() because parameters are always initialized first.
-        double y = params.amplitude * std::sin((period_time_s * ticks) * params.frequency * 2 * M_PI);
-        float_val.data = y;
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Publishing sine... " << y);
-        return float_val;
-    });
+  sine_signal.publish("sine_generator");
 
-    sine_signal.publish("sine_generator");
-
-    icey::spawn(argc, argv, "signal_generator_example"); 
+  icey::spawn(argc, argv, "signal_generator_example");
 }

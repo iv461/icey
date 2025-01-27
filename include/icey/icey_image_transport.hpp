@@ -1,5 +1,5 @@
 /// Support for the image_transport subscribers and publishers.
-/// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport and 
+/// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport and
 /// https://github.com/ros-perception/image_common/blob/humble/image_transport for API docs.
 /// Note that we do not create a image_transport::ImageTransport object to avoid circular
 /// dependency: https://github.com/ros-perception/image_common/issues/311
@@ -20,10 +20,12 @@
 
 namespace icey {
 
-/// Image_transport does not yet support lifecycle_nodes: 
+/// Image_transport does not yet support lifecycle_nodes:
 void assert_is_not_lifecycle_node(const NodeBookkeeping &book) {
-    if(book.node_.maybe_regular_node == nullptr)
-        throw std::runtime_error("You tried to use image_transport with a lifecycle node, unfortunately ROS Humble does not currently support image_transport with lifecycle nodes.");
+  if (book.node_.maybe_regular_node == nullptr)
+    throw std::runtime_error(
+        "You tried to use image_transport with a lifecycle node, unfortunately ROS Humble does not "
+        "currently support image_transport with lifecycle nodes.");
 }
 
 // An observable representing a camera image subscriber.
@@ -39,10 +41,13 @@ struct ImageTransportSubscriber : public Observable<sensor_msgs::msg::Image::Con
     /// TODO do not capture this, save sub somewhere else
     this->attach_ = [this, this_obs, base_topic_name, transport, qos, cb,
                      options](NodeBookkeeping &node) {
-                        assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
+      assert_is_not_lifecycle_node(
+          node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
+                  /// lifecycle nodes, so we can only assert this at runtime
       try {
-        subscriber_ = image_transport::create_subscription(node.node_.maybe_regular_node, base_topic_name, cb, transport,
-                                                           qos.get_rmw_qos_profile(), options);
+        subscriber_ =
+            image_transport::create_subscription(node.node_.maybe_regular_node, base_topic_name, cb,
+                                                 transport, qos.get_rmw_qos_profile(), options);
       } catch (const image_transport::TransportLoadException &exception) {
         this_obs->reject(exception);
       }
@@ -58,9 +63,12 @@ struct ImageTransportPublisher : public Observable<sensor_msgs::msg::Image::Shar
     this->name = base_topic_name;
     auto this_obs = this->observable_;
     this->attach_ = [this_obs, base_topic_name, qos, options](NodeBookkeeping &node) {
-      assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
+      assert_is_not_lifecycle_node(
+          node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
+                  /// lifecycle nodes, so we can only assert this at runtime
       image_transport::Publisher publisher = image_transport::create_publisher(
-          node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());  /// TODO Humble did accept options
+          node.node_.maybe_regular_node, base_topic_name,
+          qos.get_rmw_qos_profile());  /// TODO Humble did accept options
       this_obs->register_handler([this_obs, publisher]() {
         const auto &image_msg = this_obs->value();  /// There can be no error
         publisher.publish(image_msg);
@@ -83,12 +91,14 @@ struct CameraSubscriber
       this_obs->resolve(std::make_tuple(image, camera_info));
     };
     /// TODO do not capture this, save sub somewhere else
-    this->attach_ = [this, this_obs, base_topic_name, transport, qos,
-                     cb](NodeBookkeeping &node) {
-                         assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
+    this->attach_ = [this, this_obs, base_topic_name, transport, qos, cb](NodeBookkeeping &node) {
+      assert_is_not_lifecycle_node(
+          node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
+                  /// lifecycle nodes, so we can only assert this at runtime
       try {
-        subscriber_ = image_transport::create_camera_subscription(
-            node.node_.maybe_regular_node, base_topic_name, cb, transport, qos.get_rmw_qos_profile());
+        subscriber_ = image_transport::create_camera_subscription(node.node_.maybe_regular_node,
+                                                                  base_topic_name, cb, transport,
+                                                                  qos.get_rmw_qos_profile());
       } catch (const image_transport::TransportLoadException &exception) {
         this_obs->reject(exception);
       }
@@ -107,7 +117,9 @@ struct CameraPublisher
 
     auto this_obs = this->observable_;
     this->attach_ = [this_obs, base_topic_name, qos](NodeBookkeeping &node) {
-        assert_is_not_lifecycle_node(node); /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and lifecycle nodes, so we can only assert this at runtime
+      assert_is_not_lifecycle_node(
+          node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
+                  /// lifecycle nodes, so we can only assert this at runtime
       image_transport::CameraPublisher publisher = image_transport::create_camera_publisher(
           node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
       this_obs->register_handler([this_obs, publisher]() {

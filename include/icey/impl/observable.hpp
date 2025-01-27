@@ -9,12 +9,14 @@
 #include <variant>
 
 namespace icey {
-/// A special type that indicates that there is no value (note that using void causes many problems, defining an own struct is easier.)
+/// A special type that indicates that there is no value (note that using void causes many problems,
+/// defining an own struct is easier.)
 struct Nothing {};
-/// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we will generally use in the following to recognize (unspecialized) class templates.
-struct ResultTag {}; 
+/// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we
+/// will generally use in the following to recognize (unspecialized) class templates.
+struct ResultTag {};
 /// A Result-type like in Rust, it is a sum type that can either hold Value or Error, or, different
-/// to Rust, none. 
+/// to Rust, none.
 template <class _Value, class _ErrorValue>
 struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, public ResultTag {
   using Value = _Value;
@@ -65,7 +67,8 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 }
 /// An observable. Similar to a promise in JavaScript.
 /// I saw that these implementations are very close to mine:
-/// [1] https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
+/// [1]
+/// https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
 /// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
@@ -89,9 +92,10 @@ public:
 
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
-  /// TODO disable_if these hold Nothing 
+  /// TODO disable_if these hold Nothing
   void set_none() {
-    state_.set_none();;
+    state_.set_none();
+    ;
   }
   void set_value(const MaybeValue &x) {
     if (x)
@@ -100,17 +104,17 @@ public:
       state_.set_none();
   }
 
-  void set_error(const ErrorValue &x) { 
-      state_.set_err(x); 
-  }
+  void set_error(const ErrorValue &x) { state_.set_err(x); }
 
   /// Notify about error or value, depending on the state. If there is no value, it does not notify
   void notify() {
-    if constexpr(std::is_base_of_v<std::runtime_error, ErrorValue>) {
-      // If we have an error and the chain stops, we re-throw the error so that we do not leave the error unhandled.
-      if(this->has_error() && handlers_.empty()) { 
-          //std::cout << "Unhandled promise rejection with an ErrorValue  that is an exception, re-throwing .." << std::endl;
-          throw this->error();
+    if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
+      // If we have an error and the chain stops, we re-throw the error so that we do not leave the
+      // error unhandled.
+      if (this->has_error() && handlers_.empty()) {
+        // std::cout << "Unhandled promise rejection with an ErrorValue  that is an exception,
+        // re-throwing .." << std::endl;
+        throw this->error();
       }
     }
     if (this->has_value() || this->has_error()) {
@@ -151,6 +155,7 @@ public:
   /// A name to identify this node among multiple ones with the same type, usually the topic
   /// or service name
   std::string name;
+
 protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Observable (that is captured by value)
@@ -162,7 +167,7 @@ protected:
     return [output, f = std::move(f)](const FunctionArgument &x) {
       if constexpr (std::is_void_v<ReturnType>) {
         apply_if_tuple(f, x);
-      } else if constexpr (is_result<ReturnType>) { 
+      } else if constexpr (is_result<ReturnType>) {
         /// support callbacks that at runtime may return value or error
         output->state_ = apply_if_tuple(f, x);  /// TODO maybe do not overwrite whole variant but
                                                 /// differentiate and set error or value
@@ -179,8 +184,9 @@ protected:
   /// It' behvarior closely matches promises in JavaScript.
   /// It is basis for implementing the .then() function but it does two things differently:
   /// First, it does not create the new promise, it receives an already created "output" promise.
-  /// Second, we can only register a "onResolve"- or an "onReject"-handler, not both. But "onResolve" is already implemented
-  /// such that implicitly the "onReject"-handler passes over the error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.
+  /// Second, we can only register a "onResolve"- or an "onReject"-handler, not both. But
+  /// "onResolve" is already implemented such that implicitly the "onReject"-handler passes over the
+  /// error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.
   /// @param this (implicit): Observable<V, E>* The input promise
   /// @param output: SharedPtr< Observable<V2, E> > or derived, the resulting promise
   /// @param f:  (V) -> V2 The user callback function to call when the input promises resolves or
@@ -208,8 +214,9 @@ protected:
     return handler;
   }
 
-  /// Common function for both .then and .except. The template argument "resolve" says whether f is the resolve or the
-  /// reject handler (Unlike JS, we can only register one at the time, this is for better code generation)
+  /// Common function for both .then and .except. The template argument "resolve" says whether f is
+  /// the resolve or the reject handler (Unlike JS, we can only register one at the time, this is
+  /// for better code generation)
   template <bool resolve, typename F>
   auto done(F &&f, bool register_handler) {
     /// TODO static_assert here signature for better error messages

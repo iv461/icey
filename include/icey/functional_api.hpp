@@ -1,4 +1,5 @@
-/// Provides purely functional API to ROS. Currently only regular nodes, no lifecycle nodes (they are only supported via the class-based API)
+/// Provides purely functional API to ROS. Currently only regular nodes, no lifecycle nodes (they
+/// are only supported via the class-based API)
 #pragma once
 
 namespace icey {
@@ -53,7 +54,6 @@ struct GlobalState {
                 << std::endl;
     }
   }
-
 
   // Access the node, in case only one was spawned
   Node* get_node() {
@@ -120,15 +120,14 @@ auto create_service(const std::string& service_name,
 }
 
 template <class ServiceT, class Parent>
-auto create_client(Parent parent, const std::string& service_name,
-                   const Duration& timeout,
+auto create_client(Parent parent, const std::string& service_name, const Duration& timeout,
                    const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
   return g_state.get_context().create_client<ServiceT>(parent, service_name, timeout, qos);
 }
 
-/// Extention point: support creating custom Observables: 
-template <class T, typename ...Args>
-auto create_observable(Args && ...args) {
+/// Extention point: support creating custom Observables:
+template <class T, typename... Args>
+auto create_observable(Args&&... args) {
   return g_state.get_context().template create_observable<T>(std::forward<Args>(args)...);
 }
 
@@ -158,7 +157,8 @@ auto serialize(Parents... parents) {
 }
 
 void destroy() {
-  g_state.nodes.clear(); // Purge the nodes, the nodes must be destroyed before the global rclcpp context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
+  g_state.nodes.clear();  // Purge the nodes, the nodes must be destroyed before the global rclcpp
+                          // context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
 }
 
 /// Blocking spawn of a node using the global context
@@ -169,7 +169,6 @@ void spawn(int argc, char** argv, std::string node_name) {
   spawn(g_state.create_new_node(node_name));
   destroy();
 }
-
 
 /// Create a node from the staged global context. Clears the global context so that multiple nodes
 /// can be created later.
