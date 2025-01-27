@@ -500,8 +500,6 @@ public:
     return hana::unpack(hana_tuple_output, [](auto... args) { return std::make_tuple(args...); });
   }
 
-  
-
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
 
   using promise_type = Self;  /// We are a promise
@@ -590,7 +588,8 @@ struct ParameterObservable : public Observable<_Value> {
                       bool ignore_override = false) {
     this->impl()->is_parameter_ = true;
     this->impl()->name = parameter_name;
-    this->impl()->attach_ = [impl = this->impl(), parameter_name, default_value, parameter_descriptor, ignore_override](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl(), parameter_name, default_value,
+                             parameter_descriptor, ignore_override](NodeBookkeeping &node) {
       node.add_parameter<_Value>(
           parameter_name, default_value,
           [impl](const rclcpp::Parameter &new_param) {
@@ -629,11 +628,10 @@ struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> 
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->impl()->name = topic_name;
-    this->impl()->attach_ = [impl=this->impl(), topic_name, qos, options](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl(), topic_name, qos, options](NodeBookkeeping &node) {
       node.add_subscription<_Message>(
-          topic_name,
-          [impl](typename _Message::SharedPtr new_value) { impl->resolve(new_value); }, qos,
-          options);
+          topic_name, [impl](typename _Message::SharedPtr new_value) { impl->resolve(new_value); },
+          qos, options);
     };
   }
 };
@@ -1121,8 +1119,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &parent = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];
-      parent.then(
-          [synchronizer_input](const auto &x) { synchronizer_input->impl()->resolve(x); });
+      parent.then([synchronizer_input](const auto &x) { synchronizer_input->impl()->resolve(x); });
     });
     return synchronizer;
   }
