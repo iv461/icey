@@ -16,21 +16,21 @@ int main(int argc, char **argv) {
     auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
     auto timer_signal = icey::create_timer(100ms);
     /// Add a callback for the timer:
-    auto rectangle_sig = timer_signal->then([](size_t ticks) { 
+    auto rectangle_sig = timer_signal.then([](size_t ticks) { 
         std::optional<float> result; 
         //  1/10 Frequency divider
         if(ticks % 10 == 0) {
             result = (ticks % 20 == 0) ? 1.f : 0.f;
         } // Otherwise publish nothing
         return result;
-    })->publish("rectangle_signal"); // And publish the result
+    }).publish("rectangle_signal"); // And publish the result
 
     /// Add another callback for the timer
-    auto sine_signal = timer_signal->then([&](size_t ticks) {
+    auto sine_signal = timer_signal.then([&](size_t ticks) {
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
         double y = amplitude->value() * std::sin((0.1 * ticks) / frequency->value() * 2 * M_PI);
         return y;
-    })->publish("sine_generator");
+    }).publish("sine_generator");
 
     icey::spawn(argc, argv, "signal_generator_example"); 
 }

@@ -5,7 +5,7 @@ using namespace std::chrono_literals;
 /// to store them in variables explicity:
 auto create_yaw_rotation(icey::Parameter<std::string> base_frame_param) {
     /// Note we do not assign the timer to a variable here, instead we just call then() on it:
-    return icey::create_timer(1s)->then([base_frame_param](size_t ticks) { 
+    return icey::create_timer(1s).then([base_frame_param](size_t ticks) { 
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp = icey::node->get_clock()->now();
         t.header.frame_id = "map";
@@ -23,14 +23,14 @@ auto create_yaw_rotation(icey::Parameter<std::string> base_frame_param) {
 }
 int main(int argc, char **argv) {
     icey::icey_debug_print = true;
-    /// We use here the Parameter-type explicitly:
+    
     icey::Parameter<std::string> base_frame_param = icey::declare_parameter<std::string>("base_frame", "base_link");
 
     icey::after_parameter_initialization([&] () {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Parameters arrived");
         /// We can simply pass here the parameter so that the frame_id of the published message 
         // gets updated when the parameter updated dynamically.
-        create_yaw_rotation(base_frame_param)->publish_transform();
+        create_yaw_rotation(base_frame_param).publish_transform();
     });
     icey::spawn(argc, argv, "tf_broadcaster_example"); /// Create and start node
 }

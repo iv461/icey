@@ -8,12 +8,12 @@ int main(int argc, char **argv) {
 
     auto my_string = icey::create_subscription<StringMsg>("my_string", 1);
 
-    auto derived_value = my_string->then([](StringMsg::SharedPtr my_string_val) {
+    auto derived_value = my_string.then([](StringMsg::SharedPtr my_string_val) {
         std::cout << "Computing .. " << std::endl;
         return my_string_val->data;
     });
 
-    derived_value->then([](const std::string &derived_string) {
+    derived_value.then([](const std::string &derived_string) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got value: " << derived_string);
     });
 

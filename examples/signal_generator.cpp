@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
   auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
   auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
   /// Receive parameter updates
-  amplitude->then([](double new_value) {
+  amplitude.then([](double new_value) {
       RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
   });
   */

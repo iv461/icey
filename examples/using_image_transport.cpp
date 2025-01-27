@@ -22,13 +22,13 @@ int main(int argc, char **argv) {
       icey::create_camera_subscription("camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
-      ->then([](sensor_msgs::msg::Image::ConstSharedPtr image,
+      .then([](sensor_msgs::msg::Image::ConstSharedPtr image,
                 sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Received image and info: ");
       })
       /// Optionally, you can handle the exception that the transport plugin could not be loaded
       /// (otherwise it will just throw the exception unhandled)
-      ->except([](const image_transport::TransportLoadException &exception) {
+      .except([](const image_transport::TransportLoadException &exception) {
         RCLCPP_ERROR_STREAM(icey::node->get_logger(),
                             "Could not load plugin, got exception: " << exception.what());
       });
@@ -39,13 +39,13 @@ int main(int argc, char **argv) {
 
   camera_left_sub
       /// We receive here the image after image_transport has decompressed it:
-      ->then([](sensor_msgs::msg::Image::ConstSharedPtr image) {
+      .then([](sensor_msgs::msg::Image::ConstSharedPtr image) {
         /// Process your image, e.g. paint it here:
         // As an example, we simply copy the image, output must be a shared_ptr
         return std::make_shared<sensor_msgs::msg::Image>(*image);
       })
       /// And now publish again using image_transport, creating an image_transport::Publisher:
-      ->publish<icey::ImageTransportPublisher>("camera_left_painted", rclcpp::SensorDataQoS());
+      .publish<icey::ImageTransportPublisher>("camera_left_painted", rclcpp::SensorDataQoS());
 
   icey::spawn(argc, argv, "icey_image_transport_example");  /// Create and start node
 }

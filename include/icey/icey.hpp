@@ -445,7 +445,7 @@ public:
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
     auto child = this->impl()->context.lock()->template create_observable<T>(args...);
-    this->impl()->then([child](const auto &x) { child.observable_->resolve(x); });
+    this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   /// Create a ROS normal publisher.
@@ -491,15 +491,15 @@ public:
     /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see
     /// https://stackoverflow.com/a/33181700
     constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, tuple_sz>);
-    auto this_obs = this->observable_;
-    auto hana_tuple_output = hana::transform(indices, [&](auto I) {
-      return this_obs->then([I](const auto &...args) {  /// Need to take variadic because then()
+    auto hana_tuple_output = hana::transform(indices, [impl = this->impl()](auto I) {
+      return impl->then([I](const auto &...args) {  /// Need to take variadic because then()
                                                         /// automatically unpacks tuples
         return std::get<I>(std::forward_as_tuple(
             args...));  /// So we need to pack this again in a tuple and get the index.
       });
     });
     /// Now create a std::tuple from the hana::tuple to be able to use structured bindings
+    /// TODO perfect FW
     return hana::unpack(hana_tuple_output, [](auto... args) { return std::make_tuple(args...); });
   }
 
@@ -1038,14 +1038,14 @@ struct Context : public std::enable_shared_from_this<Context> {
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     observable_traits<Parent>{};
     auto child = create_observable<PublisherObservable<obs_val<Parent>>>(topic_name, qos);
-    parent->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
+    parent->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
     auto child = create_observable<TransformPublisherObservable>();
-    parent->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
+    parent->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   auto create_timer(const Duration &interval, bool use_wall_time = false,
@@ -1071,10 +1071,10 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Promise<B>>)->Promise<B>, where the service call behaves already like F<A, Promise<B>>: Just
     /// return self. We would also need to accumulate all kinds of errors, i.e. ErrorValue must
     /// become a sum type of all the possible ErrorValues of the chain.
-    parent->then([service_client](auto req)  { service_client.call(req); });
+    parent.then([service_client](auto req) { service_client.call(req); });
     /// Pass the error since service calls are chainable
     if constexpr (not std::is_same_v<obs_err<Parent>, Nothing>) {
-      parent->except([service_client](auto err) { service_client.impl()->reject(err); });
+      parent.except([service_client](auto err) { service_client.impl()->reject(err); });
     }
     return service_client;
   }
@@ -1097,7 +1097,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     // auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return
     // hana_is_interpolatable(t); }); static_assert(all_are_interpolatables, "All inputs must be
     // interpolatable when using the sync_with_reference");
-    return reference->then([interpolatables_tuple](const auto &new_value) {
+    return reference.then([interpolatables_tuple](const auto &new_value) {
       auto parent_maybe_values = hana::transform(interpolatables_tuple, [&](auto parent) {
         return parent.get_at_time(rclcpp::Time(new_value->header.stamp));
       });
@@ -1119,7 +1119,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &parent = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];
-      parent->then(
+      parent.then(
           [synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); });
     });
     return synchronizer;
@@ -1182,7 +1182,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
-      parent->then([child](const auto &x) { child.observable_->resolve(x); });
+      parent.then([child](const auto &x) { child.observable_->resolve(x); });
     });
     return child;
   }

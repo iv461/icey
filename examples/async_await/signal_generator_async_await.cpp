@@ -44,7 +44,7 @@ icey::Observable<int, icey::Nothing> create_and_spin_node(int argc, char **argv)
     if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
       std_msgs::msg::Float32 result;
       result.data = (ticks % 20 == 0) ? 1.f : 0.f;
-      rectangle_pub->publish(result);
+      rectangle_pub.publish(result);
     }
 
     /// Add another computation for the timer
@@ -55,7 +55,7 @@ icey::Observable<int, icey::Nothing> create_and_spin_node(int argc, char **argv)
     double y = params.amplitude * std::sin((period_time_s * ticks) * params.frequency * 2 * M_PI);
     float_val.data = y;
     RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
-    sine_pub->publish(float_val);
+    sine_pub.publish(float_val);
   }
   co_return 0;
 }

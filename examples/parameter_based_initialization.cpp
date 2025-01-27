@@ -24,14 +24,14 @@ int main(int argc, char **argv) {
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
     /// TODO
-    auto rectangle_sig = map_base_link_tf->then([](auto msg) {
+    auto rectangle_sig = map_base_link_tf.then([](auto msg) {
       std::optional<std_msgs::msg::Float32> result;
       return result;
     });
 
     /// Now conditionally create a publisher based on the parameters:
     if (publish_debug_markers_param->value()) {
-      rectangle_sig->publish("debug_marker");
+      rectangle_sig.publish("debug_marker");
     }
   });
 

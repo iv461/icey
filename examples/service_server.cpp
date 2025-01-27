@@ -19,10 +19,10 @@ int main(int argc, char **argv) {
 
 
   /// Now create the service server node
-  icey::create_service<ExampleService>("set_bool_service1")->then(set_bool_service);
+  icey::create_service<ExampleService>("set_bool_service1").then(set_bool_service);
 
-  icey::create_service<ExampleService>("set_bool_service2")->then(set_bool_service);
-  icey::create_service<ExampleService>("set_bool_service3")->then(set_bool_service);
+  icey::create_service<ExampleService>("set_bool_service2").then(set_bool_service);
+  icey::create_service<ExampleService>("set_bool_service3").then(set_bool_service);
 
   icey::spawn(argc, argv, "service_server_node");
   return 0;

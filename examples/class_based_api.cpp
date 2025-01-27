@@ -15,16 +15,16 @@ public:
   MyNode(std::string name) : Base(name) {
     auto timer_signal = icey().create_timer(500ms);
 
-    timer_signal->then(
+    timer_signal.then(
         [this](size_t ticks) { RCLCPP_INFO_STREAM(get_logger(), "Timer ticked: " << ticks); });
 
     timer_signal
-        ->then([](size_t ticks) {
+        .then([](size_t ticks) {
           std_msgs::msg::Float32 float_val;
           float_val.data = std::sin(ticks / 10.);
           return float_val;
         })
-        ->publish("sine_generator");
+        .publish("sine_generator");
 
     /// Register callbacks
     icey().register_after_parameter_initialization_cb(

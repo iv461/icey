@@ -15,7 +15,7 @@ public:
         
       icey().create_timer(1s)
           /// Build a request when the timer ticks
-          ->then([this](size_t ticks) {
+          .then([this](size_t ticks) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 1;
             RCLCPP_INFO_STREAM(this->get_logger(),
@@ -25,7 +25,7 @@ public:
           /// Create a service client, the service is called every time the timer ticks. We set
           /// additionally a timeout for waiting until the service becomes available.
           ->call_service<ExampleService>("set_bool_service1", 1s)
-          ->then([this](ExampleService::Response::SharedPtr response) {
+          .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response1: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 0;
@@ -33,21 +33,21 @@ public:
           })
           
           ->call_service<ExampleService>("set_bool_service2", 1s)
-          ->then([this](ExampleService::Response::SharedPtr response) {
+          .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response2: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 1;
             return request;
           })
           ->call_service<ExampleService>("set_bool_service3", 1s)
-          ->then([this](ExampleService::Response::SharedPtr response) {
+          .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response3: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 0;
             return request;
           })
           /// Here we catch timeout errors as well as unavailability of the service:
-          ->except([this](std::string error_code) {
+          .except([this](std::string error_code) {
             /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
             /// we got interrupted while waiting for the service to become available) or
             /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"

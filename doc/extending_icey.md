@@ -119,7 +119,7 @@ public:
             auto publisher = image_transport::create_publisher(node, qos);
 
             promise->register_handler([promise, publisher]() {
-                publisher->publish(promise.value());
+                publisher.publish(promise.value());
             })
         };
     }

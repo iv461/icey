@@ -102,7 +102,7 @@ We can easily register a callback and use the timer like you usually would:
 ```cpp
 auto my_timer = icey::create_timer(100ms);
 
-my_timer->then([](size_t ticks) {
+my_timer.then([](size_t ticks) {
     /// Do work
 });
 ```
@@ -119,7 +119,7 @@ auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
 
 auto timer_signal = icey::create_timer(period_time);
 
-auto sine_signal = timer_signal->then([&](size_t ticks) {
+auto sine_signal = timer_signal.then([&](size_t ticks) {
     std_msgs::msg::Float32 float_val;
     double period_time_s = 0.1;
     /// We can .get() parameters since they are always initialized first, so at this point they are alreay there        
@@ -128,7 +128,7 @@ auto sine_signal = timer_signal->then([&](size_t ticks) {
     return float_val;
 });
 
-sine_signal->publish("sine_generator");
+sine_signal.publish("sine_generator");
 ```
 
 The signature of `create_timer` is `icey::create_timer(period_time, <use_wall_time>, <is_one_off_timer>)`, one-off timers can be implemented therefore as well.
@@ -155,7 +155,7 @@ auto period_time = 100ms;
 double frequency = 10;
 double amplitude = 2.;
 size_t period_counter = 0;
-icey::create_timer(period_time, "sine_generator")->then([&](const rclcpp::Timer &timer) {
+icey::create_timer(period_time, "sine_generator").then([&](const rclcpp::Timer &timer) {
     
     std::make_tuple()
 }).publish("sine_generator");
@@ -185,7 +185,7 @@ In ICEY, we can achieve the exact same by returning an `std::optional<T>`: If th
 ```cpp
 auto twist_signal = icey::create_subscription<geometry_msgs::msg::Twist>("twist_input");
 
-auto twist_calculation_result = twist_signal->then([] (const geometry_msgs::msg::Twist::SharedPtr msg) {
+auto twist_calculation_result = twist_signal.then([] (const geometry_msgs::msg::Twist::SharedPtr msg) {
   std::optional<double> maybe_result;
   // If message contains NaN or Inf, ignore
   if (!nav2_util::validateTwist(*msg)) {
@@ -198,7 +198,7 @@ auto twist_calculation_result = twist_signal->then([] (const geometry_msgs::msg:
   return maybe_result;
 });
 
-twist_calculation_result->then([](double result) {
+twist_calculation_result.then([](double result) {
     /// This will only be called if the previous call returned something.
 });
 ```
