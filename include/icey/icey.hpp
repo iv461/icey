@@ -416,6 +416,8 @@ public:
   /// TODO hack 
   Observable* operator->() { return this; }
 
+  Impl &impl() { return *observable_;}
+  const Impl &impl() const { return *observable_;}
   void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
     if (!this->context.lock())
       throw std::runtime_error(
@@ -849,7 +851,7 @@ struct ServiceObservable
   ServiceObservable(const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     auto this_obs = this->observable_;
-    this->attach_ = [=](NodeBookkeeping &node) {
+    this->attach_ = [this_obs, service_name, qos](NodeBookkeeping &node) {
       node.add_service<_ServiceT>(
           service_name,
           [this_obs](Request request, Response response) {
@@ -862,19 +864,25 @@ struct ServiceObservable
 /// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in
 /// the DFG
 template <typename _ServiceT>
-struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr, std::string> {
+struct ServiceClientImpl {
+  using Client = rclcpp::Client<_ServiceT>;
+  typename Client::SharedPtr client;
+  Duration timeout;
+  std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request;
+};
+template <typename _ServiceT>
+struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr, std::string, ServiceClientImpl<_ServiceT> > {
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
 
-  ServiceClient(const std::string &service_name, const Duration &timeout)
-      : timeout_(timeout) {
+  ServiceClient(const std::string &service_name, const Duration &timeout) {
     this->name = service_name;
-    auto this_obs = this->observable_;
+    this->impl()->timeout = timeout;
     /// TODO this is captured
-    this->attach_ = [this, service_name](NodeBookkeeping &node) {
-      client_ = node.add_client<_ServiceT>(service_name);
+    this->attach_ = [impl = this->impl(), service_name](NodeBookkeeping &node) {
+      impl->client = node.add_client<_ServiceT>(service_name);
     };
   }
 
@@ -882,8 +890,8 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
     if(!wait_for_service())
         return *this;
     /// TODO this is captured here 
-    maybe_pending_request_ = 
-      client_->async_send_request(request, [this](Future response_futur) {
+    this->observable_->maybe_pending_request = 
+      this->observable_->client->async_send_request(request, [this](Future response_futur) {
             on_response(response_futur);
       });
     return *this;
@@ -891,7 +899,7 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
 
 protected:
   bool wait_for_service() {
-    if (!client_->wait_for_service(timeout_)) {
+    if (!this->observable_->client->wait_for_service(this->impl()->timeout)) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()){
         this->observable_->reject("INTERRUPTED");
@@ -905,33 +913,29 @@ protected:
 
   void on_response(Future response_futur) {
       if (response_futur.valid()) {
-        maybe_pending_request_ = {};
-        this->observable_->resolve(response_futur.get().second);
+        this->impl()->maybe_pending_request = {};
+        this->impl()->resolve(response_futur.get().second);
       } else {
         /// The FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
         /// Since the async_send_request waits on the executor, we cannot only interrupt it with Ctrl-C
         // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
         if (!rclcpp::ok()) {
-          this->observable_->reject("rclcpp::FutureReturnCode::INTERRUPTED");
+          this->impl()->reject("rclcpp::FutureReturnCode::INTERRUPTED");
         } else {
-          this->observable_->reject("rclcpp::FutureReturnCode::TIMEOUT");
+          this->impl()->reject("rclcpp::FutureReturnCode::TIMEOUT");
         }
         /// Now do the weird cleanup thing that the API-user definitely neither does need to care
         /// nor know about:
-        client_->remove_pending_request(maybe_pending_request_.value());
+        this->impl()->client->remove_pending_request(this->impl()->maybe_pending_request.value());
         /// TODO I'm not sure this will still not leak memory smh: https://github.com/ros2/rclcpp/issues/1697
         /// Some ROS examples use stuff like timers that poll for dead request and clean them up.
         /// That's why I'll put this assertion here:
-        if(size_t num_requests_pruned = client_->prune_pending_requests() != 0) {
+        if(size_t num_requests_pruned = this->impl()->client->prune_pending_requests() != 0) {
             throw std::runtime_error("Pruned some more requests even after calling remove_pending_request(), you should buy a new RPC library.");
         }
-        maybe_pending_request_ = {};
+        this->impl()->maybe_pending_request = {};
     }
   }
-
-  typename Client::SharedPtr client_;
-  Duration timeout_;
-  std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request_;
 };
 
 /// Creates the data-flow graph and asserts that it is not edited one obtain() is called

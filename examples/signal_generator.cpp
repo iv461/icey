@@ -41,13 +41,13 @@ int main(int argc, char **argv) {
     auto timer_signal = icey::create_timer(period_time);
 
     /// Receive timer updates
-    const auto [a_float, a_strin, an_int] = timer_signal->then([](size_t ticks) {
+    const auto [a_float, a_strin, an_int] = timer_signal.then([](size_t ticks) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
         return std::make_tuple(3., "hellooo", 66);
     })->unpack();
 
     /// Optional publishing
-    auto rectangle_sig = timer_signal->then([](size_t ticks) { 
+    auto rectangle_sig = timer_signal.then([](size_t ticks) { 
         std::optional<std_msgs::msg::Float32> result; 
         if(ticks % 10 == 0) { /// Publish with 1/10th of the frequency
             result = std_msgs::msg::Float32();
@@ -56,10 +56,10 @@ int main(int argc, char **argv) {
         
         return result;        
     });
-    rectangle_sig->publish("rectangle_signal");
+    rectangle_sig.publish("rectangle_signal");
 
     /// Add another computation for the timer
-    auto sine_signal = timer_signal->then([&](size_t ticks) {
+    auto sine_signal = timer_signal.then([&](size_t ticks) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         return float_val;
     });
 
-    sine_signal->publish("sine_generator");
+    sine_signal.publish("sine_generator");
 
     icey::spawn(argc, argv, "signal_generator_example"); 
 }
