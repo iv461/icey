@@ -17,12 +17,14 @@ icey::Stream<std_msgs::msg::Float32> rectangle_generator(icey::Timer timer) {
     size_t ticks = co_await timer;
 
     //RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
-
+    std::cout << "timer ticked" << std::endl;
     std_msgs::msg::Float32 result;
     if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
       result.data = (ticks % 20 == 0) ? 1.f : 0.f;
+      co_return result;
+    } else  {
+      co_return std::nullopt;
     }
-    co_return result;
 }
 
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {
@@ -51,6 +53,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     /// Receive timer updates
     // size_t ticks = icey::await(timer_signal);
     std_msgs::msg::Float32 rectangle_signal = co_await rectangle_generator(timer_signal);
+    std::cout << "timer ticked" << std::endl;
     rectangle_pub.publish(rectangle_signal);
 
     /// Add another computation for the timer

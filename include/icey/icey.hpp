@@ -11,6 +11,7 @@
 #include <map>
 #include <optional>
 #include <tuple>
+#include <sstream>
 #include <unordered_map>
 
 /// TF2 support:
@@ -34,7 +35,7 @@ namespace icey {
 
 namespace hana = boost::hana;
 bool icey_debug_print = false;
-
+bool icey_coro_debug_print = false;
 using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
@@ -413,17 +414,24 @@ public:
           "context.");
   }
 
+  
+  std::string get_type_info() const {
+      std::stringstream ss;
+      auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+        ss << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << " (impl @ " 
+        << size_t(this->impl().get()) << ")] " ;
+        return ss.str();
+  }
+
 
   Observable() {
-      auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
-        " Constructor called" << std::endl;
+    if(icey_coro_debug_print)
+      std::cout << get_type_info() << " Constructor called" << std::endl;
   }
 
   ~Observable() {
-      auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
-        " Destructor called" << std::endl;
+    if(icey_coro_debug_print)
+      std::cout << get_type_info() << " Destructor called" << std::endl;
   }
 
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
@@ -514,33 +522,42 @@ public:
   }
 
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
-
-  using promise_type = Self;  /// We are a promise
+  ////////////////////////////////////////////////////////
+  /// Ok, let's go:
+  /// First, we are a promise:
+  using promise_type = Self;  
+  //// Second, we are still a promise, so we return self:
   Self get_return_object() { 
-    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
-        " get_return_object called" << std::endl;
+    //std::cout << get_type_info() <<   " get_return_object called" << std::endl;
         return *this; }
-  /// We never already got something, we always first need to spin the ROS executor to get a message
-  std::suspend_never initial_suspend() { return {}; }
+  /// Third, we never already got something since this is a stream (we always first need to spin the ROS executor to get a message), so we never suspend:
+  std::suspend_never initial_suspend() { 
+      //std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
+    return {}; 
+  }
+  /// Fourth, we return_value returns the value of the promise:
   Value return_value() { return this->impl()->value(); }
-  template <class ReturnType>
-  ReturnType return_value(ReturnType x) {
-    return x;
+  /// Fifth, if the return_value function is called with a value, it *sets* the value, makes sense right ? No ? Oh ..
+  /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)  
+  template<class T>
+  void return_value(const T &x) const {
+    if(icey_coro_debug_print)
+      std::cout << get_type_info() <<   " return value for " << boost::typeindex::type_id_runtime(x).pretty_name() << " called " <<std::endl;
+    this->impl()->set_value(x);
   }
+  /// Sixth, we already handle exceptions in the promise.
   void unhandled_exception() {}
-  std::suspend_always final_suspend() noexcept {
-    std::cout << "final_suspend  " << std::endl;
-    return {};
-  }
+  /// Seventh, we do not need to do anything at the end, no extra cleanups needed.
+  std::suspend_never final_suspend() const noexcept { return {}; }
 
-  /// Promisify a value if needed, meaning if it is not already a promise
+  /// Eight, promisify a value if needed, meaning if it is not already a promise and set context since we need to have the executor
   template <class ReturnType>
   auto await_transform(ReturnType x) {
-    auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
-    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
-        " await_transform called to " << to_type << std::endl;
+    if(icey_coro_debug_print) {
+        auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
+       std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
+    }
+
     if constexpr (std::is_base_of_v<ObservableTag, ReturnType>) {
       this->impl()->context = x.impl()->context; /// Get the context from the input promise 
       return x;
@@ -551,16 +568,9 @@ public:
     }
   }
 
-  /// Run the ROS executor untils this Promise is fulfilled. This function can be called normally
-  auto await() {
-    spin_executor();
-    return await_resume();
-  }
-
   /// Spin the event loop, (the ROS executor) until this Promise is fulfilled
   void spin_executor() {
-    auto promise = this->impl();
-    while (promise->has_none()) {
+    while (this->impl()->has_none()) {
       /// Note that spinning once might not be enough, for example if we synchronize three topics
       /// and await the synchronizer output, we would need to spin at least three times.
       this->impl()->context.lock()->executor_->spin_once();
@@ -568,43 +578,37 @@ public:
   }
 
   //// Now the Awaiter interface for C++20 coroutines:
+  /// Do we have a value ?
   bool await_ready() { return !this->impl()->has_none(); }
+  /// Spin the ROS event loop until we got a value.
   bool await_suspend(auto coroutine_handle) {
-    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
-        " await_suspend called" << std::endl;
+    if(icey_coro_debug_print)
+      std::cout << get_type_info() << " await_suspend called" << std::endl;
 
     if(this->impl()->context.expired()) {
-      std::cout << "HELP; I have no context :( !" << std::endl;
-      auto coro_p = coroutine_handle.promise();
-      while (this->impl()->has_none()) {
-        /// Note that spinning once might not be enough, for example if we synchronize three topics
-        /// and await the synchronizer output, we would need to spin at least three times.
-        coro_p.impl()->context.lock()->executor_->spin_once();
-      }
-    } else {
-      this->spin_executor();
-    }
-    //this->spin_executor();
+      std::cout << "HELP! I have no context :( Guess I'll die now" << std::endl;
+      throw std::logic_error("I have no context, cannot spin the event loop");
+    } 
+
+    this->spin_executor();
     return false;  /// Resume the current coroutine, see
                    /// https://en.cppreference.com/w/cpp/language/coroutines
   }
+
+  /// Consume the result and return it.
   auto await_resume() {
-    
-    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
-        " await_resume called" << std::endl;
-    auto promise = this->impl();
+    if(icey_coro_debug_print)
+      std::cout << get_type_info() << " await_resume called" << std::endl;
     /// Return the value if there can be no error
     if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      auto result = promise->value();
+      auto result = this->impl()->value();
       /// Reset the state since we consumed this value
-      promise->set_none();
+      this->impl()->set_none();
       return result;
     } else {
-      auto result = promise->get_state();
+      auto result = this->impl()->get_state();
       /// Reset the state since we consumed this value
-      promise->set_none();
+      this->impl()->set_none();
       return result;
     }
   }
