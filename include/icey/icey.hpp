@@ -627,6 +627,7 @@ struct ParameterObservable : public Observable<_Value> {
 /// A subscriber observable, always stores a shared pointer to the message as it's value
 template <typename _Message>
 struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
+  using Value = typename _Message::SharedPtr; /// Needed for synchronizer to determine message type TODO use base, upcast, then decltype or smth
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->name = topic_name;
@@ -779,47 +780,49 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 /// synchronization still works. I would guess currently it works only if the lowest frequency topic has a
 /// frequency of at least 1/queue_size, given the highest frequency topic has a frequency of one.
 template <typename... Messages>
-class SynchronizerObservable
-    : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string> {
-public:
-  using Self = SynchronizerObservable<Messages...>;
-  using Value = std::tuple<typename Messages::SharedPtr...>;
+struct SynchronizerObservableImpl {
   /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
   /// `TImeSynchronizer` uses by default ExactTime
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Sync = message_filters::Synchronizer<Policy>;
   using Inputs = std::tuple<std::shared_ptr<SimpleFilterAdapter<Messages>>...>;
-  SynchronizerObservable(uint32_t queue_size)
-      : inputs_(std::make_shared<SimpleFilterAdapter<Messages>>()...),  /// They are dynamically
-                                                                        /// allocated as is every
-                                                                        /// other Observable
-        queue_size_(queue_size) {
-    this->create_mfl_synchronizer();
-  }
   const auto &inputs() const { return inputs_; }
 
-private:
-  void on_messages(typename Messages::SharedPtr... msgs) {
-    this->observable_->resolve(std::forward_as_tuple(msgs...));
-  }
-
-  void create_mfl_synchronizer() {
+  void create_mfl_synchronizer(uint32_t queue_size) {
+    queue_size_ = queue_size;
+    /// They are dynamically allocated as is every other Observable
+    // TODO is this still valid 
+    inputs_ = std::make_tuple(std::make_shared<SimpleFilterAdapter<Messages>>()...);
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
     /// Connect with the input observables
     std::apply(
-        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
-        inputs_);
-    synchronizer_->setAgePenalty(
-        0.50);  /// TODO not sure why this is needed, present in example code
-    auto this_obs = this->observable_;  /// Important: Do not capture this
-    synchronizer_->registerCallback(&Self::on_messages,
-                                    this);  /// Register directly to impl::Observable
+        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },inputs_);
+    /// TODO not sure why this is needed, present in example code
+    synchronizer_->setAgePenalty(0.50); 
   }
   /// The input filters
   uint32_t queue_size_{10};
   Inputs inputs_;
   std::shared_ptr<Sync> synchronizer_;
+};
+
+template <typename... Messages>
+class SynchronizerObservable
+    : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string, SynchronizerObservableImpl<Messages...> > {
+public:
+  using Self = SynchronizerObservable<Messages...>;
+  SynchronizerObservable(uint32_t queue_size) {
+      this->create_mfl_synchronizer(queue_size);
+    /// Note that even if this object is copied, this capture of the this-pointer is still valid because we only access impl in on_messages
+    this->impl()->synchronizer_->registerCallback(&Self::on_messages, this); 
+  }
+
+private:
+  void on_messages(typename Messages::SharedPtr... msgs) {
+    this->impl()->resolve(std::forward_as_tuple(msgs...));
+  }
+
 };
 
 // A transform broadcaster observable
@@ -1076,16 +1079,17 @@ struct Context : public std::enable_shared_from_this<Context> {
     observable_traits<Reference>{};
     observable_traits<Interpolatables...>{};
     using namespace message_filters::message_traits;
-    static_assert(HasHeader<obs_msg<Reference>>::value,
+    using RefMsg = obs_msg<Reference>;
+    static_assert(HasHeader< RefMsg >::value,
                   "The ROS message type must have a header with the timestamp to be synchronized");
     auto interpolatables_tuple = std::make_tuple(interpolatables...);
     /// TOOD somehow does not work
     // auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return
     // hana_is_interpolatable(t); }); static_assert(all_are_interpolatables, "All inputs must be
     // interpolatable when using the sync_with_reference");
-    return reference->then([interpolatables_tuple](const obs_val<Reference> &new_value) {
+    return reference->then([interpolatables_tuple](const auto &new_value) {
       auto parent_maybe_values = hana::transform(interpolatables_tuple, [&](auto parent) {
-        return parent->get_at_time(rclcpp::Time(new_value->header.stamp));
+        return parent.get_at_time(rclcpp::Time(new_value->header.stamp));
       });
       /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject
       return hana::prepend(parent_maybe_values, new_value);
@@ -1163,9 +1167,11 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto serialize(Parents... parents) {
     observable_traits<Parents...>{};
     // TODO assert_all_observable_values_are_same<Parents...>();
-    using Parent = decltype(*std::get<0>(std::forward_as_tuple(parents...)));
+    /// TODO use obs_val, for this get first of variadic pack with hana
+    using Parent = decltype(std::get<0>(std::forward_as_tuple(parents...)));
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
     /// First, create a new observable
+    /// TODO error handling
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {

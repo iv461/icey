@@ -44,7 +44,7 @@ ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp
 
 
 #ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
-#ament_auto_add_executable(automatic_synchronization_example examples/automatic_synchronization.cpp)
+ament_auto_add_executable(automatic_synchronization_example examples/automatic_synchronization.cpp)
 
 ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
 
