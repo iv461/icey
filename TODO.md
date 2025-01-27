@@ -11,9 +11,7 @@ Sorted by decreasing priority.
 
 - [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
 - [ ] [Async/Await] `async`: allow async routignes using C++20 coroutines
-- [ ] [Async/Await] Enable not having to allocate Observables dynamically to enable `async` via coroutines. Needed because we have no control over the allocation 
 
-- [ ] Fix segfault on termination with service example
 - [ ] `get_promise`-API needed intead of this->observable_ 
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
@@ -73,7 +71,6 @@ Sorted by decreasing priority.
 
 ## API elegance/clarity
 
-- [ ] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
 - SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
 - [ ] Search for code that fixes the most common issues like setting int to an double param should be allowed
 
@@ -187,6 +184,10 @@ Sorted by decreasing priority.
 
 - [X] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) 
 - [X] `unpack` tuple of obs to multiple obs, this is easy 
+- [X] [Async/Await] Enable not having to allocate Observables dynamically to enable `async` via coroutines. Needed because we have no control over the allocation 
+- [X] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
+- [X] Fix segfault on termination with service example
+
 ### Code 
 
 - [X] Use Result https://github.com/bitwizeshift/result

@@ -404,7 +404,7 @@ public:
   using ErrorValue = typename Impl::ErrorValue;
   using Self = Observable<_Value, _ErrorValue, Derived>;  // DerivedWithDefaults<Derived>
 
-  auto impl() const { return observable_; }
+  auto impl() const { return impl_; }
 
   void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
     if (!this->impl()->context.lock())
@@ -417,7 +417,7 @@ public:
   /// observable changes, where y = f(x).
   template <typename F>
   auto then(F &&f) {
-    auto child = Self::create_from_impl(observable_->then(f));
+    auto child = Self::create_from_impl(impl()->then(f));
     child.impl()->context = this->impl()->context;
     return child;
   }
@@ -426,7 +426,7 @@ public:
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
                   "This observable cannot have errors, so you cannot register except() on it.");
-    auto child = Self::create_from_impl(observable_->except(f));
+    auto child = Self::create_from_impl(impl()->except(f));
     child.impl()->context = this->impl()->context;
     return child;
   }
@@ -500,7 +500,7 @@ public:
     return hana::unpack(hana_tuple_output, [](auto... args) { return std::make_tuple(args...); });
   }
 
-  std::shared_ptr<Impl> get_promise() const { return this->observable_; }
+  
 
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
 
@@ -508,7 +508,7 @@ public:
   Self get_return_object() { return *this; }
   /// We never already got something, we always first need to spin the ROS executor to get a message
   std::suspend_never initial_suspend() { return {}; }
-  Value return_value() { return get_promise()->value(); }
+  Value return_value() { return this->impl()->value(); }
   template <class ReturnType>
   ReturnType return_value(ReturnType x) {
     return x;
@@ -573,12 +573,12 @@ public:
   /// based on the passed implementation pointer.
   template <class NewVal, class NewErr, class NewDerived>
   static Observable<NewVal, NewErr, NewDerived> create_from_impl(
-      std::shared_ptr<impl::Observable<NewVal, NewErr, NewDerived>> obs_impl) {
+      std::shared_ptr<impl::Observable<NewVal, NewErr, NewDerived>> impl) {
     Observable<NewVal, NewErr, NewDerived> new_obs;
-    new_obs.observable_ = obs_impl;
+    new_obs.impl_ = impl;
     return new_obs;
   }
-  std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
+  std::shared_ptr<Impl> impl_{impl::create_observable<Impl>()};
 };
 
 /// An observable for ROS parameters. Fires initially an event if a default_value set
@@ -590,13 +590,12 @@ struct ParameterObservable : public Observable<_Value> {
                       bool ignore_override = false) {
     this->impl()->is_parameter_ = true;
     this->impl()->name = parameter_name;
-    auto this_obs = this->observable_;
-    this->impl()->attach_ = [=](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl(), parameter_name, default_value, parameter_descriptor, ignore_override](NodeBookkeeping &node) {
       node.add_parameter<_Value>(
           parameter_name, default_value,
-          [this_obs](const rclcpp::Parameter &new_param) {
+          [impl](const rclcpp::Parameter &new_param) {
             _Value new_value = new_param.get_value<_Value>();
-            this_obs->resolve(new_value);
+            impl->resolve(new_value);
           },
           parameter_descriptor, ignore_override);
       /// Set default value if there is one
@@ -605,7 +604,7 @@ struct ParameterObservable : public Observable<_Value> {
         /// TODO I think I added this to crash in case no default is there, think regarding default
         /// values of params
         // node.get_parameter_or(parameter_name, initial_value, *default_value);
-        this_obs->resolve(*default_value);
+        impl->resolve(*default_value);
       }
     };
   }
@@ -630,11 +629,10 @@ struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> 
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->impl()->name = topic_name;
-    auto this_obs = this->observable_;
-    this->impl()->attach_ = [=](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl=this->impl(), topic_name, qos, options](NodeBookkeeping &node) {
       node.add_subscription<_Message>(
           topic_name,
-          [this_obs](typename _Message::SharedPtr new_value) { this_obs->resolve(new_value); }, qos,
+          [impl](typename _Message::SharedPtr new_value) { impl->resolve(new_value); }, qos,
           options);
     };
   }
@@ -847,10 +845,10 @@ public:
   using Value = geometry_msgs::msg::TransformStamped;
   TransformPublisherObservable() {
     this->impl()->name = "tf_pub";
-    this->impl()->attach_ = [this_obs = this->observable_](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl()](NodeBookkeeping &node) {
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
-      this_obs->register_handler([this_obs, tf_broadcaster]() {
-        const auto &new_value = this_obs->value();  /// There can be no error
+      impl->register_handler([impl, tf_broadcaster]() {
+        const auto &new_value = impl->value();  /// There can be no error
         tf_broadcaster->sendTransform(new_value);
       });
     };
@@ -1124,7 +1122,7 @@ struct Context : public std::enable_shared_from_this<Context> {
       auto &parent = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];
       parent.then(
-          [synchronizer_input](const auto &x) { synchronizer_input->observable_->resolve(x); });
+          [synchronizer_input](const auto &x) { synchronizer_input->impl()->resolve(x); });
     });
     return synchronizer;
   }
@@ -1186,7 +1184,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
-      parent.then([child](const auto &x) { child.observable_->resolve(x); });
+      parent.then([child](const auto &x) { child.impl()->resolve(x); });
     });
     return child;
   }
