@@ -389,6 +389,11 @@ constexpr void assert_all_observable_values_are_same() {
                 "The values of all the observables must be the same");
 }
 
+/// Adds some things we want to put in inside the impl::Observable by default. 
+/// Handy to not force the user to declare this, i.e. to not leak implementation details
+template<class Derived>
+struct DerivedWithDefaults : public Derived, public NodeAttachable {};
+
 /// An observable. Similar to a promise in JavaScript.
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = NodeAttachable>
 class Observable : public ObservableTag {
@@ -397,7 +402,7 @@ public:
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
-  using Self = Observable<_Value, _ErrorValue, Derived>;
+  using Self = Observable<_Value, _ErrorValue, Derived >; // DerivedWithDefaults<Derived>
 
   /// TODO hack
   Observable *operator->() { return this; }

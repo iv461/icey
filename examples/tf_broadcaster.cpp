@@ -3,13 +3,13 @@ using namespace std::chrono_literals;
 
 /// You can put the creation of times/subscribers/publishers etc. into a separate function, you do not have
 /// to store them in variables explicity:
-auto create_yaw_rotation(std::shared_ptr<icey::Parameter<std::string>> base_frame_param) {
+auto create_yaw_rotation(icey::Parameter<std::string> base_frame_param) {
     /// Note we do not assign the timer to a variable here, instead we just call then() on it:
     return icey::create_timer(1s)->then([base_frame_param](size_t ticks) { 
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp = icey::node->get_clock()->now();
         t.header.frame_id = "map";
-        t.child_frame_id = base_frame_param->value(); /// Get the current value of the parameter
+        t.child_frame_id = base_frame_param.value(); /// Get the current value of the parameter
         t.transform.translation.x = ticks * .1;
         t.transform.translation.y = ticks * -1.;
         t.transform.translation.z = 0.0;
@@ -24,7 +24,7 @@ auto create_yaw_rotation(std::shared_ptr<icey::Parameter<std::string>> base_fram
 int main(int argc, char **argv) {
     icey::icey_debug_print = true;
     /// We use here the Parameter-type explicitly:
-    std::shared_ptr<icey::Parameter<std::string>> base_frame_param = icey::declare_parameter<std::string>("base_frame", "base_link");
+    icey::Parameter<std::string> base_frame_param = icey::declare_parameter<std::string>("base_frame", "base_link");
 
     icey::after_parameter_initialization([&] () {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Parameters arrived");
