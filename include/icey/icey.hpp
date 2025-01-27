@@ -219,8 +219,6 @@ struct NodeInterfaces {
       std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
                                       std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
           parameters_;
-
-      /// TODO we don't need any, there is a *Base actually
       std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
       std::unordered_map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
       std::unordered_map<std::string, rclcpp::ServiceBase::SharedPtr> services_;
@@ -263,7 +261,6 @@ struct NodeInterfaces {
                            bool ignore_override = false) {
       rclcpp::ParameterValue v =
           default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
-          /// TODO The rclcpp::Node class does a 
       auto param = node_.node_parameters_->declare_parameter(name, v, parameter_descriptor,
                                                                 ignore_override);
       auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(node_);
@@ -303,7 +300,7 @@ struct NodeInterfaces {
       auto service = rclcpp::create_service<ServiceT>(
         node_.node_base_,
           node_.node_services_,
-          service_name, std::move(callback),qos.get_rmw_qos_profile(), group); /// TODO get_rmw_qos_profile only needed for Humble
+          service_name, std::move(callback),qos.get_rmw_qos_profile(), group); 
       book_.services_.emplace(service_name, service);
     }
 
@@ -317,7 +314,7 @@ struct NodeInterfaces {
           node_.node_graph_,
           node_.node_services_,
           service_name, 
-          rclcpp::ServicesQoS().get_rmw_qos_profile(), /// TODO get_rmw_qos_profile only needed for Humble
+          rclcpp::ServicesQoS().get_rmw_qos_profile(), 
           group);
       book_.services_clients_.emplace(service_name, client);
       return client;
@@ -402,7 +399,6 @@ constexpr void assert_all_observable_values_are_same() {
 }
 
 /// An observable. Similar to a promise in JavaScript.
-/// TODO Do not create shared_ptr, we finally have PIMPL
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Observable : public ObservableTag,
                    public NodeAttachable {
@@ -606,7 +602,7 @@ struct ParameterObservable : public Observable<_Value> {
       /// Set default value if there is one
       if (default_value) {
         //Value initial_value;
-        /// TODO I think I added this to crash in case no default is there
+        /// TODO I think I added this to crash in case no default is there, think regarding default values of params
         //node.get_parameter_or(parameter_name, initial_value, *default_value);
         this_obs->resolve(*default_value);
       }
@@ -677,7 +673,7 @@ struct TransformSubscriptionObservable
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
           [this, this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
-            *shared_value_ = new_value;  /// TODO use the value in the variant
+            *shared_value_ = new_value;  
             this_obs->resolve(shared_value_);
           },
           [this_obs](const tf2::TransformException &ex) { this_obs->reject(ex.what()); });
@@ -695,7 +691,7 @@ struct TransformSubscriptionObservable
   }
   std::string target_frame_;
   std::string source_frame_;
-  /// We allocate a single message that we share with the other observables when notifying them
+  /// We allocate a single message that we share with the other observables when notifying them. Note that we cannot use the base value since it is needed for notifying, i.e. it is cleared
   std::shared_ptr<Message> shared_value_{std::make_shared<Message>()};
   /// We do not own the listener, the Book owns it
   std::weak_ptr<TFListener> tf2_listener_;
@@ -725,6 +721,19 @@ struct TimerObservable : public Observable<size_t, Nothing, TimerImpl> {
 template <typename _Value>
 struct PublisherImpl {
   typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
+  void publish(const _Value &message) {
+      // We cannot pass over the pointer since publish expects a unique ptr and we got a
+      // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
+      /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
+      // This is because the use_count
+      /// can change in a multithreaded program immediatelly after it was retrieved, see: https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count
+      /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
+      /// Therefore, we have to copy the message for publishing.
+      if constexpr (is_shared_ptr<_Value>)
+        publisher->publish(*message);
+      else
+        publisher->publish(message);
+  }
 };
 template <typename _Value>
 struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_Value> > {
@@ -739,22 +748,9 @@ struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_V
       this_obs->publisher = node.add_publisher<Message>(topic_name, qos);
       this_obs->register_handler([this_obs]() {
         const auto &message = this_obs->value();
-        // We cannot pass over the pointer since publish expects a unique ptr and we got a
-        // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
-        /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
-        // This is because the use_count
-        /// can change in a multithreaded program immediatelly after it was retrieved, see: https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count
-        /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
-        /// Therefore, we have to copy the message for publishing.
-        if constexpr (is_shared_ptr<_Value>)
-          this_obs->publisher->publish(*message);
-        else
-          this_obs->publisher->publish(message);
+        this_obs->publish(message);
       });
     };
-  }
-  void publish(const _Value &message) {
-    /// TODO 
   }
 };
 
@@ -883,7 +879,6 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   ServiceClient(const std::string &service_name, const Duration &timeout) {
     this->name = service_name;
     this->impl()->timeout = timeout;
-    /// TODO this is captured
     this->attach_ = [impl = this->impl(), service_name](NodeBookkeeping &node) {
       impl->client = node.add_client<_ServiceT>(service_name);
     };
@@ -892,7 +887,6 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   auto &call(Request request) {
     if(!wait_for_service())
         return *this;
-    /// TODO this is captured here 
     this->observable_->maybe_pending_request = 
       this->observable_->client->async_send_request(request, [this](Future response_futur) {
             on_response(response_futur);
@@ -1095,8 +1089,6 @@ struct Context : public std::enable_shared_from_this<Context> {
       return hana::prepend(parent_maybe_values, new_value);
     });
   }
-
-  // TODO ID: [](auto &&x) { return std::move(x); }
 
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
