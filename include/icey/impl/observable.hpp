@@ -68,13 +68,14 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 /// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
-template <typename _Value, typename _ErrorValue = Nothing>
+template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Observable : private boost::noncopyable,
-                   public std::enable_shared_from_this<Observable<_Value, _ErrorValue>> {
+                   public Derived,
+                   public std::enable_shared_from_this<Observable<_Value, _ErrorValue, Derived>> {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Observable<Value, ErrorValue>;
+  using Self = Observable<Value, ErrorValue, Derived>;
   using MaybeValue = std::optional<Value>;
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;

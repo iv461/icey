@@ -24,6 +24,7 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Parameter " << changed_parameter << " changed, params are now:\n");
     });
     
+
     /*
     Or you can declare single parameters and get updates on them:
     auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
@@ -33,6 +34,7 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "amplitude parameter changed: " << new_value);
     });
     */
+
 
     /// You cannot use parameters yet, this will throw an exception:
     // std::cout << "parameter  frequency is:: " << frequency->get() << std::endl;

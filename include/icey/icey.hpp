@@ -403,15 +403,15 @@ constexpr void assert_all_observable_values_are_same() {
 
 /// An observable. Similar to a promise in JavaScript.
 /// TODO Do not create shared_ptr, we finally have PIMPL
-template <typename _Value, typename _ErrorValue = Nothing>
+template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Observable : public ObservableTag,
                    public NodeAttachable {
 public:
-  using Impl = impl::Observable<_Value, _ErrorValue>;
+  using Impl = impl::Observable<_Value, _ErrorValue, Derived>;
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
-  using Self = Observable<_Value, _ErrorValue>;
+  using Self = Observable<_Value, _ErrorValue, Derived>;
 
   /// TODO hack 
   Observable* operator->() { return this; }
@@ -568,14 +568,15 @@ public:
       return result;
     }
   }
+  ///////////////////// End coroutine support inerface 
 
   // protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer. 
-  template <class NewVal, class NewErr>
-  static Observable<NewVal, NewErr> create_from_impl(
-      std::shared_ptr<impl::Observable<NewVal, NewErr>> obs_impl) {
-    Observable<NewVal, NewErr> new_obs;
+  template <class NewVal, class NewErr, class NewDerived>
+  static Observable<NewVal, NewErr, NewDerived> create_from_impl(
+      std::shared_ptr<impl::Observable<NewVal, NewErr, NewDerived>> obs_impl) {
+    Observable<NewVal, NewErr, NewDerived> new_obs;
     new_obs.observable_ = obs_impl;
     return new_obs;
   }
@@ -719,7 +720,11 @@ struct TimerObservable : public Observable<size_t> {
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
-struct PublisherObservable : public Observable<_Value> {
+struct PublisherImpl {
+  typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
+};
+template <typename _Value>
+struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_Value> > {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
@@ -728,8 +733,8 @@ struct PublisherObservable : public Observable<_Value> {
     this->name = topic_name;
     auto this_obs = this->observable_;
     this->attach_ = [topic_name, qos, this_obs](NodeBookkeeping &node) {
-      auto publisher = node.add_publisher<Message>(topic_name, qos);
-      this_obs->register_handler([this_obs, publisher]() {
+      this_obs->publisher = node.add_publisher<Message>(topic_name, qos);
+      this_obs->register_handler([this_obs]() {
         const auto &message = this_obs->value();
         // We cannot pass over the pointer since publish expects a unique ptr and we got a
         // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
@@ -739,16 +744,15 @@ struct PublisherObservable : public Observable<_Value> {
         /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
         /// Therefore, we have to copy the message for publishing.
         if constexpr (is_shared_ptr<_Value>)
-          publisher->publish(*message);
+          this_obs->publisher->publish(*message);
         else
-          publisher->publish(message);
+          this_obs->publisher->publish(message);
       });
     };
   }
   void publish(const _Value &message) {
     /// TODO 
   }
-  //typename rclcpp::Publisher<Message>::SharedPtr publisher;
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
