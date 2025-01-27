@@ -18,9 +18,9 @@ include_directories(
 # Add examples 
 
 #ament_auto_add_executable(listener_example examples/listener.cpp)
-#ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
+ament_auto_add_executable(tf_approx_filter_example examples/tf_approx_filter.cpp)
 #ament_auto_add_executable(tf_broadcaster_example examples/tf_broadcaster.cpp)
-#ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
+ament_auto_add_executable(class_based_api_example examples/class_based_api.cpp)
 #ament_auto_add_executable(multi_node_example examples/multi_node.cpp)
 #ament_auto_add_executable(parameter_based_initialization_example examples/parameter_based_initialization.cpp)
 #ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
@@ -28,12 +28,12 @@ include_directories(
 #ament_auto_add_executable(service_client_and_server_example examples/service_client_and_server.cpp)
 ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
 
-#ament_auto_add_executable(service_client_example examples/service_client.cpp)
-#ament_auto_add_executable(service_server_example examples/service_server.cpp)
+ament_auto_add_executable(service_client_example examples/service_client.cpp)
+ament_auto_add_executable(service_server_example examples/service_server.cpp)
 
 #ament_auto_add_executable(service_client_class_api_example examples/service_client_class_api.cpp)
 
-#ament_auto_add_executable(parameters_struct_example examples/parameters_struct.cpp)
+ament_auto_add_executable(parameters_struct_example examples/parameters_struct.cpp)
 
 
 #ament_auto_add_executable(promise_test_async test/promise_test_async.cpp)
@@ -57,7 +57,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   #add_subdirectory(test)
   
-  #ament_auto_add_gtest(promise_test test/promise_test.cpp) 
+  ament_auto_add_gtest(promise_test test/promise_test.cpp) 
 
   ##target_include_directories(promise_test PUBLIC include/)
   #ament_target_dependencies(promise_test rclcpp) 

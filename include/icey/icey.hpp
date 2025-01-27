@@ -440,7 +440,7 @@ public:
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
     auto child = this->impl()->context.lock()->template create_observable<T>(args...);
-    this->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
+    this->impl()->then([child](const auto &x) { child.observable_->resolve(x); });
   }
 
   /// Create a ROS normal publisher.
@@ -610,13 +610,13 @@ struct ParameterObservable : public Observable<_Value> {
   /// Parameters are initialized always at the beginning, so we can provide a getter for the value
   /// so that they can be used conveniently in callbacks.
   const _Value &value() const {
-    if (!this->observable_->has_value()) {
+    if (!this->impl()->has_value()) {
       throw std::runtime_error(
           "Parameter '" + this->impl()->name +
           "' cannot be accessed before spawning the node. You can only access parameters "
           "inside callbacks (which are triggered after calling icey::spawn())");
     }
-    return this->observable_->value();
+    return this->impl()->value();
   }
 };
 
@@ -687,7 +687,7 @@ struct TransformSubscriptionObservable
           tf2_listener_.lock()->buffer_->lookupTransform(target_frame_, source_frame_, time);
       return shared_value_;
     } catch (const tf2::TransformException &e) {
-      this->observable_->reject(e.what());
+      this->impl()->reject(e.what());
       return {};
     }
   }
@@ -769,9 +769,9 @@ struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_V
 template <typename _Message, class _Base = Observable<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
-    this->observable_->register_handler([this]() {
+    this->impl()->register_handler([this]() {
       using Event = message_filters::MessageEvent<const _Message>;
-      const auto &new_value = this->observable_->value();  /// There can be no error
+      const auto &new_value = this->impl()->value();  /// There can be no error
       this->signalMessage(Event(new_value));
     });
   }
@@ -873,7 +873,7 @@ struct ServiceObservable
 /// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in
 /// the DFG
 template <typename _ServiceT>
-struct ServiceClientImpl {
+struct ServiceClientImpl: public NodeAttachable {
   using Client = rclcpp::Client<_ServiceT>;
   typename Client::SharedPtr client;
   Duration timeout;
@@ -895,28 +895,28 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
     };
   }
 
-  auto &call(Request request) {
+  auto &call(Request request) const {
     if (!wait_for_service()) return *this;
-    this->observable_->maybe_pending_request = this->observable_->client->async_send_request(
+    this->impl()->maybe_pending_request = this->impl()->client->async_send_request(
         request, [this](Future response_futur) { on_response(response_futur); });
     return *this;
   }
 
 protected:
-  bool wait_for_service() {
-    if (!this->observable_->client->wait_for_service(this->impl()->timeout)) {
+  bool wait_for_service() const {
+    if (!this->impl()->client->wait_for_service(this->impl()->timeout)) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
-        this->observable_->reject("INTERRUPTED");
+        this->impl()->reject("INTERRUPTED");
       } else {
-        this->observable_->reject("SERVICE_UNAVAILABLE");
+        this->impl()->reject("SERVICE_UNAVAILABLE");
       }
       return false;
     }
     return true;
   }
 
-  void on_response(Future response_futur) {
+  void on_response(Future response_futur) const {
     if (response_futur.valid()) {
       this->impl()->maybe_pending_request = {};
       this->impl()->resolve(response_futur.get().second);
@@ -1066,10 +1066,10 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// Promise<B>>)->Promise<B>, where the service call behaves already like F<A, Promise<B>>: Just
     /// return self. We would also need to accumulate all kinds of errors, i.e. ErrorValue must
     /// become a sum type of all the possible ErrorValues of the chain.
-    parent->then([service_client](auto req) { service_client->call(req); });
+    parent->then([service_client](auto req)  { service_client.call(req); });
     /// Pass the error since service calls are chainable
     if constexpr (not std::is_same_v<obs_err<Parent>, Nothing>) {
-      parent->except([service_client](auto err) { service_client->observable_->reject(err); });
+      parent->except([service_client](auto err) { service_client.impl()->reject(err); });
     }
     return service_client;
   }
