@@ -404,9 +404,6 @@ public:
   using ErrorValue = typename Impl::ErrorValue;
   using Self = Observable<_Value, _ErrorValue, Derived >; // DerivedWithDefaults<Derived>
 
-  /// TODO hack
-  Observable *operator->() { return this; }
-
   auto impl() const { return observable_; }
 
   void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
@@ -1003,7 +1000,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
     O observable{args...};
-    NodeAttachable att = *observable->impl();
+    NodeAttachable att = *observable.impl();
     attachables_.push_back(att);  /// Register
     observable.impl()->context = shared_from_this();
     observable.impl()->class_name = boost::typeindex::type_id_runtime(observable).pretty_name();
@@ -1038,14 +1035,14 @@ struct Context : public std::enable_shared_from_this<Context> {
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     observable_traits<Parent>{};
     auto child = create_observable<PublisherObservable<obs_val<Parent>>>(topic_name, qos);
-    parent->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+    parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
     auto child = create_observable<TransformPublisherObservable>();
-    parent->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+    parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   auto create_timer(const Duration &interval, bool use_wall_time = false,

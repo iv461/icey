@@ -44,8 +44,7 @@ int main(int argc, char **argv) {
           .then([](size_t ticks) {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
             return std::make_tuple(3., "hellooo", 66);
-          })
-          ->unpack();
+          }).unpack();
 
   /// Optional publishing
   auto rectangle_sig = timer_signal.then([](size_t ticks) {

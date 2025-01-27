@@ -24,7 +24,7 @@ public:
           })
           /// Create a service client, the service is called every time the timer ticks. We set
           /// additionally a timeout for waiting until the service becomes available.
-          ->call_service<ExampleService>("set_bool_service1", 1s)
+          .call_service<ExampleService>("set_bool_service1", 1s)
           .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response1: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
@@ -32,14 +32,14 @@ public:
             return request;
           })
           
-          ->call_service<ExampleService>("set_bool_service2", 1s)
+          .call_service<ExampleService>("set_bool_service2", 1s)
           .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response2: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 1;
             return request;
           })
-          ->call_service<ExampleService>("set_bool_service3", 1s)
+          .call_service<ExampleService>("set_bool_service3", 1s)
           .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response3: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
