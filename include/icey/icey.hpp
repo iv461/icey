@@ -333,7 +333,7 @@ public:
 
   auto add_tf_broadcaster_if_needed() {
     if (!book_.tf_broadcaster_)
-      book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_.node_topics_);
+      book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
     return book_.tf_broadcaster_;
   }
 

@@ -9,10 +9,6 @@ Sorted by decreasing priority.
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] `timeout` filter
 - [ ] Rename Observable to Stream
-- [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
-- [ ] [Async/Await] `async`: allow async routignes using C++20 coroutines
-
-- [ ] `get_promise`-API needed intead of this->observable_ 
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
 
@@ -35,9 +31,8 @@ Sorted by decreasing priority.
 - [ ] Maybe support cascading the synchronizers 
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
-- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
-- [ ] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125) -> maybe "lazy" parameter on publish() ? 
+- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
 
 - [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
 
@@ -187,6 +182,11 @@ Sorted by decreasing priority.
 - [X] [Async/Await] Enable not having to allocate Observables dynamically to enable `async` via coroutines. Needed because we have no control over the allocation 
 - [X] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
 - [X] Fix segfault on termination with service example
+- [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
+- [X] [Async/Await] `async`: allow async routignes using C++20 coroutines
+- [X] `get_promise`-API needed intead of this->observable_ -> `impl`
+
+- [X] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125) -> maybe "lazy" parameter on publish() ?  -> document how to access publisher 
 
 ### Code 
 
