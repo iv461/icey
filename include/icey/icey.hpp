@@ -534,8 +534,8 @@ public:
 
   /// Spin the event loop, (the ROS executor) until this Promise is fulfilled
   void spin_executor() {
-    auto promise = this->get_promise();
-    while (!(promise->has_value() || promise->has_error())) {
+    auto promise = this->impl();
+    while (promise->has_none()) {
       /// Note that spinning once might not be enough, for example if we synchronize three topics
       /// and await the synchronizer output, we would need to spin at least three times.
       this->impl()->context.lock()->executor_->spin_once();
@@ -543,14 +543,14 @@ public:
   }
 
   //// Now the Awaiter interface for C++20 coroutines:
-  bool await_ready() { return !this->get_promise()->has_none(); }
+  bool await_ready() { return !this->impl()->has_none(); }
   bool await_suspend(auto coroutine_handle) {
     this->spin_executor();
     return false;  /// Resume the current coroutine, see
                    /// https://en.cppreference.com/w/cpp/language/coroutines
   }
   auto await_resume() {
-    auto promise = this->get_promise();
+    auto promise = this->impl();
     /// Return the value if there can be no error
     if constexpr (std::is_same_v<ErrorValue, Nothing>) {
       auto result = promise->value();
@@ -762,6 +762,9 @@ struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_V
         impl->publish(message);
       });
     };
+  }
+  void publish(const _Value &message) const {
+    this->impl()->publish(message);
   }
 };
 

@@ -39,7 +39,7 @@ ament_auto_add_executable(parameters_struct_example examples/parameters_struct.c
 #ament_auto_add_executable(promise_test_async test/promise_test_async.cpp)
 #ament_auto_add_executable(async_hello test/async_hello.cpp)
 
-#ament_auto_add_executable(signal_generator_async_await_example examples/async_await/signal_generator_async_await.cpp)
+ament_auto_add_executable(signal_generator_async_await_example examples/async_await/signal_generator_async_await.cpp)
 #ament_auto_add_executable(service_client_async_await_example examples/async_await/service_client_async_await.cpp)
 
 
