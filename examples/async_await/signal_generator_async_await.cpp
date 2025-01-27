@@ -13,20 +13,6 @@ struct NodeParameters {
   icey::DynParameter<double> amplitude{3};
 };
 
-icey::Stream<std_msgs::msg::Float32> rectangle_generator(icey::Timer timer) {
-    size_t ticks = co_await timer;
-
-    //RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
-    std::cout << "timer ticked" << std::endl;
-    std_msgs::msg::Float32 result;
-    if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
-      result.data = (ticks % 20 == 0) ? 1.f : 0.f;
-      co_return result;
-    } else  {
-      co_return std::nullopt;
-    }
-}
-
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     std::cout << "Starting node .. " << std::endl;
   auto period_time = 100ms;
@@ -38,7 +24,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
                            "Parameter " << changed_parameter << " changed, params are now:\n");
       });
 
-  auto timer_signal = icey::create_timer(period_time);
+  auto timer = icey::create_timer(period_time);
   auto rectangle_pub = icey::create_observable<icey::PublisherObservable<std_msgs::msg::Float32> >(
       "rectangle_signal", rclcpp::SystemDefaultsQoS());
 
@@ -51,13 +37,17 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   /// Main spinning loop
   while (rclcpp::ok()) {
     /// Receive timer updates
-    // size_t ticks = icey::await(timer_signal);
-    std_msgs::msg::Float32 rectangle_signal = co_await rectangle_generator(timer_signal);
-    std::cout << "timer ticked" << std::endl;
-    rectangle_pub.publish(rectangle_signal);
+    size_t ticks = co_await timer;
 
+    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
+    
+    if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
+      std_msgs::msg::Float32 result;
+      result.data = (ticks % 20 == 0) ? 1.f : 0.f;  
+      rectangle_pub.publish(result);
+    } 
+    
     /// Add another computation for the timer
-    /*
     std_msgs::msg::Float32 float_val;
     double period_time_s = 0.1;
     /// We can access parameters in callbacks using .value() because parameters are always
@@ -66,14 +56,14 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     float_val.data = y;
     RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
     sine_pub.publish(float_val);
-    */
+  
   }
   co_return 0;
 }
 
 int main(int argc, char **argv) {
-  /// TODO do not store the node in the context so that this is not needed
-  auto ret = create_and_spin_node(argc, argv);
+  create_and_spin_node(argc, argv);
   
+  /// TODO do not store the node in the context so that this is not needed
   icey::destroy();
 }
