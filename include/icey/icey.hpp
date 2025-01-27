@@ -389,9 +389,9 @@ constexpr void assert_all_observable_values_are_same() {
                 "The values of all the observables must be the same");
 }
 
-/// Adds some things we want to put in inside the impl::Observable by default. 
+/// Adds some things we want to put in inside the impl::Observable by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details
-template<class Derived>
+template <class Derived>
 struct DerivedWithDefaults : public Derived, public NodeAttachable {};
 
 /// An observable. Similar to a promise in JavaScript.
@@ -402,7 +402,7 @@ public:
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
-  using Self = Observable<_Value, _ErrorValue, Derived >; // DerivedWithDefaults<Derived>
+  using Self = Observable<_Value, _ErrorValue, Derived>;  // DerivedWithDefaults<Derived>
 
   auto impl() const { return observable_; }
 
@@ -490,7 +490,7 @@ public:
     constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, tuple_sz>);
     auto hana_tuple_output = hana::transform(indices, [impl = this->impl()](auto I) {
       return impl->then([I](const auto &...args) {  /// Need to take variadic because then()
-                                                        /// automatically unpacks tuples
+                                                    /// automatically unpacks tuples
         return std::get<I>(std::forward_as_tuple(
             args...));  /// So we need to pack this again in a tuple and get the index.
       });
@@ -643,8 +643,9 @@ struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> 
 /// TODO rem RTTI, recognize differently, use concepts for iface def for example.
 struct InterpolateableObservableTag {};
 template <typename _Message, typename DerivedImpl>
-struct InterpolateableObservable : public InterpolateableObservableTag,
-                                   public Observable<typename _Message::SharedPtr, std::string, DerivedImpl> {
+struct InterpolateableObservable
+    : public InterpolateableObservableTag,
+      public Observable<typename _Message::SharedPtr, std::string, DerivedImpl> {
   using MaybeValue = std::optional<typename _Message::SharedPtr>;
   /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
@@ -663,7 +664,7 @@ constexpr auto hana_is_interpolatable(T) {
 
 /// A subscription for single transforms. It implements InterpolateableObservable but by using
 /// lookupTransform, not an own buffer
-struct TransformSubscriptionObservableImpl: public NodeAttachable {
+struct TransformSubscriptionObservableImpl : public NodeAttachable {
   using Message = geometry_msgs::msg::TransformStamped;
   std::string target_frame_;
   std::string source_frame_;
@@ -675,11 +676,13 @@ struct TransformSubscriptionObservableImpl: public NodeAttachable {
 };
 struct TransformSubscriptionObservable
     : public InterpolateableObservable<geometry_msgs::msg::TransformStamped,
-    TransformSubscriptionObservableImpl> {
+                                       TransformSubscriptionObservableImpl> {
   using Message = geometry_msgs::msg::TransformStamped;
-  using MaybeValue = InterpolateableObservable<Message, TransformSubscriptionObservableImpl>::MaybeValue;
+  using MaybeValue =
+      InterpolateableObservable<Message, TransformSubscriptionObservableImpl>::MaybeValue;
 
-  TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame) {
+  TransformSubscriptionObservable(const std::string &target_frame,
+                                  const std::string &source_frame) {
     this->impl()->target_frame_ = target_frame;
     this->impl()->source_frame_ = source_frame;
     this->impl()->name = "source_frame: " + source_frame + ", target_frame: " + target_frame;
@@ -696,8 +699,8 @@ struct TransformSubscriptionObservable
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
     try {
       // Note that this call does not wait, the transform must already have arrived.
-      *this->impl()->shared_value_ =
-          this->impl()->tf2_listener_.lock()->buffer_->lookupTransform(this->impl()->target_frame_, this->impl()->source_frame_, time);
+      *this->impl()->shared_value_ = this->impl()->tf2_listener_.lock()->buffer_->lookupTransform(
+          this->impl()->target_frame_, this->impl()->source_frame_, time);
       return this->impl()->shared_value_;
     } catch (const tf2::TransformException &e) {
       this->impl()->reject(e.what());
@@ -879,7 +882,7 @@ struct ServiceObservable
 /// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in
 /// the DFG
 template <typename _ServiceT>
-struct ServiceClientImpl: public NodeAttachable {
+struct ServiceClientImpl : public NodeAttachable {
   using Client = rclcpp::Client<_ServiceT>;
   typename Client::SharedPtr client;
   Duration timeout;
