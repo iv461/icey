@@ -13,7 +13,20 @@ struct NodeParameters {
   icey::DynParameter<double> amplitude{3};
 };
 
-icey::Observable<int, icey::Nothing> create_and_spin_node(int argc, char **argv) {
+icey::Stream<std_msgs::msg::Float32> rectangle_generator(icey::Timer timer) {
+    size_t ticks = co_await timer;
+
+    //RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
+
+    std_msgs::msg::Float32 result;
+    if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
+      result.data = (ticks % 20 == 0) ? 1.f : 0.f;
+    }
+    co_return result;
+}
+
+icey::Stream<int> create_and_spin_node(int argc, char **argv) {
+    std::cout << "Starting node .. " << std::endl;
   auto period_time = 100ms;
   NodeParameters params;
   /// Declare parameter struct and receive updates each time
@@ -32,22 +45,16 @@ icey::Observable<int, icey::Nothing> create_and_spin_node(int argc, char **argv)
 
   auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
   node->create_executor_in_context();
-
+    std::cout << "Starting loop .. " << std::endl;
   /// Main spinning loop
   while (rclcpp::ok()) {
     /// Receive timer updates
     // size_t ticks = icey::await(timer_signal);
-    size_t ticks = co_await timer_signal;
-
-    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
-
-    if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
-      std_msgs::msg::Float32 result;
-      result.data = (ticks % 20 == 0) ? 1.f : 0.f;
-      rectangle_pub.publish(result);
-    }
+    std_msgs::msg::Float32 rectangle_signal = co_await rectangle_generator(timer_signal);
+    rectangle_pub.publish(rectangle_signal);
 
     /// Add another computation for the timer
+    /*
     std_msgs::msg::Float32 float_val;
     double period_time_s = 0.1;
     /// We can access parameters in callbacks using .value() because parameters are always
@@ -56,11 +63,14 @@ icey::Observable<int, icey::Nothing> create_and_spin_node(int argc, char **argv)
     float_val.data = y;
     RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
     sine_pub.publish(float_val);
+    */
   }
   co_return 0;
 }
 
 int main(int argc, char **argv) {
   /// TODO do not store the node in the context so that this is not needed
+  auto ret = create_and_spin_node(argc, argv);
+  
   icey::destroy();
 }

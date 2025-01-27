@@ -8,7 +8,7 @@ Sorted by decreasing priority.
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] `timeout` filter
-
+- [ ] Rename Observable to Stream
 - [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
 - [ ] [Async/Await] `async`: allow async routignes using C++20 coroutines
 

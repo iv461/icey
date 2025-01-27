@@ -413,6 +413,19 @@ public:
           "context.");
   }
 
+
+  Observable() {
+      auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
+        " Constructor called" << std::endl;
+  }
+
+  ~Observable() {
+      auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
+        " Destructor called" << std::endl;
+  }
+
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   template <typename F>
@@ -503,7 +516,11 @@ public:
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
 
   using promise_type = Self;  /// We are a promise
-  Self get_return_object() { return *this; }
+  Self get_return_object() { 
+    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
+        " get_return_object called" << std::endl;
+        return *this; }
   /// We never already got something, we always first need to spin the ROS executor to get a message
   std::suspend_never initial_suspend() { return {}; }
   Value return_value() { return this->impl()->value(); }
@@ -520,10 +537,18 @@ public:
   /// Promisify a value if needed, meaning if it is not already a promise
   template <class ReturnType>
   auto await_transform(ReturnType x) {
-    if constexpr (std::is_base_of_v<ObservableTag, ReturnType>)
+    auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
+    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
+        " await_transform called to " << to_type << std::endl;
+    if constexpr (std::is_base_of_v<ObservableTag, ReturnType>) {
+      this->impl()->context = x.impl()->context; /// Get the context from the input promise 
       return x;
-    else
-      return Observable<ReturnType, Nothing>{};
+    } else {
+      Observable<ReturnType, Nothing> new_obs;
+      new_obs.impl()->context = this->impl()->context;
+      return new_obs;
+    }
   }
 
   /// Run the ROS executor untils this Promise is fulfilled. This function can be called normally
@@ -545,11 +570,30 @@ public:
   //// Now the Awaiter interface for C++20 coroutines:
   bool await_ready() { return !this->impl()->has_none(); }
   bool await_suspend(auto coroutine_handle) {
-    this->spin_executor();
+    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
+        " await_suspend called" << std::endl;
+
+    if(this->impl()->context.expired()) {
+      std::cout << "HELP; I have no context :( !" << std::endl;
+      auto coro_p = coroutine_handle.promise();
+      while (this->impl()->has_none()) {
+        /// Note that spinning once might not be enough, for example if we synchronize three topics
+        /// and await the synchronizer output, we would need to spin at least three times.
+        coro_p.impl()->context.lock()->executor_->spin_once();
+      }
+    } else {
+      this->spin_executor();
+    }
+    //this->spin_executor();
     return false;  /// Resume the current coroutine, see
                    /// https://en.cppreference.com/w/cpp/language/coroutines
   }
   auto await_resume() {
+    
+    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    std::cout << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << std::dec << 
+        " await_resume called" << std::endl;
     auto promise = this->impl();
     /// Return the value if there can be no error
     if constexpr (std::is_same_v<ErrorValue, Nothing>) {
@@ -1281,6 +1325,9 @@ void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
 
 template <class T>
 using Parameter = ParameterObservable<T>;
+using Timer = TimerObservable;
+template <class V, class E = Nothing>
+using Stream = Observable<V, E>;
 
 }  // namespace icey
 
