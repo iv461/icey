@@ -22,8 +22,7 @@ auto create_yaw_rotation(icey::Parameter<std::string> base_frame_param) {
     });
 }
 int main(int argc, char **argv) {
-    icey::icey_debug_print = true;
-    
+
     icey::Parameter<std::string> base_frame_param = icey::declare_parameter<std::string>("base_frame", "base_link");
 
     icey::after_parameter_initialization([&] () {

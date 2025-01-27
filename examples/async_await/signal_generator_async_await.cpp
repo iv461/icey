@@ -25,11 +25,8 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
       });
 
   auto timer = icey::create_timer(period_time);
-  auto rectangle_pub = icey::create_observable<icey::PublisherObservable<std_msgs::msg::Float32> >(
-      "rectangle_signal", rclcpp::SystemDefaultsQoS());
-
-  auto sine_pub = icey::create_observable<icey::PublisherObservable<std_msgs::msg::Float32> >(
-      "sine_signal", rclcpp::SystemDefaultsQoS());
+  auto rectangle_pub = icey::create_publisher<std_msgs::msg::Float32>("rectangle_signal", rclcpp::SystemDefaultsQoS());
+  auto sine_pub = icey::create_publisher<std_msgs::msg::Float32>("sine_signal", rclcpp::SystemDefaultsQoS());
 
   auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
   node->create_executor_in_context();

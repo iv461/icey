@@ -943,11 +943,11 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
 
-  ServiceClient(const std::string &service_name, const Duration &timeout) {
+  ServiceClient(const std::string &service_name, const Duration &timeout, const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
     this->impl()->name = service_name;
     this->impl()->timeout = timeout;
-    this->impl()->attach_ = [impl = this->impl(), service_name](NodeBookkeeping &node) {
-      impl->client = node.add_client<_ServiceT>(service_name);
+    this->impl()->attach_ = [impl = this->impl(), service_name, qos](NodeBookkeeping &node) {
+      impl->client = node.add_client<_ServiceT>(service_name, qos);
     };
   }
 
@@ -1084,11 +1084,17 @@ struct Context : public std::enable_shared_from_this<Context> {
     return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
   }
 
+  template <class Message>
+  auto create_publisher(const std::string &topic_name,
+                        const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
+    return create_observable<PublisherObservable< Message >>(topic_name, qos);
+  }
+  
   template <class Parent>
   void create_publisher(Parent parent, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     observable_traits<Parent>{};
-    auto child = create_observable<PublisherObservable<obs_val<Parent>>>(topic_name, qos);
+    auto child = create_publisher< obs_val<Parent> >(topic_name, qos);
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
@@ -1110,14 +1116,21 @@ struct Context : public std::enable_shared_from_this<Context> {
     return create_observable<ServiceObservable<ServiceT>>(service_name, qos);
   }
 
-  /// Add a service client
+   /// Add a service client
+  template <typename ServiceT>
+  auto create_client(const std::string &service_name, const Duration &timeout,
+                     const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
+    return create_observable<ServiceClient<ServiceT>>(service_name, timeout, qos);
+  }
+
+  /// Add a service client and connect it to the parent
   template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name, const Duration &timeout,
-                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    observable_traits<Parent>{};  // obs_val since the Request must be a shared_ptr
+                const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
+    observable_traits<Parent>{};  
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
-    auto service_client = create_observable<ServiceClient<ServiceT>>(service_name, timeout);
+    auto service_client = create_client<ServiceT>(service_name, timeout, qos);
     /// TODO maybe solve better. We would need to implement then(Promise<A>, F<A,
     /// Promise<B>>)->Promise<B>, where the service call behaves already like F<A, Promise<B>>: Just
     /// return self. We would also need to accumulate all kinds of errors, i.e. ErrorValue must
@@ -1130,6 +1143,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     return service_client;
   }
 
+  
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
   // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
@@ -1295,13 +1309,6 @@ public:
     this->icey_context_->executor_->add_node(this->shared_from_this());
   }
 };
-
-/// Await until a promise has a value by spinning the ROS executor for as long as needed. Returns
-/// the state of the promise, i.e. of type Result<V, E>
-template <class Obs>
-auto await(Obs obs) {
-  return obs->await();
-}
 
 /// Blocking spawn of an existing node.
 template <class Node>

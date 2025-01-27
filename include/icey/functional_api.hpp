@@ -103,14 +103,18 @@ auto create_subscription(
   return g_state.get_context().create_subscription<MessageT>(topic_name, qos, options);
 };
 
+template <class MessageT>
+auto create_publisher(const std::string& topic_name, const rclcpp::QoS& qos = rclcpp::SystemDefaultsQoS()) {
+  return g_state.get_context().create_publisher<MessageT>(topic_name, qos);
+};
+
 auto create_transform_subscription(const std::string& target_frame,
                                    const std::string& source_frame) {
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-auto create_timer(const Duration& interval, bool use_wall_time = false,
-                  bool is_one_off_timer = false) {
-  return g_state.get_context().create_timer(interval, use_wall_time, is_one_off_timer);
+auto create_timer(const Duration& interval, bool is_one_off_timer = false) {
+  return g_state.get_context().create_timer(interval, is_one_off_timer);
 }
 
 template <class ServiceT>
@@ -119,10 +123,10 @@ auto create_service(const std::string& service_name,
   return g_state.get_context().create_service<ServiceT>(service_name, qos);
 }
 
-template <class ServiceT, class Parent>
-auto create_client(Parent parent, const std::string& service_name, const Duration& timeout,
+template <class ServiceT>
+auto create_client(const std::string& service_name, const Duration& timeout,
                    const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
-  return g_state.get_context().create_client<ServiceT>(parent, service_name, timeout, qos);
+  return g_state.get_context().create_client<ServiceT>(service_name, timeout, qos);
 }
 
 /// Extention point: support creating custom Observables:
