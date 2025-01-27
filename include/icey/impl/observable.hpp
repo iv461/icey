@@ -55,7 +55,13 @@ template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
 namespace impl {
-
+/// Creates a new observable of type O by passing the args to the constructor. Observables are
+/// always reference counted, currently implemented with std::shared_ptr.
+template <class O, typename... Args>
+static std::shared_ptr<O> create_observable(Args &&...args) {
+  auto observable = std::make_shared<O>(std::forward<Args>(args)...);
+  return observable;
+}
 /// An observable. Similar to a promise in JavaScript.
 /// I saw that these implementations are very close to mine:
 /// [1] https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html

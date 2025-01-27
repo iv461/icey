@@ -131,7 +131,7 @@ static void declare_parameter_struct(Context &ctx, T &params, const std::functio
         desc.read_only = field_value.read_only;
         auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
         param_obs->observable_->register_handler([&field_value, param_obs, field_name_r, notify_callback]() {
-            field_value.value = param_obs->value();
+            field_value.value = param_obs.value();
             notify_callback(field_name_r);
         });
     });

@@ -379,9 +379,9 @@ public:
 struct ObservableTag {};  /// A tag to be able to recognize the type "Observeble" using traits
 template <typename... Args>
 struct observable_traits {
-  static_assert(
+  /*static_assert(
       (is_shared_ptr<Args> && ...),
-      "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");
+      "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");*/
   static_assert((std::is_base_of_v<ObservableTag, remove_shared_ptr_t<Args>> && ...),
                 "The arguments must be an icey::Observable");
 };
@@ -428,7 +428,7 @@ public:
   template <typename F>
   auto then(F &&f) {
     auto child = Self::create_from_impl(observable_->then(f));
-    child->context = this->context;
+    child.context = this->context;
     return child;
   }
 
@@ -437,7 +437,7 @@ public:
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
                   "This observable cannot have errors, so you cannot register except() on it.");
     auto child = Self::create_from_impl(observable_->except(f));
-    child->context = this->context;
+    child.context = this->context;
     return child;
   }
 
@@ -451,7 +451,7 @@ public:
                   "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
     auto child = this->context.lock()->template create_observable<T>(args...);
-    this->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
+    this->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
   }
 
   /// Create a ROS normal publisher.
@@ -461,7 +461,7 @@ public:
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
-    return this->context.lock()->create_publisher(this->shared_from_this(), topic_name, qos);
+    return this->context.lock()->create_publisher(*this, topic_name, qos);
   }
 
   void publish_transform() {
@@ -470,7 +470,7 @@ public:
                   "The observable must hold a Value of type "
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
-    return this->context.lock()->create_transform_publisher(this->shared_from_this());
+    return this->context.lock()->create_transform_publisher(*this);
   }
 
   
@@ -483,7 +483,7 @@ public:
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to publish, you cannot "
                   "call publish() on it.");
-    return this->context.lock()->template create_client<ServiceT>(this->shared_from_this(), service_name, timeout, qos);
+    return this->context.lock()->template create_client<ServiceT>(*this, service_name, timeout, qos);
   }
 
   /// Unpacks an Observable holding a tuple as value to multiple Observables for each tuple element.
@@ -573,10 +573,10 @@ public:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer. 
   template <class NewVal, class NewErr>
-  static std::shared_ptr<Observable<NewVal, NewErr>> create_from_impl(
+  static Observable<NewVal, NewErr> create_from_impl(
       std::shared_ptr<impl::Observable<NewVal, NewErr>> obs_impl) {
-    auto new_obs = impl::create_observable<Observable<NewVal, NewErr>>();
-    new_obs->observable_ = obs_impl;
+    Observable<NewVal, NewErr> new_obs;
+    new_obs.observable_ = obs_impl;
     return new_obs;
   }
   std::shared_ptr<Impl> observable_{impl::create_observable<Impl>()};
@@ -727,27 +727,28 @@ struct PublisherObservable : public Observable<_Value> {
                       const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->name = topic_name;
     auto this_obs = this->observable_;
-    this->attach_ = [this, topic_name, qos, this_obs](NodeBookkeeping &node) {
-      this->publisher = node.add_publisher<Message>(topic_name, qos);
-      this_obs->register_handler([this, this_obs]() {
-        this->publish(this_obs->value());
+    this->attach_ = [topic_name, qos, this_obs](NodeBookkeeping &node) {
+      auto publisher = node.add_publisher<Message>(topic_name, qos);
+      this_obs->register_handler([this_obs, publisher]() {
+        const auto &message = this_obs->value();
+        // We cannot pass over the pointer since publish expects a unique ptr and we got a
+        // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
+        /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
+        // This is because the use_count
+        /// can change in a multithreaded program immediatelly after it was retrieved, see: https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count
+        /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
+        /// Therefore, we have to copy the message for publishing.
+        if constexpr (is_shared_ptr<_Value>)
+          publisher->publish(*message);
+        else
+          publisher->publish(message);
       });
     };
   }
   void publish(const _Value &message) {
-      // We cannot pass over the pointer since publish expects a unique ptr and we got a
-      // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure the shared_ptr is not referenced somewhere else.
-      /// We could check whether use_count is one but this is not a reliable indicator whether the object not referenced anywhere else.
-      // This is because the use_count
-      /// can change in a multithreaded program immediatelly after it was retrieved, see: https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count
-      /// (Same holds for shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
-      /// Therefore, we have to copy the message for publishing.
-      if constexpr (is_shared_ptr<_Value>)
-        publisher->publish(*message);
-      else
-        publisher->publish(message);
+    /// TODO 
   }
-  typename rclcpp::Publisher<Message>::SharedPtr publisher;
+  //typename rclcpp::Publisher<Message>::SharedPtr publisher;
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -867,20 +868,21 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
       : timeout_(timeout) {
     this->name = service_name;
     auto this_obs = this->observable_;
+    /// TODO this is captured
     this->attach_ = [this, service_name](NodeBookkeeping &node) {
       client_ = node.add_client<_ServiceT>(service_name);
     };
   }
 
-  auto call(Request request) {
+  auto &call(Request request) {
     if(!wait_for_service())
-        return this->shared_from_this();
+        return *this;
     /// TODO this is captured here 
     maybe_pending_request_ = 
       client_->async_send_request(request, [this](Future response_futur) {
             on_response(response_futur);
       });
-    return this->shared_from_this();
+    return *this;
   }
 
 protected:
@@ -958,8 +960,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     /// parameters immediatelly have their values.
     if (icey_debug_print) std::cout << "[icey::Context] Attaching parameters ..." << std::endl;
 
-    for (const auto &attachable : attachables_) {
-      if (attachable->is_parameter()) attachable->attach_to_node(node);
+    for (auto &attachable : attachables_) {
+      if (attachable.is_parameter()) attachable.attach_to_node(node);
     }
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching parameters finished." << std::endl;
@@ -967,8 +969,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     if (after_parameter_initialization_cb_) after_parameter_initialization_cb_();
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching everything else  ... " << std::endl;
-    for (const auto &attachable : attachables_) {
-      if (!attachable->is_parameter()) attachable->attach_to_node(node);
+    for (auto &attachable : attachables_) {
+      if (!attachable.is_parameter()) attachable.attach_to_node(node);
     }
     if (icey_debug_print)
       std::cout << "[icey::Context] Attaching finished. " << std::endl;
@@ -977,7 +979,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Creates a new observable of type O by passing the args to the constructor. It also adds it as
   /// a vertex to the graph.
   template <class O, typename... Args>
-  std::shared_ptr<O> create_observable(Args &&...args) {
+  auto create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
     O observable{args...};
     attachables_.push_back(observable);  /// Register 
@@ -1014,14 +1016,14 @@ struct Context : public std::enable_shared_from_this<Context> {
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     observable_traits<Parent>{};
     auto child = create_observable<PublisherObservable<obs_val<Parent>>>(topic_name, qos);
-    parent->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
+    parent->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
   }
 
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
     auto child = create_observable<TransformPublisherObservable>();
-    parent->observable_->then([child](const auto &x) { child->observable_->resolve(x); });
+    parent->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
   }
 
   auto create_timer(const Duration &interval, bool use_wall_time = false,
@@ -1159,7 +1161,7 @@ struct Context : public std::enable_shared_from_this<Context> {
     auto child = create_observable<Observable<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
-      parent->then([child](const auto &x) { child->observable_->resolve(x); });
+      parent->then([child](const auto &x) { child.observable_->resolve(x); });
     });
     return child;
   }
@@ -1181,7 +1183,7 @@ struct Context : public std::enable_shared_from_this<Context> {
 
   bool was_initialized_{false};
 
-  std::vector<std::shared_ptr<NodeAttachable>> attachables_;
+  std::vector<NodeAttachable> attachables_;
 
   std::function<void()> after_parameter_initialization_cb_;
   std::function<void()> on_node_destruction_cb_;

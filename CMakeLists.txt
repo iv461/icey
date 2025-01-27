@@ -26,7 +26,7 @@ include_directories(
 #ament_auto_add_executable(managing_state_example examples/managing_state.cpp)
 #ament_auto_add_executable(message_filters_interoperability_example examples/message_filters_interoperability.cpp)
 #ament_auto_add_executable(service_client_and_server_example examples/service_client_and_server.cpp)
-#ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
+ament_auto_add_executable(signal_generator_example examples/signal_generator.cpp)
 
 #ament_auto_add_executable(service_client_example examples/service_client.cpp)
 #ament_auto_add_executable(service_server_example examples/service_server.cpp)
@@ -36,15 +36,16 @@ include_directories(
 #ament_auto_add_executable(parameters_struct_example examples/parameters_struct.cpp)
 
 
-ament_auto_add_executable(promise_test_async test/promise_test_async.cpp)
-ament_auto_add_executable(async_hello test/async_hello.cpp)
+#ament_auto_add_executable(promise_test_async test/promise_test_async.cpp)
+#ament_auto_add_executable(async_hello test/async_hello.cpp)
 
-ament_auto_add_executable(signal_generator_async_await_example examples/async_await/signal_generator_async_await.cpp)
-ament_auto_add_executable(service_client_async_await_example examples/async_await/service_client_async_await.cpp)
+#ament_auto_add_executable(signal_generator_async_await_example examples/async_await/signal_generator_async_await.cpp)
+#ament_auto_add_executable(service_client_async_await_example examples/async_await/service_client_async_await.cpp)
 
 
 #ament_auto_add_executable(using_image_transport_example examples/using_image_transport.cpp)
 #ament_auto_add_executable(automatic_synchronization_example examples/automatic_synchronization.cpp)
+
 ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
 
 if(BUILD_TESTING)
