@@ -416,8 +416,8 @@ public:
   /// TODO hack 
   Observable* operator->() { return this; }
 
-  Impl &impl() { return *observable_;}
-  const Impl &impl() const { return *observable_;}
+  auto impl() const { return observable_;}
+
   void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
     if (!this->context.lock())
       throw std::runtime_error(
@@ -702,22 +702,22 @@ struct TransformSubscriptionObservable
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
 /// the callback
-struct TimerObservable : public Observable<size_t> {
+struct TimerImpl {
+  size_t ticks_counter{0};
+  rclcpp::TimerBase::SharedPtr timer;
+};
+struct TimerObservable : public Observable<size_t, Nothing, TimerImpl> {
   TimerObservable(const Duration &interval, bool use_wall_time, bool is_one_off_timer) {
     this->name = "timer";
-    auto this_obs = this->observable_;
-    this->attach_ = [=](NodeBookkeeping &node) {
-      /// TODO DO NOT CAPTURE THIS, write the ros_timer_ somewhere
-      timer = node.add_timer(interval, use_wall_time, [this, this_obs, is_one_off_timer]() {
-        this_obs->resolve(ticks_counter);
+    this->attach_ = [impl = this->impl(), interval, use_wall_time, is_one_off_timer](NodeBookkeeping &node) {
+      impl->timer = node.add_timer(interval, use_wall_time, [impl, is_one_off_timer]() {
+        impl->resolve(impl->ticks_counter);
         /// Needed as separate state as it might be resetted in async/await mode
-        this->ticks_counter++;
-        if (is_one_off_timer) timer->cancel();
+        impl->ticks_counter++;
+        if (is_one_off_timer) impl->timer->cancel();
       });
     };
   }
-  size_t ticks_counter{0};
-  rclcpp::TimerBase::SharedPtr timer;
 };
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
