@@ -11,6 +11,7 @@ Sorted by decreasing priority.
 
 - [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
 - [ ] [Async/Await] `async`: allow async routignes using C++20 coroutines
+- [ ] [Async/Await] Enable not having to allocate Observables dynamically to enable `async` via coroutines. Needed because we have no control over the allocation 
 
 - [ ] Fix segfault on termination with service example
 - [ ] `get_promise`-API needed intead of this->observable_ 
@@ -29,7 +30,6 @@ Sorted by decreasing priority.
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
 - [ ] Result-type for error handling example
-
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
 

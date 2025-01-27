@@ -54,6 +54,7 @@ using obs_state = typename remove_shared_ptr_t<T>::State;
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
+struct Context;
 namespace impl {
 /// Creates a new observable of type O by passing the args to the constructor. Observables are
 /// always reference counted, currently implemented with std::shared_ptr.
@@ -142,6 +143,14 @@ public:
   }
 
   State &get_state() { return state_; }
+
+  /// For creating new Observables, we need a reference to the context
+  std::weak_ptr<Context> context;
+  // The class name, i.e. the name of the type, for example "SubscriberObservable<std::string>"
+  std::string class_name;
+  /// A name to identify this node among multiple ones with the same type, usually the topic
+  /// or service name
+  std::string name;
 protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Observable (that is captured by value)

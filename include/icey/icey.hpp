@@ -344,24 +344,15 @@ struct NodeInterfaces {
     }
   };
 
-class Context;
-
 /// Everything that can be "attached" to a ROS node, publishers, subscribers, clients, TF subscriber
 /// etc.
 class NodeAttachable {
 public:
-  /// For creating new Observables, we need a reference to the context
-  std::weak_ptr<Context> context;
-  // The class name, i.e. the name of the type, for example "SubscriberObservable<std::string>"
-  std::string class_name;
-  /// A name to identify this node among multiple ones with the same type, usually the topic
-  /// or service name
-  std::string name;
 
   void attach_to_node(NodeBookkeeping &node_handle) {
     if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
-    if (icey_debug_print)
-      std::cout << "Attaching " << class_name << ", " << name << " ..." << std::endl;
+    //if (icey_debug_print)
+      //std::cout << "Attaching " << class_name << ", " << name << " ..." << std::endl;
     attach_(node_handle);
     was_attached_ = true;
   }
@@ -399,9 +390,9 @@ constexpr void assert_all_observable_values_are_same() {
 }
 
 /// An observable. Similar to a promise in JavaScript.
-template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
-class Observable : public ObservableTag,
-                   public NodeAttachable {
+template <typename _Value, typename _ErrorValue = Nothing, 
+  typename Derived = NodeAttachable>
+class Observable : public ObservableTag {
 public:
   using Impl = impl::Observable<_Value, _ErrorValue, Derived>;
   using Value = typename Impl::Value;
@@ -415,7 +406,7 @@ public:
   auto impl() const { return observable_;}
 
   void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
-    if (!this->context.lock())
+    if (!this->impl()->context.lock())
       throw std::runtime_error(
           "This observable does not have context, we cannot do stuff with it that depends on the "
           "context.");
@@ -426,7 +417,7 @@ public:
   template <typename F>
   auto then(F &&f) {
     auto child = Self::create_from_impl(observable_->then(f));
-    child.context = this->context;
+    child.impl()->context = this->impl()->context;
     return child;
   }
 
@@ -435,7 +426,7 @@ public:
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
                   "This observable cannot have errors, so you cannot register except() on it.");
     auto child = Self::create_from_impl(observable_->except(f));
-    child.context = this->context;
+    child.impl()->context = this->impl()->context;
     return child;
   }
 
@@ -448,7 +439,7 @@ public:
                   "This observable does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto child = this->context.lock()->template create_observable<T>(args...);
+    auto child = this->impl()->context.lock()->template create_observable<T>(args...);
     this->observable_->then([child](const auto &x) { child.observable_->resolve(x); });
   }
 
@@ -459,7 +450,7 @@ public:
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
-    return this->context.lock()->create_publisher(*this, topic_name, qos);
+    return this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
   }
 
   void publish_transform() {
@@ -468,7 +459,7 @@ public:
                   "The observable must hold a Value of type "
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
-    return this->context.lock()->create_transform_publisher(*this);
+    return this->impl()->context.lock()->create_transform_publisher(*this);
   }
 
   
@@ -481,7 +472,7 @@ public:
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to publish, you cannot "
                   "call publish() on it.");
-    return this->context.lock()->template create_client<ServiceT>(*this, service_name, timeout, qos);
+    return this->impl()->context.lock()->template create_client<ServiceT>(*this, service_name, timeout, qos);
   }
 
   /// Unpacks an Observable holding a tuple as value to multiple Observables for each tuple element.
@@ -541,7 +532,7 @@ public:
     while(!(promise->has_value() || promise->has_error())) { 
       /// Note that spinning once might not be enough, for example if we synchronize three topics and 
       /// await the synchronizer output, we would need to spin at least three times.
-      this->context.lock()->executor_->spin_once(); 
+      this->impl()->context.lock()->executor_->spin_once(); 
     }
   }
 
@@ -566,7 +557,7 @@ public:
       return result;
     }
   }
-  ///////////////////// End coroutine support inerface 
+  ///////////////////// End coroutine support interface 
 
   // protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
@@ -588,10 +579,10 @@ struct ParameterObservable : public Observable<_Value> {
                       const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                           rcl_interfaces::msg::ParameterDescriptor(),
                       bool ignore_override = false) {
-    this->is_parameter_ = true;
-    this->name = parameter_name;
+    this->impl()->is_parameter_ = true;
+    this->impl()->name = parameter_name;
     auto this_obs = this->observable_;
-    this->attach_ = [=](NodeBookkeeping &node) {
+    this->impl()->attach_ = [=](NodeBookkeeping &node) {
       node.add_parameter<_Value>(
           parameter_name, default_value,
           [this_obs](const rclcpp::Parameter &new_param) {
@@ -612,7 +603,7 @@ struct ParameterObservable : public Observable<_Value> {
   const _Value &value() const {
     if (!this->observable_->has_value()) {
       throw std::runtime_error(
-          "Parameter '" + this->name +
+          "Parameter '" + this->impl()->name +
           "' cannot be accessed before spawning the node. You can only access parameters "
           "inside callbacks (which are triggered after calling icey::spawn())");
     }
@@ -626,9 +617,9 @@ struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> 
   using Value = typename _Message::SharedPtr; /// Needed for synchronizer to determine message type TODO use base, upcast, then decltype or smth
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
-    this->name = topic_name;
+    this->impl()->name = topic_name;
     auto this_obs = this->observable_;
-    this->attach_ = [=](NodeBookkeeping &node) {
+    this->impl()->attach_ = [=](NodeBookkeeping &node) {
       node.add_subscription<_Message>(
           topic_name,
           [this_obs](typename _Message::SharedPtr new_value) { this_obs->resolve(new_value); }, qos,
@@ -666,10 +657,10 @@ struct TransformSubscriptionObservable
 
   TransformSubscriptionObservable(const std::string &target_frame, const std::string &source_frame)
       : target_frame_(target_frame), source_frame_(source_frame) {
-    this->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
+    this->impl()->name = "source_frame: " + source_frame_ + ", target_frame: " + target_frame_;
     auto this_obs = this->observable_;
 
-    this->attach_ = [=](NodeBookkeeping &node) {
+    this->impl()->attach_ = [=](NodeBookkeeping &node) {
       tf2_listener_ = node.add_tf_subscription(
           target_frame, source_frame,
           [this, this_obs](const geometry_msgs::msg::TransformStamped &new_value) {
@@ -699,14 +690,14 @@ struct TransformSubscriptionObservable
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
 /// the callback
-struct TimerImpl {
+struct TimerImpl: public NodeAttachable {
   size_t ticks_counter{0};
   rclcpp::TimerBase::SharedPtr timer;
 };
 struct TimerObservable : public Observable<size_t, Nothing, TimerImpl> {
   TimerObservable(const Duration &interval, bool use_wall_time, bool is_one_off_timer) {
-    this->name = "timer";
-    this->attach_ = [impl = this->impl(), interval, use_wall_time, is_one_off_timer](NodeBookkeeping &node) {
+    this->impl()->name = "timer";
+    this->impl()->attach_ = [impl = this->impl(), interval, use_wall_time, is_one_off_timer](NodeBookkeeping &node) {
       impl->timer = node.add_timer(interval, use_wall_time, [impl, is_one_off_timer]() {
         impl->resolve(impl->ticks_counter);
         /// Needed as separate state as it might be resetted in async/await mode
@@ -719,7 +710,7 @@ struct TimerObservable : public Observable<size_t, Nothing, TimerImpl> {
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
-struct PublisherImpl {
+struct PublisherImpl : public NodeAttachable {
   typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
   void publish(const _Value &message) {
       // We cannot pass over the pointer since publish expects a unique ptr and we got a
@@ -742,13 +733,12 @@ struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_V
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
   PublisherObservable(const std::string &topic_name,
                       const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
-    this->name = topic_name;
-    auto this_obs = this->observable_;
-    this->attach_ = [topic_name, qos, this_obs](NodeBookkeeping &node) {
-      this_obs->publisher = node.add_publisher<Message>(topic_name, qos);
-      this_obs->register_handler([this_obs]() {
-        const auto &message = this_obs->value();
-        this_obs->publish(message);
+    this->impl()->name = topic_name;
+    this->impl()->attach_ = [impl = this->impl(), topic_name, qos](NodeBookkeeping &node) {
+      impl->publisher = node.add_publisher<Message>(topic_name, qos);
+      impl->register_handler([impl]() {
+        const auto &message = impl->value();
+        impl->publish(message);
       });
     };
   }
@@ -827,8 +817,8 @@ class TransformPublisherObservable : public Observable<geometry_msgs::msg::Trans
 public:
   using Value = geometry_msgs::msg::TransformStamped;
   TransformPublisherObservable() {
-    this->name = "tf_pub";
-    this->attach_ = [this_obs = this->observable_](NodeBookkeeping &node) {
+    this->impl()->name = "tf_pub";
+    this->impl()->attach_ = [this_obs = this->observable_](NodeBookkeeping &node) {
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
       this_obs->register_handler([this_obs, tf_broadcaster]() {
         const auto &new_value = this_obs->value();  /// There can be no error
@@ -849,12 +839,11 @@ struct ServiceObservable
 
   ServiceObservable(const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    auto this_obs = this->observable_;
-    this->attach_ = [this_obs, service_name, qos](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl(), service_name, qos](NodeBookkeeping &node) {
       node.add_service<_ServiceT>(
           service_name,
-          [this_obs](Request request, Response response) {
-            this_obs->resolve(std::make_pair(request, response));
+          [impl](Request request, Response response) {
+            impl->resolve(std::make_pair(request, response));
           },qos);
     };
   }
@@ -877,9 +866,9 @@ struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr
   using Future = typename Client::SharedFutureWithRequest;
 
   ServiceClient(const std::string &service_name, const Duration &timeout) {
-    this->name = service_name;
+    this->impl()->name = service_name;
     this->impl()->timeout = timeout;
-    this->attach_ = [impl = this->impl(), service_name](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl(), service_name](NodeBookkeeping &node) {
       impl->client = node.add_client<_ServiceT>(service_name);
     };
   }
@@ -987,9 +976,10 @@ struct Context : public std::enable_shared_from_this<Context> {
   auto create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
     O observable{args...};
-    attachables_.push_back(observable);  /// Register 
-    observable.context = shared_from_this();
-    observable.class_name = boost::typeindex::type_id_runtime(observable).pretty_name();
+    NodeAttachable att = *observable->impl();
+    attachables_.push_back(att);  /// Register 
+    observable.impl()->context = shared_from_this();
+    observable.impl()->class_name = boost::typeindex::type_id_runtime(observable).pretty_name();
     return observable;
   }
 
