@@ -25,7 +25,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   /// Main spinning loop
   while (rclcpp::ok()) {
     /// Receive timer updates
-    size_t ticks = co_await timer;
+    co_await timer;
 
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;

@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
   auto service_response =
       icey::create_timer(1s)
           /// Build a request when the timer ticks
-          .then([](size_t ticks) {
+          .then([](size_t) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 1;
             RCLCPP_INFO_STREAM(icey::node->get_logger(),

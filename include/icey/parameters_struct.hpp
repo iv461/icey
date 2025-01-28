@@ -51,7 +51,7 @@ struct Validator {
     if constexpr (std::is_unsigned_v<Value>)
       validate = [](const ROSValue &new_value) { return new_value >= 0; };
     else
-      validate = [](const ROSValue &new_value) { return true; };
+      validate = [](const ROSValue &) { return true; };
   }
 
   /// Construct explicitly from a  validation predicate

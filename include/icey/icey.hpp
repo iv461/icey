@@ -581,7 +581,7 @@ public:
   /// Do we have a value ?
   bool await_ready() { return !this->impl()->has_none(); }
   /// Spin the ROS event loop until we got a value.
-  bool await_suspend(auto coroutine_handle) {
+  bool await_suspend(auto) {
     if(icey_coro_debug_print)
       std::cout << get_type_info() << " await_suspend called" << std::endl;
 

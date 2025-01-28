@@ -27,6 +27,9 @@ Sorted by decreasing priority.
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
 
+- [ ] Parameters struct: Return Stream to be able to .then on it
+- [ ] Parameters struct: Groups, support nested structs 
+
 - [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 - [ ] Maybe support cascading the synchronizers 
 

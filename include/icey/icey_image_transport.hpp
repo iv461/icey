@@ -142,7 +142,7 @@ auto create_image_transport_subscription(
 };
 
 auto create_image_transport_publisher(
-    const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
+    const std::string &base_topic_name, const rclcpp::QoS &qos,
     const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
   return create_observable<ImageTransportPublisher>(base_topic_name, qos, options);
 };

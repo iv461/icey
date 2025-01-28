@@ -167,7 +167,10 @@ namespace field_reflection
             return std::tie();
         }
 
+/// TODO Ivo: pragma region is for MSVC and only supported by it.
+#ifndef __GNUC__
 #pragma region TO_TUPLE_TEMPLATE_MACRO
+#endif
 // map macro: https://github.com/swansontec/map-macro
 #define FIELD_RFL_EVAL0(...) __VA_ARGS__
 #define FIELD_RFL_EVAL1(...) FIELD_RFL_EVAL0(FIELD_RFL_EVAL0(FIELD_RFL_EVAL0(__VA_ARGS__)))
@@ -557,7 +560,10 @@ namespace field_reflection
 #undef FIELD_RFL_DECLTYPE
 #undef FIELD_RFL_MOVE
 #undef FIELD_RFL_TO_TUPLE_TEMPLATE
+
+#ifndef __GNUC__
 #pragma endregion TO_TUPLE_TEMPLATE_MACRO
+#endif
 
 #if defined(__clang__)
 #pragma clang diagnostic push
