@@ -5,8 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  #add_compile_options( -Werror=return-type -Werror=return-local-addr -Werror=init-self -Wno-strict-aliasing -fmax-errors=1)
-  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self) 
+  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=init-self) 
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
