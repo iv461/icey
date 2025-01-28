@@ -10,6 +10,8 @@ Sorted by decreasing priority.
 - [ ] `timeout` filter
 - [ ] Rename Stream to Stream
 
+- [ ] We still got a crash in service_client_async_await_example
+
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 

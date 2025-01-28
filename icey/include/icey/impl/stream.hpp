@@ -192,11 +192,12 @@ protected:
   /// rejects
   template <bool resolve, class Output, class F>
   Handler create_handler(Output output, F &&f, bool register_it) {
-    auto input = this->shared_from_this();  // strong reference to this for binding, instead of only
-                                            // weak if we would bind this
-    auto handler = [input, output,
+    auto input_s = this->shared_from_this(); 
+    typename decltype(input_s)::weak_type input_w = input_s;
+    auto handler = [input_w, output,
                     call_and_resolve =
                         std::move(call_depending_on_signature<resolve>(output, f))]() {
+      auto input = input_w.lock();
       if constexpr (resolve) {  /// If we handle values with .then()
         if (input->has_value()) {
           call_and_resolve(input->value());
@@ -209,7 +210,7 @@ protected:
         }  /// Else do nothing
       }
     };
-    if (register_it) input->register_handler(handler);
+    if (register_it) input_s->register_handler(handler);
     return handler;
   }
 
