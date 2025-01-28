@@ -119,19 +119,22 @@ Still, there are some small limitations:
 
 - ROS 2 (tested on Humble)
 - Boost Hana
+- C++20 ir required for the parameters struct feature and coroutine-support
 
 # Build and test 
 
+Simply clone into your ROS 2 workspace and build it. 
+
+To build the examples, do:
 ```sh
 colcon build  --packages-up-to icey_examples
+```
+To run the unit-tests:
+
+```sh
 colcon test --packages-select icey 
-# Run tests
 build/icey./promise_test
 ```
-
-# Robustness 
-
-This library is designed to be robust against common usage mistakes: It will detect problems like cyclic dependencies that would cause infinite update cycles. It enforces this by creating a Directed Acyclic Graph (DAG) and using topological sorting to ensure a pre-determined order of updates that guarantees all predecessor nodes are updated before their children ("deterministic update")
 
 # Related effords
 
