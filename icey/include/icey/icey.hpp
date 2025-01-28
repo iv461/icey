@@ -119,12 +119,12 @@ private:
   using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
 
   struct TFSubscriptionInfo {
-    TFSubscriptionInfo(std::string target_frame, std::string source_frame,
+    TFSubscriptionInfo(const std::string &target_frame, const std::string &source_frame,
                        OnTransform on_transform, OnError on_error)
-        : target_frame(std::move(std::move(target_frame))),
-          source_frame(std::move(std::move(source_frame))),
-          on_transform(std::move(on_transform)),
-          on_error(std::move(on_error)) {}
+        : target_frame(target_frame),
+          source_frame(source_frame),
+          on_transform(on_transform),
+          on_error(on_error) {}
     std::string target_frame;
     std::string source_frame;
     std::optional<TransformMsg> last_received_transform;
@@ -181,21 +181,15 @@ private:
   /// we have to notify.
   void maybe_notify(TFSubscriptionInfo &info) {
     try {
-      /// Lookup the latest transform in the buffer to see if we got something new in the buffer.
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg =
           buffer_->lookupTransform(info.target_frame, info.source_frame, tf2::TimePointZero);
-      /// Now check if it is the same as the last one, in this case we return nothing since the
-      /// transform did not change. (Instead, we received on /tf some other, unrelated
-      /// transforms.)
       if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
         info.last_received_transform = tf_msg;
         info.on_transform(tf_msg);
       }
     } catch (const tf2::TransformException &e) {
-      /// Simply ignore. Because we are requesting the latest transform in the buffer, the only
-      /// exception we can get is that there is no transform available yet.
       info.on_error(e);
     }
   }
@@ -1329,6 +1323,4 @@ using Stream = Observable<V, E>;
 }  // namespace icey
 
 #include <icey/functional_api.hpp>
-#include <utility>
-#include <utility>
 #define ICEY_ROS2_WAS_INCLUDED
