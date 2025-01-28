@@ -112,14 +112,14 @@ Still, there are some small limitations:
 
 # More features 
 
-- C++20 coroutines, aka. Async/await: 
+TODO
 - 
 
 # Dependencies: 
 
 - ROS 2 (tested on Humble)
 - Boost Hana
-- C++20 ir required for the parameters struct feature and coroutine-support
+- C++20 is required for the parameters struct feature and coroutine-support
 
 # Build and test 
 
@@ -135,6 +135,10 @@ To run the unit-tests:
 colcon test --packages-select icey 
 build/icey./promise_test
 ```
+
+# Coming soon: 
+
+- Python/`rclpy` support
 
 # Related effords
 
