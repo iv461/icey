@@ -316,8 +316,7 @@ public:
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// TODO extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
     auto client = rclcpp::create_client<Service>(
-        node_.node_base_, node_.node_graph_, node_.node_services_, service_name,
-        rclcpp::ServicesQoS().get_rmw_qos_profile(), group);
+        node_.node_base_, node_.node_graph_, node_.node_services_, service_name, qos.get_rmw_qos_profile(), group);
     book_.services_clients_.emplace(service_name, client);
     return client;
   }

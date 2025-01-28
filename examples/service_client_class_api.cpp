@@ -15,7 +15,7 @@ public:
         
       icey().create_timer(1s)
           /// Build a request when the timer ticks
-          .then([this](size_t ticks) {
+          .then([this](size_t) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = 1;
             RCLCPP_INFO_STREAM(this->get_logger(),

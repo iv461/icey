@@ -5,7 +5,10 @@
 #include "std_msgs/msg/float32.hpp"
 
 /// Here, you could load your neural network model from file, from ONNX, TFLite etc.
-void load_neural_network_model(std::string filename) { std::cout << "Loeaded NN." << std::endl; }
+void load_neural_network_model(std::string filename) { 
+  (void)filename; 
+  std::cout << "Loeaded NN." << std::endl; 
+}
 
 int main(int argc, char **argv) {
   icey::icey_debug_print = true;
@@ -18,19 +21,19 @@ int main(int argc, char **argv) {
   /// publishers etc.) is initialized. Note that it does not matter where we call this, since here
   /// we are still in the declaration phase.
   icey::after_parameter_initialization([&]() {
-    load_neural_network_model(nn_model_filename_param->value());
+    load_neural_network_model(nn_model_filename_param.value());
 
     /// Add additional subscribers
     auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
 
     /// TODO
-    auto rectangle_sig = map_base_link_tf.then([](auto msg) {
+    auto rectangle_sig = map_base_link_tf.then([](auto) {
       std::optional<std_msgs::msg::Float32> result;
       return result;
     });
 
     /// Now conditionally create a publisher based on the parameters:
-    if (publish_debug_markers_param->value()) {
+    if (publish_debug_markers_param.value()) {
       rectangle_sig.publish("debug_marker");
     }
   });
