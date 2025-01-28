@@ -81,32 +81,39 @@ struct NodeParameters {
 
 # Key features: 
 
-- Because ICEY removes unccesesary boolerplate code
+- ICEY introduces modern asynchronous programming to ROS using Streams (Promises) and coroutines (async/await)
+- ICEY removes unnecessary boilerplate code for using parameters, creating and spawning nodes and synchronization
+- Automatic synchronization, 
+- Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
+- Extensible: Example extension to support custom `image_transport`-publishers/subscribers
+
 - Easy asynchronous programming using promises, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html) or spawning extra threads
-- It automatically computes the data-flow synchronously to the data it depents on: No more `received_x`-flags and asynchronously spinning in timers, waiting to something to arrive 
-- Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types
+
+- Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types instead of C++-exceptions
+
+# Performance: 
+
+TODO summarize 
+
+The promises implemented are generally very fast, they have a small (non-zero), but in practice neglible overhead compared to plain callbacks. 
+To demonstrate this, we translated a typical node from the Autoware project with multiple subscribers/publishers and measured the performance with perf. 
+The evaluation showed an overall latency increase of only X.X % and no significant increase of the latency variance (jitter). 
+See the [Evaluation]-section for more details. 
 
 
-# Not supported yet
+# (small) limitations
 
-- Only the SingleThreadedExecutor is supported currently. That is mainly because the MultiThreadedExecturos does not have a properly implemented scheduler and instead sufferts from a [starvation](https://github.com/ros2/rclcpp/pull/2702) [issue](https://github.com/ros2/rclcpp/issues/2402). I have no intereset in making the code thread-safe as long as there is no reliable MT-executor anyway. Note that this does not mean you cannot use multiple threads for your computation-heavy algorihtms: You can still use OpenMP to parallelize them, only all the callbacks will be called from a single (the same) thread. 
-- Memory strategy is not implemented, but could be easily, simply add the arguments everywhere 
+We generally aim with ICEY to support everything that ROS also supports. 
+Still, there are some small limitations: 
+
+- Only the SingleThreadedExecutor is supported currently
+- Memory strategy is not implemented, but could be easily
 - Sub-nodes
 
-## Parameters 
+# More features 
 
-Parameters are persisted, but updates are communicated similar to topics. That is why they are very similar to states:
-
-```cpp
-auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
-```
-
-
-## Mixing with old ROS 2 API: 
-
-Icey is a thin wrapper around ROS 2/1 and you can always switch to using the regular ROS 2 API: 
-
-TODO 
+- C++20 coroutines, aka. Async/await: 
+- 
 
 # Dependencies: 
 
@@ -130,17 +137,6 @@ This library is designed to be robust against common usage mistakes: It will det
 
 - Autoware's `autoware::component_interface_utils::NodeAdaptor` simplifies the ROS-API as well 
 - [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept
-- [RXROS](https://github.com/rosin-project/rxros2) Proof on concept
-
-## Not directly related
+- [RXROS](https://github.com/rosin-project/rxros2) Proof on concepts
 - [fuse](https://github.com/locusrobotics/fuse) Allows to model data flows, but it is focused on one application: sensor fusion. ICEY on the other hand is general 
-
-# References 
-
-- [1] https://en.wikipedia.org/wiki/Reactive_programming 
-- [2] https://cs.brown.edu/~sk/Publications/Papers/Published/ck-frtime/
-- [3] https://en.wikipedia.org/wiki/Functional_reactive_programming
-- [4] https://svelte.dev/tutorial/
-- [5] https://www.youtube.com/watch?v=cELFZQAMdhQ
-- [6] https://docs.ros.org/en/jazzy/p/rclcpp/generated/
 
