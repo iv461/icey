@@ -996,7 +996,8 @@ protected:
 
 /// Creates the data-flow graph and asserts that it is not edited one obtain() is called
 /// A context, creates and manages the data-flow graph. Basis for the class-based API of ICEY.
-struct Context : public std::enable_shared_from_this<Context> {
+class Context : public std::enable_shared_from_this<Context> {
+public:
   virtual ~Context() {
     if (on_node_destruction_cb_) on_node_destruction_cb_();
   }
