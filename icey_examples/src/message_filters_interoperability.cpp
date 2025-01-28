@@ -5,7 +5,7 @@
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int32.hpp"
 
-int main(int argc, char **argv) {
+int main(/*int argc, char **argv*/) {
 
     
 }
