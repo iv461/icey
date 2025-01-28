@@ -14,10 +14,7 @@ void set_bool_service(const std::shared_ptr<ExampleService::Request>& request,
       "Got request: " << request->data << ", returning response: " << response->success);
 }
 
-int main(int argc, char **argv) {
-  icey::icey_debug_print = true;
-
-
+int main(int argc, char **argv) {  
   /// Now create the service server node
   icey::create_service<ExampleService>("set_bool_service1").then(set_bool_service);
 

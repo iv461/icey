@@ -3,7 +3,7 @@
 /// Note that for our use-case, we need only resolving with values, not with other promises
 #include <gtest/gtest.h>
 
-#include <icey/impl/observable.hpp>
+#include <icey/impl/stream.hpp>
 #include <iostream>
 
 class PromiseTest : public testing::Test {

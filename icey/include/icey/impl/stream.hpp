@@ -65,7 +65,7 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
   auto observable = std::make_shared<O>(std::forward<Args>(args)...);
   return observable;
 }
-/// An observable. Similar to a promise in JavaScript.
+/// A stream, conceptually very similar to a promise in JavaScript but the state transitions are not final.
 /// I saw that these implementations are very close to mine:
 /// [1]
 /// https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html

@@ -81,9 +81,9 @@ TODO
 # Build and test 
 
 ```sh
-colcon build  --packages-select icey
+colcon build  --packages-up-to icey_examples
 colcon test --packages-select icey 
-# Run test
+# Run tests
 build/icey./promise_test
 ```
 

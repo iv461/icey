@@ -6,7 +6,7 @@
 #include <boost/type_index.hpp>
 #include <functional>
 #include <icey/impl/bag_of_metaprogramming_tricks.hpp>
-#include <icey/impl/observable.hpp>
+#include <icey/impl/stream.hpp>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -1295,6 +1295,8 @@ template <class Node>
 static void spawn(Node node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
+  node->icey_context_->executor_->remove_node(node);
+  node->icey_context_->executor_.reset();
   executor.add_node(node);
   executor.spin();
   rclcpp::shutdown();
@@ -1309,7 +1311,11 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   /// This is how nodes should be composed according to ROS guru wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
-  for (const auto &node : nodes) executor.add_node(node);
+  for (auto &node : nodes) {
+    node->icey_context_->executor_->remove_node(node);
+    node->icey_context_->executor_.reset();
+    executor.add_node(node);
+  }
   executor.spin();
   rclcpp::shutdown();
 }
