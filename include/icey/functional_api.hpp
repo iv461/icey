@@ -1,3 +1,5 @@
+#include <utility>
+
 /// Provides purely functional API to ROS. Currently only regular nodes, no lifecycle nodes (they
 /// are only supported via the class-based API)
 #pragma once
@@ -22,9 +24,10 @@ struct GlobalState {
 
   /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
   Node* operator->() { return get_node(); }
-  /// Allow using this node in a context where a rclrpp::Node is needed, mind that Node
+  /// Allow implicit conversion for using this node in a context where a rclrpp::Node is needed, mind that Node
   /// derives from rclrpp::Node
-  operator Node*() { return get_node(); }
+  operator Node*() /// NOLINT
+  { return get_node(); }
 
   auto create_new_node(const std::string& name) {
     nodes.emplace(name, std::make_shared<Node>(name));
@@ -59,7 +62,7 @@ struct GlobalState {
   Node* get_node() {
     if (nodes.empty()) {
       throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
-    } else if (nodes.size() != 1) {
+    } if (nodes.size() != 1) {
       throw std::runtime_error(
           "More than one node was spawned, you need to use icey::node(<name>) instead of "
           "icey::node-> when accessing the "
@@ -137,11 +140,11 @@ auto create_observable(Args&&... args) {
 
 /// Register something that is called immediatelly after we received all paramters from ROS
 void after_parameter_initialization(std::function<void()> cb) {
-  return g_state.get_context().register_after_parameter_initialization_cb(cb);
+  return g_state.get_context().register_after_parameter_initialization_cb(std::move(cb));
 }
 /// Register a callback when the node is going to be destructor, i.e. when the destructor is called.
 void on_node_destruction(std::function<void()> cb) {
-  return g_state.get_context().register_on_node_destruction_cb(cb);
+  return g_state.get_context().register_on_node_destruction_cb(std::move(cb));
 }
 
 /// Now the filters
@@ -166,7 +169,7 @@ void destroy() {
 }
 
 /// Blocking spawn of a node using the global context
-void spawn(int argc, char** argv, std::string node_name) {
+void spawn(int argc, char** argv, const std::string& node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
@@ -176,7 +179,7 @@ void spawn(int argc, char** argv, std::string node_name) {
 
 /// Create a node from the staged global context. Clears the global context so that multiple nodes
 /// can be created later.
-auto create_node(int argc, char** argv, std::string node_name) {
+auto create_node(int argc, char** argv, const std::string& node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);

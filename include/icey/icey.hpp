@@ -64,15 +64,15 @@ struct NodeInterfaces {
   }
   /// This getter is needed for ParameterEventHandler. Other functions likely require this interface
   /// too.
-  auto get_node_base_interface() { return node_base_; }
-  auto get_node_graph_interface() { return node_graph_; }
-  auto get_node_clock_interface() { return node_clock_; }
-  auto get_node_logging_interface() { return node_logging_; }
-  auto get_node_timers_interface() { return node_timers_; }
-  auto get_node_topics_interface() { return node_topics_; }
-  auto get_node_services_interface() { return node_services_; }
-  auto get_node_parameters_interface() { return node_parameters_; }
-  auto get_node_time_source_interface() { return node_time_source_; }
+  auto get_node_base_interface() const { return node_base_; }
+  auto get_node_graph_interface() const { return node_graph_; }
+  auto get_node_clock_interface() const { return node_clock_; }
+  auto get_node_logging_interface() const { return node_logging_; }
+  auto get_node_timers_interface() const { return node_timers_; }
+  auto get_node_topics_interface() const { return node_topics_; }
+  auto get_node_services_interface() const { return node_services_; }
+  auto get_node_parameters_interface() const { return node_parameters_; }
+  auto get_node_time_source_interface() const { return node_time_source_; }
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_;
   rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_;
   rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_;
@@ -101,10 +101,10 @@ struct TFListener {
   using OnTransform = std::function<void(const TransformMsg &)>;
   using OnError = std::function<void(const tf2::TransformException &)>;
 
-  explicit TFListener(const NodeInterfaces &node) : node_(node) { init(); }
+  explicit TFListener(NodeInterfaces node) : node_(std::move(node)) { init(); }
 
   /// Add notification for a single transform.
-  void add_subscription(std::string target_frame, std::string source_frame,
+  void add_subscription(const std::string& target_frame, const std::string& source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
     subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
   }
@@ -120,11 +120,11 @@ private:
 
   struct TFSubscriptionInfo {
     TFSubscriptionInfo(std::string target_frame, std::string source_frame,
-                       const OnTransform &on_transform, const OnError &on_error)
-        : target_frame(target_frame),
-          source_frame(source_frame),
-          on_transform(on_transform),
-          on_error(on_error) {}
+                       OnTransform on_transform, OnError on_error)
+        : target_frame(std::move(std::move(target_frame))),
+          source_frame(std::move(std::move(source_frame))),
+          on_transform(std::move(on_transform)),
+          on_error(std::move(on_error)) {}
     std::string target_frame;
     std::string source_frame;
     std::optional<TransformMsg> last_received_transform;
@@ -138,10 +138,10 @@ private:
     const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
     auto topics_if = node_.node_topics_;
     message_subscription_tf_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(
-        topics_if, "/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
+        topics_if, "/tf", qos, [this](TransformsMsg msg) { on_tf_message(std::move(msg), false); });
     message_subscription_tf_static_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(
         topics_if, "/tf_static", static_qos,
-        [this](TransformsMsg msg) { on_tf_message(msg, true); });
+        [this](TransformsMsg msg) { on_tf_message(std::move(msg), true); });
   }
 
   void init_tf_buffer() {
@@ -163,16 +163,16 @@ private:
   /// Store the received transforms in the buffer.
   void store_in_buffer(const tf2_msgs::msg::TFMessage &msg_in, bool is_static) {
     std::string authority = "Authority undetectable";
-    for (size_t i = 0u; i < msg_in.transforms.size(); i++) {
+    for (const auto & transform : msg_in.transforms) {
       try {
-        buffer_->setTransform(msg_in.transforms[i], authority, is_static);
+        buffer_->setTransform(transform, authority, is_static);
       } catch (const tf2::TransformException &ex) {
         // /\todo Use error reporting
         std::string temp = ex.what();
         RCLCPP_ERROR(node_.node_logging_->get_logger(),
                      "Failure to set received transform from %s to %s with error: %s\n",
-                     msg_in.transforms[i].child_frame_id.c_str(),
-                     msg_in.transforms[i].header.frame_id.c_str(), temp.c_str());
+                     transform.child_frame_id.c_str(),
+                     transform.header.frame_id.c_str(), temp.c_str());
       }
     }
   }
@@ -207,7 +207,7 @@ private:
     }
   }
 
-  void on_tf_message(TransformsMsg msg, bool is_static) {
+  void on_tf_message(const TransformsMsg& msg, bool is_static) {
     store_in_buffer(*msg, is_static);
     notify_if_any_relevant_transform_was_received();
   }
@@ -241,7 +241,7 @@ public:
     std::unordered_map<std::string, std::any> extra_baggage_;
   };
 
-  explicit NodeBookkeeping(const NodeInterfaces &node) : node_(node) {}
+  explicit NodeBookkeeping(NodeInterfaces node) : node_(std::move(node)) {}
 
   NodeInterfaces node_;
   IceyBook book_;
@@ -249,10 +249,10 @@ public:
   /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
   /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
   /// regular nodes without templates.
-  inline std::string extend_name_with_sub_namespace(const std::string &name,
+  static inline std::string extend_name_with_sub_namespace(const std::string &name,
                                                     const std::string &sub_namespace) {
     std::string name_with_sub_namespace(name);
-    if (sub_namespace != "" && name.front() != '/' && name.front() != '~') {
+    if (!sub_namespace.empty() && name.front() != '/' && name.front() != '~') {
       name_with_sub_namespace = sub_namespace + "/" + name;
     }
     return name_with_sub_namespace;
@@ -269,7 +269,7 @@ public:
     auto param =
         node_.node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
     auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(node_);
-    auto cb_handle = param_subscriber->add_parameter_callback(name, std::move(update_callback));
+    auto cb_handle = param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
     book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
     return param;
   }
@@ -294,7 +294,7 @@ public:
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// TODO no normal timer in humble, also no autostart flag was present in Humble
     rclcpp::TimerBase::SharedPtr timer =
-        rclcpp::create_wall_timer(time_interval, std::move(callback), group, node_.node_base_.get(),
+        rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group, node_.node_base_.get(),
                                   node_.node_timers_.get());
     book_.timers_.push_back(timer);
     return timer;
@@ -306,7 +306,7 @@ public:
                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     auto service =
         rclcpp::create_service<ServiceT>(node_.node_base_, node_.node_services_, service_name,
-                                         std::move(callback), qos.get_rmw_qos_profile(), group);
+                                         std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group);
     book_.services_.emplace(service_name, service);
   }
 
@@ -791,7 +791,7 @@ struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_V
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  PublisherObservable(const std::string &topic_name,
+  explicit PublisherObservable(const std::string &topic_name,
                       const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->impl()->name = topic_name;
     this->impl()->attach_ = [impl = this->impl(), topic_name, qos](NodeBookkeeping &node) {
@@ -864,7 +864,7 @@ class SynchronizerObservable
                         SynchronizerObservableImpl<Messages...>> {
 public:
   using Self = SynchronizerObservable<Messages...>;
-  SynchronizerObservable(uint32_t queue_size) {
+  explicit SynchronizerObservable(uint32_t queue_size) {
     this->create_mfl_synchronizer(queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
     /// because we only access impl in on_messages
@@ -904,7 +904,7 @@ struct ServiceObservable
   using Response = std::shared_ptr<typename _ServiceT::Response>;
   using Value = std::pair<Request, Response>;
 
-  ServiceObservable(const std::string &service_name,
+  explicit ServiceObservable(const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     this->impl()->attach_ = [impl = this->impl(), service_name, qos](NodeBookkeeping &node) {
       node.add_service<_ServiceT>(
@@ -923,7 +923,7 @@ template <typename _ServiceT>
 struct ServiceClientImpl : public NodeAttachable {
   using Client = rclcpp::Client<_ServiceT>;
   typename Client::SharedPtr client;
-  Duration timeout;
+  Duration timeout{};
   std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request;
 };
 template <typename _ServiceT>
@@ -1004,10 +1004,10 @@ struct Context : public std::enable_shared_from_this<Context> {
   /// Register callback to be called after all parameters have been attached
   /// For the functional API
   void register_after_parameter_initialization_cb(std::function<void()> cb) {
-    after_parameter_initialization_cb_ = cb;
+    after_parameter_initialization_cb_ = std::move(cb);
   }
 
-  void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = cb; }
+  void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = std::move(cb); }
 
   void initialize(NodeBookkeeping &node) {
     if (attachables_.empty()) {
@@ -1195,7 +1195,7 @@ struct Context : public std::enable_shared_from_this<Context> {
         hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
-    static_assert(not(num_interpolatables > 0 && num_non_interpolatables == 0),
+    static_assert(num_interpolatables <= 0 || num_non_interpolatables != 0,
                   "You are trying to synchronize only interpolatable signals. This does not work, "
                   "you need to "
                   "have at least one non-interpolatable signal that is the common time for all the "
@@ -1249,7 +1249,7 @@ struct Context : public std::enable_shared_from_this<Context> {
   bool empty() const { return attachables_.empty(); }
   void clear() { attachables_.clear(); }
 
-  void assert_icey_was_not_initialized() {
+  void assert_icey_was_not_initialized() const {
     if (was_initialized_)
       throw std::invalid_argument(
           "You are not allowed to add signals after ICEY was initialized. The graph must be "
@@ -1333,4 +1333,6 @@ using Stream = Observable<V, E>;
 }  // namespace icey
 
 #include <icey/functional_api.hpp>
+#include <utility>
+#include <utility>
 #define ICEY_ROS2_WAS_INCLUDED

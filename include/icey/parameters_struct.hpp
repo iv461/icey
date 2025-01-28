@@ -14,6 +14,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_set>
+#include <utility>
 
 namespace icey {
 /// FOr API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
@@ -55,17 +56,20 @@ struct Validator {
   }
 
   /// Construct explicitly from a  validation predicate
-  explicit Validator(const Validate &validate) : validate(validate) {}
+  Validator(const Validate &validate) 
+    : validate(validate) {}
 
   /// Allow implicit conversion from some easy sets:
-  Validator(const Interval<Value> &interval) {
+  Validator(const Interval<Value> &interval) /// NOLINT
+  {
     validate = [interval](const ROSValue &new_value) {
       return new_value >= interval.minimum && new_value <= interval.maximum;
     };
   }
 
   /// Implicit conversion from a Set of values
-  Validator(const Set<Value> &set) {
+  Validator(const Set<Value> &set) /// NOLINT
+  {
     validate = [set](const ROSValue &new_value) {
       return set.count(new_value) > 0;  /// contains is C++20 :(
     };
@@ -80,20 +84,21 @@ class DynParameterTag {};
 template <class Value>
 struct DynParameter : public DynParameterTag {
   using type = Value;
-  DynParameter(const std::optional<Value> &default_value,
+  explicit DynParameter(const std::optional<Value> &default_value,
                const Validator<Value> &validator = Validator<Value>(),
-               const std::string &description = "", bool read_only = false)
+               std::string description = "", bool read_only = false)
       :  // parameter_name(parameter_name),
         value(default_value),
         default_value(default_value),
         validator(validator),
-        description(description),
+        description(std::move(description)),
         read_only(read_only) {}
 
   const Value &get_value() const { return value.value(); }
 
   /// Allow implicit conversion to the stored value type
-  operator Value() const { return get_value(); }
+  operator Value() const /// NOLINT
+  { return get_value(); }
 
   std::optional<Value> value;
   std::string parameter_name;

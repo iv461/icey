@@ -164,7 +164,7 @@ protected:
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
     // TODO use std::invoke_result
     using ReturnType = decltype(apply_if_tuple(f, std::declval<FunctionArgument>()));
-    return [output, f = std::move(f)](const FunctionArgument &x) {
+    return [output, f = std::forward<F>(f)](const FunctionArgument &x) {
       if constexpr (std::is_void_v<ReturnType>) {
         apply_if_tuple(f, x);
       } else if constexpr (is_result<ReturnType>) {
@@ -227,20 +227,20 @@ protected:
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
       auto child = create_observable<Observable<Nothing, ErrorValue>>();
-      auto handler = create_handler<resolve>(child, std::move(f), register_handler);
+      auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto child =
           create_observable<Observable<typename ReturnType::Value,
                                        typename ReturnType::ErrorValue>>();  // Must pass over error
-      auto handler = create_handler<resolve>(child, std::move(f), register_handler);
+      auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the
       /// error
       auto child = create_observable<Observable<ReturnTypeSome, ErrorValue>>();
-      auto handler = create_handler<resolve>(child, std::move(f), register_handler);
+      auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     }
   }
