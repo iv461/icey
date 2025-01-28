@@ -85,7 +85,7 @@ struct NodeParameters {
 - ICEY minimizes boilerplate code needed for using parameters, creating and spawning nodes and synchronization 
 - Automatic synchronization, unifying usage of TF as a form of synchronization
 - Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
-- Extensible: [We demonstrate](doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
+- Extensible: [We demonstrate](icey/doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
 
 - Easy asynchronous programming using promises, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html) or spawning extra threads
 
@@ -139,7 +139,7 @@ build/icey./promise_test
 # Related effords
 
 - Autoware's `autoware::component_interface_utils::NodeAdaptor` simplifies the ROS-API as well 
-- [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept
-- [RXROS](https://github.com/rosin-project/rxros2) Proof on concepts
+- [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept for reactive programming
+- [RXROS](https://github.com/rosin-project/rxros2) Proof on concept for reactive programming
 - [fuse](https://github.com/locusrobotics/fuse) Allows to model data flows, but it is focused on one application: sensor fusion. ICEY on the other hand is general 
 
