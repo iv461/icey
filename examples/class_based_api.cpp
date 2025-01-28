@@ -12,7 +12,7 @@ using namespace std::chrono_literals;
 class MyNode : public icey::Node {
 public:
   using Base = icey::Node;
-  MyNode(std::string name) : Base(name) {
+  explicit MyNode(std::string name) : Base(name) {
     auto timer_signal = icey().create_timer(500ms);
 
     timer_signal.then(

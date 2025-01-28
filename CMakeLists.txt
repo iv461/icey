@@ -2,10 +2,18 @@ cmake_minimum_required(VERSION 3.15)
 project(icey)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   #add_compile_options( -Werror=return-type -Werror=return-local-addr -Werror=init-self -Wno-strict-aliasing -fmax-errors=1)
-  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self -fmax-errors=1) 
+  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=return-local-addr -Werror=init-self) 
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX)
+  add_compile_options(-Werror=return-local-addr -fmax-errors=1) 
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Werror=return-stack-address) 
 endif()
 
 find_package(ament_cmake_auto REQUIRED)

@@ -199,3 +199,21 @@ Sorted by decreasing priority.
 - [X] Use boost hana instead fo rolling our own bag of meta-programming tricks
 - [X] Look at https://github.com/xhawk18/promise-cpp
 
+
+
+# Run clang-tidy: 
+
+1. Install mxins: https://github.com/colcon/colcon-mixin-repository
+
+```sh
+colcon build  --packages-select icey --cmake-args -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+
+```sh
+clang-tidy -p ~/autoware/build/icey/ include/icey/*.hpp --fix -fix-errors
+```
+
+colcon build  --packages-select icey --cmake-args -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15
+
+clang-tidy-15 -p ~/autoware/build/icey/compile_commands.json examples/*.cpp --fix

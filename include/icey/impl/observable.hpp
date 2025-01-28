@@ -56,7 +56,7 @@ using obs_state = typename remove_shared_ptr_t<T>::State;
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
-struct Context;
+class Context;
 namespace impl {
 /// Creates a new observable of type O by passing the args to the constructor. Observables are
 /// always reference counted, currently implemented with std::shared_ptr.
