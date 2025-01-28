@@ -83,12 +83,12 @@ struct GlobalState {
                                      /// stuff to the graph is still possible.
 };
 
-GlobalState g_state;
+inline GlobalState g_state;
 
 /// Enable API icey::node
 auto& node = g_state;
 
-inline Context& get_global_context() { return g_state.get_context(); }
+static  Context& get_global_context() { return g_state.get_context(); }
 
 template <class ParameterT>
 auto declare_parameter(const std::string& name,
@@ -111,12 +111,12 @@ auto create_publisher(const std::string& topic_name, const rclcpp::QoS& qos = rc
   return g_state.get_context().create_publisher<MessageT>(topic_name, qos);
 };
 
-auto create_transform_subscription(const std::string& target_frame,
+static auto create_transform_subscription(const std::string& target_frame,
                                    const std::string& source_frame) {
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
-auto create_timer(const Duration& interval, bool is_one_off_timer = false) {
+static auto create_timer(const Duration& interval, bool is_one_off_timer = false) {
   return g_state.get_context().create_timer(interval, is_one_off_timer);
 }
 
@@ -139,11 +139,11 @@ auto create_observable(Args&&... args) {
 }
 
 /// Register something that is called immediatelly after we received all paramters from ROS
-void after_parameter_initialization(std::function<void()> cb) {
+static void after_parameter_initialization(std::function<void()> cb) {
   return g_state.get_context().register_after_parameter_initialization_cb(std::move(cb));
 }
 /// Register a callback when the node is going to be destructor, i.e. when the destructor is called.
-void on_node_destruction(std::function<void()> cb) {
+static  void on_node_destruction(std::function<void()> cb) {
   return g_state.get_context().register_on_node_destruction_cb(std::move(cb));
 }
 
@@ -163,13 +163,13 @@ auto serialize(Parents... parents) {
   return g_state.get_context().serialize(parents...);
 }
 
-void destroy() {
+static void destroy() {
   g_state.nodes.clear();  // Purge the nodes, the nodes must be destroyed before the global rclcpp
                           // context gets destroyed, otherwise we get an ugly segfault on Ctrl+C
 }
 
 /// Blocking spawn of a node using the global context
-void spawn(int argc, char** argv, const std::string& node_name) {
+static void spawn(int argc, char** argv, const std::string& node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
@@ -179,7 +179,7 @@ void spawn(int argc, char** argv, const std::string& node_name) {
 
 /// Create a node from the staged global context. Clears the global context so that multiple nodes
 /// can be created later.
-auto create_node(int argc, char** argv, const std::string& node_name) {
+static auto create_node(int argc, char** argv, const std::string& node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);

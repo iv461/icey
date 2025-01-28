@@ -34,8 +34,8 @@
 namespace icey {
 
 namespace hana = boost::hana;
-bool icey_debug_print = false;
-bool icey_coro_debug_print = false;
+inline bool icey_debug_print = false;
+inline bool icey_coro_debug_print = false;
 using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
@@ -138,10 +138,10 @@ private:
     const rclcpp::QoS &static_qos = tf2_ros::StaticListenerQoS();
     auto topics_if = node_.node_topics_;
     message_subscription_tf_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(
-        topics_if, "/tf", qos, [this](TransformsMsg msg) { on_tf_message(std::move(msg), false); });
+        topics_if, "/tf", qos, [this](TransformsMsg msg) { on_tf_message(msg, false); });
     message_subscription_tf_static_ = rclcpp::create_subscription<tf2_msgs::msg::TFMessage>(
         topics_if, "/tf_static", static_qos,
-        [this](TransformsMsg msg) { on_tf_message(std::move(msg), true); });
+        [this](TransformsMsg msg) { on_tf_message(msg, true); });
   }
 
   void init_tf_buffer() {
@@ -1302,7 +1302,7 @@ public:
 
 /// Blocking spawn of an existing node.
 template <class Node>
-void spawn(Node node) {
+static void spawn(Node node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
@@ -1314,7 +1314,7 @@ void spawn(Node node) {
 using Node = NodeWithIceyContext<rclcpp::Node>;
 using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
 
-void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
+static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
   /// This is how nodes should be composed according to ROS guru wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references
