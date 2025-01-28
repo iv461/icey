@@ -19,9 +19,6 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   using Response = ExampleService::Response::SharedPtr;
 
   auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
-  /// TODO rem
-  node->create_executor_in_context();
-
   /// Main spinning loop
   while (rclcpp::ok()) {
     /// Receive timer updates

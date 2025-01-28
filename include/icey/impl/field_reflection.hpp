@@ -25,7 +25,7 @@ namespace field_reflection
     {
 //#if defined(__GNUC__) || defined(__clang__)
 //#pragma GCC diagnostic push
-/// TODO Ivo: This warning does not exist in GCC 11.4, so we get another warning trying to ingore this warning lol :D
+/// Hint Ivo: This warning does not exist in GCC 11.4, so we get another warning trying to ingore this warning lol :D
 //#pragma GCC diagnostic ignored "-Wundefined-inline"
 //#endif
         template <typename T, std::size_t = 0>
@@ -167,7 +167,7 @@ namespace field_reflection
             return std::tie();
         }
 
-/// TODO Ivo: pragma region is for MSVC and only supported by it.
+/// Hint Ivo: pragma region is for MSVC and only supported by it.
 #ifndef __GNUC__
 #pragma region TO_TUPLE_TEMPLATE_MACRO
 #endif

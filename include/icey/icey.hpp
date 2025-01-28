@@ -93,7 +93,7 @@ struct NodeInterfaces {
 /// systems. It is implemented similarly to the tf2_ros::TransformListener, but without a separate
 /// node. The implementation currently checks for relevant transforms (i.e. ones we subscribed)
 /// every time a new message is receved on /tf.
-/// TODO: To speed up the code a bit (not sure if significantly), we could obtain the path in the TF
+/// We could speed up the code a bit here (not sure if significantly), for this we could obtain the path in the TF
 /// tree between the source- and target-frame using tf2::BufferCore::_chainAsVector and then only
 /// react if any transform was received that is part of this path.
 struct TFListener {
@@ -167,7 +167,6 @@ private:
       try {
         buffer_->setTransform(transform, authority, is_static);
       } catch (const tf2::TransformException &ex) {
-        // /\todo Use error reporting
         std::string temp = ex.what();
         RCLCPP_ERROR(node_.node_logging_->get_logger(),
                      "Failure to set received transform from %s to %s with error: %s\n",
@@ -292,7 +291,7 @@ public:
   template <class CallbackT>
   auto add_timer(const Duration &time_interval, CallbackT &&callback,
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    /// TODO no normal timer in humble, also no autostart flag was present in Humble
+    /// We have not no normal timer in Humble, this is why only wall_timer is supported
     rclcpp::TimerBase::SharedPtr timer =
         rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group, node_.node_base_.get(),
                                   node_.node_timers_.get());
@@ -664,7 +663,6 @@ struct ParameterObservable : public Observable<_Value> {
 template <typename _Message>
 struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
-                                               /// TODO use base, upcast, then decltype or smth
   SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->impl()->name = topic_name;
@@ -840,8 +838,6 @@ struct SynchronizerObservableImpl {
 
   void create_mfl_synchronizer(uint32_t queue_size) {
     queue_size_ = queue_size;
-    /// They are dynamically allocated as is every other Observable
-    // TODO is this still valid
     inputs_ = std::make_tuple(std::make_shared<SimpleFilterAdapter<Messages>>()...);
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
@@ -849,7 +845,6 @@ struct SynchronizerObservableImpl {
     std::apply(
         [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
         inputs_);
-    /// TODO not sure why this is needed, present in example code
     synchronizer_->setAgePenalty(0.50);
   }
   /// The input filters
@@ -981,9 +976,9 @@ protected:
       /// Now do the weird cleanup thing that the API-user definitely neither does need to care
       /// nor know about:
       this->impl()->client->remove_pending_request(this->impl()->maybe_pending_request.value());
-      /// TODO I'm not sure this will still not leak memory smh:
-      /// https://github.com/ros2/rclcpp/issues/1697 Some ROS examples use stuff like timers that
-      /// poll for dead request and clean them up. That's why I'll put this assertion here:
+      /// I'm not sure this will still not leak memory smh:
+      /// https://github.com/ros2/rclcpp/issues/1697. Some ROS examples use stuff like timers that
+      /// poll for dead requests and clean them up. That's why I'll put this assertion here:
       if (size_t num_requests_pruned = this->impl()->client->prune_pending_requests() != 0) {
         throw std::runtime_error(
             "Pruned some more requests even after calling remove_pending_request(), you should buy "
@@ -1140,6 +1135,7 @@ public:
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
   // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to
   // know the node's clock (that may be simulated time, i.e sub on /clock)
+  // TODO error handling
   template <class Reference, class... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
     observable_traits<Reference>{};
@@ -1157,7 +1153,6 @@ public:
       auto parent_maybe_values = hana::transform(interpolatables_tuple, [&](auto parent) {
         return parent.get_at_time(rclcpp::Time(new_value->header.stamp));
       });
-      /// TODO If not hana::all(parent_maybe_values, have value) -> get error from parent and reject
       return hana::prepend(parent_maybe_values, new_value);
     });
   }
@@ -1183,7 +1178,6 @@ public:
   /// Synchronize a variable amount of Observables. Uses a Approx-Time synchronizer if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
-  /// TODO consider rafactoring using auto template arg to achieve constexpr passing
   template <typename... Parents>
   auto synchronize(Parents... parents) {
     observable_traits<Parents...>{};
@@ -1229,7 +1223,7 @@ public:
   auto serialize(Parents... parents) {
     observable_traits<Parents...>{};
     // TODO assert_all_observable_values_are_same<Parents...>();
-    /// TODO use obs_val, for this get first of variadic pack with hana
+    /// TODO simplify using obs_val, for this get first of variadic pack with hana
     using Parent = decltype(std::get<0>(std::forward_as_tuple(parents...)));
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
     /// First, create a new observable
@@ -1292,9 +1286,10 @@ public:
                 /// icey_initialize in the ctor, meaning the ctor is not finished yet.
     this->book_ = std::make_shared<NodeBookkeeping>(node_interfaces);
     icey().initialize(*this->book_);
+    create_executor_in_context();
   }
 
-  /// TODO hacky, circular ref, mem leak !
+  /// TODO hacky
   void create_executor_in_context() {
     this->icey_context_->executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
     this->icey_context_->executor_->add_node(this->shared_from_this());

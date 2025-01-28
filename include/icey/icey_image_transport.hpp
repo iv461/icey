@@ -42,7 +42,6 @@ struct ImageTransportSubscriber
     const auto cb = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
       impl->resolve(image);
     };
-    /// TODO do not capture this, save sub somewhere else
     this->impl()->attach_ = [impl = this->impl(), base_topic_name, transport, qos, cb,
                              options](NodeBookkeeping &node) {
       assert_is_not_lifecycle_node(
@@ -70,7 +69,7 @@ struct ImageTransportPublisher : public Observable<sensor_msgs::msg::Image::Shar
                   /// lifecycle nodes, so we can only assert this at runtime
       image_transport::Publisher publisher = image_transport::create_publisher(
           node.node_.maybe_regular_node, base_topic_name,
-          qos.get_rmw_qos_profile());  /// TODO Humble did accept options
+          qos.get_rmw_qos_profile());  
       impl->register_handler([impl, publisher]() {
         const auto &image_msg = impl->value();  /// There can be no error
         publisher.publish(image_msg);
@@ -97,7 +96,6 @@ struct CameraSubscriber
                         sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
       impl->resolve(std::make_tuple(image, camera_info));
     };
-    /// TODO do not capture this, save sub somewhere else
     this->impl()->attach_ = [impl = this->impl(), base_topic_name, transport, qos,
                              cb](NodeBookkeeping &node) {
       assert_is_not_lifecycle_node(
@@ -128,7 +126,7 @@ struct CameraPublisher
       impl->register_handler([impl, publisher]() {
         const auto &new_value = impl->value();  /// There can be no error
         const auto &[image_msg, camera_info_msg] = new_value;
-        /// TODO don't we need to copy here, why does this compile ??
+        /// TODO Maybe clarify message ownership, this publish-function is inconsistent with regular publishers because it accepts share_ptr<M> 
         publisher.publish(image_msg, camera_info_msg);
       });
     };

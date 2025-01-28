@@ -169,8 +169,7 @@ protected:
         apply_if_tuple(f, x);
       } else if constexpr (is_result<ReturnType>) {
         /// support callbacks that at runtime may return value or error
-        output->state_ = apply_if_tuple(f, x);  /// TODO maybe do not overwrite whole variant but
-                                                /// differentiate and set error or value
+        output->state_ = apply_if_tuple(f, x); 
         output->notify();
       } else {  /// Other return types are interpreted as values that resolve the promise. Here, we
                 /// also support returning std::optional.

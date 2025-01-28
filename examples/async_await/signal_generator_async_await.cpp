@@ -29,7 +29,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   auto sine_pub = icey::create_publisher<std_msgs::msg::Float32>("sine_signal", rclcpp::SystemDefaultsQoS());
 
   auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
-  node->create_executor_in_context();
+  
     std::cout << "Starting loop .. " << std::endl;
   /// Main spinning loop
   while (rclcpp::ok()) {
