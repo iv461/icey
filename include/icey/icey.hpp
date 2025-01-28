@@ -82,8 +82,7 @@ struct NodeInterfaces {
   rclcpp::node_interfaces::NodeServicesInterface::SharedPtr node_services_;
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters_;
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
-  // rclcpp::node_interfaces::NodeTypeDescriptionsInterface::SharedPtr node_type_descriptions_;
-  // rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_;
+  
   /// This is set to either of the two, depending on which node we got.
   /// It has to be a raw pointer since this nodeInterface is needed during node construction
   rclcpp::Node *maybe_regular_node{nullptr};
@@ -367,9 +366,6 @@ public:
 struct ObservableTag {};  /// A tag to be able to recognize the type "Observeble" using traits
 template <typename... Args>
 struct observable_traits {
-  /*static_assert(
-      (is_shared_ptr<Args> && ...),
-      "The arguments must be a shared_ptr< icey::Observable >, but it is not a shared_ptr");*/
   static_assert((std::is_base_of_v<ObservableTag, remove_shared_ptr_t<Args>> && ...),
                 "The arguments must be an icey::Observable");
 };
@@ -406,13 +402,13 @@ public:
 
   auto impl() const { return impl_; }
 
-  void assert_we_have_context() {  // Cpp is great, but Java still has a NullPtrException more...
+
+  void assert_we_have_context() { 
     if (!this->impl()->context.lock())
       throw std::runtime_error(
           "This observable does not have context, we cannot do stuff with it that depends on the "
           "context.");
   }
-
   
   std::string get_type_info() const {
       std::stringstream ss;
@@ -436,19 +432,17 @@ public:
   /// Creates a new Observable that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   template <typename F>
-  auto then(F &&f) {
-    auto child = Self::create_from_impl(impl()->then(f));
-    child.impl()->context = this->impl()->context;
-    return child;
+  auto then(F &&f) { 
+    static_assert(not std::is_same_v<Value, Nothing>,
+                  "This observable cannot have values, so you cannot register then() on it.");
+    return create_from_impl(impl()->then(f)); 
   }
 
   template <typename F>
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
                   "This observable cannot have errors, so you cannot register except() on it.");
-    auto child = Self::create_from_impl(impl()->except(f));
-    child.impl()->context = this->impl()->context;
-    return child;
+    return create_from_impl(impl()->except(f));
   }
 
   /// Create a ROS publisher by creating a new observable of type T and connecting it to this
@@ -501,8 +495,6 @@ public:
   auto unpack() {
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to unpack().");
-    static_assert(!std::is_same_v<Value, Nothing>,
-                  "This observable does not have a value, there is nothing to unpack().");
     // TODO assert_observable_holds_tuple<Parent>();
     constexpr size_t tuple_sz = std::tuple_size_v<obs_val<Self>>;
     /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see
@@ -516,8 +508,7 @@ public:
       });
     });
     /// Now create a std::tuple from the hana::tuple to be able to use structured bindings
-    /// TODO perfect FW
-    return hana::unpack(hana_tuple_output, [](auto... args) { return std::make_tuple(args...); });
+    return hana::unpack(hana_tuple_output, [](const auto &... args) { return std::make_tuple(args...); });
   }
 
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
@@ -617,12 +608,14 @@ public:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
   template <class NewVal, class NewErr, class NewDerived>
-  static Observable<NewVal, NewErr, NewDerived> create_from_impl(
-      std::shared_ptr<impl::Observable<NewVal, NewErr, NewDerived>> impl) {
+  Observable<NewVal, NewErr, NewDerived> create_from_impl(
+      const std::shared_ptr<impl::Observable<NewVal, NewErr, NewDerived>> &impl) const {
     Observable<NewVal, NewErr, NewDerived> new_obs;
     new_obs.impl_ = impl;
+    new_obs.impl()->context = this->impl()->context;
     return new_obs;
   }
+
   std::shared_ptr<Impl> impl_{impl::create_observable<Impl>()};
 };
 
