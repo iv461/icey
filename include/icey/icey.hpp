@@ -291,7 +291,7 @@ public:
   }
 
   template <class CallbackT>
-  auto add_timer(const Duration &time_interval, bool use_wall_time, CallbackT &&callback,
+  auto add_timer(const Duration &time_interval, CallbackT &&callback,
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// TODO no normal timer in humble, also no autostart flag was present in Humble
     rclcpp::TimerBase::SharedPtr timer =
@@ -760,11 +760,10 @@ struct TimerImpl : public NodeAttachable {
   rclcpp::TimerBase::SharedPtr timer;
 };
 struct TimerObservable : public Observable<size_t, Nothing, TimerImpl> {
-  TimerObservable(const Duration &interval, bool use_wall_time, bool is_one_off_timer) {
+  TimerObservable(const Duration &interval, bool is_one_off_timer) {
     this->impl()->name = "timer";
-    this->impl()->attach_ = [impl = this->impl(), interval, use_wall_time,
-                             is_one_off_timer](NodeBookkeeping &node) {
-      impl->timer = node.add_timer(interval, use_wall_time, [impl, is_one_off_timer]() {
+    this->impl()->attach_ = [impl = this->impl(), interval, is_one_off_timer](NodeBookkeeping &node) {
+      impl->timer = node.add_timer(interval, [impl, is_one_off_timer]() {
         impl->resolve(impl->ticks_counter);
         /// Needed as separate state as it might be resetted in async/await mode
         impl->ticks_counter++;
@@ -1105,9 +1104,8 @@ struct Context : public std::enable_shared_from_this<Context> {
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
-  auto create_timer(const Duration &interval, bool use_wall_time = false,
-                    bool is_one_off_timer = false) {
-    return create_observable<TimerObservable>(interval, use_wall_time, is_one_off_timer);
+  auto create_timer(const Duration &interval, bool is_one_off_timer = false) {
+    return create_observable<TimerObservable>(interval, is_one_off_timer);
   }
 
   template <typename ServiceT>
