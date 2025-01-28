@@ -10,11 +10,11 @@ Sorted by decreasing priority.
 - [ ] `timeout` filter
 - [ ] Rename Observable to Stream
 
-- [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types.
-
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
+
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
+
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
 
 - [ ] Unit-test that no dead-locks occur, use example from the official docu where a timer drives the service client
@@ -30,8 +30,6 @@ Sorted by decreasing priority.
 - [ ] Parameters struct: Return Stream to be able to .then on it
 - [ ] Parameters struct: Groups, support nested structs 
 
-- [ ] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
-- [ ] Maybe support cascading the synchronizers 
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
@@ -49,6 +47,9 @@ Sorted by decreasing priority.
 - [ ] PCL isn't ported yet: https://github.com/ros-perception/perception_pcl/issues/225
 
 ## Other nice-to-have features, not for 0.1
+
+- [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
+- [ ] Maybe support cascading the synchronizers -> not for 0.1
 
 - [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
 - [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
@@ -199,7 +200,7 @@ Sorted by decreasing priority.
 - [X] Use boost hana instead fo rolling our own bag of meta-programming tricks
 - [X] Look at https://github.com/xhawk18/promise-cpp
 
-
+- [X] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 
 # Run clang-tidy: 
 
