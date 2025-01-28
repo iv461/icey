@@ -8,7 +8,7 @@ Sorted by decreasing priority.
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] `timeout` filter
-- [ ] Rename Observable to Stream
+- [ ] Rename Stream to Stream
 
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
@@ -52,7 +52,7 @@ Sorted by decreasing priority.
 - [ ] Maybe support cascading the synchronizers -> not for 0.1
 
 - [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
-- [ ] Code: The ROS-Observables only need to write to the contained ObservableImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal ObservableImpl won't be copied.
+- [ ] Code: The ROS-Streams only need to write to the contained StreamImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal StreamImpl won't be copied.
 - [ ] Auto-pipelining ...
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
@@ -100,7 +100,7 @@ Sorted by decreasing priority.
 - [X] Writable publiser, otherwise no hardware drivers possible !
 - [X] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
 - [X] Forbid and detect creating new states in callback
-- [X] Prevent getting the value from an observable, i.e. from the object SubscriptionObservable,  it is read-only
+- [X] Prevent getting the value from an observable, i.e. from the object SubscriptionStream,  it is read-only
 - [X] Disallow graph change after node is created. Detect it. Provide instead "Node enable" functionality if someone wants to disable a publisher/subscriber
 - [X] Explicit DAG
 - [x] Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
@@ -177,13 +177,13 @@ Sorted by decreasing priority.
 - [X] About the premise that we only ever need transforms at the header time of some other topic: there is even a ROS tutorial [how to look up arbitrary times](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Time-Travel-With-Tf2-Cpp.html), but as I suspected it deals only with a constant delay, like 5 seconds. We could acutally support this by a Delay-node (Simulink style). We delay the sensor message and then lookup the TF (output maybe without delay if we assume we can receive old meesage). API maybe .delay(time)
 - [X] A way to enable/disable the node -> Lifecycle node
 
-- [X] Maybe support extention point, pass the Observable template arg with a default (i.e. for printing a warning that a parameter could not be retrieved) -> we already have with 
+- [X] Maybe support extention point, pass the Stream template arg with a default (i.e. for printing a warning that a parameter could not be retrieved) -> we already have with 
 
 - [X] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
 
 - [X] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) 
 - [X] `unpack` tuple of obs to multiple obs, this is easy 
-- [X] [Async/Await] Enable not having to allocate Observables dynamically to enable `async` via coroutines. Needed because we have no control over the allocation 
+- [X] [Async/Await] Enable not having to allocate Streams dynamically to enable `async` via coroutines. Needed because we have no control over the allocation 
 - [X] Prevent having to use an arrow -> only because everything needs to be reference-counted: Wrap the smart-ptr inside an object, i.e. use PIMPL. -> difficult, no solution without much code dup yet. Either pimpl or allow copying the objects
 - [X] Fix segfault on termination with service example
 - [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 

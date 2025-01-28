@@ -356,42 +356,42 @@ public:
   std::function<void(NodeBookkeeping &)> attach_;
 };
 
-struct ObservableTag {};  /// A tag to be able to recognize the type "Observeble" using traits
+struct StreamTag {};  /// A tag to be able to recognize the type "Observeble" using traits
 template <typename... Args>
 struct observable_traits {
-  static_assert((std::is_base_of_v<ObservableTag, remove_shared_ptr_t<Args>> && ...),
-                "The arguments must be an icey::Observable");
+  static_assert((std::is_base_of_v<StreamTag, remove_shared_ptr_t<Args>> && ...),
+                "The arguments must be an icey::Stream");
 };
 
 template <class T>
 constexpr void assert_observable_holds_tuple() {
   static_assert(is_tuple_v<obs_msg<T>>,
-                "The Observable must hold a tuple as a value for unpacking.");
+                "The Stream must hold a tuple as a value for unpacking.");
 }
 
-// Assert that all Observables types hold the same value
+// Assert that all Streams types hold the same value
 template <typename First, typename... Rest>
 constexpr void assert_all_observable_values_are_same() {
-  observable_traits<First, Rest...>{};  /// Only Observables are expected to have ::Value
+  observable_traits<First, Rest...>{};  /// Only Streams are expected to have ::Value
   // Static assert that each T::Value is the same as First::Value
   static_assert((std::is_same_v<obs_msg<First>, obs_msg<Rest>> && ...),
                 "The values of all the observables must be the same");
 }
 
-/// Adds some things we want to put in inside the impl::Observable by default.
+/// Adds some things we want to put in inside the impl::Stream by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details
 template <class Derived>
 struct DerivedWithDefaults : public Derived, public NodeAttachable {};
 
 /// An observable. Similar to a promise in JavaScript.
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = NodeAttachable>
-class Observable : public ObservableTag {
+class Stream : public StreamTag {
 public:
-  using Impl = impl::Observable<_Value, _ErrorValue, Derived>;
+  using Impl = impl::Stream<_Value, _ErrorValue, Derived>;
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
-  using Self = Observable<_Value, _ErrorValue, Derived>;  // DerivedWithDefaults<Derived>
+  using Self = Stream<_Value, _ErrorValue, Derived>;  // DerivedWithDefaults<Derived>
 
   auto impl() const { return impl_; }
 
@@ -412,17 +412,17 @@ public:
   }
 
 
-  Observable() {
+  Stream() {
     if(icey_coro_debug_print)
       std::cout << get_type_info() << " Constructor called" << std::endl;
   }
 
-  ~Observable() {
+  ~Stream() {
     if(icey_coro_debug_print)
       std::cout << get_type_info() << " Destructor called" << std::endl;
   }
 
-  /// Creates a new Observable that changes it's value to y every time the value x of the parent
+  /// Creates a new Stream that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   template <typename F>
   auto then(F &&f) { 
@@ -484,7 +484,7 @@ public:
                                                                           timeout, qos);
   }
 
-  /// Unpacks an Observable holding a tuple as value to multiple Observables for each tuple element.
+  /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
   auto unpack() {
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, there is nothing to unpack().");
@@ -541,11 +541,11 @@ public:
        std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
     }
 
-    if constexpr (std::is_base_of_v<ObservableTag, ReturnType>) {
+    if constexpr (std::is_base_of_v<StreamTag, ReturnType>) {
       this->impl()->context = x.impl()->context; /// Get the context from the input promise 
       return x;
     } else {
-      Observable<ReturnType, Nothing> new_obs;
+      Stream<ReturnType, Nothing> new_obs;
       new_obs.impl()->context = this->impl()->context;
       return new_obs;
     }
@@ -601,9 +601,9 @@ public:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
   template <class NewVal, class NewErr, class NewDerived>
-  Observable<NewVal, NewErr, NewDerived> create_from_impl(
-      const std::shared_ptr<impl::Observable<NewVal, NewErr, NewDerived>> &impl) const {
-    Observable<NewVal, NewErr, NewDerived> new_obs;
+  Stream<NewVal, NewErr, NewDerived> create_from_impl(
+      const std::shared_ptr<impl::Stream<NewVal, NewErr, NewDerived>> &impl) const {
+    Stream<NewVal, NewErr, NewDerived> new_obs;
     new_obs.impl_ = impl;
     new_obs.impl()->context = this->impl()->context;
     return new_obs;
@@ -614,8 +614,8 @@ public:
 
 /// An observable for ROS parameters. Fires initially an event if a default_value set
 template <typename _Value>
-struct ParameterObservable : public Observable<_Value> {
-  ParameterObservable(const std::string &parameter_name, const std::optional<_Value> &default_value,
+struct ParameterStream : public Stream<_Value> {
+  ParameterStream(const std::string &parameter_name, const std::optional<_Value> &default_value,
                       const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                           rcl_interfaces::msg::ParameterDescriptor(),
                       bool ignore_override = false) {
@@ -655,9 +655,9 @@ struct ParameterObservable : public Observable<_Value> {
 
 /// A subscriber observable, always stores a shared pointer to the message as it's value
 template <typename _Message>
-struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> {
+struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
-  SubscriptionObservable(const std::string &topic_name, const rclcpp::QoS &qos,
+  SubscriptionStream(const std::string &topic_name, const rclcpp::QoS &qos,
                          const rclcpp::SubscriptionOptions &options) {
     this->impl()->name = topic_name;
     this->impl()->attach_ = [impl = this->impl(), topic_name, qos, options](NodeBookkeeping &node) {
@@ -669,11 +669,11 @@ struct SubscriptionObservable : public Observable<typename _Message::SharedPtr> 
 };
 
 /// TODO rem RTTI, recognize differently, use concepts for iface def for example.
-struct InterpolateableObservableTag {};
+struct InterpolateableStreamTag {};
 template <typename _Message, typename DerivedImpl>
-struct InterpolateableObservable
-    : public InterpolateableObservableTag,
-      public Observable<typename _Message::SharedPtr, std::string, DerivedImpl> {
+struct InterpolateableStream
+    : public InterpolateableStreamTag,
+      public Stream<typename _Message::SharedPtr, std::string, DerivedImpl> {
   using MaybeValue = std::optional<typename _Message::SharedPtr>;
   /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
@@ -684,15 +684,15 @@ struct InterpolateableObservable
 /// and allows to query the message at a given point, using interpolation.
 template <typename T>
 constexpr auto hana_is_interpolatable(T) {
-  if constexpr (std::is_base_of_v<InterpolateableObservableTag, T>)
+  if constexpr (std::is_base_of_v<InterpolateableStreamTag, T>)
     return hana::bool_c<true>;
   else
     return hana::bool_c<false>;
 }
 
-/// A subscription for single transforms. It implements InterpolateableObservable but by using
+/// A subscription for single transforms. It implements InterpolateableStream but by using
 /// lookupTransform, not an own buffer
-struct TransformSubscriptionObservableImpl : public NodeAttachable {
+struct TransformSubscriptionStreamImpl : public NodeAttachable {
   using Message = geometry_msgs::msg::TransformStamped;
   std::string target_frame_;
   std::string source_frame_;
@@ -702,14 +702,14 @@ struct TransformSubscriptionObservableImpl : public NodeAttachable {
   /// We do not own the listener, the Book owns it
   std::weak_ptr<TFListener> tf2_listener_;
 };
-struct TransformSubscriptionObservable
-    : public InterpolateableObservable<geometry_msgs::msg::TransformStamped,
-                                       TransformSubscriptionObservableImpl> {
+struct TransformSubscriptionStream
+    : public InterpolateableStream<geometry_msgs::msg::TransformStamped,
+                                       TransformSubscriptionStreamImpl> {
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue =
-      InterpolateableObservable<Message, TransformSubscriptionObservableImpl>::MaybeValue;
+      InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
 
-  TransformSubscriptionObservable(const std::string &target_frame,
+  TransformSubscriptionStream(const std::string &target_frame,
                                   const std::string &source_frame) {
     this->impl()->target_frame_ = target_frame;
     this->impl()->source_frame_ = source_frame;
@@ -743,8 +743,8 @@ struct TimerImpl : public NodeAttachable {
   size_t ticks_counter{0};
   rclcpp::TimerBase::SharedPtr timer;
 };
-struct TimerObservable : public Observable<size_t, Nothing, TimerImpl> {
-  TimerObservable(const Duration &interval, bool is_one_off_timer) {
+struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
+  TimerStream(const Duration &interval, bool is_one_off_timer) {
     this->impl()->name = "timer";
     this->impl()->attach_ = [impl = this->impl(), interval, is_one_off_timer](NodeBookkeeping &node) {
       impl->timer = node.add_timer(interval, [impl, is_one_off_timer]() {
@@ -779,11 +779,11 @@ struct PublisherImpl : public NodeAttachable {
   }
 };
 template <typename _Value>
-struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_Value>> {
+struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  explicit PublisherObservable(const std::string &topic_name,
+  explicit PublisherStream(const std::string &topic_name,
                       const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->impl()->name = topic_name;
     this->impl()->attach_ = [impl = this->impl(), topic_name, qos](NodeBookkeeping &node) {
@@ -801,11 +801,11 @@ struct PublisherObservable : public Observable<_Value, Nothing, PublisherImpl<_V
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
 /// message_filters package. An adapter, adapting the message_filters::SimpleFilter to our
-/// Observable (two different implementations of almost the same concept). Does nothing else than
+/// Stream (two different implementations of almost the same concept). Does nothing else than
 /// what message_filters::Subscriber does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 // We neeed the base to be able to recognize interpolatable nodes for example
-template <typename _Message, class _Base = Observable<typename _Message::SharedPtr>>
+template <typename _Message, class _Base = Stream<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   SimpleFilterAdapter() {
     this->impl()->register_handler([this]() {
@@ -822,7 +822,7 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 /// has a frequency of at least 1/queue_size, given the highest frequency topic has a frequency of
 /// one.
 template <typename... Messages>
-struct SynchronizerObservableImpl {
+struct SynchronizerStreamImpl {
   /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
   /// `TImeSynchronizer` uses by default ExactTime
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
@@ -848,12 +848,12 @@ struct SynchronizerObservableImpl {
 };
 
 template <typename... Messages>
-class SynchronizerObservable
-    : public Observable<std::tuple<typename Messages::SharedPtr...>, std::string,
-                        SynchronizerObservableImpl<Messages...>> {
+class SynchronizerStream
+    : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
+                        SynchronizerStreamImpl<Messages...>> {
 public:
-  using Self = SynchronizerObservable<Messages...>;
-  explicit SynchronizerObservable(uint32_t queue_size) {
+  using Self = SynchronizerStream<Messages...>;
+  explicit SynchronizerStream(uint32_t queue_size) {
     this->create_mfl_synchronizer(queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
     /// because we only access impl in on_messages
@@ -867,12 +867,12 @@ private:
 };
 
 // A transform broadcaster observable
-class TransformPublisherObservable : public Observable<geometry_msgs::msg::TransformStamped> {
+class TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
   friend class Context;
 
 public:
   using Value = geometry_msgs::msg::TransformStamped;
-  TransformPublisherObservable() {
+  TransformPublisherStream() {
     this->impl()->name = "tf_pub";
     this->impl()->attach_ = [impl = this->impl()](NodeBookkeeping &node) {
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
@@ -886,14 +886,14 @@ public:
 
 /// A service observable, storing it's request and response
 template <typename _ServiceT>
-struct ServiceObservable
-    : public Observable<std::pair<std::shared_ptr<typename _ServiceT::Request>,
+struct ServiceStream
+    : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
                                   std::shared_ptr<typename _ServiceT::Response>>> {
   using Request = std::shared_ptr<typename _ServiceT::Request>;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
   using Value = std::pair<Request, Response>;
 
-  explicit ServiceObservable(const std::string &service_name,
+  explicit ServiceStream(const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     this->impl()->attach_ = [impl = this->impl(), service_name, qos](NodeBookkeeping &node) {
       node.add_service<_ServiceT>(
@@ -916,7 +916,7 @@ struct ServiceClientImpl : public NodeAttachable {
   std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request;
 };
 template <typename _ServiceT>
-struct ServiceClient : public Observable<typename _ServiceT::Response::SharedPtr, std::string,
+struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
                                          ServiceClientImpl<_ServiceT>> {
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
@@ -1001,7 +1001,7 @@ public:
 
   void initialize(NodeBookkeeping &node) {
     if (attachables_.empty()) {
-      std::cout << "WARNING: Nothing to spawn, try first to create some Observables" << std::endl;
+      std::cout << "WARNING: Nothing to spawn, try first to create some Streams" << std::endl;
       return;
     }
     attach_everything_to_node(node);
@@ -1048,7 +1048,7 @@ public:
                          const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                              rcl_interfaces::msg::ParameterDescriptor(),
                          bool ignore_override = false) {
-    return create_observable<ParameterObservable<ParameterT>>(
+    return create_observable<ParameterStream<ParameterT>>(
         name, maybe_default_value, parameter_descriptor, ignore_override);
   }
 
@@ -1056,19 +1056,19 @@ public:
   auto create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-    auto observable = create_observable<SubscriptionObservable<MessageT>>(name, qos, options);
+    auto observable = create_observable<SubscriptionStream<MessageT>>(name, qos, options);
     return observable;
   }
 
   auto create_transform_subscription(const std::string &target_frame,
                                      const std::string &source_frame) {
-    return create_observable<TransformSubscriptionObservable>(target_frame, source_frame);
+    return create_observable<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
   template <class Message>
   auto create_publisher(const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
-    return create_observable<PublisherObservable< Message >>(topic_name, qos);
+    return create_observable<PublisherStream< Message >>(topic_name, qos);
   }
   
   template <class Parent>
@@ -1082,18 +1082,18 @@ public:
   template <class Parent>
   void create_transform_publisher(Parent parent) {
     observable_traits<Parent>{};
-    auto child = create_observable<TransformPublisherObservable>();
+    auto child = create_observable<TransformPublisherStream>();
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   auto create_timer(const Duration &interval, bool is_one_off_timer = false) {
-    return create_observable<TimerObservable>(interval, is_one_off_timer);
+    return create_observable<TimerStream>(interval, is_one_off_timer);
   }
 
   template <typename ServiceT>
   auto create_service(const std::string &service_name,
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_observable<ServiceObservable<ServiceT>>(service_name, qos);
+    return create_observable<ServiceStream<ServiceT>>(service_name, qos);
   }
 
    /// Add a service client
@@ -1159,7 +1159,7 @@ public:
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
-    auto synchronizer = create_observable<SynchronizerObservable<obs_msg<Parents>...>>(queue_size);
+    auto synchronizer = create_observable<SynchronizerStream<obs_msg<Parents>...>>(queue_size);
     auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs());
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &parent = input_output_tuple[0_c];
@@ -1169,7 +1169,7 @@ public:
     return synchronizer;
   }
 
-  /// Synchronize a variable amount of Observables. Uses a Approx-Time synchronizer if the inputs
+  /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
   template <typename... Parents>
@@ -1222,7 +1222,7 @@ public:
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
     /// First, create a new observable
     /// TODO error handling
-    auto child = create_observable<Observable<ParentValue>>();
+    auto child = create_observable<Stream<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
       parent.then([child](const auto &x) { child.impl()->resolve(x); });
@@ -1315,10 +1315,8 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
 }
 
 template <class T>
-using Parameter = ParameterObservable<T>;
-using Timer = TimerObservable;
-template <class V, class E = Nothing>
-using Stream = Observable<V, E>;
+using Parameter = ParameterStream<T>;
+using Timer = TimerStream;
 
 }  // namespace icey
 

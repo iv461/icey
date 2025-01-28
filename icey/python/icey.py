@@ -18,7 +18,7 @@ def launch_node():
     executor.add_node(g_node)
     executor.spin()
 
-class Observable:
+class Stream:
     def __init__(self):
         self.notify_list = []
 
@@ -29,15 +29,15 @@ class Observable:
     def notify(self, cb):
         self.notify_list.append(cb)
 
-class ReadableState(Observable): 
+class ReadableState(Stream): 
 
     def __init__(self, name: str, state_content: type):
-        super(Observable).__init__()
+        super(Stream).__init__()
 
-class WritableState(Observable):
+class WritableState(Stream):
 
     def __init__(self):
-        super(Observable).__init__()
+        super(Stream).__init__()
 
     def publish(self, topic_name, **kwargs):
         self.publishers.append(Publisher(topic_name))
@@ -50,7 +50,7 @@ class ProxiedMsg(MutableState):
         ... 
 
 
-class SubscriptionObservable(ReadableState):
+class SubscriptionStream(ReadableState):
     # State that is stored somewhere else in a node
     def __init__(self, name: str, state_content: type):
         super(ReadableState).__init__()
@@ -104,7 +104,7 @@ def compute_based_on(F, *args):
 def example1():
 
     # allow for plumbing: 
-    current_pose = SubscriptionObservable("car_pose", states.TF) # subscribes automatically on /tf 
+    current_pose = SubscriptionStream("car_pose", states.TF) # subscribes automatically on /tf 
 
     #target_vel = 100 if (current_pose.x - 100) < 100 else 0
     current_velocity = PrivateState("current_velocity", float)

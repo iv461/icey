@@ -58,7 +58,7 @@ using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
 class Context;
 namespace impl {
-/// Creates a new observable of type O by passing the args to the constructor. Observables are
+/// Creates a new observable of type O by passing the args to the constructor. Streams are
 /// always reference counted, currently implemented with std::shared_ptr.
 template <class O, typename... Args>
 static std::shared_ptr<O> create_observable(Args &&...args) {
@@ -73,13 +73,13 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
-class Observable : private boost::noncopyable,
+class Stream : private boost::noncopyable,
                    public Derived,
-                   public std::enable_shared_from_this<Observable<_Value, _ErrorValue, Derived>> {
+                   public std::enable_shared_from_this<Stream<_Value, _ErrorValue, Derived>> {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Observable<Value, ErrorValue, Derived>;
+  using Self = Stream<Value, ErrorValue, Derived>;
   using MaybeValue = std::optional<Value>;
   using State = Result<Value, ErrorValue>;
   using Handler = std::function<void()>;
@@ -148,9 +148,9 @@ public:
 
   State &get_state() { return state_; }
 
-  /// For creating new Observables, we need a reference to the context
+  /// For creating new Streams, we need a reference to the context
   std::weak_ptr<Context> context;
-  // The class name, i.e. the name of the type, for example "SubscriberObservable<std::string>"
+  // The class name, i.e. the name of the type, for example "SubscriberStream<std::string>"
   std::string class_name;
   /// A name to identify this node among multiple ones with the same type, usually the topic
   /// or service name
@@ -158,7 +158,7 @@ public:
 
 protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
-  /// passed output Observable (that is captured by value)
+  /// passed output Stream (that is captured by value)
   template <bool resolve, class Output, class F>
   auto call_depending_on_signature(Output output, F &&f) {
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
@@ -186,8 +186,8 @@ protected:
   /// Second, we can only register a "onResolve"- or an "onReject"-handler, not both. But
   /// "onResolve" is already implemented such that implicitly the "onReject"-handler passes over the
   /// error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.
-  /// @param this (implicit): Observable<V, E>* The input promise
-  /// @param output: SharedPtr< Observable<V2, E> > or derived, the resulting promise
+  /// @param this (implicit): Stream<V, E>* The input promise
+  /// @param output: SharedPtr< Stream<V2, E> > or derived, the resulting promise
   /// @param f:  (V) -> V2 The user callback function to call when the input promises resolves or
   /// rejects
   template <bool resolve, class Output, class F>
@@ -225,20 +225,20 @@ protected:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto child = create_observable<Observable<Nothing, ErrorValue>>();
+      auto child = create_observable<Stream<Nothing, ErrorValue>>();
       auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto child =
-          create_observable<Observable<typename ReturnType::Value,
+          create_observable<Stream<typename ReturnType::Value,
                                        typename ReturnType::ErrorValue>>();  // Must pass over error
       auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the
       /// error
-      auto child = create_observable<Observable<ReturnTypeSome, ErrorValue>>();
+      auto child = create_observable<Stream<ReturnTypeSome, ErrorValue>>();
       auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     }

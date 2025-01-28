@@ -34,7 +34,7 @@ struct ImageTransportSubscriberImpl : public NodeAttachable {
 };
 // An observable representing a camera image subscriber.
 struct ImageTransportSubscriber
-    : public Observable<sensor_msgs::msg::Image::ConstSharedPtr,
+    : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                         image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
   ImageTransportSubscriber(const std::string &base_topic_name, const std::string &transport,
                            const rclcpp::QoS qos, const rclcpp::SubscriptionOptions &options) {
@@ -58,7 +58,7 @@ struct ImageTransportSubscriber
   }
 };
 
-struct ImageTransportPublisher : public Observable<sensor_msgs::msg::Image::SharedPtr> {
+struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPtr> {
   ImageTransportPublisher(const std::string &base_topic_name, const rclcpp::QoS qos,
                           const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
     this->impl()->name = base_topic_name;
@@ -85,7 +85,7 @@ struct CameraSubscriberImpl : public NodeAttachable {
 };
 
 struct CameraSubscriber
-    : public Observable<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
+    : public Stream<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
                                    sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
                         image_transport::TransportLoadException, CameraSubscriberImpl> {
   CameraSubscriber(const std::string &base_topic_name, const std::string &transport,
@@ -113,7 +113,7 @@ struct CameraSubscriber
 };
 
 struct CameraPublisher
-    : public Observable<
+    : public Stream<
           std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>> {
   CameraPublisher(const std::string &base_topic_name, const rclcpp::QoS qos) {
     this->impl()->name = base_topic_name;

@@ -26,7 +26,7 @@ protected:
 
   using ResolveValue = std::string;
   using ErrorValue = std::string;
-  using Obs = icey::impl::Observable<ResolveValue, ErrorValue>;
+  using Obs = icey::impl::Stream<ResolveValue, ErrorValue>;
   std::shared_ptr<Obs> promise{icey::impl::create_observable<Obs>()};
 
   std::vector<size_t> events;

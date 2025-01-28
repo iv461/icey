@@ -132,7 +132,7 @@ auto create_client(const std::string& service_name, const Duration& timeout,
   return g_state.get_context().create_client<ServiceT>(service_name, timeout, qos);
 }
 
-/// Extention point: support creating custom Observables:
+/// Extention point: support creating custom Streams:
 template <class T, typename... Args>
 auto create_observable(Args&&... args) {
   return g_state.get_context().template create_observable<T>(std::forward<Args>(args)...);

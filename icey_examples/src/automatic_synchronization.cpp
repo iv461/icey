@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
           return float(float_val->data * tf_val->transform.rotation.z);
       });*/
 
-  /// this has type Observable<std::tuple<int, float>>
+  /// this has type Stream<std::tuple<int, float>>
 
   auto float1 = icey::create_subscription<std_msgs::msg::Float32>("float1");
   auto float2 = icey::create_subscription<std_msgs::msg::Float32>("float2");
