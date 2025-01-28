@@ -24,10 +24,12 @@ struct GlobalState {
 
   /// Access the node, in case only one was spawned, e.g. icey::node->get_logger()
   Node* operator->() { return get_node(); }
-  /// Allow implicit conversion for using this node in a context where a rclrpp::Node is needed, mind that Node
-  /// derives from rclrpp::Node
-  operator Node*() /// NOLINT
-  { return get_node(); }
+  /// Allow implicit conversion for using this node in a context where a rclrpp::Node is needed,
+  /// mind that Node derives from rclrpp::Node
+  operator Node*()  /// NOLINT
+  {
+    return get_node();
+  }
 
   auto create_new_node(const std::string& name) {
     nodes.emplace(name, std::make_shared<Node>(name));
@@ -62,7 +64,8 @@ struct GlobalState {
   Node* get_node() {
     if (nodes.empty()) {
       throw std::runtime_error("There are no nodes, did you forget to first call icey::spawn() ?");
-    } if (nodes.size() != 1) {
+    }
+    if (nodes.size() != 1) {
       throw std::runtime_error(
           "More than one node was spawned, you need to use icey::node(<name>) instead of "
           "icey::node-> when accessing the "
@@ -88,7 +91,7 @@ inline GlobalState g_state;
 /// Enable API icey::node
 auto& node = g_state;
 
-static  Context& get_global_context() { return g_state.get_context(); }
+static Context& get_global_context() { return g_state.get_context(); }
 
 template <class ParameterT>
 auto declare_parameter(const std::string& name,
@@ -107,12 +110,13 @@ auto create_subscription(
 };
 
 template <class MessageT>
-auto create_publisher(const std::string& topic_name, const rclcpp::QoS& qos = rclcpp::SystemDefaultsQoS()) {
+auto create_publisher(const std::string& topic_name,
+                      const rclcpp::QoS& qos = rclcpp::SystemDefaultsQoS()) {
   return g_state.get_context().create_publisher<MessageT>(topic_name, qos);
 };
 
 static auto create_transform_subscription(const std::string& target_frame,
-                                   const std::string& source_frame) {
+                                          const std::string& source_frame) {
   return g_state.get_context().create_transform_subscription(target_frame, source_frame);
 }
 
@@ -143,7 +147,7 @@ static void after_parameter_initialization(std::function<void()> cb) {
   return g_state.get_context().register_after_parameter_initialization_cb(std::move(cb));
 }
 /// Register a callback when the node is going to be destructor, i.e. when the destructor is called.
-static  void on_node_destruction(std::function<void()> cb) {
+static void on_node_destruction(std::function<void()> cb) {
   return g_state.get_context().register_on_node_destruction_cb(std::move(cb));
 }
 

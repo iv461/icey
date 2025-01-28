@@ -24,7 +24,7 @@ Sorted by decreasing priority.
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
-- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surpises
+- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 - [ ] Result-type for error handling example
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
@@ -35,7 +35,7 @@ Sorted by decreasing priority.
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
-- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything ouput by LLMs is checked for factual accuracy of course.
+- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 
 - [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
 

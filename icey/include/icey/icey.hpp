@@ -10,8 +10,8 @@
 #include <iostream>
 #include <map>
 #include <optional>
-#include <tuple>
 #include <sstream>
+#include <tuple>
 #include <unordered_map>
 
 /// TF2 support:
@@ -82,7 +82,7 @@ struct NodeInterfaces {
   rclcpp::node_interfaces::NodeServicesInterface::SharedPtr node_services_;
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters_;
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
-  
+
   /// This is set to either of the two, depending on which node we got.
   /// It has to be a raw pointer since this nodeInterface is needed during node construction
   rclcpp::Node *maybe_regular_node{nullptr};
@@ -93,9 +93,9 @@ struct NodeInterfaces {
 /// systems. It is implemented similarly to the tf2_ros::TransformListener, but without a separate
 /// node. The implementation currently checks for relevant transforms (i.e. ones we subscribed)
 /// every time a new message is receved on /tf.
-/// We could speed up the code a bit here (not sure if significantly), for this we could obtain the path in the TF
-/// tree between the source- and target-frame using tf2::BufferCore::_chainAsVector and then only
-/// react if any transform was received that is part of this path.
+/// We could speed up the code a bit here (not sure if significantly), for this we could obtain the
+/// path in the TF tree between the source- and target-frame using tf2::BufferCore::_chainAsVector
+/// and then only react if any transform was received that is part of this path.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
   using OnTransform = std::function<void(const TransformMsg &)>;
@@ -104,7 +104,7 @@ struct TFListener {
   explicit TFListener(NodeInterfaces node) : node_(std::move(node)) { init(); }
 
   /// Add notification for a single transform.
-  void add_subscription(const std::string& target_frame, const std::string& source_frame,
+  void add_subscription(const std::string &target_frame, const std::string &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
     subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
   }
@@ -163,15 +163,15 @@ private:
   /// Store the received transforms in the buffer.
   void store_in_buffer(const tf2_msgs::msg::TFMessage &msg_in, bool is_static) {
     std::string authority = "Authority undetectable";
-    for (const auto & transform : msg_in.transforms) {
+    for (const auto &transform : msg_in.transforms) {
       try {
         buffer_->setTransform(transform, authority, is_static);
       } catch (const tf2::TransformException &ex) {
         std::string temp = ex.what();
         RCLCPP_ERROR(node_.node_logging_->get_logger(),
                      "Failure to set received transform from %s to %s with error: %s\n",
-                     transform.child_frame_id.c_str(),
-                     transform.header.frame_id.c_str(), temp.c_str());
+                     transform.child_frame_id.c_str(), transform.header.frame_id.c_str(),
+                     temp.c_str());
       }
     }
   }
@@ -200,7 +200,7 @@ private:
     }
   }
 
-  void on_tf_message(const TransformsMsg& msg, bool is_static) {
+  void on_tf_message(const TransformsMsg &msg, bool is_static) {
     store_in_buffer(*msg, is_static);
     notify_if_any_relevant_transform_was_received();
   }
@@ -243,7 +243,7 @@ public:
   /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
   /// regular nodes without templates.
   static inline std::string extend_name_with_sub_namespace(const std::string &name,
-                                                    const std::string &sub_namespace) {
+                                                           const std::string &sub_namespace) {
     std::string name_with_sub_namespace(name);
     if (!sub_namespace.empty() && name.front() != '/' && name.front() != '~') {
       name_with_sub_namespace = sub_namespace + "/" + name;
@@ -262,7 +262,8 @@ public:
     auto param =
         node_.node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
     auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(node_);
-    auto cb_handle = param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
+    auto cb_handle =
+        param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
     book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
     return param;
   }
@@ -287,8 +288,8 @@ public:
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// We have not no normal timer in Humble, this is why only wall_timer is supported
     rclcpp::TimerBase::SharedPtr timer =
-        rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group, node_.node_base_.get(),
-                                  node_.node_timers_.get());
+        rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group,
+                                  node_.node_base_.get(), node_.node_timers_.get());
     book_.timers_.push_back(timer);
     return timer;
   }
@@ -297,9 +298,9 @@ public:
   void add_service(const std::string &service_name, CallbackT &&callback,
                    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    auto service =
-        rclcpp::create_service<ServiceT>(node_.node_base_, node_.node_services_, service_name,
-                                         std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group);
+    auto service = rclcpp::create_service<ServiceT>(node_.node_base_, node_.node_services_,
+                                                    service_name, std::forward<CallbackT>(callback),
+                                                    qos.get_rmw_qos_profile(), group);
     book_.services_.emplace(service_name, service);
   }
 
@@ -307,8 +308,9 @@ public:
   auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// TODO extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
-    auto client = rclcpp::create_client<Service>(
-        node_.node_base_, node_.node_graph_, node_.node_services_, service_name, qos.get_rmw_qos_profile(), group);
+    auto client =
+        rclcpp::create_client<Service>(node_.node_base_, node_.node_graph_, node_.node_services_,
+                                       service_name, qos.get_rmw_qos_profile(), group);
     book_.services_clients_.emplace(service_name, client);
     return client;
   }
@@ -365,8 +367,7 @@ struct observable_traits {
 
 template <class T>
 constexpr void assert_observable_holds_tuple() {
-  static_assert(is_tuple_v<obs_msg<T>>,
-                "The Stream must hold a tuple as a value for unpacking.");
+  static_assert(is_tuple_v<obs_msg<T>>, "The Stream must hold a tuple as a value for unpacking.");
 }
 
 // Assert that all Streams types hold the same value
@@ -395,40 +396,36 @@ public:
 
   auto impl() const { return impl_; }
 
-
-  void assert_we_have_context() { 
+  void assert_we_have_context() {
     if (!this->impl()->context.lock())
       throw std::runtime_error(
           "This observable does not have context, we cannot do stuff with it that depends on the "
           "context.");
   }
-  
+
   std::string get_type_info() const {
-      std::stringstream ss;
-      auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-        ss << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << " (impl @ " 
-        << size_t(this->impl().get()) << ")] " ;
-        return ss.str();
+    std::stringstream ss;
+    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
+    ss << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << " (impl @ "
+       << size_t(this->impl().get()) << ")] ";
+    return ss.str();
   }
 
-
   Stream() {
-    if(icey_coro_debug_print)
-      std::cout << get_type_info() << " Constructor called" << std::endl;
+    if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
   }
 
   ~Stream() {
-    if(icey_coro_debug_print)
-      std::cout << get_type_info() << " Destructor called" << std::endl;
+    if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
   }
 
   /// Creates a new Stream that changes it's value to y every time the value x of the parent
   /// observable changes, where y = f(x).
   template <typename F>
-  auto then(F &&f) { 
+  auto then(F &&f) {
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable cannot have values, so you cannot register then() on it.");
-    return create_from_impl(impl()->then(f)); 
+    return create_from_impl(impl()->then(f));
   }
 
   template <typename F>
@@ -501,31 +498,36 @@ public:
       });
     });
     /// Now create a std::tuple from the hana::tuple to be able to use structured bindings
-    return hana::unpack(hana_tuple_output, [](const auto &... args) { return std::make_tuple(args...); });
+    return hana::unpack(hana_tuple_output,
+                        [](const auto &...args) { return std::make_tuple(args...); });
   }
 
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
   ////////////////////////////////////////////////////////
   /// Ok, let's go:
   /// First, we are a promise:
-  using promise_type = Self;  
+  using promise_type = Self;
   //// Second, we are still a promise, so we return self:
-  Self get_return_object() { 
-    //std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-        return *this; }
-  /// Third, we never already got something since this is a stream (we always first need to spin the ROS executor to get a message), so we never suspend:
-  std::suspend_never initial_suspend() { 
-      //std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
-    return {}; 
+  Self get_return_object() {
+    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
+    return *this;
+  }
+  /// Third, we never already got something since this is a stream (we always first need to spin the
+  /// ROS executor to get a message), so we never suspend:
+  std::suspend_never initial_suspend() {
+    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
+    return {};
   }
   /// Fourth, we return_value returns the value of the promise:
   Value return_value() { return this->impl()->value(); }
-  /// Fifth, if the return_value function is called with a value, it *sets* the value, makes sense right ? No ? Oh ..
-  /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)  
-  template<class T>
+  /// Fifth, if the return_value function is called with a value, it *sets* the value, makes sense
+  /// right ? No ? Oh .. (Reference:
+  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+  template <class T>
   void return_value(const T &x) const {
-    if(icey_coro_debug_print)
-      std::cout << get_type_info() <<   " return value for " << boost::typeindex::type_id_runtime(x).pretty_name() << " called " <<std::endl;
+    if (icey_coro_debug_print)
+      std::cout << get_type_info() << " return value for "
+                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
     this->impl()->set_value(x);
   }
   /// Sixth, we already handle exceptions in the promise.
@@ -533,16 +535,17 @@ public:
   /// Seventh, we do not need to do anything at the end, no extra cleanups needed.
   std::suspend_never final_suspend() const noexcept { return {}; }
 
-  /// Eight, promisify a value if needed, meaning if it is not already a promise and set context since we need to have the executor
+  /// Eight, promisify a value if needed, meaning if it is not already a promise and set context
+  /// since we need to have the executor
   template <class ReturnType>
   auto await_transform(ReturnType x) {
-    if(icey_coro_debug_print) {
-        auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
-       std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
+    if (icey_coro_debug_print) {
+      auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
+      std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
     }
 
     if constexpr (std::is_base_of_v<StreamTag, ReturnType>) {
-      this->impl()->context = x.impl()->context; /// Get the context from the input promise 
+      this->impl()->context = x.impl()->context;  /// Get the context from the input promise
       return x;
     } else {
       Stream<ReturnType, Nothing> new_obs;
@@ -565,13 +568,12 @@ public:
   bool await_ready() { return !this->impl()->has_none(); }
   /// Spin the ROS event loop until we got a value.
   bool await_suspend(auto) {
-    if(icey_coro_debug_print)
-      std::cout << get_type_info() << " await_suspend called" << std::endl;
+    if (icey_coro_debug_print) std::cout << get_type_info() << " await_suspend called" << std::endl;
 
-    if(this->impl()->context.expired()) {
+    if (this->impl()->context.expired()) {
       std::cout << "HELP! I have no context :( Guess I'll die now" << std::endl;
       throw std::logic_error("I have no context, cannot spin the event loop");
-    } 
+    }
 
     this->spin_executor();
     return false;  /// Resume the current coroutine, see
@@ -580,8 +582,7 @@ public:
 
   /// Consume the result and return it.
   auto await_resume() {
-    if(icey_coro_debug_print)
-      std::cout << get_type_info() << " await_resume called" << std::endl;
+    if (icey_coro_debug_print) std::cout << get_type_info() << " await_resume called" << std::endl;
     /// Return the value if there can be no error
     if constexpr (std::is_same_v<ErrorValue, Nothing>) {
       auto result = this->impl()->value();
@@ -616,9 +617,9 @@ public:
 template <typename _Value>
 struct ParameterStream : public Stream<_Value> {
   ParameterStream(const std::string &parameter_name, const std::optional<_Value> &default_value,
-                      const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
-                          rcl_interfaces::msg::ParameterDescriptor(),
-                      bool ignore_override = false) {
+                  const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
+                      rcl_interfaces::msg::ParameterDescriptor(),
+                  bool ignore_override = false) {
     this->impl()->is_parameter_ = true;
     this->impl()->name = parameter_name;
     this->impl()->attach_ = [impl = this->impl(), parameter_name, default_value,
@@ -658,7 +659,7 @@ template <typename _Message>
 struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
   SubscriptionStream(const std::string &topic_name, const rclcpp::QoS &qos,
-                         const rclcpp::SubscriptionOptions &options) {
+                     const rclcpp::SubscriptionOptions &options) {
     this->impl()->name = topic_name;
     this->impl()->attach_ = [impl = this->impl(), topic_name, qos, options](NodeBookkeeping &node) {
       node.add_subscription<_Message>(
@@ -704,13 +705,11 @@ struct TransformSubscriptionStreamImpl : public NodeAttachable {
 };
 struct TransformSubscriptionStream
     : public InterpolateableStream<geometry_msgs::msg::TransformStamped,
-                                       TransformSubscriptionStreamImpl> {
+                                   TransformSubscriptionStreamImpl> {
   using Message = geometry_msgs::msg::TransformStamped;
-  using MaybeValue =
-      InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
+  using MaybeValue = InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
 
-  TransformSubscriptionStream(const std::string &target_frame,
-                                  const std::string &source_frame) {
+  TransformSubscriptionStream(const std::string &target_frame, const std::string &source_frame) {
     this->impl()->target_frame_ = target_frame;
     this->impl()->source_frame_ = source_frame;
     this->impl()->name = "source_frame: " + source_frame + ", target_frame: " + target_frame;
@@ -746,7 +745,8 @@ struct TimerImpl : public NodeAttachable {
 struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   TimerStream(const Duration &interval, bool is_one_off_timer) {
     this->impl()->name = "timer";
-    this->impl()->attach_ = [impl = this->impl(), interval, is_one_off_timer](NodeBookkeeping &node) {
+    this->impl()->attach_ = [impl = this->impl(), interval,
+                             is_one_off_timer](NodeBookkeeping &node) {
       impl->timer = node.add_timer(interval, [impl, is_one_off_timer]() {
         impl->resolve(impl->ticks_counter);
         /// Needed as separate state as it might be resetted in async/await mode
@@ -784,7 +784,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
   explicit PublisherStream(const std::string &topic_name,
-                      const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
+                           const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
     this->impl()->name = topic_name;
     this->impl()->attach_ = [impl = this->impl(), topic_name, qos](NodeBookkeeping &node) {
       impl->publisher = node.add_publisher<Message>(topic_name, qos);
@@ -794,9 +794,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
       });
     };
   }
-  void publish(const _Value &message) const {
-    this->impl()->publish(message);
-  }
+  void publish(const _Value &message) const { this->impl()->publish(message); }
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -848,9 +846,8 @@ struct SynchronizerStreamImpl {
 };
 
 template <typename... Messages>
-class SynchronizerStream
-    : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
-                        SynchronizerStreamImpl<Messages...>> {
+class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
+                                         SynchronizerStreamImpl<Messages...>> {
 public:
   using Self = SynchronizerStream<Messages...>;
   explicit SynchronizerStream(uint32_t queue_size) {
@@ -886,15 +883,14 @@ public:
 
 /// A service observable, storing it's request and response
 template <typename _ServiceT>
-struct ServiceStream
-    : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
-                                  std::shared_ptr<typename _ServiceT::Response>>> {
+struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
+                                               std::shared_ptr<typename _ServiceT::Response>>> {
   using Request = std::shared_ptr<typename _ServiceT::Request>;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
   using Value = std::pair<Request, Response>;
 
   explicit ServiceStream(const std::string &service_name,
-                    const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     this->impl()->attach_ = [impl = this->impl(), service_name, qos](NodeBookkeeping &node) {
       node.add_service<_ServiceT>(
           service_name,
@@ -917,13 +913,14 @@ struct ServiceClientImpl : public NodeAttachable {
 };
 template <typename _ServiceT>
 struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
-                                         ServiceClientImpl<_ServiceT>> {
+                                     ServiceClientImpl<_ServiceT>> {
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
 
-  ServiceClient(const std::string &service_name, const Duration &timeout, const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
+  ServiceClient(const std::string &service_name, const Duration &timeout,
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     this->impl()->name = service_name;
     this->impl()->timeout = timeout;
     this->impl()->attach_ = [impl = this->impl(), service_name, qos](NodeBookkeeping &node) {
@@ -997,7 +994,9 @@ public:
     after_parameter_initialization_cb_ = std::move(cb);
   }
 
-  void register_on_node_destruction_cb(std::function<void()> cb) { on_node_destruction_cb_ = std::move(cb); }
+  void register_on_node_destruction_cb(std::function<void()> cb) {
+    on_node_destruction_cb_ = std::move(cb);
+  }
 
   void initialize(NodeBookkeeping &node) {
     if (attachables_.empty()) {
@@ -1048,8 +1047,8 @@ public:
                          const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                              rcl_interfaces::msg::ParameterDescriptor(),
                          bool ignore_override = false) {
-    return create_observable<ParameterStream<ParameterT>>(
-        name, maybe_default_value, parameter_descriptor, ignore_override);
+    return create_observable<ParameterStream<ParameterT>>(name, maybe_default_value,
+                                                          parameter_descriptor, ignore_override);
   }
 
   template <typename MessageT>
@@ -1068,14 +1067,14 @@ public:
   template <class Message>
   auto create_publisher(const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
-    return create_observable<PublisherStream< Message >>(topic_name, qos);
+    return create_observable<PublisherStream<Message>>(topic_name, qos);
   }
-  
+
   template <class Parent>
   void create_publisher(Parent parent, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     observable_traits<Parent>{};
-    auto child = create_publisher< obs_val<Parent> >(topic_name, qos);
+    auto child = create_publisher<obs_val<Parent>>(topic_name, qos);
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
@@ -1096,18 +1095,18 @@ public:
     return create_observable<ServiceStream<ServiceT>>(service_name, qos);
   }
 
-   /// Add a service client
+  /// Add a service client
   template <typename ServiceT>
   auto create_client(const std::string &service_name, const Duration &timeout,
-                     const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
+                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_observable<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
   /// Add a service client and connect it to the parent
   template <typename ServiceT, typename Parent>
   auto create_client(Parent parent, const std::string &service_name, const Duration &timeout,
-                const rclcpp::QoS& qos = rclcpp::ServicesQoS()) {
-    observable_traits<Parent>{};  
+                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    observable_traits<Parent>{};
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_client<ServiceT>(service_name, timeout, qos);
@@ -1123,7 +1122,6 @@ public:
     return service_client;
   }
 
-  
   /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
   // interpolated
   // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic

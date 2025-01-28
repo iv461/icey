@@ -56,11 +56,10 @@ struct Validator {
   }
 
   /// Construct explicitly from a  validation predicate
-  explicit Validator(const Validate &validate) 
-    : validate(validate) {}
+  explicit Validator(const Validate &validate) : validate(validate) {}
 
   /// Allow implicit conversion from some easy sets:
-  Validator(const Interval<Value> &interval) /// NOLINT
+  Validator(const Interval<Value> &interval)  /// NOLINT
   {
     validate = [interval](const ROSValue &new_value) {
       return new_value >= interval.minimum && new_value <= interval.maximum;
@@ -68,7 +67,7 @@ struct Validator {
   }
 
   /// Implicit conversion from a Set of values
-  Validator(const Set<Value> &set) /// NOLINT
+  Validator(const Set<Value> &set)  /// NOLINT
   {
     validate = [set](const ROSValue &new_value) {
       return set.count(new_value) > 0;  /// contains is C++20 :(
@@ -85,8 +84,8 @@ template <class Value>
 struct DynParameter : public DynParameterTag {
   using type = Value;
   explicit DynParameter(const std::optional<Value> &default_value,
-               const Validator<Value> &validator = Validator<Value>(),
-               std::string description = "", bool read_only = false)
+                        const Validator<Value> &validator = Validator<Value>(),
+                        std::string description = "", bool read_only = false)
       :  // parameter_name(parameter_name),
         value(default_value),
         default_value(default_value),
@@ -97,8 +96,10 @@ struct DynParameter : public DynParameterTag {
   const Value &get_value() const { return value.value(); }
 
   /// Allow implicit conversion to the stored value type
-  operator Value() const /// NOLINT
-  { return get_value(); }
+  operator Value() const  /// NOLINT
+  {
+    return get_value();
+  }
 
   std::optional<Value> value;
   std::string parameter_name;
@@ -122,25 +123,24 @@ template <class T>
 static void declare_parameter_struct(
     Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback) {
   // auto parameters_struct_obs = ctx.create_observable<
-  field_reflection::for_each_field(
-      params, [&ctx, &params, notify_callback](std::string_view field_name, auto &field_value) {
-        using Field = std::remove_reference_t<decltype(field_value)>;
-        static_assert(std::is_base_of_v<DynParameterTag, Field>,
-                      "Every field of the parameters struct must be of type icey::DynParameter<T>");
-        using ParamValue = typename Field::type;
-        std::string field_name_r(field_name);
-        /// TODO register validator
-        rcl_interfaces::msg::ParameterDescriptor desc;
-        desc.description = field_value.description;
-        desc.read_only = field_value.read_only;
-        auto param_obs =
-            ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
-        param_obs.impl()->register_handler(
-            [&field_value, param_obs, field_name_r, notify_callback]() {
-              field_value.value = param_obs.value();
-              notify_callback(field_name_r);
-            });
-      });
+  field_reflection::for_each_field(params, [&ctx, &params, notify_callback](
+                                               std::string_view field_name, auto &field_value) {
+    using Field = std::remove_reference_t<decltype(field_value)>;
+    static_assert(std::is_base_of_v<DynParameterTag, Field>,
+                  "Every field of the parameters struct must be of type icey::DynParameter<T>");
+    using ParamValue = typename Field::type;
+    std::string field_name_r(field_name);
+    /// TODO register validator
+    rcl_interfaces::msg::ParameterDescriptor desc;
+    desc.description = field_value.description;
+    desc.read_only = field_value.read_only;
+    auto param_obs =
+        ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
+    param_obs.impl()->register_handler([&field_value, param_obs, field_name_r, notify_callback]() {
+      field_value.value = param_obs.value();
+      notify_callback(field_name_r);
+    });
+  });
 }
 
 }  // namespace icey

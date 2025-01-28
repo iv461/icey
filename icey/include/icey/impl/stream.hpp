@@ -65,17 +65,16 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
   auto observable = std::make_shared<O>(std::forward<Args>(args)...);
   return observable;
 }
-/// A stream, conceptually very similar to a promise in JavaScript but the state transitions are not final.
-/// I saw that these implementations are very close to mine:
-/// [1]
+/// A stream, conceptually very similar to a promise in JavaScript but the state transitions are not
+/// final. I saw that these implementations are very close to mine: [1]
 /// https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
 /// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Stream : private boost::noncopyable,
-                   public Derived,
-                   public std::enable_shared_from_this<Stream<_Value, _ErrorValue, Derived>> {
+               public Derived,
+               public std::enable_shared_from_this<Stream<_Value, _ErrorValue, Derived>> {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
@@ -169,7 +168,7 @@ protected:
         apply_if_tuple(f, x);
       } else if constexpr (is_result<ReturnType>) {
         /// support callbacks that at runtime may return value or error
-        output->state_ = apply_if_tuple(f, x); 
+        output->state_ = apply_if_tuple(f, x);
         output->notify();
       } else {  /// Other return types are interpreted as values that resolve the promise. Here, we
                 /// also support returning std::optional.
@@ -192,7 +191,7 @@ protected:
   /// rejects
   template <bool resolve, class Output, class F>
   Handler create_handler(Output output, F &&f, bool register_it) {
-    auto input_s = this->shared_from_this(); 
+    auto input_s = this->shared_from_this();
     typename decltype(input_s)::weak_type input_w = input_s;
     auto handler = [input_w, output,
                     call_and_resolve =
@@ -233,7 +232,7 @@ protected:
       /// In this case we want to be able to pass over the same error
       auto child =
           create_observable<Stream<typename ReturnType::Value,
-                                       typename ReturnType::ErrorValue>>();  // Must pass over error
+                                   typename ReturnType::ErrorValue>>();  // Must pass over error
       auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
       return std::make_tuple(child, handler);
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
