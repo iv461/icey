@@ -30,28 +30,28 @@ Using Streams (promises), you can build your own data-driven pipeline of computa
 icey::create_timer(1s)
     /// Build a request when the timer ticks
     .then([](size_t) {
-    auto request = std::make_shared<ExampleService::Request>();
-    request->data = true;
-    RCLCPP_INFO_STREAM(icey::node->get_logger(),
-                        "Timer ticked, sending request: " << request->data);
-    return request;
+        auto request = std::make_shared<ExampleService::Request>();
+        request->data = true;
+        RCLCPP_INFO_STREAM(icey::node->get_logger(),
+                            "Timer ticked, sending request: " << request->data);
+        return request;
     })
     /// Now call the service with the request build
     .call_service<ExampleService>("set_bool_service1", 1s)
     .then([](ExampleService::Response::SharedPtr response) {
-    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
-    auto request = std::make_shared<ExampleService::Request>();
-    request->data = false;
-    return request;
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
+        auto request = std::make_shared<ExampleService::Request>();
+        request->data = false;
+        return request;
     })
     .call_service<ExampleService>("set_bool_service2", 1s)
     .then([](ExampleService::Response::SharedPtr response) {
-    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
-    ...
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
+        ...
     })
     /// Here we catch timeout errors as well as unavailability of the service:
     .except([](const std::string& error_code) {
-    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
     });
 ```     
 This programming model is fully asynchronous and therefore there is danger of deadlocks when chaining multiple callbacks. 
@@ -82,10 +82,10 @@ struct NodeParameters {
 # Key features: 
 
 - ICEY introduces modern asynchronous programming to ROS using Streams (Promises) and coroutines (async/await)
-- ICEY removes unnecessary boilerplate code for using parameters, creating and spawning nodes and synchronization
-- Automatic synchronization, 
+- ICEY minimizes boilerplate code needed for using parameters, creating and spawning nodes and synchronization 
+- Automatic synchronization, unifying usage of TF as a form of synchronization
 - Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
-- Extensible: Example extension to support custom `image_transport`-publishers/subscribers
+- Extensible: [We demonstrate](doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
 
 - Easy asynchronous programming using promises, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html) or spawning extra threads
 

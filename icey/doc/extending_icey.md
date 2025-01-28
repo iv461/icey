@@ -12,10 +12,22 @@ With this information, we already know how to create new subscribers: When we su
 > ###  `image_transport` Subscriber
 In the following, we will extend ICEY to support the subscribers from the `ìmage_transport` package that allows subscribing to compressed camera images.
 
-We create a new `ImageTransportSubscriber`-observable by deriving from the class `Stream` and giving it as a template parameter the ROS-message type `sensor_msgs::Image::ConstSharedPtr `:
+We create a new `ImageTransportSubscriber`-stream by deriving from the class `Stream`.
+The class template `Stream<Value, Error, DerivedImpl>`
+is parametrized on the `Value` it holds, for this we use the ROS-message type `sensor_msgs::Image::ConstSharedPtr `.
+
+TODO finish:
+
+As `DerivedImpl` we pass a class that we declare to store the subscriber and everything else required. 
 
 ```cpp
-class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
+struct ImageTransportSubscriberImpl : public NodeAttachable {
+  /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
+  image_transport::Subscriber subscriber;
+};
+
+class ImageTransportSubscriber : Stream< sensor_msgs::msg::Image::ConstSharedPtr,
+                    image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
 public:
 
 ```
@@ -43,12 +55,10 @@ We implement the method attach with a lambda-function, capturing by value (copyi
 class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
 public:
     ImageTransportSubscriber(const std::string &topic_name, std::string &transport,  rclcpp::QoS qos) {  
-        this->attach_ = [this, topic_name, transport, qos](icey::NodeBookkeeping &node) {
-            subscriber_ = image_transport::create_subscriber(node, transport, qos, 
-                    subscriber_callback);
+        this->impl()->attach_ = [impl = this->impl(), topic_name, transport, qos](icey::NodeBookkeeping &node) {
+            this->impl()->subscriber = image_transport::create_subscriber(node, transport, qos, subscriber_callback);
         };
     }
-    iamge_transport::Subscriber subscriber_;
 };
 ```
 
@@ -128,5 +138,6 @@ public:
 
 ### Error handling 
 
+TODO 
 Streams also support error handling, they can hold an `ErrorValue`:
 

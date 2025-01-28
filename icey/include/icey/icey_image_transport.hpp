@@ -35,7 +35,7 @@ struct ImageTransportSubscriberImpl : public NodeAttachable {
 // An observable representing a camera image subscriber.
 struct ImageTransportSubscriber
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                        image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
+                    image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
   ImageTransportSubscriber(const std::string &base_topic_name, const std::string &transport,
                            const rclcpp::QoS qos, const rclcpp::SubscriptionOptions &options) {
     this->impl()->name = base_topic_name;
@@ -68,8 +68,7 @@ struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPt
           node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                   /// lifecycle nodes, so we can only assert this at runtime
       image_transport::Publisher publisher = image_transport::create_publisher(
-          node.node_.maybe_regular_node, base_topic_name,
-          qos.get_rmw_qos_profile());  
+          node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
       impl->register_handler([impl, publisher]() {
         const auto &image_msg = impl->value();  /// There can be no error
         publisher.publish(image_msg);
@@ -86,8 +85,8 @@ struct CameraSubscriberImpl : public NodeAttachable {
 
 struct CameraSubscriber
     : public Stream<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
-                                   sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
-                        image_transport::TransportLoadException, CameraSubscriberImpl> {
+                               sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
+                    image_transport::TransportLoadException, CameraSubscriberImpl> {
   CameraSubscriber(const std::string &base_topic_name, const std::string &transport,
                    const rclcpp::QoS qos) {
     this->impl()->name = base_topic_name;
@@ -126,7 +125,8 @@ struct CameraPublisher
       impl->register_handler([impl, publisher]() {
         const auto &new_value = impl->value();  /// There can be no error
         const auto &[image_msg, camera_info_msg] = new_value;
-        /// TODO Maybe clarify message ownership, this publish-function is inconsistent with regular publishers because it accepts share_ptr<M> 
+        /// TODO Maybe clarify message ownership, this publish-function is inconsistent with regular
+        /// publishers because it accepts share_ptr<M>
         publisher.publish(image_msg, camera_info_msg);
       });
     };
