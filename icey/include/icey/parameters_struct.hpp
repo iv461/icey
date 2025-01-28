@@ -123,7 +123,7 @@ template <class T>
 static void declare_parameter_struct(
     Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback) {
   // auto parameters_struct_obs = ctx.create_observable<
-  field_reflection::for_each_field(params, [&ctx, &params, notify_callback](
+  field_reflection::for_each_field(params, [&ctx, notify_callback](
                                                std::string_view field_name, auto &field_value) {
     using Field = std::remove_reference_t<decltype(field_value)>;
     static_assert(std::is_base_of_v<DynParameterTag, Field>,
@@ -143,4 +143,9 @@ static void declare_parameter_struct(
   });
 }
 
+template <class T>
+static void declare_parameter_struct(T &params, 
+  const std::function<void(const std::string &)> &notify_callback) {
+  declare_parameter_struct(get_global_context(), params, notify_callback);
+}
 }  // namespace icey

@@ -54,11 +54,30 @@ icey::create_timer(1s)
     RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
     });
 ```     
-
-The key in ICEY is to describe the data-flow declaratively and then 
-This not only simplifies the code, but prevents dead-lock bugs.ICEY automatically analyzes the data-flow graph and asserts no loops are present, performs topological sorting, and determines how many callback-groups are needed.
+This programming model is fully asynchronous and therefore there is danger of deadlocks when chaining multiple callbacks. 
 
 ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anything or use private implementation details.
+
+## Parameter declaration: 
+ICEY also simplifies the declaration of many parameters: (very similar to the `dynamic_reconfigure`-package from ROS 1):
+
+```cpp
+/// All parameters of the node in a struct:
+struct NodeParameters {
+  /// We set a default value, allowed interval and a description
+  icey::DynParameter<double> frequency{10., icey::Interval(0., 25.), std::string("The frequency of the sine")};
+  icey::DynParameter<double> amplitude{3};
+  icey::DynParameter<std::string> map_path{""};
+  ...
+};
+ /// The object holding all the parameters:
+ NodeParameters params;
+  /// Declare parameter struct and receive updates each time a parameter changes:
+  icey::declare_parameter_struct(params, [](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(),
+                           "Parameter " << changed_parameter << " changed");
+      });
+```
 
 # Key features: 
 

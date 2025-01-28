@@ -18,8 +18,7 @@ int main(int argc, char **argv) {
 
   NodeParameters params;
   /// Declare parameter struct and receive updates each time
-  icey::declare_parameter_struct(
-      icey::get_global_context(), params, [](const std::string &changed_parameter) {
+  icey::declare_parameter_struct(params, [](const std::string &changed_parameter) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(),
                            "Parameter " << changed_parameter << " changed, params are now:\n");
       });
