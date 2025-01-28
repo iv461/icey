@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     icey::create_timer(100ms)
       .then([&](size_t ticks) {
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
-        double y = amplitude->value() * std::sin((0.1 * ticks) / frequency->value() * 2 * M_PI);
+        double y = std::sin(0.1 * ticks * 2 * M_PI);
         return y;
     }).publish("sine_generator");
 
@@ -28,33 +28,31 @@ Using Streams (promises), you can build your own data-driven pipeline of computa
 
 ```cpp
 icey::create_timer(1s)
-          /// Build a request when the timer ticks
-          .then([](size_t) {
-            auto request = std::make_shared<ExampleService::Request>();
-            request->data = true;
-            RCLCPP_INFO_STREAM(icey::node->get_logger(),
-                               "Timer ticked, sending request: " << request->data);
-            return request;
-          })
-          /// Create a service client, the service is called every time the timer ticks. We set
-          /// additionally a timeout for waiting until the service becomes available.
-          .call_service<ExampleService>("set_bool_service1", 1s)
-          .then([](ExampleService::Response::SharedPtr response) {
-            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
-            auto request = std::make_shared<ExampleService::Request>();
-            request->data = false;
-            return request;
-          })
-
-          .call_service<ExampleService>("set_bool_service2", 1s)
-          .then([](ExampleService::Response::SharedPtr response) {
-            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
-            ...
-          })
-          /// Here we catch timeout errors as well as unavailability of the service:
-          .except([](const std::string& error_code) {
-            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
-          });
+    /// Build a request when the timer ticks
+    .then([](size_t) {
+    auto request = std::make_shared<ExampleService::Request>();
+    request->data = true;
+    RCLCPP_INFO_STREAM(icey::node->get_logger(),
+                        "Timer ticked, sending request: " << request->data);
+    return request;
+    })
+    /// Now call the service with the request build
+    .call_service<ExampleService>("set_bool_service1", 1s)
+    .then([](ExampleService::Response::SharedPtr response) {
+    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
+    auto request = std::make_shared<ExampleService::Request>();
+    request->data = false;
+    return request;
+    })
+    .call_service<ExampleService>("set_bool_service2", 1s)
+    .then([](ExampleService::Response::SharedPtr response) {
+    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
+    ...
+    })
+    /// Here we catch timeout errors as well as unavailability of the service:
+    .except([](const std::string& error_code) {
+    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
+    });
 ```     
 
 The key in ICEY is to describe the data-flow declaratively and then 
