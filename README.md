@@ -1,7 +1,7 @@
 # ICEY 
 
-A new, simple data-driven interface library for the Robot Operating System (ROS). 
-In Icey, you can rapidly prototype Nodes that make the data-flow clear, using modern asynchronous programming techniques such as promises.
+A new, simple asynchronous/data-driven library for the Robot Operating System (ROS) for fast prototyping and eliminating boilerplate code.
+ICEY enables using modern asynchronous programming techniques such as promises and C++-20's coroutines (async/await)
 
 # Features 
 
@@ -11,33 +11,51 @@ The real power in ICEY is that you can declare computations, that will  be publi
 ```cpp
 #include <icey/icey.hpp>
 int main(int argc, char **argv) {
-
-    auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
-    auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
-    auto timer_signal = icey::create_timer(100ms);
-    /// Add a callback for the timer:
-    auto rectangle_sig = timer_signal.then([](size_t ticks) { 
-        std::optional<float> result; 
-        //  1/10 Frequency divider
-        if(ticks % 10 == 0) {
-            result = (ticks % 20 == 0) ? 1.f : 0.f;
-        } // Otherwise publish nothing
-        return result;
-    }).publish("rectangle_signal"); // And publish the result
-
-    /// Add another callback for the timer
-    auto sine_signal = timer_signal.then([&](size_t ticks) {
+    
+    icey::create_timer(100ms)
+      .then([&](size_t ticks) {
         /// We can access parameters in callbacks using .value() because parameters are always initialized first.
         double y = amplitude->value() * std::sin((0.1 * ticks) / frequency->value() * 2 * M_PI);
         return y;
     }).publish("sine_generator");
 
+    /// Create and spin the node:
     icey::spawn(argc, argv, "signal_generator_example"); 
 }
 ```
 
-You can build your own data-driven pipeline of computations:
+Using Streams (promises), you can build your own data-driven pipeline of computations, for example sequencing service calls: 
 
+```cpp
+icey::create_timer(1s)
+          /// Build a request when the timer ticks
+          .then([](size_t) {
+            auto request = std::make_shared<ExampleService::Request>();
+            request->data = true;
+            RCLCPP_INFO_STREAM(icey::node->get_logger(),
+                               "Timer ticked, sending request: " << request->data);
+            return request;
+          })
+          /// Create a service client, the service is called every time the timer ticks. We set
+          /// additionally a timeout for waiting until the service becomes available.
+          .call_service<ExampleService>("set_bool_service1", 1s)
+          .then([](ExampleService::Response::SharedPtr response) {
+            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
+            auto request = std::make_shared<ExampleService::Request>();
+            request->data = false;
+            return request;
+          })
+
+          .call_service<ExampleService>("set_bool_service2", 1s)
+          .then([](ExampleService::Response::SharedPtr response) {
+            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
+            ...
+          })
+          /// Here we catch timeout errors as well as unavailability of the service:
+          .except([](const std::string& error_code) {
+            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
+          });
+```     
 
 The key in ICEY is to describe the data-flow declaratively and then 
 This not only simplifies the code, but prevents dead-lock bugs.ICEY automatically analyzes the data-flow graph and asserts no loops are present, performs topological sorting, and determines how many callback-groups are needed.
