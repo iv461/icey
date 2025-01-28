@@ -10,9 +10,9 @@ int main(int argc, char **argv) {
     icey::icey_debug_print = true;
     auto timer_signal = icey::create_timer(1s);
 
-    auto timed_request = timer_signal.then([](size_t ticks) {
+    auto timed_request = timer_signal.then([](size_t  /*ticks*/) {
         auto request = std::make_shared<ExampleService::Request>();
-        request->data = 1;
+        request->data = true;
         RCLCPP_INFO_STREAM(icey::node("service_client_node")->get_logger(), "Timer ticked, sending request: " <<
                 request->data);
         return request;
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
         });
 
     /// Here we catch timeout errors as well as unavailability of the service
-    service_response.except([](std::string error_code) {
+    service_response.except([](const std::string& error_code) {
         /// Possible values for error_code are "SERVICE_UNAVAILABLE", "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
         std::cout << "Service got error: " << error_code << std::endl;
     });
@@ -37,8 +37,8 @@ int main(int argc, char **argv) {
     /// Now create the service node
     auto service = icey::create_service<ExampleService>("set_bool_service");
 
-    service.then([](std::shared_ptr<ExampleService::Request> request,
-            std::shared_ptr<ExampleService::Response> response) {
+    service.then([](const std::shared_ptr<ExampleService::Request>& request,
+            const std::shared_ptr<ExampleService::Response>& response) {
             response->success = !request->data;
             RCLCPP_INFO_STREAM(icey::node("service_server_node")->get_logger(), 
                 "Got request: " << request->data 

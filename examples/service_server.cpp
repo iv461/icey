@@ -6,8 +6,8 @@ using namespace std::chrono_literals;
 
 using ExampleService = std_srvs::srv::SetBool;
 
-void set_bool_service(std::shared_ptr<ExampleService::Request> request,
-                      std::shared_ptr<ExampleService::Response> response) {
+void set_bool_service(const std::shared_ptr<ExampleService::Request>& request,
+                      const std::shared_ptr<ExampleService::Response>& response) {
   response->success = !request->data;
   RCLCPP_INFO_STREAM(
       icey::node->get_logger(),

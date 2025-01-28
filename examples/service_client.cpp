@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
           /// Build a request when the timer ticks
           .then([](size_t) {
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 1;
+            request->data = true;
             RCLCPP_INFO_STREAM(icey::node->get_logger(),
                                "Timer ticked, sending request: " << request->data);
             return request;
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
           .then([](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 0;
+            request->data = false;
             return request;
           })
 
@@ -30,18 +30,18 @@ int main(int argc, char **argv) {
           .then([](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 1;
+            request->data = true;
             return request;
           })
           .call_service<ExampleService>("set_bool_service3", 1s)
           .then([](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response3: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 0;
+            request->data = false;
             return request;
           })
           /// Here we catch timeout errors as well as unavailability of the service:
-          .except([](std::string error_code) {
+          .except([](const std::string& error_code) {
             /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
             /// we got interrupted while waiting for the service to become available) or
             /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"

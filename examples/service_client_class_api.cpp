@@ -11,13 +11,13 @@ using ExampleService = std_srvs::srv::SetBool;
 class MyNode : public icey::Node {
 public:
     using Base =  icey::Node;
-    MyNode(std::string name) : Base(name) {
+    explicit MyNode(const std::string& name) : Base(name) {
         
       icey().create_timer(1s)
           /// Build a request when the timer ticks
           .then([this](size_t) {
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 1;
+            request->data = true;
             RCLCPP_INFO_STREAM(this->get_logger(),
                                "Timer ticked, sending request: " << request->data);
             return request;
@@ -28,7 +28,7 @@ public:
           .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response1: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 0;
+            request->data = false;
             return request;
           })
           
@@ -36,18 +36,18 @@ public:
           .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response2: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 1;
+            request->data = true;
             return request;
           })
           .call_service<ExampleService>("set_bool_service3", 1s)
           .then([this](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(this->get_logger(), "Got response3: " << response->success);
             auto request = std::make_shared<ExampleService::Request>();
-            request->data = 0;
+            request->data = false;
             return request;
           })
           /// Here we catch timeout errors as well as unavailability of the service:
-          .except([this](std::string error_code) {
+          .except([this](const std::string& error_code) {
             /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
             /// we got interrupted while waiting for the service to become available) or
             /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"

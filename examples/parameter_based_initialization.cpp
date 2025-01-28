@@ -5,7 +5,7 @@
 #include "std_msgs/msg/float32.hpp"
 
 /// Here, you could load your neural network model from file, from ONNX, TFLite etc.
-void load_neural_network_model(std::string filename) { 
+void load_neural_network_model(const std::string& filename) { 
   (void)filename; 
   std::cout << "Loeaded NN." << std::endl; 
 }

@@ -56,7 +56,7 @@ struct Validator {
   }
 
   /// Construct explicitly from a  validation predicate
-  Validator(const Validate &validate) 
+  explicit Validator(const Validate &validate) 
     : validate(validate) {}
 
   /// Allow implicit conversion from some easy sets:
