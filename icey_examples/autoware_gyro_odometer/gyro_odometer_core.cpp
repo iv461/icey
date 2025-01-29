@@ -60,7 +60,8 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
   auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu");
     /// Now synchronize: Previously, this was doen manually with imu_arrived_ and twist_arrived_flags and two callbacks. 
     /// All of this becomes unnecessary with ICEY.
-  auto [twist_raw, twist] = icey::synchronize(twist_with_cov_sub, imu_sub, 100)
+    /// TODO pass queue_size
+  auto [twist_raw, twist] = icey::synchronize(twist_with_cov_sub, imu_sub)
     .then([](const auto &twist_msg, const auto &imu_msg) {
 
     })
