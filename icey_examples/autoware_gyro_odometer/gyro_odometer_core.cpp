@@ -50,7 +50,7 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
 : Node("gyro_odometer", node_options),
 
 {   
-    auto message_timeout_sec = icey().declare_parameter<double>("message_timeout_sec");
+auto message_timeout_sec = icey().declare_parameter<double>("message_timeout_sec");
     output_frame_ = icey().declare_parameter<std::string>("output_frame"); 
 
     /// We do not need QoS(100), i.e. keeping up to 100 messages in the RMW since we will use the synchronizer's queue
@@ -92,49 +92,16 @@ void GyroOdometerNode::concat_gyro_and_odometer()
   //diagnostics_->add_key_value("is_arrived_first_vehicle_twist", vehicle_twist_arrived_);
   //diagnostics_->add_key_value("is_arrived_first_imu", imu_arrived_);
  
-  // check timeout
-  const double vehicle_twist_dt =
-    std::abs((this->now() - latest_vehicle_twist_ros_time_).seconds());
-  const double imu_dt = std::abs((this->now() - latest_imu_ros_time_).seconds());
-  //diagnostics_->add_key_value("vehicle_twist_time_stamp_dt", vehicle_twist_dt);
-  //diagnostics_->add_key_value("imu_time_stamp_dt", imu_dt);
-  if (vehicle_twist_dt > message_timeout_sec_) {
-    const std::string message = fmt::format(
-      "Vehicle twist msg is timeout. vehicle_twist_dt: {}[sec], tolerance {}[sec]",
-      vehicle_twist_dt, message_timeout_sec_);
-    RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, message);
-    //diagnostics_->update_level_and_message(diagnostic_msgs::msg::DiagnosticStatus::ERROR, message);
-
-    vehicle_twist_queue_.clear();
-    gyro_queue_.clear();
-    return;
-  }
-  if (imu_dt > message_timeout_sec_) {
-    const std::string message = fmt::format(
-      "Imu msg is timeout. imu_dt: {}[sec], tolerance {}[sec]", imu_dt, message_timeout_sec_);
-    RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, message);
-    //diagnostics_->update_level_and_message(diagnostic_msgs::msg::DiagnosticStatus::ERROR, message);
-
-    vehicle_twist_queue_.clear();
-    gyro_queue_.clear();
-    return;
-  }
-
+  
   // check queue size
   //diagnostics_->add_key_value("vehicle_twist_queue_size", vehicle_twist_queue_.size());
   //diagnostics_->add_key_value("imu_queue_size", gyro_queue_.size());
-  if (vehicle_twist_queue_.empty()) {
-    // not output error and clear queue
-    return;
-  }
-  if (gyro_queue_.empty()) {
-    // not output error and clear queue
-    return;
-  }
 
   // get transformation
   geometry_msgs::msg::TransformStamped::ConstSharedPtr tf_imu2base_ptr =
-    transform_listener_->getLatestTransform(gyro_queue_.front().header.frame_id, output_frame_);
+    transform_listener_->getLatestTransform(    
+            gyro_queue_.front().header.frame_id, 
+            output_frame_);
 
   const bool is_succeed_transform_imu = (tf_imu2base_ptr != nullptr);
   //diagnostics_->add_key_value("is_succeed_transform_imu", is_succeed_transform_imu);
