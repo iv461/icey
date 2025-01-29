@@ -384,6 +384,10 @@ constexpr void assert_all_observable_values_are_same() {
 template <class Derived>
 struct DerivedWithDefaults : public Derived, public NodeAttachable {};
 
+/// TODO
+template<class Value>
+class TimeoutFilter;
+
 /// An observable. Similar to a promise in JavaScript.
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = NodeAttachable>
 class Stream : public StreamTag {
@@ -447,6 +451,17 @@ public:
     /// We create this through the context to register it for attachment to the ROS node
     auto child = this->impl()->context.lock()->template create_observable<T>(args...);
     this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+  }
+
+  /// TODO document
+  auto timeout(rclcpp::Duration max_age, bool create_extra_timer=false) {
+    assert_we_have_context();
+    /// We create this through the context to register it for attachment to the ROS node
+    auto timeout_filter = this->impl()->context.lock()->template 
+      create_observable< TimeoutFilter<_Value> >
+      (max_age, create_extra_timer);
+    this->impl()->then([timeout_filter](const auto &x) { timeout_filter.impl()->resolve(x); });
+    return timeout_filter;
   }
 
   /// Create a ROS normal publisher.
@@ -795,6 +810,35 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
     };
   }
   void publish(const _Value &message) const { this->impl()->publish(message); }
+};
+
+/// A filter that detects timeouts on different topics.
+/// It needs to be attached to the node because it needs the current time.
+/// TODO assert message has a header stamp.
+/// TODO document extra-timer feature and explain how this works.
+template <typename _Value>
+struct TimeoutFilter : public Stream<_Value, 
+  std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration> > {
+  /// TODO allow parameters as max_age
+  explicit TimeoutFilter(const rclcpp::Duration &max_age,
+                          bool create_extra_timer=false) {
+    this->impl()->name = "timeout_filter1";
+    this->impl()->attach_ = [impl = this->impl(), max_age](NodeBookkeeping &node) {
+      auto node_clock = node.node_.get_node_clock_interface();
+      impl->register_handler([impl, node_clock, max_age]() {
+        /// TODO err passing
+        const auto &message = impl->value();
+        rclcpp::Time time_now = node_clock->get_clock()->now();
+        rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
+        
+        if((time_now - time_message) <= max_age) {
+          impl->resolve(message);
+        } else {
+            impl->reject(std::make_tuple(time_now, time_message, max_age));
+        }
+      });
+    };
+  }  
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the

@@ -50,7 +50,7 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
 : Node("gyro_odometer", node_options),
 
 {   
-    message_timeout_sec_ = icey().declare_parameter<double>("message_timeout_sec");
+    auto message_timeout_sec = icey().declare_parameter<double>("message_timeout_sec");
     output_frame_ = icey().declare_parameter<std::string>("output_frame"); 
 
     /// We do not need QoS(100), i.e. keeping up to 100 messages in the RMW since we will use the synchronizer's queue

@@ -7,8 +7,6 @@ Sorted by decreasing priority.
 - [ ] Buffer: Basis for `delay`-filter
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
-- [ ] `timeout` filter
-- [ ] Rename Stream to Stream
 
 - [ ] We still got a crash in service_client_async_await_example
 
@@ -203,7 +201,8 @@ Sorted by decreasing priority.
 - [X] Look at https://github.com/xhawk18/promise-cpp
 
 - [X] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
-
+- [X] `timeout` filter
+- [X] Rename Stream to Stream
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository

@@ -12,6 +12,8 @@
 #include <icey/icey_image_transport.hpp>  /// Include the message_transport header after (!) the ICEY header
 // clang-format on
 
+using namespace std::chrono_literals;
+
 int main(int argc, char **argv) {
   /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
@@ -22,6 +24,7 @@ int main(int argc, char **argv) {
       icey::create_camera_subscription("camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
+      //.timeout(rclcpp::Duration(100ms))
       .then([](sensor_msgs::msg::Image::ConstSharedPtr  /*image*/,
                 sensor_msgs::msg::CameraInfo::ConstSharedPtr  /*camera_info*/) {
         RCLCPP_INFO_STREAM(icey::node->get_logger(), "Received image and info: ");
