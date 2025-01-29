@@ -92,10 +92,8 @@ public:
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
   /// TODO disable_if these hold Nothing
-  void set_none() {
-    state_.set_none();
-    ;
-  }
+  void set_none() { state_.set_none(); }
+  
   void set_value(const MaybeValue &x) {
     if (x)
       state_.set_ok(*x);

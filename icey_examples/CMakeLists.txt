@@ -41,6 +41,19 @@ ament_auto_add_executable(service_client_async_await_example src/async_await/ser
 ament_auto_add_executable(using_image_transport_example src/using_image_transport.cpp)
 ament_auto_add_executable(automatic_synchronization_example src/automatic_synchronization.cpp)
 
+#ament_auto_add_executable(icey_autoware_gyro_odometer autoware_gyro_odometer/gyro_odometer_core.cpp)
+
+ament_auto_add_library(icey_autoware_gyro_odometer SHARED
+autoware_gyro_odometer/gyro_odometer_core.cpp
+)
+rclcpp_components_register_node(icey_autoware_gyro_odometer
+  PLUGIN "autoware::gyro_odometer::GyroOdometerNode"
+  EXECUTABLE icey_autoware_gyro_odometer_node
+  EXECUTOR SingleThreadedExecutor
+)
+
+
+
 ament_auto_package(
   INSTALL_TO_SHARE
 )
