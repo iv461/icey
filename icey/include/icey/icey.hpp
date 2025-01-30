@@ -242,7 +242,7 @@ public:
   /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
   /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
   /// regular nodes without templates.
-  static inline std::string extend_name_with_sub_namespace(const std::string &name,
+  static std::string extend_name_with_sub_namespace(const std::string &name,
                                                            const std::string &sub_namespace) {
     std::string name_with_sub_namespace(name);
     if (!sub_namespace.empty() && name.front() != '/' && name.front() != '~') {
@@ -897,7 +897,7 @@ public:
   explicit SynchronizerStream(uint32_t queue_size) {
     this->create_mfl_synchronizer(queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
-    /// because we only access impl in on_messages
+    /// because we only access impl in on_messages. Therefore, the referenced impl is always the same and (since it is ref-counted) always valid.
     this->impl()->synchronizer_->registerCallback(&Self::on_messages, this);
   }
 

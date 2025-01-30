@@ -94,12 +94,12 @@ In case it is too old, it is not passed through but an error message is printed.
 auto message_timeout_sec_param = icey().declare_parameter<double>("message_timeout_sec");
 
 auto imu_sub_with_timeout = imu_sub
-    .timeout(message_timeout_sec_param) 
+    .timeout(message_timeout_sec_param)
     .then([](const auto &msg) {
         /// Consume the message in case it is not too old
     });
 
-aut imu_sub_with_timeout.except([](auto message_timestamp, auto current_time, auto max_age) {
+auto imu_sub_with_timeout.except([](auto message_timestamp, auto current_time, auto max_age) {
     auto vehicle_twist_dt = (current_time - message_timestamp).seconds();
         RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(),        *this->get_clock(), 1000, fmt::format(
             "Vehicle twist msg is timeout. vehicle_twist_dt: {}[sec], tolerance {}[sec]",
@@ -108,3 +108,6 @@ aut imu_sub_with_timeout.except([](auto message_timestamp, auto current_time, au
 ```
 
 TODO for the transforming we have the frame_id based on data pattern, for this we need to support the `tf2_ros::MessageFilter<M>`
+
+
+After some refactoring, for example creating a new function `transform_imu_msg` that applies a rigid 3D-transformation to a `sensor_msgs::Imu`-message, we obtain the following:

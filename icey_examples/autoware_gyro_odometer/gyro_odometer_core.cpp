@@ -29,6 +29,42 @@
 #include <sstream>
 #include <string>
 
+namespace {
+  sensor_msgs::msg::Imu transform_imu_msg(const sensor_msgs::msg::Imu &imu_msg, const eometry_msgs::msg::TransformStamped &transform) {
+    auto gyro = imu_msg;
+    geometry_msgs::msg::Vector3Stamped angular_velocity;
+    angular_velocity.header = gyro.header;
+    angular_velocity.vector = gyro.angular_velocity;
+
+    geometry_msgs::msg::Vector3Stamped transformed_angular_velocity;
+    transformed_angular_velocity.header = transform.header;
+    tf2::doTransform(angular_velocity, transformed_angular_velocity, transform);
+
+    gyro.header.frame_id = output_frame_;
+    gyro.angular_velocity = transformed_angular_velocity.vector;
+    gyro.angular_velocity_covariance = transform_covariance(gyro.angular_velocity_covariance);
+    return gyro;
+  }
+
+  geometry_msgs::msg::TwistStamped surpress_imu_bias(geometry_msgs::msg::TwistStamped twist_msg) {
+     if (std::fabs(twist_msg.twist.angular.z) < 0.01 &&
+        std::fabs(twist_msg.twist.linear.x) < 0.01) {
+        twist_msg.twist.angular.x = 0.0;
+        twist_msg.twist.angular.y = 0.0;
+        twist_msg.twist.angular.z = 0.0;
+    }
+    return twist_msg;
+  }
+
+  geometry_msgs::msg::TwistStamped to_twist_wo_covariance
+    (const geometry_msgs::msg::TwistWithCovarianceStamped &twist_with_cov) {
+      geometry_msgs::msg::TwistStamped twist_msg;
+      twist_msg.header = twist_with_cov.header;
+      twist_msg.twist = twist_with_cov.twist.twist;
+      return twist_msg;
+  }
+}
+
 namespace autoware::gyro_odometer
 {
 
@@ -50,20 +86,40 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
 : Node("gyro_odometer", node_options),
 
 {   
-auto message_timeout_sec = icey().declare_parameter<double>("message_timeout_sec");
-    output_frame_ = icey().declare_parameter<std::string>("output_frame"); 
+auto message_timeout_sec_param = icey().declare_parameter<double>("message_timeout_sec");
+auto output_frame_param = icey().declare_parameter<std::string>("output_frame"); 
 
     /// We do not need QoS(100), i.e. keeping up to 100 messages in the RMW since we will use the synchronizer's queue
+  /// Make subscribers, add timeout:
   auto twist_with_cov_sub = icey().create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
-    "vehicle/twist_with_covariance");
+    "vehicle/twist_with_covariance").timeout(message_timeout_sec_param);
+  auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu").timeout(message_timeout_sec_param);
 
-  auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu");
+  /// Handle timeout:
+  twist_with_cov_sub.except([](auto current_time, const msg_time, auto max_age) { });
+  imu_sub.except([]());
+
+  // Now for each IMU message, wait on the transform to become available (uses the tf2_ros::MessageFilter internally)
+  auto gyro_with_imu_to_base_tf = icey::synchronize_with_transform(imu_sub, output_frame_param);
+  
+  gyro_with_imu_to_base_tf.except([](const auto &tf_ex) {
+    //diagnostics_->add_key_value("is_succeed_transform_imu", is_succeed_transform_imu);
+    std::stringstream message;
+      message << "Please publish TF " << output_frame_ << " to "
+              << gyro_queue_.front().header.frame_id;
+      RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, message.str());
+      diagnostics_->update_level_and_message(
+        diagnostic_msgs::msg::DiagnosticStatus::ERROR, message.str());
+
+  });
+
     /// Now synchronize: Previously, this was doen manually with imu_arrived_ and twist_arrived_flags and two callbacks. 
     /// All of this becomes unnecessary with ICEY.
     /// TODO pass queue_size
-  auto [twist_raw, twist] = icey::synchronize(twist_with_cov_sub, imu_sub)
-    .then([](const auto &twist_msg, const auto &imu_msg) {
-
+  auto [twist_raw, twist] = icey::synchronize(twist_with_cov_sub, gyro_with_imu_to_base_tf)
+    .then([](const auto &twist_msg, const auto &gyro_with_tf) {
+        const auto [imu_msg, imu2base_tf] = gyro_with_tf;
+        auto transformed = transform_imu_msg(imu_msg, imu2base_tf);
     })
     .unpack()
     .except([]() {
@@ -97,41 +153,8 @@ void GyroOdometerNode::concat_gyro_and_odometer()
   //diagnostics_->add_key_value("vehicle_twist_queue_size", vehicle_twist_queue_.size());
   //diagnostics_->add_key_value("imu_queue_size", gyro_queue_.size());
 
-  // get transformation
-  geometry_msgs::msg::TransformStamped::ConstSharedPtr tf_imu2base_ptr =
-    transform_listener_->getLatestTransform(    
-            gyro_queue_.front().header.frame_id, 
-            output_frame_);
 
-  const bool is_succeed_transform_imu = (tf_imu2base_ptr != nullptr);
-  //diagnostics_->add_key_value("is_succeed_transform_imu", is_succeed_transform_imu);
-  if (!is_succeed_transform_imu) {
-    std::stringstream message;
-    message << "Please publish TF " << output_frame_ << " to "
-            << gyro_queue_.front().header.frame_id;
-    RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, message.str());
-    //diagnostics_->update_level_and_message(
-      diagnostic_msgs::msg::DiagnosticStatus::ERROR, message.str());
-
-    vehicle_twist_queue_.clear();
-    gyro_queue_.clear();
-    return;
-  }
-
-  // transform gyro frame
-  for (auto & gyro : gyro_queue_) {
-    geometry_msgs::msg::Vector3Stamped angular_velocity;
-    angular_velocity.header = gyro.header;
-    angular_velocity.vector = gyro.angular_velocity;
-
-    geometry_msgs::msg::Vector3Stamped transformed_angular_velocity;
-    transformed_angular_velocity.header = tf_imu2base_ptr->header;
-    tf2::doTransform(angular_velocity, transformed_angular_velocity, *tf_imu2base_ptr);
-
-    gyro.header.frame_id = output_frame_;
-    gyro.angular_velocity = transformed_angular_velocity.vector;
-    gyro.angular_velocity_covariance = transform_covariance(gyro.angular_velocity_covariance);
-  }
+ 
 
   using COV_IDX_XYZ = autoware::universe_utils::xyz_covariance_index::XYZ_COV_IDX;
   using COV_IDX_XYZRPY = autoware::universe_utils::xyzrpy_covariance_index::XYZRPY_COV_IDX;
@@ -195,34 +218,6 @@ void GyroOdometerNode::concat_gyro_and_odometer()
   gyro_queue_.clear();
 }
 
-void GyroOdometerNode::publish_data(
-  const geometry_msgs::msg::TwistWithCovarianceStamped & twist_with_cov_raw)
-{
-  geometry_msgs::msg::TwistStamped twist_raw;
-  twist_raw.header = twist_with_cov_raw.header;
-  twist_raw.twist = twist_with_cov_raw.twist.twist;
-
-  twist_raw_pub_->publish(twist_raw);
-  twist_with_covariance_raw_pub_->publish(twist_with_cov_raw);
-
-  geometry_msgs::msg::TwistWithCovarianceStamped twist_with_covariance = twist_with_cov_raw;
-  geometry_msgs::msg::TwistStamped twist = twist_raw;
-
-  // clear imu yaw bias if vehicle is stopped
-  if (
-    std::fabs(twist_with_cov_raw.twist.twist.angular.z) < 0.01 &&
-    std::fabs(twist_with_cov_raw.twist.twist.linear.x) < 0.01) {
-    twist.twist.angular.x = 0.0;
-    twist.twist.angular.y = 0.0;
-    twist.twist.angular.z = 0.0;
-    twist_with_covariance.twist.twist.angular.x = 0.0;
-    twist_with_covariance.twist.twist.angular.y = 0.0;
-    twist_with_covariance.twist.twist.angular.z = 0.0;
-  }
-
-  twist_pub_->publish(twist);
-  twist_with_covariance_pub_->publish(twist_with_covariance);
-}
 
 }  // namespace autoware::gyro_odometer
 
