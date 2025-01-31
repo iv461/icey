@@ -15,12 +15,9 @@
 #ifndef GYRO_ODOMETER_CORE_HPP_
 #define GYRO_ODOMETER_CORE_HPP_
 
-/*
 #include "autoware/universe_utils/ros/diagnostics_interface.hpp"
-#include "autoware/universe_utils/ros/logger_level_configure.hpp"
 #include "autoware/universe_utils/ros/msg_covariance.hpp"
-#include "autoware/universe_utils/ros/transform_listener.hpp"
-*/
+
 #include <rclcpp/rclcpp.hpp>
 
 #include <geometry_msgs/msg/twist_stamped.hpp>
@@ -46,7 +43,7 @@ namespace autoware::gyro_odometer
 class GyroOdometerNode : public rclcpp::Node
 {
 private:
-  //using COV_IDX = autoware::universe_utils::xyz_covariance_index::XYZ_COV_IDX;
+  using COV_IDX = autoware::universe_utils::xyz_covariance_index::XYZ_COV_IDX;
 
 public:
   explicit GyroOdometerNode(const rclcpp::NodeOptions & node_options);
