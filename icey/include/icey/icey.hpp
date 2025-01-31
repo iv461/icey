@@ -331,12 +331,16 @@ public:
     return book_.tf_broadcaster_;
   }
 
-private:
   void add_tf_listener_if_needed() {
     if (book_.tf2_listener_)  /// We need only one subscription on /tf, but can have multiple
                               /// transforms on which we listen
       return;
     book_.tf2_listener_ = std::make_shared<TFListener>(node_);
+  }
+
+  auto get_tf_buffer() {
+    add_tf_listener_if_needed();
+    return book_.tf2_listener_->buffer_;
   }
 };
 
@@ -928,33 +932,36 @@ public:
 
 
 template<class Message>
-struct TF2MessageFilterImpl {
+struct TF2MessageFilterImpl: public NodeAttachable {
   using MFLFilter = tf2_ros::MessageFilter< Message >;
   SimpleFilterAdapter<Message> input_adapter_;
   MFLFilter filter_;
 };
 
 /// Wrapper for the tf2_ros::MessageFilter. 
-template<class _Value>
-struct TF2MessageFilter : public Stream<_Value, std::string,
-  TF2MessageFilterImpl<_Value> > {
+template<class _Message>
+struct TF2MessageFilter : public Stream<typename _Value::SharedPtr,
+     std::string,
+  TF2MessageFilterImpl<_Message> > {
   using Self = TF2MessageFilter<_Value>;
-  using Message = _Value;
-  using MFLFilter = typename TF2MessageFilterImpl<_Value>::MFLFilter;
+  using Message = _Message;
+  using MFLFilter = typename TF2MessageFilterImpl<_Message>::MFLFilter;
   
+  // TODO consider buffer timeout
   TF2MessageFilter(std::string target_frame, 
     rclcpp::Duration buffer_timeout) {
       this->impl()->name = "tf_filter";
       this->impl()->attach_ = [this, impl = this->impl(), target_frame, buffer_timeout]
         (NodeBookkeeping &node) {
           impl->filter_ = 
-            std::make_shared<>(impl->input_adapter_, 
+            std::make_shared<MFLFilter>(
+              impl->input_adapter_, 
+              *node.get_tf_buffer(),
               target_frame, 
                 10, 
                 node.node_.get_node_logging_interface(),
-                node.node_.get_node_clock_interface(),
-                buffer_timeout);
-          impl->filter->registerCallback(&Self::on_message, this);
+                node.node_.get_node_clock_interface());
+          impl->filter_->registerCallback(&Self::on_message, this);
       };
   }
 
@@ -1253,8 +1260,8 @@ public:
   template<class Parent>
   auto synchronize_with_transform(Parent parent, 
       std::string target_frame, rclcpp::Duration buffer_timeout) {
-    auto child = create_observable< TF2MessageFilter< obs_val<Parent> > >(target_frame, buffer_timeout);
-    parent.then([child](const auto &x) { child->impl()->resolve(x); });
+    auto child = create_observable< TF2MessageFilter< obs_msg<Parent> > >(target_frame, buffer_timeout);
+    parent.then([child](const auto &x) { child.impl()->resolve(x); });
     return child;
   }
   
