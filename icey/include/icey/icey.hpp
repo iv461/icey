@@ -940,10 +940,10 @@ struct TF2MessageFilterImpl: public NodeAttachable {
 
 /// Wrapper for the tf2_ros::MessageFilter. 
 template<class _Message>
-struct TF2MessageFilter : public Stream<typename _Value::SharedPtr,
+struct TF2MessageFilter : public Stream<typename _Message::SharedPtr,
      std::string,
   TF2MessageFilterImpl<_Message> > {
-  using Self = TF2MessageFilter<_Value>;
+  using Self = TF2MessageFilter<_Message>;
   using Message = _Message;
   using MFLFilter = typename TF2MessageFilterImpl<_Message>::MFLFilter;
   
@@ -964,10 +964,9 @@ struct TF2MessageFilter : public Stream<typename _Value::SharedPtr,
           impl->filter_->registerCallback(&Self::on_message, this);
       };
   }
-
-  void on_message(const typename _Value::SharedPtr &msg) {
+  void on_message(const typename _Message::SharedPtr &msg) {
     this->impl()->resolve(msg);
-  } 
+  }
 };
 
 /// A service observable, storing it's request and response
