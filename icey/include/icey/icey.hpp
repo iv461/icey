@@ -900,7 +900,7 @@ class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr
 public:
   using Self = SynchronizerStream<Messages...>;
   explicit SynchronizerStream(uint32_t queue_size) {
-    this->create_mfl_synchronizer(queue_size);
+    this->impl()->create_mfl_synchronizer(queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
     /// because we only access impl in on_messages. Therefore, the referenced impl is always the same and (since it is ref-counted) always valid.
     this->impl()->synchronizer_->registerCallback(&Self::on_messages, this);
@@ -935,7 +935,7 @@ template<class Message>
 struct TF2MessageFilterImpl: public NodeAttachable {
   using MFLFilter = tf2_ros::MessageFilter< Message >;
   SimpleFilterAdapter<Message> input_adapter_;
-  MFLFilter filter_;
+  std::shared_ptr<MFLFilter> filter_;
 };
 
 /// Wrapper for the tf2_ros::MessageFilter. 
@@ -1245,8 +1245,9 @@ public:
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
-    auto synchronizer = create_observable<SynchronizerStream<obs_msg<Parents>...>>(queue_size);
-    auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer->inputs());
+    /// TODO synchronizer does not need attaching
+    auto synchronizer = SynchronizerStream< obs_msg<Parents>...> (queue_size);
+    auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer.impl()->inputs());
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &parent = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];

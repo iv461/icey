@@ -105,25 +105,31 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
   /// TODO after param init
   auto gyro_with_imu_to_base_tf = icey().synchronize_with_transform(imu_sub, output_frame_param.value(), rclcpp::Duration(5s));
   
-  gyro_with_imu_to_base_tf.except([](const auto &tf_ex) {
+  gyro_with_imu_to_base_tf.except([output_frame_param](const auto &tf_ex) {
     //diagnostics_->add_key_value("is_succeed_transform_imu", is_succeed_transform_imu);
     std::stringstream message;
-      message << "Please publish TF " << output_frame_ << " to "
+    /*
+      message << "Please publish TF " << output_frame_param.value() << " to "
               << gyro_queue_.front().header.frame_id;
       RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, message.str());
       diagnostics_->update_level_and_message(
         diagnostic_msgs::msg::DiagnosticStatus::ERROR, message.str());
+    */
 
   });
 
     /// Now synchronize: Previously, this was doen manually with imu_arrived_ and twist_arrived_flags and two callbacks. 
     /// All of this becomes unnecessary with ICEY.
     /// TODO pass queue_size
-  auto [twist_raw, twist] = icey::synchronize(twist_with_cov_sub, gyro_with_imu_to_base_tf)
-    .then([output_frame_param](const auto &twist_msg, const auto &gyro_with_tf) {
-        const auto [imu_msg, imu2base_tf] = gyro_with_tf;
-        auto transformed = transform_imu_msg(imu_msg, imu2base_tf, output_frame_param.value());
-    })
+  //auto [twist_raw, twist] =
+   icey::synchronize(twist_with_cov_sub, gyro_with_imu_to_base_tf)
+    .then([output_frame_param](const auto &twist_msg, const auto &imu_msg) {
+        //const auto [imu_msg, imu2base_tf] = gyro_with_tf;
+        ///TODO get the tf and trnasform
+        geometry_msgs::msg::TransformStamped imu2base_tf;
+        auto transformed = transform_imu_msg(*imu_msg, imu2base_tf, output_frame_param.value());
+    });
+    /*
     .unpack()
     .except([]() {
         /// TODO publish over diagnostics debug info about the synchronizer: What has arrived, 
@@ -136,6 +142,8 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
   
   .publish<geometry_msgs::msg::TwistStamped>("twist", rclcpp::QoS{10});
   .publish<geometry_msgs::msg::TwistWithCovarianceStamped>("twist_with_covariance", rclcpp::QoS{10});
+    */
+
     /*
   //diagnostics_ =
     std::make_unique<autoware::universe_utils::DiagnosticsInterface>(this, "gyro_odometer_status");
