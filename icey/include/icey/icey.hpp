@@ -927,17 +927,11 @@ public:
 };
 
 
-template<class _Value>
+template<class Message>
 struct TF2MessageFilterImpl {
   using MFLFilter = tf2_ros::MessageFilter< Message >;
-
-  explicit TF2MessageFilterImpl(std::string target_frame) {
-    
-  }
-
-  SimpleFilterAdapter input_adapter_;
+  SimpleFilterAdapter<Message> input_adapter_;
   MFLFilter filter_;
-
 };
 
 /// Wrapper for the tf2_ros::MessageFilter. 
@@ -948,10 +942,10 @@ struct TF2MessageFilter : public Stream<_Value, std::string,
   using Message = _Value;
   using MFLFilter = typename TF2MessageFilterImpl<_Value>::MFLFilter;
   
-  explicit TF2MessageFilter(std::string target_frame, 
-    const Duration &buffer_timeout) {
+  TF2MessageFilter(std::string target_frame, 
+    Duration buffer_timeout) {
       this->impl()->name = "tf_filter";
-      this->impl()->attach_ = [impl = this->impl(), target_frame]
+      this->impl()->attach_ = [this, impl = this->impl(), target_frame, buffer_timeout]
         (NodeBookkeeping &node) {
           impl->filter_ = 
             std::make_shared<>(impl->input_adapter_, 
@@ -959,7 +953,7 @@ struct TF2MessageFilter : public Stream<_Value, std::string,
                 10, 
                 node.node_.get_node_logging_interface(),
                 node.node_.get_node_clock_interface(),
-                buffer_timeout),;
+                buffer_timeout);
           impl->filter->registerCallback(&Self::on_message, this);
       };
   }
@@ -1258,8 +1252,8 @@ public:
 
   template<class Parent>
   auto synchronize_with_transform(Parent parent, 
-      const std::string &target_frame, const Duration &buffer_timeout) {
-    auto child = create_observable < TF2MessageFilter >(target_frame, buffer_timeout);
+      std::string target_frame, Duration buffer_timeout) {
+    auto child = create_observable< TF2MessageFilter< obs_val<Parent> > >(target_frame, buffer_timeout);
     parent.then([child](const auto &x) { child->impl()->resolve(x); });
     return child;
   }

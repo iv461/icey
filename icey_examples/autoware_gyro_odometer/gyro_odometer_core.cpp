@@ -101,8 +101,9 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
   twist_with_cov_sub.except([](auto current_time, auto msg_time, auto max_age){});
   imu_sub.except([](auto current_time, auto msg_time, auto max_age){});
 
-  // Now for each IMU message, wait on the transform to become available (uses the tf2_ros::MessageFilter internally)
-  auto gyro_with_imu_to_base_tf = icey().synchronize_with_transform(imu_sub, output_frame_param);
+  // Now for each IMU message, wait on the transform to become available (uses the tf2_ros::MessageFilter internally), with 5s tf timeout
+  /// TODO after param init
+  auto gyro_with_imu_to_base_tf = icey().synchronize_with_transform(imu_sub, output_frame_param.value(), rclcpp::Duration(5s));
   
   gyro_with_imu_to_base_tf.except([](const auto &tf_ex) {
     //diagnostics_->add_key_value("is_succeed_transform_imu", is_succeed_transform_imu);
