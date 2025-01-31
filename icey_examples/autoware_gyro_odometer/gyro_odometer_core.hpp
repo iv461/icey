@@ -40,9 +40,9 @@
 #include <icey/icey.hpp>
 
 namespace autoware::gyro_odometer
-{
+{//
 
-class GyroOdometerNode : public rclcpp::Node
+class GyroOdometerNode : public icey::Node
 {
 private:
   using COV_IDX = autoware::universe_utils::xyz_covariance_index::XYZ_COV_IDX;
@@ -53,10 +53,6 @@ public:
 private:
   void concat_gyro_and_odometer();
   void publish_data(const geometry_msgs::msg::TwistWithCovarianceStamped & twist_with_cov_raw);
-
-  icey::Parameter<std::string> output_frame_;
-  icey::Parameter<double> message_timeout_sec_;
-
 
   std::deque<geometry_msgs::msg::TwistWithCovarianceStamped> vehicle_twist_queue_;
   std::deque<sensor_msgs::msg::Imu> gyro_queue_;

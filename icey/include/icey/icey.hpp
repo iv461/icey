@@ -21,6 +21,7 @@
 #include "tf2_ros/message_filter.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
+#include "tf2_ros/message_filter.h"
 
 // Message filters library: (.h so that this works with humble as well)
 #include <message_filters/subscriber.h>
@@ -925,6 +926,49 @@ public:
   }
 };
 
+
+template<class _Value>
+struct TF2MessageFilterImpl {
+  using MFLFilter = tf2_ros::MessageFilter< Message >;
+
+  explicit TF2MessageFilterImpl(std::string target_frame) {
+    
+  }
+
+  SimpleFilterAdapter input_adapter_;
+  MFLFilter filter_;
+
+};
+
+/// Wrapper for the tf2_ros::MessageFilter. 
+template<class _Value>
+struct TF2MessageFilter : public Stream<_Value, std::string,
+  TF2MessageFilterImpl<_Value> > {
+  using Self = TF2MessageFilter<_Value>;
+  using Message = _Value;
+  using MFLFilter = typename TF2MessageFilterImpl<_Value>::MFLFilter;
+  
+  explicit TF2MessageFilter(std::string target_frame, 
+    const Duration &buffer_timeout) {
+      this->impl()->name = "tf_filter";
+      this->impl()->attach_ = [impl = this->impl(), target_frame]
+        (NodeBookkeeping &node) {
+          impl->filter_ = 
+            std::make_shared<>(impl->input_adapter_, 
+              target_frame, 
+                10, 
+                node.node_.get_node_logging_interface(),
+                node.node_.get_node_clock_interface(),
+                buffer_timeout),;
+          impl->filter->registerCallback(&Self::on_message, this);
+      };
+  }
+
+  void on_message(const typename _Value::SharedPtr &msg) {
+    this->impl()->resolve(msg);
+  } 
+};
+
 /// A service observable, storing it's request and response
 template <typename _ServiceT>
 struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
@@ -1210,6 +1254,16 @@ public:
     });
     return synchronizer;
   }
+
+
+  template<class Parent>
+  auto synchronize_with_transform(Parent parent, 
+      const std::string &target_frame, const Duration &buffer_timeout) {
+    auto child = create_observable < TF2MessageFilter >(target_frame, buffer_timeout);
+    parent.then([child](const auto &x) { child->impl()->resolve(x); });
+    return child;
+  }
+  
 
   /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given

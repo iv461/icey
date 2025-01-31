@@ -29,41 +29,6 @@
 #include <sstream>
 #include <string>
 
-namespace {
-  sensor_msgs::msg::Imu transform_imu_msg(const sensor_msgs::msg::Imu &imu_msg, const eometry_msgs::msg::TransformStamped &transform) {
-    auto gyro = imu_msg;
-    geometry_msgs::msg::Vector3Stamped angular_velocity;
-    angular_velocity.header = gyro.header;
-    angular_velocity.vector = gyro.angular_velocity;
-
-    geometry_msgs::msg::Vector3Stamped transformed_angular_velocity;
-    transformed_angular_velocity.header = transform.header;
-    tf2::doTransform(angular_velocity, transformed_angular_velocity, transform);
-
-    gyro.header.frame_id = output_frame_;
-    gyro.angular_velocity = transformed_angular_velocity.vector;
-    gyro.angular_velocity_covariance = transform_covariance(gyro.angular_velocity_covariance);
-    return gyro;
-  }
-
-  geometry_msgs::msg::TwistStamped surpress_imu_bias(geometry_msgs::msg::TwistStamped twist_msg) {
-     if (std::fabs(twist_msg.twist.angular.z) < 0.01 &&
-        std::fabs(twist_msg.twist.linear.x) < 0.01) {
-        twist_msg.twist.angular.x = 0.0;
-        twist_msg.twist.angular.y = 0.0;
-        twist_msg.twist.angular.z = 0.0;
-    }
-    return twist_msg;
-  }
-
-  geometry_msgs::msg::TwistStamped to_twist_wo_covariance
-    (const geometry_msgs::msg::TwistWithCovarianceStamped &twist_with_cov) {
-      geometry_msgs::msg::TwistStamped twist_msg;
-      twist_msg.header = twist_with_cov.header;
-      twist_msg.twist = twist_with_cov.twist.twist;
-      return twist_msg;
-  }
-}
 
 namespace autoware::gyro_odometer
 {
@@ -82,25 +47,62 @@ std::array<double, 9> transform_covariance(const std::array<double, 9> & cov)
   return cov_transformed;
 }
 
-GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
-: Node("gyro_odometer", node_options),
+sensor_msgs::msg::Imu transform_imu_msg(const sensor_msgs::msg::Imu &imu_msg, 
+    const geometry_msgs::msg::TransformStamped &transform,
+    const std::string &output_frame) {
 
-{   
-auto message_timeout_sec_param = icey().declare_parameter<double>("message_timeout_sec");
-auto output_frame_param = icey().declare_parameter<std::string>("output_frame"); 
+    auto gyro = imu_msg;
+    geometry_msgs::msg::Vector3Stamped angular_velocity;
+    angular_velocity.header = gyro.header;
+    angular_velocity.vector = gyro.angular_velocity;
+
+    geometry_msgs::msg::Vector3Stamped transformed_angular_velocity;
+    transformed_angular_velocity.header = transform.header;
+    tf2::doTransform(angular_velocity, transformed_angular_velocity, transform);
+
+    gyro.header.frame_id = output_frame;
+    gyro.angular_velocity = transformed_angular_velocity.vector;
+    gyro.angular_velocity_covariance = transform_covariance(gyro.angular_velocity_covariance);
+    return gyro;
+  }
+
+geometry_msgs::msg::TwistStamped surpress_imu_bias(geometry_msgs::msg::TwistStamped twist_msg) {
+     if (std::fabs(twist_msg.twist.angular.z) < 0.01 &&
+        std::fabs(twist_msg.twist.linear.x) < 0.01) {
+        twist_msg.twist.angular.x = 0.0;
+        twist_msg.twist.angular.y = 0.0;
+        twist_msg.twist.angular.z = 0.0;
+    }
+    return twist_msg;
+}
+
+geometry_msgs::msg::TwistStamped to_twist_wo_covariance(const geometry_msgs::msg::TwistWithCovarianceStamped &twist_with_cov) {
+      geometry_msgs::msg::TwistStamped twist_msg;
+      twist_msg.header = twist_with_cov.header;
+      twist_msg.twist = twist_with_cov.twist.twist;
+      return twist_msg;
+}
+
+using namespace std::chrono_literals;
+
+GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
+: icey::Node("gyro_odometer", node_options) {   
+
+    auto message_timeout_sec_param = icey().declare_parameter<double>("message_timeout_sec");
+    auto output_frame_param = icey().declare_parameter<std::string>("output_frame"); 
 
     /// We do not need QoS(100), i.e. keeping up to 100 messages in the RMW since we will use the synchronizer's queue
   /// Make subscribers, add timeout:
   auto twist_with_cov_sub = icey().create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
-    "vehicle/twist_with_covariance").timeout(message_timeout_sec_param);
-  auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu").timeout(message_timeout_sec_param);
+    "vehicle/twist_with_covariance").timeout(rclcpp::Duration(1s)); // TODO use message_timeout_sec_param
+  auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu").timeout(rclcpp::Duration(1s)); // TODO use message_timeout_sec_param
 
   /// Handle timeout:
-  twist_with_cov_sub.except([](auto current_time, const msg_time, auto max_age) { });
-  imu_sub.except([]());
+  twist_with_cov_sub.except([](auto current_time, auto msg_time, auto max_age){});
+  imu_sub.except([](auto current_time, auto msg_time, auto max_age){});
 
   // Now for each IMU message, wait on the transform to become available (uses the tf2_ros::MessageFilter internally)
-  auto gyro_with_imu_to_base_tf = icey::synchronize_with_transform(imu_sub, output_frame_param);
+  auto gyro_with_imu_to_base_tf = icey().synchronize_with_transform(imu_sub, output_frame_param);
   
   gyro_with_imu_to_base_tf.except([](const auto &tf_ex) {
     //diagnostics_->add_key_value("is_succeed_transform_imu", is_succeed_transform_imu);
@@ -117,9 +119,9 @@ auto output_frame_param = icey().declare_parameter<std::string>("output_frame");
     /// All of this becomes unnecessary with ICEY.
     /// TODO pass queue_size
   auto [twist_raw, twist] = icey::synchronize(twist_with_cov_sub, gyro_with_imu_to_base_tf)
-    .then([](const auto &twist_msg, const auto &gyro_with_tf) {
+    .then([output_frame_param](const auto &twist_msg, const auto &gyro_with_tf) {
         const auto [imu_msg, imu2base_tf] = gyro_with_tf;
-        auto transformed = transform_imu_msg(imu_msg, imu2base_tf);
+        auto transformed = transform_imu_msg(imu_msg, imu2base_tf, output_frame_param.value());
     })
     .unpack()
     .except([]() {

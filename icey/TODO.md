@@ -10,6 +10,8 @@ Sorted by decreasing priority.
 
 - [ ] We still got a crash in service_client_async_await_example
 
+- [ ] Decide on whether streams should be default-constructable to be able to store them as members
+
 - [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
