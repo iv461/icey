@@ -21,7 +21,6 @@
 #include "tf2_ros/message_filter.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
-#include "tf2_ros/message_filter.h"
 
 // Message filters library: (.h so that this works with humble as well)
 #include <message_filters/subscriber.h>
@@ -244,7 +243,7 @@ public:
   /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
   /// regular nodes without templates.
   static std::string extend_name_with_sub_namespace(const std::string &name,
-                                                           const std::string &sub_namespace) {
+                                                    const std::string &sub_namespace) {
     std::string name_with_sub_namespace(name);
     if (!sub_namespace.empty() && name.front() != '/' && name.front() != '~') {
       name_with_sub_namespace = sub_namespace + "/" + name;
@@ -390,7 +389,7 @@ template <class Derived>
 struct DerivedWithDefaults : public Derived, public NodeAttachable {};
 
 /// TODO
-template<class Value>
+template <class Value>
 class TimeoutFilter;
 
 /// An observable. Similar to a promise in JavaScript.
@@ -459,12 +458,12 @@ public:
   }
 
   /// TODO document
-  auto timeout(rclcpp::Duration max_age, bool create_extra_timer=false) {
+  auto timeout(rclcpp::Duration max_age, bool create_extra_timer = false) {
     assert_we_have_context();
     /// We create this through the context to register it for attachment to the ROS node
-    auto timeout_filter = this->impl()->context.lock()->template 
-      create_observable< TimeoutFilter<_Value> >
-      (max_age, create_extra_timer);
+    auto timeout_filter =
+        this->impl()->context.lock()->template create_observable<TimeoutFilter<_Value>>(
+            max_age, create_extra_timer);
     this->impl()->then([timeout_filter](const auto &x) { timeout_filter.impl()->resolve(x); });
     return timeout_filter;
   }
@@ -822,11 +821,10 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 /// TODO assert message has a header stamp.
 /// TODO document extra-timer feature and explain how this works.
 template <typename _Value>
-struct TimeoutFilter : public Stream<_Value, 
-  std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration> > {
+struct TimeoutFilter
+    : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
   /// TODO allow parameters as max_age
-  explicit TimeoutFilter(const rclcpp::Duration &max_age,
-                          bool create_extra_timer=false) {
+  explicit TimeoutFilter(const rclcpp::Duration &max_age, bool create_extra_timer = false) {
     this->impl()->name = "timeout_filter1";
     this->impl()->attach_ = [impl = this->impl(), max_age](NodeBookkeeping &node) {
       auto node_clock = node.node_.get_node_clock_interface();
@@ -835,15 +833,15 @@ struct TimeoutFilter : public Stream<_Value,
         const auto &message = impl->value();
         rclcpp::Time time_now = node_clock->get_clock()->now();
         rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
-        
-        if((time_now - time_message) <= max_age) {
+
+        if ((time_now - time_message) <= max_age) {
           impl->resolve(message);
         } else {
-            impl->reject(std::make_tuple(time_now, time_message, max_age));
+          impl->reject(std::make_tuple(time_now, time_message, max_age));
         }
       });
     };
-  }  
+  }
 };
 
 /// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
@@ -902,7 +900,8 @@ public:
   explicit SynchronizerStream(uint32_t queue_size) {
     this->impl()->create_mfl_synchronizer(queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
-    /// because we only access impl in on_messages. Therefore, the referenced impl is always the same and (since it is ref-counted) always valid.
+    /// because we only access impl in on_messages. Therefore, the referenced impl is always the
+    /// same and (since it is ref-counted) always valid.
     this->impl()->synchronizer_->registerCallback(&Self::on_messages, this);
   }
 
@@ -930,43 +929,33 @@ public:
   }
 };
 
-
-template<class Message>
-struct TF2MessageFilterImpl: public NodeAttachable {
-  using MFLFilter = tf2_ros::MessageFilter< Message >;
+template <class Message>
+struct TF2MessageFilterImpl : public NodeAttachable {
+  using MFLFilter = tf2_ros::MessageFilter<Message>;
   SimpleFilterAdapter<Message> input_adapter_;
   std::shared_ptr<MFLFilter> filter_;
 };
 
-/// Wrapper for the tf2_ros::MessageFilter. 
-template<class _Message>
-struct TF2MessageFilter : public Stream<typename _Message::SharedPtr,
-     std::string,
-  TF2MessageFilterImpl<_Message> > {
+/// Wrapper for the tf2_ros::MessageFilter.
+template <class _Message>
+struct TF2MessageFilter
+    : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
   using Self = TF2MessageFilter<_Message>;
   using Message = _Message;
   using MFLFilter = typename TF2MessageFilterImpl<_Message>::MFLFilter;
-  
+
   // TODO consider buffer timeout
-  TF2MessageFilter(std::string target_frame, 
-    rclcpp::Duration buffer_timeout) {
-      this->impl()->name = "tf_filter";
-      this->impl()->attach_ = [this, impl = this->impl(), target_frame, buffer_timeout]
-        (NodeBookkeeping &node) {
-          impl->filter_ = 
-            std::make_shared<MFLFilter>(
-              impl->input_adapter_, 
-              *node.get_tf_buffer(),
-              target_frame, 
-                10, 
-                node.node_.get_node_logging_interface(),
-                node.node_.get_node_clock_interface());
-          impl->filter_->registerCallback(&Self::on_message, this);
-      };
+  TF2MessageFilter(std::string target_frame, rclcpp::Duration buffer_timeout) {
+    this->impl()->name = "tf_filter";
+    this->impl()->attach_ = [this, impl = this->impl(), target_frame,
+                             buffer_timeout](NodeBookkeeping &node) {
+      impl->filter_ = std::make_shared<MFLFilter>(
+          impl->input_adapter_, *node.get_tf_buffer(), target_frame, 10,
+          node.node_.get_node_logging_interface(), node.node_.get_node_clock_interface());
+      impl->filter_->registerCallback(&Self::on_message, this);
+    };
   }
-  void on_message(const typename _Message::SharedPtr &msg) {
-    this->impl()->resolve(msg);
-  }
+  void on_message(const typename _Message::SharedPtr &msg) { this->impl()->resolve(msg); }
 };
 
 /// A service observable, storing it's request and response
@@ -1246,7 +1235,7 @@ public:
     using namespace hana::literals;
     uint32_t queue_size = 10;
     /// TODO synchronizer does not need attaching
-    auto synchronizer = SynchronizerStream< obs_msg<Parents>...> (queue_size);
+    auto synchronizer = SynchronizerStream<obs_msg<Parents>...>(queue_size);
     auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer.impl()->inputs());
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &parent = input_output_tuple[0_c];
@@ -1256,15 +1245,13 @@ public:
     return synchronizer;
   }
 
-
-  template<class Parent>
-  auto synchronize_with_transform(Parent parent, 
-      std::string target_frame, rclcpp::Duration buffer_timeout) {
-    auto child = create_observable< TF2MessageFilter< obs_msg<Parent> > >(target_frame, buffer_timeout);
+  template <class Parent>
+  auto synchronize_with_transform(Parent parent, std::string target_frame,
+                                  rclcpp::Duration buffer_timeout) {
+    auto child = create_observable<TF2MessageFilter<obs_msg<Parent>>>(target_frame, buffer_timeout);
     parent.then([child](const auto &x) { child.impl()->resolve(x); });
     return child;
   }
-  
 
   /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
