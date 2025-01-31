@@ -943,7 +943,7 @@ struct TF2MessageFilter : public Stream<_Value, std::string,
   using MFLFilter = typename TF2MessageFilterImpl<_Value>::MFLFilter;
   
   TF2MessageFilter(std::string target_frame, 
-    Duration buffer_timeout) {
+    rclcpp::Duration buffer_timeout) {
       this->impl()->name = "tf_filter";
       this->impl()->attach_ = [this, impl = this->impl(), target_frame, buffer_timeout]
         (NodeBookkeeping &node) {
@@ -1252,7 +1252,7 @@ public:
 
   template<class Parent>
   auto synchronize_with_transform(Parent parent, 
-      std::string target_frame, Duration buffer_timeout) {
+      std::string target_frame, rclcpp::Duration buffer_timeout) {
     auto child = create_observable< TF2MessageFilter< obs_val<Parent> > >(target_frame, buffer_timeout);
     parent.then([child](const auto &x) { child->impl()->resolve(x); });
     return child;
