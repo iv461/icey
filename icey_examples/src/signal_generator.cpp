@@ -15,7 +15,6 @@ struct NodeParameters {
   struct OtherParams {
     double max_amp = 6.;
     std::vector<double> cov;
-
   } others;
 };
 

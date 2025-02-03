@@ -646,18 +646,19 @@ struct ParameterStream : public Stream<_Value> {
       node.add_parameter<_Value>(
           parameter_name, default_value,
           [impl](const rclcpp::Parameter &new_param) {
-            /// TODO Refactor to validator and converters. Convert to std::array but retrieve as std::vector. T
-            if constexpr(is_std_array<_Value>) {
-                using Scalar = typename  _Value::value_type;
-              auto new_value = new_param.get_value< std::vector < Scalar> >();
-              if( std::declval<_Value>().max_size() != new_value.size() ) {
+            /// TODO Refactor to validator and converters. Convert to std::array but retrieve as
+            /// std::vector. T
+            if constexpr (is_std_array<_Value>) {
+              using Scalar = typename _Value::value_type;
+              auto new_value = new_param.get_value<std::vector<Scalar>>();
+              if (std::declval<_Value>().max_size() != new_value.size()) {
                 throw std::invalid_argument("Wrong size of array parameter");
               }
               _Value new_val_arr{};
               std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
               impl->resolve(new_val_arr);
             } else {
-              _Value new_value = new_param.get_value< _Value >();
+              _Value new_value = new_param.get_value<_Value>();
               impl->resolve(new_value);
             }
           },

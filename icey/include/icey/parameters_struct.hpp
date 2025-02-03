@@ -52,7 +52,7 @@ struct to_ros_param_type< std::array<T, N> > { using type = std::vector<T>; };
 
 template <class T>
 decltype(auto) to_ros_param_type(T &x) {
-  if constexpr(is_std_array<T>) {
+  if constexpr (is_std_array<T>) {
     return std::vector<typename T::value_type>(x.begin(), x.end());
   } else {
     return x;
@@ -170,13 +170,10 @@ static void declare_parameter_struct(
   // auto parameters_struct_obs = ctx.create_observable<
   field_reflection::for_each_field(params, [&ctx, notify_callback, name_prefix](
                                                std::string_view field_name, auto &field_value) {
-    
     using Field = std::remove_reference_t<decltype(field_value)>;
     std::string field_name_r(field_name);
     field_name_r = name_prefix + field_name_r;
     if constexpr (std::is_base_of_v<DynParameterTag, Field>) {
-      std::cout << "In DynParameterTag, registering param " << field_name_r << std::endl;
-
       using ParamValue = typename Field::type;
       /// TODO register validator
       rcl_interfaces::msg::ParameterDescriptor desc;
@@ -190,12 +187,10 @@ static void declare_parameter_struct(
             notify_callback(field_name_r);
           });
     } else if constexpr (is_valid_ros_param_type<Field>::value) {
-      std::cout << "In is_valid_ros_param_type, registering param " << field_name_r << std::endl;
-
       /// TODO to convert std::vector to std::array, do better
       auto field_value_init = to_ros_param_type(field_value);
       using ParamValue = std::remove_reference_t<decltype(field_value_init)>;
-      
+
       auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value_init);
       param_obs.impl()->register_handler(
           [&field_value, param_obs, field_name_r, notify_callback]() {
@@ -203,7 +198,6 @@ static void declare_parameter_struct(
             notify_callback(field_name_r);
           });
     } else if constexpr (std::is_aggregate_v<Field>) {
-      std::cout << "In is_aggregate_v, registering param " << field_name_r << std::endl;
       /// Else recurse for supporting grouped params
       declare_parameter_struct(ctx, field_value, notify_callback, field_name_r + ".");
     } else {
