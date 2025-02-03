@@ -32,7 +32,8 @@ Sorted by decreasing priority.
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
 - [ ] Parameters struct: Return Stream to be able to .then on it
-- [ ] Parameters struct: Groups, support nested structs like for AW's NDT hyper-params
+
+- [ ] Parameter-struct refactoring: Use icey::Parameter for constrained types
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
@@ -204,6 +205,9 @@ Sorted by decreasing priority.
 
 - [X] Scout ROS 2 demos for missing features: https://github.com/ros2/demos
 - [X] Scout https://github.com/orgs/ros-perception/
+
+- [X] Parameters struct: Groups, support nested structs like for AW's NDT hyper-params
+- [X] Parameter struct: Allow plain (unwrapped) types, i.e. string, double etc.
 
 # Run clang-tidy: 
 
