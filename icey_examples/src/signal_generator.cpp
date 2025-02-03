@@ -11,10 +11,10 @@ struct NodeParameters {
   icey::DynParameter<double> frequency{10., icey::Interval(0., 25.),
                                        std::string("The frequency of the sine")};
   double amplitude{3};
-
+  /// Note that unnamed structs, i.e. struct {...} others; does not work, it will silently be ignored.
   struct OtherParams {
     double max_amp = 6.;
-    std::array<double, 36> cov;
+    std::vector<double> cov;
   }; 
   OtherParams others;
 
