@@ -12,6 +12,8 @@ Sorted by decreasing priority.
 
 - [ ] We still got a crash in service_client_async_await_example
 
+- [ ] Consider removing the filters, parameters etc out of the Context and moving them to separate files. Then, create a class_based_api that simply defines the Node and wraps the free-functions synchronize and passed them the this->context instead of the global context. 
+
 - [ ] Decide on whether streams should be default-constructable to be able to store them as members
 
 - [ ] Up-to-date docs 
