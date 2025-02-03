@@ -10,7 +10,14 @@ struct NodeParameters {
   /// We set a default value, allowed interval and a description
   icey::DynParameter<double> frequency{10., icey::Interval(0., 25.),
                                        std::string("The frequency of the sine")};
-  icey::DynParameter<double> amplitude{3};
+  double amplitude{3};
+
+  struct OtherParams {
+    double max_amp = 6.;
+    std::array<double, 36> cov;
+  }; 
+  OtherParams others;
+
 };
 
 int main(int argc, char **argv) {

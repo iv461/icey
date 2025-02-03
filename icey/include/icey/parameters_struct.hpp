@@ -17,6 +17,30 @@
 #include <utility>
 
 namespace icey {
+
+// Traits to recognize valid types for ROS parameters (Reference: https://docs.ros.org/en/jazzy/p/rcl_interfaces/interfaces/msg/ParameterValue.html)
+template<class T>
+struct is_valid_ros_param_type : std::false_type{};
+template<>
+struct is_valid_ros_param_type<bool> : std::true_type{};
+template<>
+struct is_valid_ros_param_type<int64_t> : std::true_type{};
+template<>
+struct is_valid_ros_param_type<double> : std::true_type{};
+template<>
+struct is_valid_ros_param_type<std::string> : std::true_type{};
+/// Array type
+template<class T>
+struct is_valid_ros_param_type< std::vector<T> > : is_valid_ros_param_type<T>{};
+template<class T, int N>
+struct is_valid_ros_param_type< std::array<T, N> > : is_valid_ros_param_type<T>{};
+/// Byte array 
+template<>
+struct is_valid_ros_param_type< std::vector<std::byte> > : std::true_type{};
+template<int N>
+struct is_valid_ros_param_type< std::array<std::byte, N> > : std::true_type{};
+
+
 /// FOr API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
 
 /// First, some constraints we can impose on parameters:
@@ -83,6 +107,7 @@ class DynParameterTag {};
 template <class Value>
 struct DynParameter : public DynParameterTag {
   using type = Value;
+  static_assert(is_valid_ros_param_type<Value>::value, "Type is not an allowed ROS parameter type");
   explicit DynParameter(const std::optional<Value> &default_value,
                         const Validator<Value> &validator = Validator<Value>(),
                         std::string description = "", bool read_only = false)
@@ -121,25 +146,39 @@ struct ParametersStruct : public Derived {
 
 template <class T>
 static void declare_parameter_struct(
-    Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback) {
+    Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback, std::string name_prefix="") {
   // auto parameters_struct_obs = ctx.create_observable<
-  field_reflection::for_each_field(params, [&ctx, notify_callback](
+  field_reflection::for_each_field(params, [&ctx, notify_callback, name_prefix](
                                                std::string_view field_name, auto &field_value) {
     using Field = std::remove_reference_t<decltype(field_value)>;
-    static_assert(std::is_base_of_v<DynParameterTag, Field>,
-                  "Every field of the parameters struct must be of type icey::DynParameter<T>");
-    using ParamValue = typename Field::type;
     std::string field_name_r(field_name);
-    /// TODO register validator
-    rcl_interfaces::msg::ParameterDescriptor desc;
-    desc.description = field_value.description;
-    desc.read_only = field_value.read_only;
-    auto param_obs =
-        ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
-    param_obs.impl()->register_handler([&field_value, param_obs, field_name_r, notify_callback]() {
-      field_value.value = param_obs.value();
-      notify_callback(field_name_r);
-    });
+    field_name_r = name_prefix  + field_name_r;
+    if constexpr(std::is_base_of_v<DynParameterTag, Field>) {
+      using ParamValue = typename Field::type;
+      /// TODO register validator
+      rcl_interfaces::msg::ParameterDescriptor desc;
+      desc.description = field_value.description;
+      desc.read_only = field_value.read_only;
+      auto param_obs =
+          ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
+      param_obs.impl()->register_handler([&field_value, param_obs, field_name_r, notify_callback]() {
+        field_value.value = param_obs.value();
+        notify_callback(field_name_r);
+      });
+    } else if constexpr(is_valid_ros_param_type<Field>::value) {
+      auto param_obs =
+          ctx.declare_parameter<Field>(field_name_r, field_value);
+        param_obs.impl()->register_handler([&field_value, param_obs, field_name_r, notify_callback]() {
+        field_value = param_obs.value();
+        notify_callback(field_name_r);
+      });
+    } else if constexpr (std::is_aggregate_v<Field>) {
+      /// Else recurse for supporting grouped params
+      declare_parameter_struct(ctx, field_value, notify_callback, field_name_r + ".");
+    } else {
+      /// static_assert(false) would always trigger, that is why we use this lambda-workaround, see https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
+      static_assert([](){return false;}, "Every field of the parameters struct must be of type T or icey::DynParameter<T> or a struct of such, where T is a valid ROS param type (see rcl_interfaces/ParameterType)");
+    }
   });
 }
 

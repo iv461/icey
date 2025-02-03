@@ -1,4 +1,4 @@
-/// This test tests whether the Promises behave like promises in JavaScript, especially
+/// This test tests whether the Streams behave like promises in JavaScript, especially
 /// regarding catch-handlers executed correctly (fall-through behavior).
 /// Note that for our use-case, we need only resolving with values, not with other promises
 #include <gtest/gtest.h>
