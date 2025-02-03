@@ -29,11 +29,10 @@ Sorted by decreasing priority.
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 - [ ] Result-type for error handling example
 
-- [ ] Add static asserts everywhere in the public API, detect if it is Obs and detect callback signature, compiler messages are hard to understand otherwise
+- [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
 - [ ] Parameters struct: Return Stream to be able to .then on it
-- [ ] Parameters struct: Groups, support nested structs 
-
+- [ ] Parameters struct: Groups, support nested structs like for AW's NDT hyper-params
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
@@ -46,17 +45,12 @@ Sorted by decreasing priority.
 ## Examples 
 
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
-- [ ] Examples in separate package `icey_examples` -> TEST WHETHER WE CAN DEPEND ON THE ROS Package
-- [ ] https://github.com/ros-perception/imu_pipeline
-- [ ] PCL isn't ported yet: https://github.com/ros-perception/perception_pcl/issues/225
 
 ## Other nice-to-have features, not for 0.1
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
 - [ ] Maybe support cascading the synchronizers -> not for 0.1
 
-- [ ] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish();
-- [ ] Code: The ROS-Streams only need to write to the contained StreamImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal StreamImpl won't be copied.
 - [ ] Auto-pipelining ...
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
@@ -77,18 +71,11 @@ Sorted by decreasing priority.
 - SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
 - [ ] Search for code that fixes the most common issues like setting int to an double param should be allowed
 
-## Documentation 
-
-- [ ] Visualize DFG, maybe create a sequence diagram with websequencediagrams.com
-
 ## Examples
 
 - [ ] Kalman filter: Multiple inputs, interpolate 
 - [ ] SLAM: Front-end and backend, running asynchronously
 - [ ] Controller like PPC, gets position and velocity, etc. 
-
-- [ ] Scout ROS 2 demos for missing features: https://github.com/ros2/demos
-- [ ] Scout https://github.com/orgs/ros-perception/
 
 ## Bugs/Leaks
 
@@ -207,6 +194,17 @@ Sorted by decreasing priority.
 - [X] Fix all warnings, some reorderings are left, and also the incomplete type of Context 
 - [X] `timeout` filter
 - [X] Rename Stream to Stream
+
+- [X] Examples in separate package `icey_examples` -> TEST WHETHER WE CAN DEPEND ON THE ROS Package
+- [X] https://github.com/ros-perception/imu_pipeline
+
+- [X] PCL isn't ported yet: https://github.com/ros-perception/perception_pcl/issues/225 -> so won't fix
+- [X] Maybe publish named-tuple, could be beneficial for many debug-publishers, i.e. return icey::named_tuple({"debug/cb", tic_time}, ...) -> publish(); 
+- [X] Code: The ROS-Streams only need to write to the contained StreamImpl. For this, they should never capture this ! This way, we can pass them always by value since the internal StreamImpl won't be copied.
+
+- [X] Scout ROS 2 demos for missing features: https://github.com/ros2/demos
+- [X] Scout https://github.com/orgs/ros-perception/
+
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository
