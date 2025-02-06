@@ -4,22 +4,20 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Buffer: Basis for `delay`-filter
-- [ ] `delay` with 
-- [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 
-- [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
+- [ ] Up-to-date docs 
 
-
-- [ ] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
+- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
+- [ ] Parameter-struct refactoring: Use icey::Parameter for constrained types
 
 - [ ] We still got a crash in service_client_async_await_example
+
+- [ ] Unit-test the synchronizers, is the lookupTransform correct ?
 
 - [ ] Consider removing the filters, parameters etc out of the Context and moving them to separate files. Then, create a class_based_api that simply defines the Node and wraps the free-functions synchronize and passed them the this->context instead of the global context. 
 
 - [ ] Decide on whether streams should be default-constructable to be able to store them as members
 
-- [ ] Up-to-date docs 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
 - [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
@@ -27,18 +25,17 @@ Sorted by decreasing priority.
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
 
 - [ ] Unit-test that no dead-locks occur, use example from the official docu where a timer drives the service client
-- [ ] Unit-test the synchronizers, is the lookupTransform correct ?
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
-- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 - [ ] Result-type for error handling example
 
+- [ ] Buffer: Basis for `delay`-filter
+- [ ] `delay` with 
+- [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
-- [ ] Parameters struct: Return Stream to be able to .then on it
-
-- [ ] Parameter-struct refactoring: Use icey::Parameter for constrained types
+- [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
@@ -53,6 +50,11 @@ Sorted by decreasing priority.
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
 
 ## Other nice-to-have features, not for 0.1
+
+- [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
+
+
+- [ ] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
 - [ ] Maybe support cascading the synchronizers -> not for 0.1

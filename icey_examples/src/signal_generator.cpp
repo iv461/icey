@@ -21,10 +21,13 @@ struct NodeParameters {
 int main(int argc, char **argv) {
   auto period_time = 100ms;
 
+  auto node = icey::create_node<icey::Node>(argc, argv, "signal_generator");
+  auto &ctx = node->icey();
+
   NodeParameters params;
   /// Declare parameter struct and receive updates each time
-  icey::declare_parameter_struct(params, [](const std::string &changed_parameter) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(),
+  icey::declare_parameter_struct(ctx, params, [node](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(node->get_logger(),
                            "Parameter " << changed_parameter << " changed, params are now:\n");
       });
 
@@ -40,13 +43,13 @@ int main(int argc, char **argv) {
 
   /// You cannot use parameters yet, this will throw an exception:
   // std::cout << "parameter  frequency is:: " << frequency->get() << std::endl;
-  auto timer_signal = icey::create_timer(period_time);
+  auto timer_signal = ctx.create_timer(period_time);
 
   /// Receive timer updates
   const auto [a_float, a_strin, an_int] =
       timer_signal
-          .then([](size_t ticks) {
-            RCLCPP_INFO_STREAM(icey::node->get_logger(), "Timer ticked: " << ticks);
+          .then([node](size_t ticks) {
+            RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
             return std::make_tuple(3., "hellooo", 66);
           }).unpack();
 
@@ -70,11 +73,11 @@ int main(int argc, char **argv) {
     /// initialized first.
     double y = params.amplitude * std::sin((period_time_s * ticks) * params.frequency * 2 * M_PI);
     float_val.data = y;
-    RCLCPP_INFO_STREAM(icey::node->get_logger(), "Publishing sine... " << y);
+    RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
     return float_val;
   });
 
   sine_signal.publish("sine_generator");
 
-  icey::spawn(argc, argv, "signal_generator_example");
+  icey::spin(node);
 }

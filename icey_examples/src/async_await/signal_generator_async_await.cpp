@@ -17,19 +17,20 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     std::cout << "Starting node .. " << std::endl;
   auto period_time = 100ms;
   NodeParameters params;
+
+  auto node = icey::create_node<icey::Node>(argc, argv, "signal_generator");
+
+  auto &ctx = node->icey();
   /// Declare parameter struct and receive updates each time
-  icey::declare_parameter_struct(
-      icey::get_global_context(), params, [](const std::string &changed_parameter) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(),
+  icey::declare_parameter_struct(ctx, params, [node](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(node->get_logger(),
                            "Parameter " << changed_parameter << " changed, params are now:\n");
       });
 
-  auto timer = icey::create_timer(period_time);
-  auto rectangle_pub = icey::create_publisher<std_msgs::msg::Float32>("rectangle_signal", rclcpp::SystemDefaultsQoS());
-  auto sine_pub = icey::create_publisher<std_msgs::msg::Float32>("sine_signal", rclcpp::SystemDefaultsQoS());
+  auto timer = ctx.create_timer(period_time);
+  auto rectangle_pub = ctx.create_publisher<std_msgs::msg::Float32>("rectangle_signal", rclcpp::SystemDefaultsQoS());
+  auto sine_pub = ctx.create_publisher<std_msgs::msg::Float32>("sine_signal", rclcpp::SystemDefaultsQoS());
 
-  auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
-  
     std::cout << "Starting loop .. " << std::endl;
   /// Main spinning loop
   while (rclcpp::ok()) {
@@ -61,6 +62,4 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 int main(int argc, char **argv) {
   create_and_spin_node(argc, argv);
   
-  /// TODO do not store the node in the context so that this is not needed
-  icey::destroy();
 }

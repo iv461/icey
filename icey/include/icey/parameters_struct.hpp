@@ -211,9 +211,4 @@ static void declare_parameter_struct(
   });
 }
 
-template <class T>
-static void declare_parameter_struct(
-    T &params, const std::function<void(const std::string &)> &notify_callback) {
-  declare_parameter_struct(get_global_context(), params, notify_callback);
-}
 }  // namespace icey

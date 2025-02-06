@@ -54,7 +54,6 @@ using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
-class Context;
 namespace impl {
 /// Creates a new observable of type O by passing the args to the constructor. Streams are
 /// always reference counted, currently implemented with std::shared_ptr.

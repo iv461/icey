@@ -122,7 +122,7 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
     /// All of this becomes unnecessary with ICEY.
     /// TODO pass queue_size
   //auto [twist_raw, twist] =
-   icey::synchronize(twist_with_cov_sub, gyro_with_imu_to_base_tf)
+   icey().synchronize(twist_with_cov_sub, gyro_with_imu_to_base_tf)
     .then([output_frame_param](const auto &twist_msg, const auto &imu_msg) {
         //const auto [imu_msg, imu2base_tf] = gyro_with_tf;
         ///TODO get the tf and trnasform
