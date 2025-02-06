@@ -50,8 +50,6 @@ template <class T>
 using obs_val = typename remove_shared_ptr_t<T>::Value;
 template <class T>
 using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
-template <class T>
-using obs_state = typename remove_shared_ptr_t<T>::State;
 /// By stripping the shared_ptr, we usually get the ROS message that an observable holds
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
@@ -71,17 +69,17 @@ static std::shared_ptr<O> create_observable(Args &&...args) {
 /// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
-template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
+template <typename _Value, typename _ErrorValue, typename Derived, typename DefaultDerived>
 class Stream : private boost::noncopyable,
                public Derived,
-               public std::enable_shared_from_this<Stream<_Value, _ErrorValue, Derived>> {
+               public std::enable_shared_from_this<Stream<_Value, _ErrorValue, Derived, DefaultDerived>> {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Stream<Value, ErrorValue, Derived>;
+  using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;
   using MaybeValue = std::optional<Value>;
   using State = Result<Value, ErrorValue>;
-  using Handler = std::function<void()>;
+  using Handler = std::function<void(const State &)>;
 
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }
@@ -94,6 +92,7 @@ public:
   /// TODO disable_if these hold Nothing
   void set_none() { state_.set_none(); }
   
+  /// TODO remove handling of optional
   void set_value(const MaybeValue &x) {
     if (x)
       state_.set_ok(*x);
@@ -114,8 +113,8 @@ public:
         throw this->error();
       }
     }
-    if (this->has_value() || this->has_error()) {
-      for (const auto &cb : handlers_) cb();
+    if (!this->has_none()) {
+      for (const auto &cb : handlers_) cb(state_);
     }
   }
 
@@ -134,24 +133,16 @@ public:
     /// Note that it may only have errors
     static_assert(not std::is_same_v<Value, Nothing>,
                   "This observable does not have a value, so you cannot register .then() on it.");
-    return std::get<0>(this->done<true>(f, true));
+    return this->done<true>(f);
   }
   template <class F>
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
                   "This observable cannot have errors, so you cannot register .except() on it.");
-    return std::get<0>(this->done<false>(f, true));
+    return this->done<false>(f);
   }
 
   State &get_state() { return state_; }
-
-  /// For creating new Streams, we need a reference to the context
-  std::weak_ptr<Context> context;
-  // The class name, i.e. the name of the type, for example "SubscriberStream<std::string>"
-  std::string class_name;
-  /// A name to identify this node among multiple ones with the same type, usually the topic
-  /// or service name
-  std::string name;
 
 protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
@@ -188,34 +179,29 @@ protected:
   /// @param f:  (V) -> V2 The user callback function to call when the input promises resolves or
   /// rejects
   template <bool resolve, class Output, class F>
-  Handler create_handler(Output output, F &&f, bool register_it) {
-    auto input_s = this->shared_from_this();
-    typename decltype(input_s)::weak_type input_w = input_s;
-    auto handler = [input_w, output,
-                    call_and_resolve =
-                        std::move(call_depending_on_signature<resolve>(output, f))]() {
-      auto input = input_w.lock();
+  void create_handler(Output output, F &&f) {
+    auto handler = [output, call_and_resolve =
+                        std::move(call_depending_on_signature<resolve>(output, f))](const State &state) {
       if constexpr (resolve) {  /// If we handle values with .then()
-        if (input->has_value()) {
-          call_and_resolve(input->value());
-        } else if (input->has_error()) {
-          output->reject(input->error());  /// Do not execute f, but propagate the error
+        if (state.has_value()) {
+          call_and_resolve(state.value());
+        } else if (state.has_error()) {
+          output->reject(state.error());  /// Do not execute f, but propagate the error
         }
       } else {                     /// if we handle errors with .except()
-        if (input->has_error()) {  /// Then only resolve with the error if there is one
-          call_and_resolve(input->error());
+        if (state.has_error()) {  /// Then only resolve with the error if there is one
+          call_and_resolve(state.error());
         }  /// Else do nothing
       }
     };
-    if (register_it) input_s->register_handler(handler);
-    return handler;
+    this->register_handler(handler);
   }
 
   /// Common function for both .then and .except. The template argument "resolve" says whether f is
   /// the resolve or the reject handler (Unlike JS, we can only register one at the time, this is
   /// for better code generation)
   template <bool resolve, typename F>
-  auto done(F &&f, bool register_handler) {
+  auto done(F &&f) {
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
@@ -223,22 +209,24 @@ protected:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto child = create_observable<Stream<Nothing, ErrorValue>>();
-      auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
-      return std::make_tuple(child, handler);
+      auto child = create_observable<Stream<Nothing, ErrorValue, DefaultDerived, DefaultDerived>>();
+      create_handler<resolve>(child, std::forward<F>(f));
+      return child;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto child =
           create_observable<Stream<typename ReturnType::Value,
-                                   typename ReturnType::ErrorValue>>();  // Must pass over error
-      auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
-      return std::make_tuple(child, handler);
+                                   typename ReturnType::ErrorValue, 
+                                   DefaultDerived, DefaultDerived>>();  // Must pass over error
+      create_handler<resolve>(child, std::forward<F>(f));
+      return child;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting observable always has the same ErrorValue so that it can pass through the
       /// error
-      auto child = create_observable<Stream<ReturnTypeSome, ErrorValue>>();
-      auto handler = create_handler<resolve>(child, std::forward<F>(f), register_handler);
-      return std::make_tuple(child, handler);
+      auto child = create_observable<Stream<ReturnTypeSome, ErrorValue,
+                                DefaultDerived, DefaultDerived>>();
+      create_handler<resolve>(child, std::forward<F>(f));
+      return child;
     }
   }
 

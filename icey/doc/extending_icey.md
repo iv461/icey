@@ -18,10 +18,11 @@ is parametrized on the `Value` it holds, for this we use the ROS-message type `s
 
 TODO finish:
 
-As `DerivedImpl` we pass a class that we declare to store the subscriber and everything else required. 
+
+We first declare the `DerivedImpl`-class that holds everything this stream needs as data fields. The class that actually derives from `Stream` should never contain any fields. 
 
 ```cpp
-struct ImageTransportSubscriberImpl : public NodeAttachable {
+struct ImageTransportSubscriberImpl  {
   /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
   image_transport::Subscriber subscriber;
 };
@@ -128,7 +129,7 @@ public:
             /// Create the publisher
             auto publisher = image_transport::create_publisher(node, qos);
 
-            promise->register_handler([promise, publisher]() {
+            promise->register_handler([publisher](const auto &new_state) {
                 publisher.publish(promise.value());
             })
         };

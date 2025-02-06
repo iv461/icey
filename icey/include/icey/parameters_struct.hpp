@@ -182,8 +182,8 @@ static void declare_parameter_struct(
       auto param_obs =
           ctx.declare_parameter<ParamValue>(field_name_r, field_value.default_value, desc);
       param_obs.impl()->register_handler(
-          [&field_value, param_obs, field_name_r, notify_callback]() {
-            field_value.value = param_obs.value();
+          [&field_value, field_name_r, notify_callback](const auto &new_state) {
+            field_value.value = new_state.value();
             notify_callback(field_name_r);
           });
     } else if constexpr (is_valid_ros_param_type<Field>::value) {
@@ -193,8 +193,8 @@ static void declare_parameter_struct(
 
       auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value_init);
       param_obs.impl()->register_handler(
-          [&field_value, param_obs, field_name_r, notify_callback]() {
-            field_value = param_obs.value();
+          [&field_value, field_name_r, notify_callback](const auto &new_state) {
+            field_value = new_state.value();
             notify_callback(field_name_r);
           });
     } else if constexpr (std::is_aggregate_v<Field>) {

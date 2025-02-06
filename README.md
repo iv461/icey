@@ -146,4 +146,5 @@ build/icey./promise_test
 - [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept for reactive programming
 - [RXROS](https://github.com/rosin-project/rxros2) Proof on concept for reactive programming
 - [fuse](https://github.com/locusrobotics/fuse) Allows to model data flows, but it is focused on one application: sensor fusion. ICEY on the other hand is general 
+- [r2r](https://github.com/m-dahl/r2r_minimal_node/blob/master/r2r_minimal_node/src/main.rs) Rust wrapper for ROS 2, at parts surprisingly similar since it uses tokio (an asynchronous programming library for Rust)
 

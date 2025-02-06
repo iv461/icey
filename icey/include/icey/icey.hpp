@@ -347,6 +347,14 @@ public:
 /// etc.
 class NodeAttachable {
 public:
+  /// For creating new Streams, we need a reference to the context
+  std::weak_ptr<Context> context;
+  // The class name, i.e. the name of the type, for example "SubscriberStream<std::string>"
+  std::string class_name;
+  /// A name to identify this node among multiple ones with the same type, usually the topic
+  /// or service name
+  std::string name;
+
   void attach_to_node(NodeBookkeeping &node_handle) {
     if (this->was_attached_) throw std::invalid_argument("NodeAttachable was already attached");
     // if (icey_debug_print)
@@ -384,23 +392,23 @@ constexpr void assert_all_observable_values_are_same() {
 }
 
 /// Adds some things we want to put in inside the impl::Stream by default.
-/// Handy to not force the user to declare this, i.e. to not leak implementation details
-template <class Derived>
-struct DerivedWithDefaults : public Derived, public NodeAttachable {};
+/// Handy to not force the user to declare this, i.e. to not leak implementation details.
+template <class _Derived>
+struct WithDefaults : public _Derived, public NodeAttachable {};
 
 /// TODO
 template <class Value>
 class TimeoutFilter;
 
 /// An observable. Similar to a promise in JavaScript.
-template <typename _Value, typename _ErrorValue = Nothing, typename Derived = NodeAttachable>
+template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Stream : public StreamTag {
 public:
-  using Impl = impl::Stream<_Value, _ErrorValue, Derived>;
+  using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
   using Value = typename Impl::Value;
   using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
-  using Self = Stream<_Value, _ErrorValue, Derived>;  // DerivedWithDefaults<Derived>
+  using Self = Stream<_Value, _ErrorValue,  Derived >;
 
   auto impl() const { return impl_; }
 
@@ -620,10 +628,12 @@ public:
   // protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
-  template <class NewVal, class NewErr, class NewDerived>
-  Stream<NewVal, NewErr, NewDerived> create_from_impl(
-      const std::shared_ptr<impl::Stream<NewVal, NewErr, NewDerived>> &impl) const {
-    Stream<NewVal, NewErr, NewDerived> new_obs;
+  /// (this is only needed for impl::Stream::done, which creates a new stream that always has Derived stripped off, i.e. set to Nothing.)
+  template <class NewVal, class NewErr>
+  Stream<NewVal, NewErr> create_from_impl(
+      const std::shared_ptr<impl::Stream<NewVal, NewErr, 
+          WithDefaults<Nothing>, WithDefaults<Nothing> >> &impl) const {
+    Stream<NewVal, NewErr> new_obs;
     new_obs.impl_ = impl;
     new_obs.impl()->context = this->impl()->context;
     return new_obs;
@@ -686,7 +696,7 @@ struct ParameterStream : public Stream<_Value> {
   }
 };
 
-/// A subscriber observable, always stores a shared pointer to the message as it's value
+/// A stream that represents a regular ROS subscriber. It stores as its value always a shared pointer to the message.
 template <typename _Message>
 struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
@@ -725,7 +735,7 @@ constexpr auto hana_is_interpolatable(T) {
 
 /// A subscription for single transforms. It implements InterpolateableStream but by using
 /// lookupTransform, not an own buffer
-struct TransformSubscriptionStreamImpl : public NodeAttachable {
+struct TransformSubscriptionStreamImpl {
   using Message = geometry_msgs::msg::TransformStamped;
   std::string target_frame_;
   std::string source_frame_;
@@ -770,7 +780,7 @@ struct TransformSubscriptionStream
 
 /// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
 /// the callback
-struct TimerImpl : public NodeAttachable {
+struct TimerImpl  {
   size_t ticks_counter{0};
   rclcpp::TimerBase::SharedPtr timer;
 };
@@ -791,7 +801,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
 
 /// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
-struct PublisherImpl : public NodeAttachable {
+struct PublisherImpl {
   typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
   void publish(const _Value &message) {
     // We cannot pass over the pointer since publish expects a unique ptr and we got a
@@ -815,16 +825,25 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  explicit PublisherStream(const std::string &topic_name,
-                           const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS()) {
+  template<class Parent = Stream<_Value, Nothing> >
+  PublisherStream(const std::string &topic_name,
+                    const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
+                      Parent *maybe_parent=nullptr) {
     this->impl()->name = topic_name;
     this->impl()->attach_ = [impl = this->impl(), topic_name, qos](NodeBookkeeping &node) {
       impl->publisher = node.add_publisher<Message>(topic_name, qos);
-      impl->register_handler([impl]() {
-        const auto &message = impl->value();
+      impl->register_handler([impl](const auto &new_state) {
+        const auto &message = new_state.value();
         impl->publish(message);
       });
     };
+    if(maybe_parent) {
+      maybe_parent->impl()->register_handler([impl = this->impl()](const auto &new_state) {
+        if(new_state.has_value()) {
+            impl->resolve(new_state.value());
+        }
+      });
+    }
   }
   void publish(const _Value &message) const { this->impl()->publish(message); }
 };
@@ -833,6 +852,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 /// It needs to be attached to the node because it needs the current time.
 /// TODO assert message has a header stamp.
 /// TODO document extra-timer feature and explain how this works.
+/// TODO THIS IS NOT IMPLEMENTED CORRECTLY; we need to pass a parent !
 template <typename _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
@@ -841,12 +861,10 @@ struct TimeoutFilter
     this->impl()->name = "timeout_filter1";
     this->impl()->attach_ = [impl = this->impl(), max_age](NodeBookkeeping &node) {
       auto node_clock = node.node_.get_node_clock_interface();
-      impl->register_handler([impl, node_clock, max_age]() {
-        /// TODO err passing
-        const auto &message = impl->value();
+      impl->register_handler([impl, node_clock, max_age](const auto &new_state) {
+        const auto &message = new_state.value(); /// TODO err passing, there can be an error !
         rclcpp::Time time_now = node_clock->get_clock()->now();
         rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
-
         if ((time_now - time_message) <= max_age) {
           impl->resolve(message);
         } else {
@@ -865,11 +883,12 @@ struct TimeoutFilter
 // We neeed the base to be able to recognize interpolatable nodes for example
 template <typename _Message, class _Base = Stream<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
+  /// TODO use  mfl::simplefilter as derive-impl, then do not capture this, and do not allocate this adapter dynamically 
+  /// but statically, and pass impl() (which will be then message_filters::SimpleFilter<_Message> ) to the synchroniuzer as input.
   SimpleFilterAdapter() {
-    this->impl()->register_handler([this]() {
+    this->impl()->register_handler([this](const auto &new_state) {
       using Event = message_filters::MessageEvent<const _Message>;
-      const auto &new_value = this->impl()->value();  /// There can be no error
-      this->signalMessage(Event(new_value));
+      this->signalMessage(Event(new_state.value())); /// There can be no error
     });
   }
 };
@@ -934,16 +953,15 @@ public:
     this->impl()->name = "tf_pub";
     this->impl()->attach_ = [impl = this->impl()](NodeBookkeeping &node) {
       auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
-      impl->register_handler([impl, tf_broadcaster]() {
-        const auto &new_value = impl->value();  /// There can be no error
-        tf_broadcaster->sendTransform(new_value);
+      impl->register_handler([tf_broadcaster](const auto &new_state) {
+        tf_broadcaster->sendTransform(new_state.value()); /// There can be no error
       });
     };
   }
 };
 
 template <class Message>
-struct TF2MessageFilterImpl : public NodeAttachable {
+struct TF2MessageFilterImpl {
   using MFLFilter = tf2_ros::MessageFilter<Message>;
   SimpleFilterAdapter<Message> input_adapter_;
   std::shared_ptr<MFLFilter> filter_;
@@ -995,7 +1013,7 @@ struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _Service
 /// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in
 /// the DFG
 template <typename _ServiceT>
-struct ServiceClientImpl : public NodeAttachable {
+struct ServiceClientImpl {
   using Client = rclcpp::Client<_ServiceT>;
   typename Client::SharedPtr client;
   Duration timeout{};
@@ -1070,8 +1088,7 @@ protected:
   }
 };
 
-/// Creates the data-flow graph and asserts that it is not edited one obtain() is called
-/// A context, creates and manages the data-flow graph. Basis for the class-based API of ICEY.
+/// The context owns the streams.
 class Context : public std::enable_shared_from_this<Context> {
 public:
   virtual ~Context() {
@@ -1118,8 +1135,8 @@ public:
     if (icey_debug_print) std::cout << "[icey::Context] Attaching finished. " << std::endl;
   }
 
-  /// Creates a new observable of type O by passing the args to the constructor. It also adds it as
-  /// a vertex to the graph.
+  /// Creates a new stream of type O by passing the args to the constructor. It adds it to the list of attachables. 
+  /// This function is needed only to register streams as attachables.
   template <class O, typename... Args>
   auto create_observable(Args &&...args) {
     assert_icey_was_not_initialized();
@@ -1164,8 +1181,8 @@ public:
   void create_publisher(Parent parent, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     observable_traits<Parent>{};
-    auto child = create_publisher<obs_val<Parent>>(topic_name, qos);
-    parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+    using Message = obs_val<Parent>;
+    create_observable<PublisherStream<Message>>(topic_name, qos, &parent);
   }
 
   template <class Parent>
@@ -1242,7 +1259,7 @@ public:
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
   template <typename... Parents>
-  auto synchronize_approx_time(Parents... parents) {
+  static auto synchronize_approx_time(Parents... parents) {
     observable_traits<Parents...>{};
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
@@ -1311,7 +1328,7 @@ public:
   /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the
   /// control-flow where the same publisher can be called from multiple callbacks
   template <typename... Parents>
-  auto serialize(Parents... parents) {
+  static auto serialize(Parents... parents) {
     observable_traits<Parents...>{};
     // TODO assert_all_observable_values_are_same<Parents...>();
     /// TODO simplify using obs_val, for this get first of variadic pack with hana
@@ -1319,7 +1336,7 @@ public:
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
     /// First, create a new observable
     /// TODO error handling
-    auto child = create_observable<Stream<ParentValue>>();
+    auto child = Stream<ParentValue>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
       parent.then([child](const auto &x) { child.impl()->resolve(x); });
@@ -1337,9 +1354,7 @@ public:
 
   void assert_icey_was_not_initialized() const {
     if (was_initialized_)
-      throw std::invalid_argument(
-          "You are not allowed to add signals after ICEY was initialized. The graph must be "
-          "static");
+      throw std::invalid_argument("You are not allowed to add streams after ICEY was initialized");
   }
 
   bool was_initialized_{false};

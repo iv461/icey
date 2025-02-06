@@ -8,6 +8,9 @@ Sorted by decreasing priority.
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 
+- [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
+
+
 - [ ] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
 
 - [ ] We still got a crash in service_client_async_await_example
@@ -210,6 +213,9 @@ Sorted by decreasing priority.
 
 - [X] Parameters struct: Groups, support nested structs like for AW's NDT hyper-params
 - [X] Parameter struct: Allow plain (unwrapped) types, i.e. string, double etc.
+
+- [X] Code cleanup: Pass state to Stream callback 
+- [X] Do not leak the `NodeAttachable` implementation detail when users extend ICEY by proving defaults for the derived implementation. 
 
 # Run clang-tidy: 
 
