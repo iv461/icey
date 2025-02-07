@@ -436,10 +436,6 @@ public:
     if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
   }
 
-  explicit Stream(const std::weak_ptr<Context> &ctx) {
-    this->impl()->context = ctx;
-  }
-
   ~Stream() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
   }
@@ -660,8 +656,9 @@ public:
   Stream<NewVal, NewErr> create_from_impl(
       const std::shared_ptr<impl::Stream<NewVal, NewErr, 
           WithDefaults<Nothing>, WithDefaults<Nothing> >> &impl) const {
-    Stream<NewVal, NewErr> new_obs(this->impl()->context);
+    Stream<NewVal, NewErr> new_obs;
     new_obs.impl_ = impl;
+    new_obs.impl_->context = this->impl()->context;
     return new_obs;
   }
 
