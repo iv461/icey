@@ -21,7 +21,7 @@ Sorted by decreasing priority.
 
 - [ ] Unit-Test context: does it create everything ? 
 
-- [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
+- [ ] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
 
 - [ ] Unit-test that service client-server example driven by timer
 
@@ -99,7 +99,7 @@ Sorted by decreasing priority.
 - [X] Writable publiser, otherwise no hardware drivers possible !
 - [X] TOPOLOGICAL SORT DFG -> for the update-problem to happed a multiple input node is needed. This is only possible with fuse, that already outputs if at least one input updates -> not a problem
 - [X] Forbid and detect creating new states in callback
-- [X] Prevent getting the value from an observable, i.e. from the object SubscriptionStream,  it is read-only
+- [X] Prevent getting the value from an stream, i.e. from the object SubscriptionStream,  it is read-only
 - [X] Disallow graph change after node is created. Detect it. Provide instead "Node enable" functionality if someone wants to disable a publisher/subscriber
 - [X] Explicit DAG
 - [x] Allow for shared-ptr messages for perf, i.e. not copying the whole message but just notifying it changes. For this we need to just strip the ptr when calling node->subscribe<Msg>
@@ -147,7 +147,7 @@ Sorted by decreasing priority.
 - [X] Graph engine: notify leaves
 - [X] LookupTransform for TF Subscriber via prototypical Interpolatable, otherwise TF sub is useless ! -> depends on understanding hana and implementing `synch_with_reference`
 - [X] publish shared ptr should be supported  
-- [X] `SyncWithReference` filter -> one observable drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
+- [X] `SyncWithReference` filter -> one stream drives, from the others we get the last value. (basis for throttling), like Matlab's `synchronize`, mostly for constant frequency publishing driven by timers
 - [X] Promise-API: .catch(), finally mostly important for timeout detection of service call 
 - [X] ->then() as member
 
@@ -187,7 +187,7 @@ Sorted by decreasing priority.
 - [X] Fix segfault on termination with service example
 - [X] [Async/Await] `await`: waitning to be able to write code that looks synchronous 
 - [X] [Async/Await] `async`: allow async routignes using C++20 coroutines
-- [X] `get_promise`-API needed intead of this->observable_ -> `impl`
+- [X] `get_promise`-API needed intead of this->stream_ -> `impl`
 
 - [X] People still like to check whether there [are subscribers on a topic](https://github.com/autowarefoundation/autoware.universe/blob/main/perception/autoware_tensorrt_yolox/src/tensorrt_yolox_node.cpp#L125) -> maybe "lazy" parameter on publish() ?  -> document how to access publisher 
 

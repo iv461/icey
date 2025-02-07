@@ -70,7 +70,7 @@ We now created the subscriber as we normally would in ROS.
 ### Setting the value of the Stream
 
 We now make the Stream do something by implementing the subscriber callback to set the value.
-The observable stores a promise that we first get with `get_promise` and then `resolve` it with the message inside the callback:
+The stream stores a promise that we first get with `get_promise` and then `resolve` it with the message inside the callback:
 ```cpp
 class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
 public:
@@ -90,15 +90,15 @@ public:
 };
 ```
 
-And that's it already ! We have created a custom subscriber observable. To use it, we use the function `create_observable<T>` with our custom observable: 
+And that's it already ! We have created a custom subscriber stream. To use it, we use the function `create_stream<T>` with our custom stream: 
 
 ```cpp
-auto image_transport_sub = icey::create_observable<ImageTransportSubscriber>(topic_name, transport, qos);
+auto image_transport_sub = icey::create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
 ```
 or using the class-based API: 
 
 ```cpp
-auto image_transport_sub = icey().create_observable<ImageTransportSubscriber>(topic_name, transport, qos);
+auto image_transport_sub = icey().create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
 ```
 
 ### Writing a publisher 

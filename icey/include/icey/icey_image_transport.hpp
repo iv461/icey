@@ -32,7 +32,7 @@ struct ImageTransportSubscriberImpl  {
   /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
   image_transport::Subscriber subscriber;
 };
-// An observable representing a camera image subscriber.
+// An stream representing a camera image subscriber.
 struct ImageTransportSubscriber
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                     image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
@@ -70,7 +70,7 @@ struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPt
   }
 };
 
-// An observable representing a camera subscriber.
+// An stream representing a camera subscriber.
 struct CameraSubscriberImpl  {
   /// The image_transport sub/pub use PIMPL, so we can hold them by value.
   image_transport::CameraSubscriber subscriber;
@@ -124,28 +124,28 @@ auto create_image_transport_subscription(
     Context &ctx,
     const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
     const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-  return ctx.create_observable<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
+  return ctx.create_stream<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
 };
 
 auto create_image_transport_publisher(
   Context &ctx,
     const std::string &base_topic_name, const rclcpp::QoS &qos,
     const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
-  return ctx.create_observable<ImageTransportPublisher>(base_topic_name, qos, options);
+  return ctx.create_stream<ImageTransportPublisher>(base_topic_name, qos, options);
 };
 
 auto create_camera_subscription(
   Context &ctx,
   const std::string &base_topic_name, const std::string &transport,
                                 const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
-  return ctx.create_observable<CameraSubscriber>(base_topic_name, transport, qos);
+  return ctx.create_stream<CameraSubscriber>(base_topic_name, transport, qos);
 };
 
 auto create_camera_publisher(
   Context &ctx,
   const std::string &base_topic_name,
                              const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
-  return ctx.create_observable<CameraPublisher>(base_topic_name, qos);
+  return ctx.create_stream<CameraPublisher>(base_topic_name, qos);
 };
 
 }  // namespace icey

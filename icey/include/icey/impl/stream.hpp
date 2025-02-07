@@ -45,22 +45,22 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
 
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
-/// Some traits of the observables
+/// Some traits of the streams
 template <class T>
 using obs_val = typename remove_shared_ptr_t<T>::Value;
 template <class T>
 using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
-/// By stripping the shared_ptr, we usually get the ROS message that an observable holds
+/// By stripping the shared_ptr, we usually get the ROS message that an stream holds
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
 namespace impl {
-/// Creates a new observable of type O by passing the args to the constructor. Streams are
+/// Creates a new stream of type O by passing the args to the constructor. Streams are
 /// always reference counted, currently implemented with std::shared_ptr.
 template <class O, typename... Args>
-static std::shared_ptr<O> create_observable(Args &&...args) {
-  auto observable = std::make_shared<O>(std::forward<Args>(args)...);
-  return observable;
+static std::shared_ptr<O> create_stream(Args &&...args) {
+  auto stream = std::make_shared<O>(std::forward<Args>(args)...);
+  return stream;
 }
 /// A stream, conceptually very similar to a promise in JavaScript but the state transitions are not
 /// final. I saw that these implementations are very close to mine: [1]
@@ -131,13 +131,13 @@ public:
   auto then(F &&f) {
     /// Note that it may only have errors
     static_assert(not std::is_same_v<Value, Nothing>,
-                  "This observable does not have a value, so you cannot register .then() on it.");
+                  "This stream does not have a value, so you cannot register .then() on it.");
     return this->done<true>(f);
   }
   template <class F>
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
-                  "This observable cannot have errors, so you cannot register .except() on it.");
+                  "This stream cannot have errors, so you cannot register .except() on it.");
     return this->done<false>(f);
   }
 
@@ -208,21 +208,21 @@ protected:
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto child = create_observable<Stream<Nothing, ErrorValue, DefaultDerived, DefaultDerived>>();
+      auto child = create_stream<Stream<Nothing, ErrorValue, DefaultDerived, DefaultDerived>>();
       create_handler<resolve>(child, std::forward<F>(f));
       return child;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto child =
-          create_observable<Stream<typename ReturnType::Value,
+          create_stream<Stream<typename ReturnType::Value,
                                    typename ReturnType::ErrorValue, 
                                    DefaultDerived, DefaultDerived>>();  // Must pass over error
       create_handler<resolve>(child, std::forward<F>(f));
       return child;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
-      /// The resulting observable always has the same ErrorValue so that it can pass through the
+      /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
-      auto child = create_observable<Stream<ReturnTypeSome, ErrorValue,
+      auto child = create_stream<Stream<ReturnTypeSome, ErrorValue,
                                 DefaultDerived, DefaultDerived>>();
       create_handler<resolve>(child, std::forward<F>(f));
       return child;

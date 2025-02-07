@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
   /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
   // Note to class-based API users: call
-  /// "icey().create_observable<icey::CameraSubscriber>("camera_center", "raw")" (this API is
+  /// "icey().create_stream<icey::CameraSubscriber>("camera_center", "raw")" (this API is
   /// somewhat rough, it might change in the future).
 
   auto node = icey::create_node(argc, argv, "signal_generator");
