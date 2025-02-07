@@ -677,6 +677,7 @@ template <>
 struct is_valid_ros_param_type<bool> : std::true_type {};
 template <>
 struct is_valid_ros_param_type<int64_t> : std::true_type {};
+
 template <>
 struct is_valid_ros_param_type<double> : std::true_type {};
 template <>

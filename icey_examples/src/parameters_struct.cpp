@@ -5,8 +5,6 @@
 struct NodeParameters {
   /// We can have regular fields :
   double amplitude{3};
-  /// And also unsigned ones:
-  uint32_t number_of_attempts{3};
 
   /// And as well parameters with constraints and a description:
   icey::Parameter<double> frequency{10., icey::Interval(0., 25.),

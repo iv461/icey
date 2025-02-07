@@ -16,8 +16,8 @@
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
-namespace icey {
 
+namespace icey {
 
 template <class T>
 static void declare_parameter_struct(
@@ -49,11 +49,11 @@ static void declare_parameter_struct(
       /// Else recurse for supporting grouped params
       declare_parameter_struct(ctx, field_value, notify_callback, name_prefix + std::string(field_name) + ".");
     } else {
-      /// static_assert(false) would always trigger, that is why we use this lambda-workaround, see
+      /// static_assert(false) would always trigger, that is why we use this workaround, see
       /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
       static_assert(
-          []() { return false; },
-          "Every field of the parameters struct must be of type T or icey::DynParameter<T> or a "
+          std::is_array_v<int>, 
+          "Every field of the parameters struct must be of type T or icey::Parameter<T> or a "
           "struct of such, where T is a valid ROS param type (see rcl_interfaces/ParameterType)");
     }
   });
