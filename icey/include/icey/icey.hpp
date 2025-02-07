@@ -4,6 +4,7 @@
 #include <boost/hana.hpp>
 #include <boost/hana/ext/std/tuple.hpp>  /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
 #include <boost/type_index.hpp>
+#include <coroutine>
 #include <functional>
 #include <icey/impl/bag_of_metaprogramming_tricks.hpp>
 #include <icey/impl/stream.hpp>
@@ -14,24 +15,20 @@
 #include <tuple>
 #include <unordered_map>
 
+/// Support for lifecycle nodes:
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp/rclcpp.hpp"
+
 /// TF2 support:
 #include "tf2_ros/buffer.h" 
 #include "tf2_ros/message_filter.h"
-
+#include "tf2_ros/create_timer_ros.h"
+#include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
 // Message filters library: (.h so that this works with humble as well)
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
-
-#include "tf2_ros/create_timer_ros.h"
-#include "tf2_ros/transform_broadcaster.h"
-#include "tf2_ros/transform_listener.h"
-
-#include <coroutine>
-
-/// Support for lifecycle nodes:
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include "rclcpp/rclcpp.hpp"
 
 namespace icey {
     
@@ -637,9 +634,141 @@ public:
   std::shared_ptr<Impl> impl_{impl::create_observable<Impl>()};
 };
 
+/// <imagine here some silly Ascii-art> What follows are parameters. 
+// Traits to recognize valid types for ROS parameters (Reference:
+// https://docs.ros.org/en/jazzy/p/rcl_interfaces/interfaces/msg/ParameterValue.html)
+template <class T>
+struct is_valid_ros_param_type : std::false_type {};
+template <>
+struct is_valid_ros_param_type<bool> : std::true_type {};
+template <>
+struct is_valid_ros_param_type<int64_t> : std::true_type {};
+template <>
+struct is_valid_ros_param_type<double> : std::true_type {};
+template <>
+struct is_valid_ros_param_type<std::string> : std::true_type {};
+/// Array type
+template <class T>
+struct is_valid_ros_param_type<std::vector<T> > : is_valid_ros_param_type<T> {};
+template <class T, std::size_t N>
+struct is_valid_ros_param_type<std::array<T, N> > : is_valid_ros_param_type<T> {};
+/// Byte array, extra specialization since byte is not allowed as scalar type, only byte arrays
+template <>
+struct is_valid_ros_param_type<std::vector<std::byte> > : std::true_type {};
+template <std::size_t N>
+struct is_valid_ros_param_type<std::array<std::byte, N> > : std::true_type {};
+
+/// Converters
+/*template <class T>
+struct to_ros_param_type {};
+
+template <class T, std::size_t N>
+struct to_ros_param_type< std::array<T, N> > { using type = std::vector<T>; };
+*/
+
+template <class T>
+decltype(auto) to_ros_param_type(T &x) {
+  if constexpr (is_std_array<T>) {
+    return std::vector<typename T::value_type>(x.begin(), x.end());
+  } else {
+    return x;
+  }
+}
+
+/// FOr API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
+
+/// First, some constraints we can impose on parameters:
+/// A closed interval, meaning a value must be greater or equal to a minimum value
+/// and less or equal to a maximal value.
+template <class Value>
+struct Interval {
+  static_assert(std::is_arithmetic_v<Value>, "The value type must be a number");
+  /// TODO make two template params and use common_type + CTAD to make a really nice UX
+  Interval(Value minimum, Value maximum) : minimum(minimum), maximum(maximum) {}
+  Value minimum;
+  Value maximum;
+};
+
+/// A set specified by a given list of values that are in the set.
+template <class Value>
+struct Set {
+  // explicit Set(const Value ...values) : set_of_values(values...) {}
+  std::unordered_set<Value> set_of_values;
+};
+
+// A parameter validator, validating a parameter of type value.
+template <class Value>
+struct Validator {
+  /// In ROS, parameters can only be of certain types
+  using ROSValue = std::conditional_t<std::is_unsigned_v<Value>, int, Value>;
+  /// The type of the predicate
+  using Validate = std::function<bool(const ROSValue &)>;
+
+  /// Allow default-constructed validator, by default allowing all values
+  /// in the set of values defined by the data type.
+  Validator() {
+    if constexpr (std::is_unsigned_v<Value>)
+      validate = [](const ROSValue &new_value) { return new_value >= 0; };
+    else
+      validate = [](const ROSValue &) { return true; };
+  }
+
+  /// Construct explicitly from a  validation predicate
+  explicit Validator(const Validate &validate) : validate(validate) {}
+
+  /// Allow implicit conversion from some easy sets:
+  Validator(const Interval<Value> &interval)  /// NOLINT
+  {
+    validate = [interval](const ROSValue &new_value) {
+      return new_value >= interval.minimum && new_value <= interval.maximum;
+    };
+  }
+
+  /// Implicit conversion from a Set of values
+  Validator(const Set<Value> &set)  /// NOLINT
+  {
+    validate = [set](const ROSValue &new_value) {
+      return set.count(new_value) > 0;  /// contains is C++20 :(
+    };
+  }
+
+  /// A predicate that indicates whether a given value is feasible.
+  /// By default, a validator always returns true since the parameter is unconstrained
+  Validate validate;
+};
+
+template <class Value>
+struct ParameterStreamImpl {
+  auto create_descriptor() {
+    /// TODO register validator
+    rcl_interfaces::msg::ParameterDescriptor desc;
+    desc.description = description;
+    desc.read_only = read_only;
+    return desc;
+  }
+
+  std::string parameter_name;
+  std::optional<Value> default_value;
+  Validator<Value> validator;
+  std::string description;
+  bool read_only = false;
+};
+
 /// An observable for ROS parameters. Fires initially an event if a default_value set
 template <typename _Value>
-struct ParameterStream : public Stream<_Value> {
+struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Value> > {
+  static_assert(is_valid_ros_param_type<_Value>::value, "Type is not an allowed ROS parameter type");
+
+  ParameterStream(const std::optional<_Value> &default_value,
+                  const Validator<_Value> &validator = Validator<_Value>(),
+                        std::string description = "", bool read_only = false,
+                  bool ignore_override = false) {
+      this->impl()->default_value = default_value;
+      this->impl()->validator = validator;
+      this->impl()->description = description;
+      this->impl()->read_only = read_only;
+  }
+  /// A more traditional constructor
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name, const std::optional<_Value> &default_value,
                   const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                       rcl_interfaces::msg::ParameterDescriptor(),
@@ -684,6 +813,12 @@ struct ParameterStream : public Stream<_Value> {
           "inside callbacks (which are triggered after calling icey::spawn())");
     }
     return this->impl()->value();
+  }
+
+  /// Allow implicit conversion to the stored value type
+  operator _Value() const  /// NOLINT
+  {
+    return this->value();
   }
 };
 
@@ -1326,15 +1461,13 @@ template <class T>
 using Parameter = ParameterStream<T>;
 using Timer = TimerStream;
 
-template<class N>
+template<class N = Node>
 static auto create_node(int argc, char** argv, const std::string& node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
   return std::make_shared<N>(node_name);
 }
-
-#include <icey/filters.hpp>
 
 }  // namespace icey
 

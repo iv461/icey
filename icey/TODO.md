@@ -218,7 +218,7 @@ Sorted by decreasing priority.
 
 - [X] Code cleanup: Pass state to Stream callback 
 - [X] Do not leak the `NodeAttachable` implementation detail when users extend ICEY by proving defaults for the derived implementation. 
-
+- [X] [Refactor] Simplify functional API, remove deffered attachment to ROS 
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository

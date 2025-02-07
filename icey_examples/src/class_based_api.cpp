@@ -11,8 +11,7 @@ using namespace std::chrono_literals;
 
 class MyNode : public icey::Node {
 public:
-  using Base = icey::Node;
-  explicit MyNode(const std::string& name) : Base(name) {
+  explicit MyNode(const std::string& name) : icey::Node(name) {
     auto timer_signal = icey().create_timer(500ms);
 
     timer_signal.then(
@@ -26,33 +25,10 @@ public:
         })
         .publish("sine_generator");
 
-    /// Register callbacks
-    icey().register_after_parameter_initialization_cb(
-        [this]() { after_parameters_are_initialized(); });
-    /// Register callback when this node is destructed (this is still valid at this point)
-    icey().register_on_node_destruction_cb([this]() { on_destruction(); });
-
-    /// Finally, call this at the end of the constructor to create all the needed subsciptions,
-    /// publications etc.
-    icey_initialize();
-  }
-
-  void after_parameters_are_initialized() {
-    /// Initialize here you algorithms, are parameters are already available
-  }
-  /// Put here your code that you would normally put in the destructor
-  // (this will called immeditally after ~MyNode() is called actually, due to destruction order
-  // rules )
-  void on_destruction() {}
+    
+  }  
 };
 
-std::shared_ptr<MyNode> my_node;
-
 int main(int argc, char **argv) {
-  rclcpp::init(argc, argv);
-
-  my_node = std::make_shared<MyNode>("class_based_node_example");
-
-  icey::spawn(my_node);
-  return 0;
+  icey::spin(icey::create_node<MyNode>(argc, argv, "class_based_node_example"));
 }

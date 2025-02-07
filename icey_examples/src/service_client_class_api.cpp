@@ -7,11 +7,9 @@
 using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
-
 class MyNode : public icey::Node {
 public:
-    using Base =  icey::Node;
-    explicit MyNode(const std::string& name) : Base(name) {
+    explicit MyNode(const std::string& name) : icey::Node(name) {
         
       icey().create_timer(1s)
           /// Build a request when the timer ticks
@@ -53,26 +51,9 @@ public:
             /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
             RCLCPP_INFO_STREAM(this->get_logger(), "Service got error: " << error_code);
           });
-
-        icey_initialize();
-    }
-
-    void after_parameters_are_initialized() {
-        /// Initialize here you algorithms, are parameters are already available
-    }
-    /// Put here your code that you would normally put in the destructor
-    // (this will called immeditally after ~MyNode() is called actually, due to destruction order rules )
-    void on_destruction() {
-
     }
 };
 
-
 int main(int argc, char **argv) {
-   rclcpp::init(argc, argv);
-    
-   auto node = std::make_shared<MyNode>("service_client_class_api");
-
-   icey::spawn(node);
-   return 0;           
+  icey::spin(icey::create_node<MyNode>(argc, argv, "service_client_class_api"));
 }
