@@ -8,9 +8,9 @@ using namespace std::chrono_literals;
 /// All parameters of the node
 struct NodeParameters {
   /// We set a default value, allowed interval and a description
-  icey::DynParameter<double> frequency{10., icey::Interval(0., 25.),
+  icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
                                        std::string("The frequency of the sine")};
-  icey::DynParameter<double> amplitude{3};
+  icey::Parameter<double> amplitude{3};
 };
 
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {

@@ -34,8 +34,8 @@ ament_auto_add_executable(service_client_class_api_example src/service_client_cl
 ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
 
 ament_auto_add_executable(signal_generator_async_await_example src/async_await/signal_generator_async_await.cpp)
-#ament_auto_add_executable(service_client_async_await_example src/async_await/service_client_async_await.cpp)
-#
+ament_auto_add_executable(service_client_async_await_example src/async_await/service_client_async_await.cpp)
+
 ament_auto_add_executable(using_image_transport_example src/using_image_transport.cpp)
 ament_auto_add_executable(automatic_synchronization_example src/automatic_synchronization.cpp)
 

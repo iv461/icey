@@ -752,6 +752,7 @@ struct ParameterStreamImpl {
   Validator<Value> validator;
   std::string description;
   bool read_only = false;
+  bool ignore_override = false;
 };
 
 /// An observable for ROS parameters. Fires initially an event if a default_value set
@@ -767,15 +768,23 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
       this->impl()->validator = validator;
       this->impl()->description = description;
       this->impl()->read_only = read_only;
+      this->impl()->ignore_override = ignore_override;
+      
   }
   /// A more traditional constructor
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name, const std::optional<_Value> &default_value,
-                  const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
-                      rcl_interfaces::msg::ParameterDescriptor(),
-                  bool ignore_override = false) {
-    this->impl()->name = parameter_name;
+                  const Validator<_Value> &validator = Validator<_Value>(),
+                        std::string description = "", bool read_only = false,
+                  bool ignore_override = false) : ParameterStream(default_value, validator, description, 
+                    read_only, ignore_override) {
+    this->impl()->parameter_name = parameter_name;
+    this->register_with_ros(node);
+    
+  }
+
+  void register_with_ros(NodeBookkeeping &node) {
     node.add_parameter<_Value>(
-        parameter_name, default_value,
+        this->impl()->parameter_name, this->impl()->default_value,
         [impl=this->impl()](const rclcpp::Parameter &new_param) {
           /// TODO Refactor to validator and converters. Convert to std::array but retrieve as
           /// std::vector. T
@@ -793,16 +802,17 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
             impl->resolve(new_value);
           }
         },
-        parameter_descriptor, ignore_override);
+        this->impl()->create_descriptor(), this->impl()->ignore_override);
     /// Set default value if there is one
-    if (default_value) {
+    if (this->impl()->default_value) {
       // Value initial_value;
       /// TODO I think I added this to crash in case no default is there, think regarding default
       /// values of params
       // node.get_parameter_or(parameter_name, initial_value, *default_value);
-      this->impl()->resolve(*default_value);
+      this->impl()->resolve(*this->impl()->default_value);
     }
   }
+
   /// Parameters are initialized always at the beginning, so we can provide a getter for the value
   /// so that they can be used conveniently in callbacks.
   const _Value &value() const {
@@ -1166,9 +1176,8 @@ private:
 
 template <class Message>
 struct TF2MessageFilterImpl {
-  using MFLFilter = tf2_ros::MessageFilter<Message>;
   SimpleFilterAdapter<Message> input_adapter;
-  std::shared_ptr<MFLFilter> filter;
+  std::shared_ptr<tf2_ros::MessageFilter<Message>> filter;
 };
 
 /// Wrapper for the tf2_ros::MessageFilter.
@@ -1177,11 +1186,10 @@ struct TF2MessageFilter
     : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
   using Self = TF2MessageFilter<_Message>;
   using Message = _Message;
-  using MFLFilter = typename TF2MessageFilterImpl<_Message>::MFLFilter;
   // TODO do not ignore buffer timeout
   TF2MessageFilter(NodeBookkeeping &node, std::string target_frame, rclcpp::Duration buffer_timeout) {
     this->impl()->name = "tf_filter";
-    this->impl()->filter = std::make_shared<MFLFilter>(
+    this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
         this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
         node.node_.get_node_logging_interface(), node.node_.get_node_clock_interface());
     this->impl()->filter->registerCallback(&Self::on_message, this);
@@ -1196,21 +1204,21 @@ public:
   /// This function is needed only to register streams as attachables.
   template <class O, typename... Args>
   auto create_observable(Args &&...args) {
-    O observable{*this->node, args...};
+    O observable(*this->node, args...);
     attachables_.push_back(observable.impl());  
     observable.impl()->context = this->shared_from_this();
     return observable;
   }
 
-  
+
 template <typename ParameterT>
-  auto declare_parameter(const std::string &name,
-                         const std::optional<ParameterT> &maybe_default_value = std::nullopt,
-                         const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
-                             rcl_interfaces::msg::ParameterDescriptor(),
-                         bool ignore_override = false) {
-    return create_observable<ParameterStream<ParameterT>>(name, maybe_default_value,
-                                                          parameter_descriptor, ignore_override);
+  auto declare_parameter(  
+      const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = std::nullopt,
+                  const Validator<ParameterT> &validator = Validator<ParameterT>(),
+                        std::string description = "", bool read_only = false,
+                  bool ignore_override = false) {
+    return create_observable<ParameterStream<ParameterT>>(parameter_name, maybe_default_value,
+                                                          validator, description, read_only, ignore_override);
   }
 
   template <typename MessageT>
