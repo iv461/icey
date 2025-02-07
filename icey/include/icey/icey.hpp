@@ -726,6 +726,7 @@ struct Interval {
 /// A set specified by a given list of values that are in the set.
 template <class Value>
 struct Set {
+   Set(std::vector<Value> l) : set_of_values(l.begin(), l.end()) {}
   // explicit Set(const Value ...values) : set_of_values(values...) {}
   std::unordered_set<Value> set_of_values;
 };
@@ -790,7 +791,7 @@ struct Validator {
     validate = [set](const rclcpp::Parameter &new_param) {
       auto new_value = new_param.get_value<ROSValue>();
       std::optional<std::string> result;
-      if(!set.count(new_value)) result = "The given value is not in the set of allowed values";
+      if(!set.set_of_values.count(new_value)) result = "The given value is not in the set of allowed values";
       return result;
     };
   }
@@ -1507,8 +1508,10 @@ template <class Node>
 static void spin(Node node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
-  node->icey_context_->executor_->remove_node(node);
-  node->icey_context_->executor_.reset();
+  if(node->icey_context_->executor_) {
+    node->icey_context_->executor_->remove_node(node);
+    node->icey_context_->executor_.reset();
+  }
   executor.add_node(node);
   executor.spin();
   rclcpp::shutdown();
@@ -1520,8 +1523,10 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   /// https://robotics.stackexchange.com/a/89767. He references
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
   for (auto &node : nodes) {
-    node->icey_context_->executor_->remove_node(node);
-    node->icey_context_->executor_.reset();
+    if(node->icey_context_->executor_) {
+      node->icey_context_->executor_->remove_node(node);
+      node->icey_context_->executor_.reset();
+    }
     executor.add_node(node);
   }
   executor.spin();

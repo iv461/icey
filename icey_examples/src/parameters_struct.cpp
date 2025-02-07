@@ -10,6 +10,7 @@ struct NodeParameters {
   icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
                                        std::string("The frequency of the sine")};
   
+  icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
   /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
   struct OtherParams {
     double max_amp = 6.;
