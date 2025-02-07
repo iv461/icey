@@ -29,5 +29,6 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(node->get_logger(),
                            "Parameter " << changed_parameter << " changed");
       });
-    
+
+  icey::spin(node);
 }

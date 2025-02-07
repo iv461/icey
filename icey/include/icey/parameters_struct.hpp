@@ -18,25 +18,13 @@
 #include <utility>
 namespace icey {
 
-template <class T, class F>
-static void walk_fields_recursively(T &params, F f, std::string name_prefix = "") {
-  field_reflection::for_each_field(params, [&params, name_prefix, f](std::string_view field_name, auto &field_value) {
-    using Field = std::remove_reference_t<decltype(field_value)>;
-    if constexpr (std::is_aggregate_v<Field>) {
-      /// Else recurse for supporting grouped params
-      walk_fields_recursively(params, f, name_prefix + std::string(field_name) + ".");
-    } else {
-      f(field_name, field_value);  
-    }
-  });
-}
 
 template <class T>
 static void declare_parameter_struct(
     Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback,
     std::string name_prefix = "") {
   
-  walk_fields_recursively(params, [&ctx, notify_callback, name_prefix](
+  field_reflection::for_each_field(params, [&ctx, notify_callback, name_prefix](
                                                std::string_view field_name, auto &field_value) {
     using Field = std::remove_reference_t<decltype(field_value)>;
     std::string field_name_r(field_name);
@@ -51,7 +39,6 @@ static void declare_parameter_struct(
       auto field_value_init = to_ros_param_type(field_value);
       using ParamValue = std::remove_reference_t<decltype(field_value_init)>;
       auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value_init);
-
       
       param_obs.impl()->register_handler(
           [&field_value, field_name_r, notify_callback](const auto &new_state) {
@@ -60,7 +47,7 @@ static void declare_parameter_struct(
           });
     } else if constexpr (std::is_aggregate_v<Field>) {
       /// Else recurse for supporting grouped params
-      declare_parameter_struct(ctx, field_value, notify_callback, field_name_r + ".");
+      declare_parameter_struct(ctx, field_value, notify_callback, name_prefix + std::string(field_name) + ".");
     } else {
       /// static_assert(false) would always trigger, that is why we use this lambda-workaround, see
       /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html

@@ -290,14 +290,14 @@ public:
                      bool ignore_override = false) {
     rclcpp::ParameterValue v =
         default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
+    book_.parameter_validators_.emplace(name, f_validate);
+    add_parameter_validator_if_needed();
     auto param =
         node_.node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
     auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(node_);
     auto cb_handle =
         param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
     book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
-    book_.parameter_validators_.emplace(name, f_validate);
-    add_parameter_validator_if_needed();
     return param;
 
   }
@@ -823,7 +823,6 @@ struct ParameterStreamImpl {
 template <typename _Value>
 struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Value> > {
   static_assert(is_valid_ros_param_type<_Value>::value, "Type is not an allowed ROS parameter type");
-
   ParameterStream(const std::optional<_Value> &default_value,
                   const Validator<_Value> &validator = Validator<_Value>(),
                         std::string description = "", bool read_only = false,
@@ -879,26 +878,21 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
     }
   }
 
-
-  /// Parameters are initialized always at the beginning, so we can provide a getter for the value
-  /// so that they can be used conveniently in callbacks.
+  /// Parameters are initialized always at the beginning, so they always have a value.
   const _Value &value() const {
+    /// TODO how exactly can this happen ?
     if (!this->impl()->has_value()) {
       throw std::runtime_error(
-          "Parameter '" + this->impl()->name +
-          "' cannot be accessed before spawning the node. You can only access parameters "
-          "inside callbacks (which are triggered after calling icey::spawn())");
+          "Parameter '" + this->impl()->name + "' does not have a value");
     }
     return this->impl()->value();
   }
 
-  /// Allow implicit conversion to the stored value type
+  /// Allow implicit conversion to the stored value type for consistent API between constrained and non-constrained parameters when using the parameter structs.
   operator _Value() const  /// NOLINT
   {
     return this->value();
   }
-
-
 };
 
 /// A stream that represents a regular ROS subscriber. It stores as its value always a shared pointer to the message.
@@ -1491,9 +1485,9 @@ public:
      /// Note that here we cannot call shared_from_this() since it requires the object to be already constructed. But usually, 
     NodeInterfaces node_interfaces(this); 
     this->icey_context_->node = std::make_shared<NodeBookkeeping>(node_interfaces);
-    create_executor_in_context();
-
+    //create_executor_in_context();
   }
+
   /// Returns the context that is needed to create ICEY observables
   Context &icey() { return *this->icey_context_; }
   /// TODO hacky

@@ -19,11 +19,11 @@ Sorted by decreasing priority.
 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
-- [ ] Unit-Test context: does it create everything ? Can we attach something after initial creation ? Is everything attached to the node ?
+- [ ] Unit-Test context: does it create everything ? 
 
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the observables is 1 after destructing the context (mem-leak test)
 
-- [ ] Unit-test that no dead-locks occur, use example from the official docu where a timer drives the service client
+- [ ] Unit-test that service client-server example driven by timer
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
@@ -34,13 +34,11 @@ Sorted by decreasing priority.
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
-- [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 
 - [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 
-- [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
 
 ## Error-handling
 
@@ -50,8 +48,11 @@ Sorted by decreasing priority.
 
 ## Other nice-to-have features, not for 0.1
 
-- [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
+- [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 
+- [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
+
+- [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
 
 - [ ] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
 
