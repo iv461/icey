@@ -113,8 +113,6 @@ struct CameraPublisher
         node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
     this->impl()->register_handler([publisher](const auto &new_state) {
       const auto [image_msg, camera_info_msg] = new_state.value();  /// There can be no error;
-      /// TODO Maybe clarify message ownership, this publish-function is inconsistent with regular
-      /// publishers because it accepts share_ptr<M>
       publisher.publish(image_msg, camera_info_msg);
     });
   }

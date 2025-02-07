@@ -429,7 +429,6 @@ public:
   using ErrorValue = typename Impl::ErrorValue;
   using Self = Stream<_Value, _ErrorValue,  Derived >;
 
-
   Stream() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
   }
@@ -437,7 +436,6 @@ public:
   ~Stream() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
   }
-
 
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
@@ -486,23 +484,23 @@ public:
     this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
+  /// TODO use this, perfect FW
+  template <class O, typename... Args>
+  auto create_stream(Args &&...args) { return this->impl()->context.lock()->template create_stream(args...); }
+
   /// TODO document
-  auto timeout(rclcpp::Duration max_age, bool create_extra_timer = false) {
+  auto timeout(rclcpp::Duration max_age, bool create_extra_timer = true) {
     assert_we_have_context();
-    /// We create this through the context to register it for attachment to the ROS node
-    auto timeout_filter =
-        this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
-            max_age, create_extra_timer);
-    this->impl()->then([timeout_filter](const auto &x) { timeout_filter.impl()->resolve(x); });
-    return timeout_filter;
+    /// We create this through the context to register it for the ROS node
+    return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
+            *this, max_age, create_extra_timer);
   }
 
   /// Create a ROS normal publisher.
   void publish(const std::string &topic_name,
                const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     assert_we_have_context();
-    static_assert(
-        not std::is_same_v<Value, Nothing>,
+    static_assert(!std::is_same_v<Value, Nothing>,
         "This stream does not have a value, there is nothing to publish, so you cannot "
         "call publish() on it.");
     return this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
@@ -763,8 +761,8 @@ struct Validator {
         return std::optional<std::string>{};
     };
   }
-  
-  rcl_interfaces::msg::ParameterDescriptor descriptor; //// TODO more hacks ... 
+
+  rcl_interfaces::msg::ParameterDescriptor descriptor; 
   /// A predicate that indicates whether a given value is feasible.
   /// By default, a validator always returns true since the parameter is unconstrained
   Validate validate;
@@ -773,7 +771,6 @@ struct Validator {
 template <class Value>
 struct ParameterStreamImpl {
   auto create_descriptor() {
-    /// TODO register validator
     auto desc = validator.descriptor;
     desc.name = parameter_name;
     desc.description = description;
@@ -850,7 +847,6 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
 
   /// Parameters are initialized always at the beginning, so they always have a value.
   const _Value &value() const {
-    /// TODO how exactly can this happen ?
     if (!this->impl()->has_value()) {
       throw std::runtime_error(
           "Parameter '" + this->impl()->name + "' does not have a value");
@@ -1114,28 +1110,41 @@ protected:
   }
 };
 
-/// A filter that detects timeouts on different topics.
-/// It needs to be attached to the node because it needs the current time.
+/// A filter that detects timeouts on different topics. It does so by creating an extra timer
 /// TODO assert message has a header stamp.
-/// TODO document extra-timer feature and explain how this works.
-/// TODO THIS IS NOT IMPLEMENTED CORRECTLY; we need to pass a parent !
+/// TODO allow parameters as max_age
 template <typename _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
-  /// TODO allow parameters as max_age
-  explicit TimeoutFilter(NodeBookkeeping &node, const rclcpp::Duration &max_age, bool create_extra_timer = false) {
-    this->impl()->name = "timeout_filter1";    
+  template<class Parent>
+  explicit TimeoutFilter(NodeBookkeeping &node, Parent parent, 
+    const rclcpp::Duration &max_age, bool create_extra_timer = true) {    
     auto node_clock = node.node_.get_node_clock_interface();
-    this->impl()->register_handler([impl=this->impl(), node_clock, max_age](const auto &new_state) {
-      const auto &message = new_state.value(); /// TODO err passing, there can be an error !
+    auto check_state = [impl=this->impl(), node_clock, max_age](const auto &new_state) {
+      if(!new_state.has_value())
+        return true;
+      const auto &message = new_state.value(); 
       rclcpp::Time time_now = node_clock->get_clock()->now();
       rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
       if ((time_now - time_message) <= max_age) {
         impl->resolve(message);
+        return false;
       } else {
         impl->reject(std::make_tuple(time_now, time_message, max_age));
+        return true;
       }
-    });
+    };
+    if(create_extra_timer) {
+      auto timer = parent.impl()->context.lock()->create_timer(max_age.template to_chrono<Duration>());
+      timer.then([timer, parent_impl = parent.impl(), check_state](size_t ticks) {
+          bool timeout_occured = check_state(parent_impl->get_state());
+          if(!timeout_occured)
+            timer.impl()->timer->reset();
+      });
+    } else {
+      parent.impl()->register_handler(check_state);
+    }
+
   }
 };
 

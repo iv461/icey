@@ -35,16 +35,13 @@ static void declare_parameter_struct(
           });
       field_value.register_with_ros(*ctx.node);
     } else if constexpr (is_valid_ros_param_type<Field>::value) {
-      /// TODO to convert std::vector to std::array, do better
-      auto field_value_init = to_ros_param_type(field_value);
-      using ParamValue = std::remove_reference_t<decltype(field_value_init)>;
-      auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value_init);
-      
-      param_obs.impl()->register_handler(
-          [&field_value, field_name_r, notify_callback](const auto &new_state) {
-            field_value = new_state.value();
-            notify_callback(field_name_r);
-          });
+      using ParamValue = std::remove_reference_t<decltype(field_value)>;
+      ctx.declare_parameter<ParamValue>(field_name_r, field_value)
+        .impl()->register_handler(
+            [&field_value, field_name_r, notify_callback](const auto &new_state) {
+              field_value = new_state.value();
+              notify_callback(field_name_r);
+            });
     } else if constexpr (std::is_aggregate_v<Field>) {
       /// Else recurse for supporting grouped params
       declare_parameter_struct(ctx, field_value, notify_callback, name_prefix + std::string(field_name) + ".");

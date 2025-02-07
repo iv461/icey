@@ -85,6 +85,8 @@ public:
   bool has_error() const { return state_.has_error(); }
   const Value &value() const { return state_.value(); }
   const ErrorValue &error() const { return state_.error(); }
+  State &get_state() { return state_; }
+  const State &get_state() const { return state_; }
 
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
@@ -140,8 +142,6 @@ public:
                   "This stream cannot have errors, so you cannot register .except() on it.");
     return this->done<false>(f);
   }
-
-  State &get_state() { return state_; }
 
 protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
