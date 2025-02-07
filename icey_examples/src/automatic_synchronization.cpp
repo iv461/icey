@@ -18,7 +18,6 @@ int main(int argc, char **argv) {
   auto map_base_link_tf = icey.create_transform_subscription("map", "base_link");
 
   auto float_sig = icey.create_subscription<std_msgs::msg::Float32>("my_float");
-
   auto camera_image = icey.create_subscription<sensor_msgs::msg::Image>("camera");
   auto point_cloud = icey.create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 

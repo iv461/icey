@@ -23,7 +23,6 @@ int main(int argc, char **argv) {
 
   auto node = icey::create_node(argc, argv, "signal_generator");
   auto &icey = node->icey();
-
   auto camera_center_sub =
       icey::create_camera_subscription(icey, "camera_center", "raw", rclcpp::SensorDataQoS());
 

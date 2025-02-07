@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
       return result;
     })
     .publish("rectangle_signal");
-
+    
   /// Add another computation for the timer
   timer
     .then([&](size_t ticks) {

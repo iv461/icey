@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
             return request;
           })
 
+
           .call_service<ExampleService>("set_bool_service2", 1s)
           .then([&](ExampleService::Response::SharedPtr response) {
             RCLCPP_INFO_STREAM(node->get_logger(), "Got response2: " << response->success);

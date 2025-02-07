@@ -20,6 +20,7 @@ public:
                                "Timer ticked, sending request: " << request->data);
             return request;
           })
+          
           /// Create a service client, the service is called every time the timer ticks. We set
           /// additionally a timeout for waiting until the service becomes available.
           .call_service<ExampleService>("set_bool_service1", 1s)

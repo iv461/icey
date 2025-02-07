@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
       node->get_logger(), "Got request: " << request->data << ", returning response: " << response->success);
   };
 
+
   icey.create_service<ExampleService>("set_bool_service1").then(service_cb);
   icey.create_service<ExampleService>("set_bool_service2").then(service_cb);
   icey.create_service<ExampleService>("set_bool_service3").then(service_cb);

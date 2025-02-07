@@ -377,10 +377,8 @@ public:
 };
 
 class Context;
-
-/// Everything that can be "attached" to a ROS node, publishers, subscribers, clients, TF subscriber
-/// etc.
-class NodeAttachable {
+/// The default augmentation of a stream implementation: The context, holding ROS-related stuff, and some names for easy debugging.
+class StreamImplDefault {
 public:
   /// For creating new Streams, we need a reference to the context
   std::weak_ptr<Context> context;
@@ -391,7 +389,7 @@ public:
   std::string name;
 };
 
-struct StreamTag {};  /// A tag to be able to recognize the type "Observeble" using traits
+struct StreamTag {};  /// A tag to be able to recognize the type "Stream" using traits
 template <typename... Args>
 struct stream_traits {
   static_assert((std::is_base_of_v<StreamTag, remove_shared_ptr_t<Args>> && ...),
@@ -415,7 +413,7 @@ constexpr void assert_all_stream_values_are_same() {
 /// Adds some things we want to put in inside the impl::Stream by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details.
 template <class _Derived>
-struct WithDefaults : public _Derived, public NodeAttachable {};
+struct WithDefaults : public _Derived, public StreamImplDefault {};
 
 /// FW declarations for Streams that we can create.
 template<class V>
@@ -690,25 +688,7 @@ struct is_valid_ros_param_type<std::vector<std::byte> > : std::true_type {};
 template <std::size_t N>
 struct is_valid_ros_param_type<std::array<std::byte, N> > : std::true_type {};
 
-/// Converters
-/*template <class T>
-struct to_ros_param_type {};
-
-template <class T, std::size_t N>
-struct to_ros_param_type< std::array<T, N> > { using type = std::vector<T>; };
-*/
-
-template <class T>
-decltype(auto) to_ros_param_type(T &x) {
-  if constexpr (is_std_array<T>) {
-    return std::vector<typename T::value_type>(x.begin(), x.end());
-  } else {
-    return x;
-  }
-}
-
-/// FOr API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
-
+/// For API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
 /// First, some constraints we can impose on parameters:
 /// A closed interval, meaning a value must be greater or equal to a minimum value
 /// and less or equal to a maximal value.
@@ -745,22 +725,11 @@ struct Validator {
       descriptor.integer_range.front().from_value = 0;
       descriptor.integer_range.front().to_value = std::numeric_limits<int64_t>::max();
       descriptor.integer_range.front().step = 1;
-      validate = [](const rclcpp::Parameter &new_param) { 
-        std::optional<std::string> result;
-        auto new_value = new_param.get_value<ROSValue>();
-        if(new_value < 0) result = "An unsigned integer must be greater than zero";
-        return result;
-      };
+      /// When an interval is set with the descriptor, ROS already validates the parameters, our custom validator won't even be called.
+      validate = get_default_validator();
     } else {
-      validate = [](const rclcpp::Parameter &new_param) {
-        std::optional<std::string> result;
-        try {
-          new_param.get_value<ROSValue>(); 
-        } catch(...) {
-          result = "Type change is not allowed";
-        }
-        return result;
-      };
+      /// ROS already validates type changes (and disallows them).
+      validate = get_default_validator();
     }
   }
 
@@ -774,13 +743,8 @@ struct Validator {
     descriptor.floating_point_range.front().from_value = interval.minimum;
     descriptor.floating_point_range.front().to_value = interval.maximum;
     descriptor.floating_point_range.front().step = 0.1; /// TODO I have no idea what to put in here ...
-
-    validate = [interval](const rclcpp::Parameter &new_param) {
-      auto new_value = new_param.get_value<ROSValue>();
-      std::optional<std::string> result;
-      if(!(new_value >= interval.minimum && new_value <= interval.maximum)) result = "The given value is outside of the allowed interval";
-      return result;
-    };
+    /// When an interval is set with the descriptor, ROS already validates the parameters, our custom validator won't even be called.
+    validate = get_default_validator();
   }
 
   /// Implicit conversion from a Set of values
@@ -793,6 +757,13 @@ struct Validator {
       return result;
     };
   }
+
+  Validate get_default_validator() const {
+    return [](const rclcpp::Parameter &new_param) { 
+        return std::optional<std::string>{};
+    };
+  }
+  
   rcl_interfaces::msg::ParameterDescriptor descriptor; //// TODO more hacks ... 
   /// A predicate that indicates whether a given value is feasible.
   /// By default, a validator always returns true since the parameter is unconstrained
@@ -1262,12 +1233,12 @@ struct TF2MessageFilter
 /// The context owns the streams.
 class Context : public std::enable_shared_from_this<Context> {
 public:
-  /// Creates a new stream of type O by passing the args to the constructor. It adds it to the list of attachables. 
-  /// This function is needed only to register streams as attachables.
+  /// Creates a new stream of type O by passing the args to the constructor. It adds the impl to the list of streams so that it does not go out of scope. 
+  /// It also sets the context
   template <class O, typename... Args>
   auto create_stream(Args &&...args) {
     O stream(*this->node, args...);
-    attachables_.push_back(stream.impl());  
+    stream_impls_.push_back(stream.impl());  
     stream.impl()->context = this->shared_from_this();
     return stream;
   }
@@ -1469,7 +1440,7 @@ template <typename ParameterT>
     return child;
   }
 
-  std::vector< std::shared_ptr < NodeAttachable > > attachables_;
+  std::vector< std::shared_ptr < StreamImplDefault > > stream_impls_;
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::shared_ptr<NodeBookkeeping> node;
 };
