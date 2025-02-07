@@ -8,7 +8,6 @@ Sorted by decreasing priority.
 - [ ] Up-to-date docs 
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
-- [ ] Parameter-struct refactoring: Use icey::Parameter for constrained types
 
 - [ ] We still got a crash in service_client_async_await_example
 
@@ -219,6 +218,10 @@ Sorted by decreasing priority.
 - [X] Code cleanup: Pass state to Stream callback 
 - [X] Do not leak the `NodeAttachable` implementation detail when users extend ICEY by proving defaults for the derived implementation. 
 - [X] [Refactor] Simplify functional API, remove deffered attachment to ROS 
+
+- [X] Parameter-struct refactoring: Use icey::Parameter for constrained types
+- [X] Implement parameter validators
+
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository

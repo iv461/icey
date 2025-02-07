@@ -5,7 +5,7 @@ using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
 
-  auto node = icey::create_node<icey::Node>(argc, argv, "signal_generator");  
+  auto node = icey::create_node(argc, argv, "signal_generator");
   
   auto frequency = node->icey().declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2.);

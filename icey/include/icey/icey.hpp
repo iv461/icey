@@ -209,14 +209,24 @@ private:
   std::vector<TFSubscriptionInfo> subscribed_transforms_;
 };
 
-/// A level 1 API wrap, implementing the lower level boilerplate-code and the bookkeeping
+/// Implements holding the shared pointers to subscribers/timers/publishers etc., i.e. provides bookeeping, so that the API user does not have to do it.
 class NodeBookkeeping {
 public:
+  using MaybeError = std::optional<std::string>;
+  using FValidate = std::function<MaybeError(const rclcpp::Parameter &)>;
   /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
   struct IceyBook {
     std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
                                               std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
         parameters_;
+    std::unordered_map<std::string, FValidate> parameter_validators_;
+
+    /// Callback handles for parameter pre-, during-validation and after validation (after Humble).
+    /// Reference: 
+    /// https://github.com/ros2/rclcpp/blob/rolling/rclcpp/doc/proposed_node_parameter_callbacks.md
+    /// See also: https://github.com/ros2/rclcpp/pull/1947
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
+
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
     std::unordered_map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
     std::unordered_map<std::string, rclcpp::ServiceBase::SharedPtr> services_;
@@ -250,11 +260,33 @@ public:
     return name_with_sub_namespace;
   }
 
+  /// Installs the callback validator callback
+  void add_parameter_validator_if_needed() {
+    if(book_.validate_param_cb_)
+      return;
+    auto const set_param_cb = [this](const std::vector<rclcpp::Parameter> & parameters) {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        for (const auto & parameter : parameters) {
+          const auto &validator = book_.parameter_validators_.at(parameter.get_name());
+          auto maybe_error = validator(parameter);
+          if (maybe_error) {
+            result.successful = false;
+            result.reason = *maybe_error;
+            break;
+          }
+        }
+        return result;
+    };
+    this->book_.validate_param_cb_ = node_.node_parameters_->add_on_set_parameters_callback(set_param_cb);
+  }
+
   template <class ParameterT, class CallbackT>
   auto add_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
                      CallbackT &&update_callback,
                      const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
                          rcl_interfaces::msg::ParameterDescriptor(),
+                      FValidate f_validate = FValidate(),
                      bool ignore_override = false) {
     rclcpp::ParameterValue v =
         default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
@@ -264,9 +296,11 @@ public:
     auto cb_handle =
         param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
     book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
+    book_.parameter_validators_.emplace(name, f_validate);
+    add_parameter_validator_if_needed();
     return param;
-  }
 
+  }
   template <class Msg, class F>
   void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                         const rclcpp::SubscriptionOptions &options) {
@@ -702,15 +736,33 @@ struct Validator {
   /// In ROS, parameters can only be of certain types
   using ROSValue = std::conditional_t<std::is_unsigned_v<Value>, int, Value>;
   /// The type of the predicate
-  using Validate = std::function<bool(const ROSValue &)>;
-
+  using Validate = std::function< std::optional<std::string> (const rclcpp::Parameter &)>;
+  
   /// Allow default-constructed validator, by default allowing all values
   /// in the set of values defined by the data type.
   Validator() {
-    if constexpr (std::is_unsigned_v<Value>)
-      validate = [](const ROSValue &new_value) { return new_value >= 0; };
-    else
-      validate = [](const ROSValue &) { return true; };
+    if constexpr (std::is_unsigned_v<Value>) {
+      descriptor.integer_range.resize(1);
+      descriptor.integer_range.front().from_value = 0;
+      descriptor.integer_range.front().to_value = std::numeric_limits<int64_t>::max();
+      descriptor.integer_range.front().step = 1;
+      validate = [](const rclcpp::Parameter &new_param) { 
+        std::optional<std::string> result;
+        auto new_value = new_param.get_value<ROSValue>();
+        if(new_value < 0) result = "An unsigned integer must be greater than zero";
+        return result;
+      };
+    } else {
+      validate = [](const rclcpp::Parameter &new_param) {
+        std::optional<std::string> result;
+        try {
+          new_param.get_value<ROSValue>(); 
+        } catch(...) {
+          result = "Type change is not allowed";
+        }
+        return result;
+      };
+    }
   }
 
   /// Construct explicitly from a  validation predicate
@@ -719,19 +771,30 @@ struct Validator {
   /// Allow implicit conversion from some easy sets:
   Validator(const Interval<Value> &interval)  /// NOLINT
   {
-    validate = [interval](const ROSValue &new_value) {
-      return new_value >= interval.minimum && new_value <= interval.maximum;
+    descriptor.floating_point_range.resize(1);
+    descriptor.floating_point_range.front().from_value = interval.minimum;
+    descriptor.floating_point_range.front().to_value = interval.maximum;
+    descriptor.floating_point_range.front().step = 0.1; /// TODO I have no idea what to put in here ...
+
+    validate = [interval](const rclcpp::Parameter &new_param) {
+      auto new_value = new_param.get_value<ROSValue>();
+      std::optional<std::string> result;
+      if(!(new_value >= interval.minimum && new_value <= interval.maximum)) result = "The given value is outside of the allowed interval";
+      return result;
     };
   }
 
   /// Implicit conversion from a Set of values
   Validator(const Set<Value> &set)  /// NOLINT
   {
-    validate = [set](const ROSValue &new_value) {
-      return set.count(new_value) > 0;  /// contains is C++20 :(
+    validate = [set](const rclcpp::Parameter &new_param) {
+      auto new_value = new_param.get_value<ROSValue>();
+      std::optional<std::string> result;
+      if(!set.count(new_value)) result = "The given value is not in the set of allowed values";
+      return result;
     };
   }
-
+  rcl_interfaces::msg::ParameterDescriptor descriptor; //// TODO more hacks ... 
   /// A predicate that indicates whether a given value is feasible.
   /// By default, a validator always returns true since the parameter is unconstrained
   Validate validate;
@@ -741,12 +804,13 @@ template <class Value>
 struct ParameterStreamImpl {
   auto create_descriptor() {
     /// TODO register validator
-    rcl_interfaces::msg::ParameterDescriptor desc;
+    auto desc = validator.descriptor;
+    desc.name = parameter_name;
     desc.description = description;
     desc.read_only = read_only;
     return desc;
   }
-
+  
   std::string parameter_name;
   std::optional<Value> default_value;
   Validator<Value> validator;
@@ -779,30 +843,32 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
                     read_only, ignore_override) {
     this->impl()->parameter_name = parameter_name;
     this->register_with_ros(node);
-    
   }
 
   void register_with_ros(NodeBookkeeping &node) {
+    const auto on_change_cb = [impl=this->impl()](const rclcpp::Parameter &new_param) {
+      /// TODO Refactor to validator and converters. Convert to std::array but retrieve as
+      /// std::vector. T
+      if constexpr (is_std_array<_Value>) {
+        using Scalar = typename _Value::value_type;
+        auto new_value = new_param.get_value<std::vector<Scalar>>();
+        if (std::declval<_Value>().max_size() != new_value.size()) {
+          throw std::invalid_argument("Wrong size of array parameter");
+        }
+        _Value new_val_arr{};
+        std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
+        impl->resolve(new_val_arr);
+      } else {
+        _Value new_value = new_param.get_value<_Value>();
+        impl->resolve(new_value);
+      }
+    };
     node.add_parameter<_Value>(
         this->impl()->parameter_name, this->impl()->default_value,
-        [impl=this->impl()](const rclcpp::Parameter &new_param) {
-          /// TODO Refactor to validator and converters. Convert to std::array but retrieve as
-          /// std::vector. T
-          if constexpr (is_std_array<_Value>) {
-            using Scalar = typename _Value::value_type;
-            auto new_value = new_param.get_value<std::vector<Scalar>>();
-            if (std::declval<_Value>().max_size() != new_value.size()) {
-              throw std::invalid_argument("Wrong size of array parameter");
-            }
-            _Value new_val_arr{};
-            std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
-            impl->resolve(new_val_arr);
-          } else {
-            _Value new_value = new_param.get_value<_Value>();
-            impl->resolve(new_value);
-          }
-        },
-        this->impl()->create_descriptor(), this->impl()->ignore_override);
+        on_change_cb,
+        this->impl()->create_descriptor(), 
+        this->impl()->validator.validate,
+        this->impl()->ignore_override);
     /// Set default value if there is one
     if (this->impl()->default_value) {
       // Value initial_value;
@@ -812,6 +878,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
       this->impl()->resolve(*this->impl()->default_value);
     }
   }
+
 
   /// Parameters are initialized always at the beginning, so we can provide a getter for the value
   /// so that they can be used conveniently in callbacks.
@@ -830,6 +897,8 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   {
     return this->value();
   }
+
+
 };
 
 /// A stream that represents a regular ROS subscriber. It stores as its value always a shared pointer to the message.

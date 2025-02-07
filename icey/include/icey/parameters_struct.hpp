@@ -16,7 +16,6 @@
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
-
 namespace icey {
 
 template <class T, class F>
@@ -42,6 +41,7 @@ static void declare_parameter_struct(
     using Field = std::remove_reference_t<decltype(field_value)>;
     std::string field_name_r(field_name);
     if constexpr (std::is_base_of_v<StreamTag, Field>) {
+      field_value.impl()->parameter_name = field_name_r;
       field_value.impl()->register_handler([field_name_r, notify_callback](const auto &new_state) {
             notify_callback(field_name_r);
           });
@@ -51,6 +51,8 @@ static void declare_parameter_struct(
       auto field_value_init = to_ros_param_type(field_value);
       using ParamValue = std::remove_reference_t<decltype(field_value_init)>;
       auto param_obs = ctx.declare_parameter<ParamValue>(field_name_r, field_value_init);
+
+      
       param_obs.impl()->register_handler(
           [&field_value, field_name_r, notify_callback](const auto &new_state) {
             field_value = new_state.value();
