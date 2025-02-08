@@ -149,7 +149,6 @@ protected:
   template <class Output, class F>
   auto call_depending_on_signature(Output output, F &&f) {
     return [output, f = std::forward<F>(f)](const auto &x) {
-        // TODO use std::invoke_result
       using ReturnType = decltype(apply_if_tuple(f, x));
       if constexpr (std::is_void_v<ReturnType>) {
         apply_if_tuple(f, x);
