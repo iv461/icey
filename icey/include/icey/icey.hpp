@@ -364,8 +364,8 @@ public:
   }
 
   void add_tf_listener_if_needed() {
-    if (book_.tf2_listener_)  /// We need only one subscription on /tf, but can have multiple
-                              /// transforms on which we listen
+    if (book_.tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
+                              /// transforms on which we listen to
       return;
     book_.tf2_listener_ = std::make_shared<TFListener>(node_);
   }
@@ -425,7 +425,6 @@ class Stream : public StreamTag {
 public:
   using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
   using Value = typename Impl::Value;
-  using MaybeValue = typename Impl::MaybeValue;
   using ErrorValue = typename Impl::ErrorValue;
   using Self = Stream<_Value, _ErrorValue,  Derived >;
 
@@ -508,7 +507,7 @@ public:
 
   void publish_transform() {
     assert_we_have_context();
-    static_assert(std::is_same_v<obs_msg<Self>, geometry_msgs::msg::TransformStamped>,
+    static_assert(std::is_same_v<Value, geometry_msgs::msg::TransformStamped>,
                   "The stream must hold a Value of type "
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
@@ -723,7 +722,7 @@ struct Validator {
       descriptor.integer_range.front().from_value = 0;
       descriptor.integer_range.front().to_value = std::numeric_limits<int64_t>::max();
       descriptor.integer_range.front().step = 1;
-      /// When an interval is set with the descriptor, ROS already validates the parameters, our custom validator won't even be called.
+      /// When an interval is set with the descriptor, ROS already validates the parameters, our custom validator won't even get called.
       validate = get_default_validator();
     } else {
       /// ROS already validates type changes (and disallows them).

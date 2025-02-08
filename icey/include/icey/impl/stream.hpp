@@ -146,12 +146,11 @@ public:
 protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Stream (that is captured by value)
-  template <bool resolve, class Output, class F>
+  template <class Output, class F>
   auto call_depending_on_signature(Output output, F &&f) {
-    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
-    // TODO use std::invoke_result
-    using ReturnType = decltype(apply_if_tuple(f, std::declval<FunctionArgument>()));
-    return [output, f = std::forward<F>(f)](const FunctionArgument &x) {
+    return [output, f = std::forward<F>(f)](const auto &x) {
+        // TODO use std::invoke_result
+      using ReturnType = decltype(apply_if_tuple(f, x));
       if constexpr (std::is_void_v<ReturnType>) {
         apply_if_tuple(f, x);
       } else if constexpr (is_result<ReturnType>) {
@@ -180,7 +179,7 @@ protected:
   template <bool resolve, class Output, class F>
   void create_handler(Output output, F &&f) {
     auto handler = [output, call_and_resolve =
-                        std::move(call_depending_on_signature<resolve>(output, f))](const State &state) {
+                        std::move(call_depending_on_signature(output, f))](const State &state) {
       if constexpr (resolve) {  /// If we handle values with .then()
         if (state.has_value()) {
           call_and_resolve(state.value());
