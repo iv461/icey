@@ -19,6 +19,7 @@ release = '0.1.0'
 # ones.
 extensions = [
     "breathe",
+    "myst_parser",
 ]
 
 breathe_projects = {"icey": ".build/doxygenxml/"}
@@ -40,3 +41,9 @@ highlight_language = 'c++'
 
 html_theme = 'furo'
 html_static_path = ['_static']
+html_theme_options = {
+    "dark_css_variables": {
+        "color-brand-primary": "#7C4DFF",
+        "color-brand-content": "#7C4DFF",
+    },
+}

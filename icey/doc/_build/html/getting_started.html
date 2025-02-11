@@ -1,0 +1,535 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Using Parameters Structs for managing many parameters" href="using_parameter_structs.html" /><link rel="prev" title="icey documentation" href="index.html" />
+
+    <!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
+        <title>Getting started - icey 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=354aac6f" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=302659d7" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #7C4DFF;
+  --color-brand-content: #7C4DFF;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #7C4DFF;
+  --color-brand-content: #7C4DFF;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">icey 0.1.0 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  
+  <span class="sidebar-brand-text">icey 0.1.0 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a></li>
+<li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="_sources/getting_started.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="getting-started">
+<h1>Getting started<a class="headerlink" href="#getting-started" title="Link to this heading">¶</a></h1>
+<section id="subscribing-and-publishing">
+<h2>Subscribing and publishing<a class="headerlink" href="#subscribing-and-publishing" title="Link to this heading">¶</a></h2>
+<p>TODO</p>
+</section>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<p>TODO update</p>
+</section>
+<section id="declare-and-use-parameters">
+<h2>Declare and use parameters<a class="headerlink" href="#declare-and-use-parameters" title="Link to this heading">¶</a></h2>
+<p>ICEY tries as to make using parameters, as everything else, as simple as possible.
+Parameters are declared with:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">offset_param</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">declare_parameter</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;offset&quot;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Where the argument <code class="docutils literal notranslate"><span class="pre">0.</span></code> is the default value and the argument <code class="docutils literal notranslate"><span class="pre">true</span></code> indicates this parameter is dynamic, i.e. it can be changed at runtime.</p>
+<p>If we cannot decide on meaningful default values for the parameters and instead require the user to always give the node this parameter,</p>
+<p>We can also constrain the values of each parameter:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">offset_param</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">parameter</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;offset&quot;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">,</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">Interval</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">));</span>
+</pre></div>
+</div>
+<p>We can also constraint it to a set of values:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">offset_param</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">parameter</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;offset&quot;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">,</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">Set</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">));</span>
+</pre></div>
+</div>
+<p>The issue that parameters in ROS require much unnecessary boilerplate code is
+widely known [1], and a couple of different solution were proposed.</p>
+<p>Some noteworthy are:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/PickNikRobotics/generate_parameter_library">PickNick’s code-generation solution based on YAML files</a></p></li>
+<li><p><a class="reference external" href="https://github.com/orgs/autowarefoundation/discussions/3433">AutoWare’s JSON schemas</a></p></li>
+</ul>
+<p>These approaches alleviate in my opinion the problem greatly and are well scalable.
+If there is interest in integrating any of these great libraries into ICEY, please open an GitHub issue.</p>
+<p>ICEY implements a simpler approch, not based on external files, more akin to the great <code class="docutils literal notranslate"><span class="pre">dynamic_reconfigure</span></code> package that was present in ROS 1. We will see in the future how the official ROS 2 API will evolve and which approach will eventually become the standard way.</p>
+<section id="using-parameters">
+<h3>Using parameters:<a class="headerlink" href="#using-parameters" title="Link to this heading">¶</a></h3>
+<p>Parameters can be used</p>
+<p>Do you commonly use a pareters struct that contains all your algorithm parameters ?</p>
+<p>(https://github.com/ros-navigation/navigation2/blob/main/nav2_map_server/include/nav2_map_server/map_io.hpp#L31)</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">struct</span><span class="w"> </span><span class="nc">LoadParameters</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">image_file_name</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">double</span><span class="w"> </span><span class="n">resolution</span><span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">origin</span><span class="p">{</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">};</span>
+<span class="w">  </span><span class="kt">double</span><span class="w"> </span><span class="n">free_thresh</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">double</span><span class="w"> </span><span class="n">occupied_thresh</span><span class="p">;</span>
+<span class="w">  </span><span class="n">MapMode</span><span class="w"> </span><span class="n">mode</span><span class="p">;</span>
+<span class="w">  </span><span class="kt">bool</span><span class="w"> </span><span class="n">negate</span><span class="p">;</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="subscribers">
+<h2>Subscribers<a class="headerlink" href="#subscribers" title="Link to this heading">¶</a></h2>
+<blockquote>
+<div><p>[!NOTE]
+A note to the message type: In ICEY, you always receive in the callback a regular C++ reference.
+Under the hood, ICEY always receives to allow for zero-overhead message passing when using intra-process communication, it simply dereferences the shared pointer before passing it to the user callback.</p>
+</div></blockquote>
+</section>
+<section id="managing-resources">
+<h2>Managing resources<a class="headerlink" href="#managing-resources" title="Link to this heading">¶</a></h2>
+<p>In ICEY, everything that you spawsn is managed internally, you do not have to store subscribers, publishers, timers etc. internally as class field like you have to in ROS.</p>
+</section>
+<section id="managing-state">
+<h2>Managing state<a class="headerlink" href="#managing-state" title="Link to this heading">¶</a></h2>
+<p>We understand that in robotics applications, we need to keep state somewhere: initialized algorithm libraries etc. Generally, you should try to use only state that is necessary, and pay attention to not store state redundantly. With that said, in ICEY the callbacks can always access variables from the outside, they do not need to be pure functions. This means, you simply capture your state in the lambda variable:</p>
+</section>
+<section id="timers">
+<h2>Timers<a class="headerlink" href="#timers" title="Link to this heading">¶</a></h2>
+<p>Timers are also signals:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">my_timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">create_timer</span><span class="p">(</span><span class="mi">100</span><span class="n">ms</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>You can think of them as sources similar to subscribers but with no information, publishing periodically.
+We can easily register a callback and use the timer like you usually would:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">my_timer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">create_timer</span><span class="p">(</span><span class="mi">100</span><span class="n">ms</span><span class="p">);</span>
+
+<span class="n">my_timer</span><span class="p">.</span><span class="n">then</span><span class="p">([](</span><span class="kt">size_t</span><span class="w"> </span><span class="n">ticks</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">/// Do work</span>
+<span class="p">});</span>
+</pre></div>
+</div>
+</section>
+<section id="using-timers-as-signal-generators">
+<h2>Using timers as signal generators<a class="headerlink" href="#using-timers-as-signal-generators" title="Link to this heading">¶</a></h2>
+<p>The power in ICEY comes from the fact that timers can be used as signal generators. For example, you can easily implement your own sine signal generator and publish it:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">period_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span><span class="n">ms</span><span class="p">;</span>
+<span class="k">auto</span><span class="w"> </span><span class="n">frequency</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">declare_parameter</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;frequency&quot;</span><span class="p">,</span><span class="w"> </span><span class="mf">10.</span><span class="p">);</span><span class="w"> </span><span class="c1">// Hz, i.e. 1/s</span>
+<span class="k">auto</span><span class="w"> </span><span class="n">amplitude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">declare_parameter</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;amplitude&quot;</span><span class="p">,</span><span class="w"> </span><span class="mf">2.</span><span class="p">);</span>
+
+<span class="k">auto</span><span class="w"> </span><span class="n">timer_signal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">create_timer</span><span class="p">(</span><span class="n">period_time</span><span class="p">);</span>
+
+<span class="k">auto</span><span class="w"> </span><span class="n">sine_signal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">timer_signal</span><span class="p">.</span><span class="n">then</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="kt">size_t</span><span class="w"> </span><span class="n">ticks</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">std_msgs</span><span class="o">::</span><span class="n">msg</span><span class="o">::</span><span class="n">Float32</span><span class="w"> </span><span class="n">float_val</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">period_time_s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.1</span><span class="p">;</span>
+<span class="w">    </span><span class="c1">/// We can .get() parameters since they are always initialized first, so at this point they are alreay there        </span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">amplitude</span><span class="o">-&gt;</span><span class="n">get</span><span class="p">()</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">sin</span><span class="p">((</span><span class="n">period_time_s</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">ticks</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">frequency</span><span class="o">-&gt;</span><span class="n">get</span><span class="p">()</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">M_PI</span><span class="p">);</span>
+<span class="w">    </span><span class="n">float_val</span><span class="p">.</span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">y</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">float_val</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="n">sine_signal</span><span class="p">.</span><span class="n">publish</span><span class="p">(</span><span class="s">&quot;sine_generator&quot;</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>The signature of <code class="docutils literal notranslate"><span class="pre">create_timer</span></code> is <code class="docutils literal notranslate"><span class="pre">icey::create_timer(period_time,</span> <span class="pre">&lt;use_wall_time&gt;,</span> <span class="pre">&lt;is_one_off_timer&gt;)</span></code>, one-off timers can be implemented therefore as well.</p>
+</section>
+<section id="using-timers-as-reference-signal-for-synchronization">
+<h2>Using timers as reference signal for synchronization<a class="headerlink" href="#using-timers-as-reference-signal-for-synchronization" title="Link to this heading">¶</a></h2>
+<p>TODO impl
+You can use timer signals as a reference point to bring multiple topics to the same frequency by simply adding a timer signal to the <code class="docutils literal notranslate"><span class="pre">ApproxTime</span></code> filter as an input source:</p>
+</section>
+<section id="signal-routing">
+<h2>Signal routing<a class="headerlink" href="#signal-routing" title="Link to this heading">¶</a></h2>
+<p>In the following, more advanced signal routing strategies are explained.</p>
+</section>
+<section id="single-input-multiple-output">
+<h2>Single input, multiple output<a class="headerlink" href="#single-input-multiple-output" title="Link to this heading">¶</a></h2>
+<p>TODO</p>
+<p>If you need to publish multiple times</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">period_time</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span><span class="n">ms</span><span class="p">;</span>
+<span class="kt">double</span><span class="w"> </span><span class="n">frequency</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+<span class="kt">double</span><span class="w"> </span><span class="n">amplitude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">2.</span><span class="p">;</span>
+<span class="kt">size_t</span><span class="w"> </span><span class="n">period_counter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">icey</span><span class="o">::</span><span class="n">create_timer</span><span class="p">(</span><span class="n">period_time</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;sine_generator&quot;</span><span class="p">).</span><span class="n">then</span><span class="p">([</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">rclcpp</span><span class="o">::</span><span class="n">Timer</span><span class="w"> </span><span class="o">&amp;</span><span class="n">timer</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">make_tuple</span><span class="p">()</span>
+<span class="p">}).</span><span class="n">publish</span><span class="p">(</span><span class="s">&quot;sine_generator&quot;</span><span class="p">);</span>
+</pre></div>
+</div>
+</section>
+<section id="stopping-the-data-flow-optional-return">
+<h2>Stopping the data flow: optional return<a class="headerlink" href="#stopping-the-data-flow-optional-return" title="Link to this heading">¶</a></h2>
+<p>One common control flow is to return early in a callback:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">VelocitySmoother::inputCommandCallback</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">geometry_msgs</span><span class="o">::</span><span class="n">msg</span><span class="o">::</span><span class="n">Twist</span><span class="o">::</span><span class="n">SharedPtr</span><span class="w"> </span><span class="n">msg</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="c1">// If message contains NaN or Inf, ignore</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">nav2_util</span><span class="o">::</span><span class="n">validateTwist</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">RCLCPP_ERROR</span><span class="p">(</span><span class="n">get_logger</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Velocity message contains NaNs or Infs! Ignoring as invalid!&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span>
+<span class="w">  </span><span class="c1">/// Otherwise, continue to do stuff</span>
+<span class="w">  </span><span class="kt">double</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">doCalculation</span><span class="p">(</span><span class="n">msg</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>In ICEY, we can achieve the exact same by returning an <code class="docutils literal notranslate"><span class="pre">std::optional&lt;T&gt;</span></code>: If there is value, it is propagated further. If not, then the next stage won’t be called.</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">auto</span><span class="w"> </span><span class="n">twist_signal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">create_subscription</span><span class="o">&lt;</span><span class="n">geometry_msgs</span><span class="o">::</span><span class="n">msg</span><span class="o">::</span><span class="n">Twist</span><span class="o">&gt;</span><span class="p">(</span><span class="s">&quot;twist_input&quot;</span><span class="p">);</span>
+
+<span class="k">auto</span><span class="w"> </span><span class="n">twist_calculation_result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">twist_signal</span><span class="p">.</span><span class="n">then</span><span class="p">([]</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">geometry_msgs</span><span class="o">::</span><span class="n">msg</span><span class="o">::</span><span class="n">Twist</span><span class="o">::</span><span class="n">SharedPtr</span><span class="w"> </span><span class="n">msg</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">optional</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">maybe_result</span><span class="p">;</span>
+<span class="w">  </span><span class="c1">// If message contains NaN or Inf, ignore</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">nav2_util</span><span class="o">::</span><span class="n">validateTwist</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">RCLCPP_ERROR</span><span class="p">(</span><span class="n">get_logger</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Velocity message contains NaNs or Infs! Ignoring as invalid!&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">maybe_result</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span>
+<span class="w">  </span><span class="c1">/// Otherwise, continue to do stuff</span>
+<span class="w">  </span><span class="n">maybe_result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">doCalculation</span><span class="p">(</span><span class="n">msg</span><span class="p">);</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">maybe_result</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="n">twist_calculation_result</span><span class="p">.</span><span class="n">then</span><span class="p">([](</span><span class="kt">double</span><span class="w"> </span><span class="n">result</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">/// This will only be called if the previous call returned something.</span>
+<span class="p">});</span>
+</pre></div>
+</div>
+<p>This is especially important for conditional publishing</p>
+</section>
+<section id="where-are-the-callback-groups">
+<h2>Where are the callback groups ?<a class="headerlink" href="#where-are-the-callback-groups" title="Link to this heading">¶</a></h2>
+<p>Callback groups were introduced in ROS 2 mostly for two things: Speeding up computation by allowing callbacks to be called by the executor from different threads in parallel, and avoid deadlocks [1].</p>
+<p>In ICEY deadlocks are prevented effectively by using the abstraction of Promises and using async/await.
+This way, altough the code looks synchronous, it is fully asynchronous and it is not possible to spin the event queue while a task is being processed, i.e. during a callback.</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>[1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272</p></li>
+<li><p>[2] Promise proposal by William Woodall and async/await discussion: https://github.com/ros2/ros2_documentation/issues/901</p></li>
+<li><p>[3] Mozilla Promise implementation: https://firefox-source-docs.mozilla.org/xpcom/mozpromise.html</p></li>
+<li><p>[4] std::future lacks continuation, current (2024) state of the art: https://ikriv.com/blog/?p=4916</p></li>
+<li><p>[5] https://engineering.fb.com/2015/06/19/developer-tools/futures-for-c-11-at-facebook/</p></li>
+<li><p>[1] Tutorial on how to use callback groups in rclcpp https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255</p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="using_parameter_structs.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Using Parameters Structs for managing many parameters</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Home</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Ivo Ivanov
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Getting started</a><ul>
+<li><a class="reference internal" href="#subscribing-and-publishing">Subscribing and publishing</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+<li><a class="reference internal" href="#declare-and-use-parameters">Declare and use parameters</a><ul>
+<li><a class="reference internal" href="#using-parameters">Using parameters:</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#subscribers">Subscribers</a></li>
+<li><a class="reference internal" href="#managing-resources">Managing resources</a></li>
+<li><a class="reference internal" href="#managing-state">Managing state</a></li>
+<li><a class="reference internal" href="#timers">Timers</a></li>
+<li><a class="reference internal" href="#using-timers-as-signal-generators">Using timers as signal generators</a></li>
+<li><a class="reference internal" href="#using-timers-as-reference-signal-for-synchronization">Using timers as reference signal for synchronization</a></li>
+<li><a class="reference internal" href="#signal-routing">Signal routing</a></li>
+<li><a class="reference internal" href="#single-input-multiple-output">Single input, multiple output</a></li>
+<li><a class="reference internal" href="#stopping-the-data-flow-optional-return">Stopping the data flow: optional return</a></li>
+<li><a class="reference internal" href="#where-are-the-callback-groups">Where are the callback groups ?</a></li>
+<li><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/scripts/furo.js?v=5fa4622c"></script>
+    </body>
+</html>

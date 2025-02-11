@@ -13,4 +13,10 @@ Table of Contents
 .. toctree::    
    :maxdepth: 2
    
-   api/index
+   getting_started
+   using_parameter_structs
+   using_tf
+   translating_an_autoware_node
+   extending_icey
+   development 
+   api_reference

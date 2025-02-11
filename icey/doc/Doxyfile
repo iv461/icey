@@ -22,3 +22,4 @@ PREDEFINED             = PYBIND11_NOINLINE
 
 EXCLUDE =  ../include/icey/impl/bag_of_metaprogramming_tricks.hpp
 EXCLUDE =  ../include/icey/impl/field_reflection.hpp
+EXCLUDE_SYMBOLS        = detail::*,*::detail::*
