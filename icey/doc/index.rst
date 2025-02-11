@@ -11,12 +11,18 @@ icey documentation
 Table of Contents
 ^^^^^^^^^^^^^^^^^
 .. toctree::    
+   :caption: Basics
    :maxdepth: 2
    
    getting_started
    using_parameter_structs
    using_tf
    translating_an_autoware_node
+
+.. toctree::    
+   :caption: Advanced
+   :maxdepth: 2
+   
    extending_icey
    development 
    api_reference
