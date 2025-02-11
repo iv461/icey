@@ -25,6 +25,7 @@ extensions = [
 breathe_projects = {"icey": ".build/doxygenxml/"}
 breathe_default_project = "icey"
 breathe_domain_by_extension = {"hpp": "cpp"}
+breathe_default_members = ('members', 'undoc-members')
 
 templates_path = ['_templates']
 exclude_patterns = []

@@ -415,11 +415,10 @@ constexpr void assert_all_stream_values_are_same() {
 template <class _Derived>
 struct WithDefaults : public _Derived, public StreamImplDefault {};
 
-/// FW declarations for Streams that we can create.
 template<class V>
 struct TimeoutFilter;
 
-/// An stream. Similar to a promise in JavaScript.
+/// An stream, basis for all other streams. Similar to a promise in JavaScript.
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Stream : public StreamTag {
 public:
@@ -451,7 +450,8 @@ public:
     return ss.str();
   }
 
-  auto impl() const { return impl_; }
+  /// Returns the undelying pointer to the implementation. 
+  Impl impl() const { return impl_; }
 
   /// Creates a new Stream that changes it's value to y every time the value x of the parent
   /// stream changes, where y = f(x).
@@ -462,6 +462,7 @@ public:
     return create_from_impl(impl()->then(f));
   }
 
+  /// Creates a new Stream that reveices the error.
   template <typename F>
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
@@ -469,7 +470,7 @@ public:
     return create_from_impl(impl()->except(f));
   }
 
-  /// Create a ROS publisher by creating a new stream of type T and connecting it to this
+  /// Creates a ROS publisher by creating a new stream of type T and connecting it to this
   /// stream.
   template <class T, typename... Args>
   void publish(Args &&...args) {
@@ -483,19 +484,20 @@ public:
     this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
-  /// TODO use this, perfect FW
+  /// Creates an arbitrary new stream through the \ref Context
   template <class O, typename... Args>
   auto create_stream(Args &&...args) { return this->impl()->context.lock()->template create_stream(args...); }
 
-  /// TODO document
-  auto timeout(rclcpp::Duration max_age, bool create_extra_timer = true) {
+  /// Returns a new Stream that sets an error on a timeout. 
+  /// \param create_extra_timer If set to true, an extra ROS-timer will be started so that a timeout error is set independent if any value is received in this Stream or not.
+  TimeoutFilter<Value> timeout(rclcpp::Duration max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
     return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
             *this, max_age, create_extra_timer);
   }
 
-  /// Create a ROS normal publisher.
+  /// Publish the value of this Stream.
   void publish(const std::string &topic_name,
                const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     assert_we_have_context();
@@ -505,6 +507,7 @@ public:
     return this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
   }
 
+  /// Publish a transform using the \ref TFBroadcaster in case this Stream holds a Value of type `geometry_msgs::msg::TransformStamped`.
   void publish_transform() {
     assert_we_have_context();
     static_assert(std::is_same_v<Value, geometry_msgs::msg::TransformStamped>,
@@ -549,8 +552,8 @@ public:
 
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
   ////////////////////////////////////////////////////////
-  /// Ok, let's go:
-  /// First, we are a promise:
+
+  /// @brief Promise type alias for supporting C++20's coroutines.
   using promise_type = Self;
   //// Second, we are still a promise, so we return self:
   Self get_return_object() {
@@ -657,6 +660,7 @@ public:
     return new_obs;
   }
 
+  /// The pointer to the undelying implementation (i.e. PIMPL idiom).
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
 };
 
@@ -1455,6 +1459,7 @@ template <typename ParameterT>
 
 /// The ROS node, additionally owning the context that holds the Streams.
 /// The template argument NodeType can be either rclcpp::Node or LifecycleNode, meaning it is used to support lifecycle_nodes
+/// \tparam NodeType can either be rclcpp::Node or rclcpp_lifecycle::LifecycleNode
 template <class NodeType>
 class NodeWithIceyContext : public NodeType {
 public:
@@ -1476,7 +1481,6 @@ public:
   std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
 };
 
-/// Public API aliases:
 using Node = NodeWithIceyContext<rclcpp::Node>;
 using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
 
