@@ -20,6 +20,17 @@
 ```{doxygentypedef} icey::Duration
 ```
 
+## Functions 
+```{doxygenfunction} icey::create_node
+```
+```{doxygenfunction} icey::spin
+```
+```{doxygenfunction} icey::spin_nodes
+```
+```{doxygenfunction} icey::declare_parameter_struct
+```
+
+
 ## Fundamentals
 ```{doxygenstruct} icey::Nothing
 ```
@@ -111,6 +122,10 @@ The context owns all the Streams.
 ```{doxygenclass} icey::NodeWithIceyContext
 ```
 
+## C++20' coroutines support 
+
+TODO 
+
 ## Traits 
 ```{doxygentypedef} icey::obs_err
 ```
@@ -119,5 +134,4 @@ The context owns all the Streams.
 ```{doxygentypedef} icey::obs_msg
 ```
 
-## C++20' coroutines support 
 

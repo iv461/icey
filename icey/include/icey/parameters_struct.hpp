@@ -19,6 +19,12 @@
 
 namespace icey {
 
+/// @brief Declare all fields of a given parameter struct as ROS parameters.
+/// @tparam T the type of the Parameter struct. It is a struct with fields of either a supported ROS type or a `icey::ParameterStream` or another (nested) with more fields of these types.
+/// @param ctx the ICEY-Context
+/// @param params The instance of the parameter struct where the values will be written to.
+/// @param notify_callback The callback that gets called when any field changes
+/// @param name_prefix Prefix for each parameter. Used by the recursive call to support nested structs.
 template <class T>
 static void declare_parameter_struct(
     Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback,
