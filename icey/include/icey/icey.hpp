@@ -1151,16 +1151,16 @@ struct TimeoutFilter
   }
 };
 
-/// Wrap the message_filters official ROS package. In the following, "MFL" refers to the
-/// message_filters package. An adapter, adapting the message_filters::SimpleFilter to our
-/// Stream (two different implementations of almost the same concept). Does nothing else than
-/// what message_filters::Subscriber does:
+/// Adapts the `message_filters::SimpleFilter` to our
+/// `Stream` (which is a similar concept). 
+/// Note that this is the same as what 
+/// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
-// We neeed the base to be able to recognize interpolatable nodes for example
 template <typename _Message, class _Base = Stream<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
-  /// TODO use  mfl::simplefilter as derive-impl, then do not capture this, and do not allocate this adapter dynamically 
-  /// but statically, and pass impl() (which will be then message_filters::SimpleFilter<_Message> ) to the synchroniuzer as input.
+  /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so that `signalMessage` is called once a value is received.
+  ///.. todo:: Use mfl::simplefilter as derive-impl, then do not capture this, and do not allocate this adapter dynamically 
+  ///  but statically, and pass impl() (which will be then message_filters::SimpleFilter<_Message> ) to the synchroniuzer as input.
   SimpleFilterAdapter() {
     this->impl()->register_handler([this](const auto &new_state) {
       using Event = message_filters::MessageEvent<const _Message>;
@@ -1257,7 +1257,7 @@ public:
 
 
 template <typename ParameterT>
-  auto declare_parameter(  
+ParameterStream<ParameterT> declare_parameter(  
       const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = std::nullopt,
                   const Validator<ParameterT> &validator = Validator<ParameterT>(),
                         std::string description = "", bool read_only = false,
@@ -1267,26 +1267,26 @@ template <typename ParameterT>
   }
 
   template <typename MessageT>
-  auto create_subscription(
+  SubscriptionStream<MessageT> create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
     auto stream = create_stream<SubscriptionStream<MessageT>>(name, qos, options);
     return stream;
   }
 
-  auto create_transform_subscription(const std::string &target_frame,
+  TransformSubscriptionStream create_transform_subscription(const std::string &target_frame,
                                      const std::string &source_frame) {
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
   template <class Message>
-  auto create_publisher(const std::string &topic_name,
+  PublisherStream<Message> create_publisher(const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     return create_stream<PublisherStream<Message>>(topic_name, qos);
   }
 
   template <class Parent>
-  void create_publisher(Parent parent, const std::string &topic_name,
+  PublisherStream<Message> create_publisher(Parent parent, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     stream_traits<Parent>{};
     using Message = obs_val<Parent>;
@@ -1294,32 +1294,32 @@ template <typename ParameterT>
   }
 
   template <class Parent>
-  void create_transform_publisher(Parent parent) {
+  TransformPublisherStream create_transform_publisher(Parent parent) {
     stream_traits<Parent>{};
     auto child = create_stream<TransformPublisherStream>();
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
-  auto create_timer(const Duration &interval, bool is_one_off_timer = false) {
+  TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
     return create_stream<TimerStream>(interval, is_one_off_timer);
   }
 
   template <typename ServiceT>
-  auto create_service(const std::string &service_name,
+  ServiceStream<ServiceT> create_service(const std::string &service_name,
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceStream<ServiceT>>(service_name, qos);
   }
 
   /// Add a service client
   template <typename ServiceT>
-  auto create_client(const std::string &service_name, const Duration &timeout,
+  ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
   /// Add a service client and connect it to the parent
   template <typename ServiceT, typename Parent>
-  auto create_client(Parent parent, const std::string &service_name, const Duration &timeout,
+  ServiceClient<ServiceT> create_client(Parent parent, const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     stream_traits<Parent>{};
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
@@ -1367,7 +1367,7 @@ template <typename ParameterT>
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
   template <typename... Parents>
-  static auto synchronize_approx_time(Parents... parents) {
+  static SynchronizerStream<obs_msg<Parents>...> synchronize_approx_time(Parents... parents) {
     stream_traits<Parents...>{};
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
@@ -1458,8 +1458,7 @@ template <typename ParameterT>
 };
 
 /// The ROS node, additionally owning the context that holds the Streams.
-/// The template argument NodeType can be either rclcpp::Node or LifecycleNode, meaning it is used to support lifecycle_nodes
-/// \tparam NodeType can either be rclcpp::Node or rclcpp_lifecycle::LifecycleNode
+/// \tparam NodeType can either be rclcpp::Node or rclcpp_lifecycle::LifecycleNode, meaning it is used to support lifecycle_nodes
 template <class NodeType>
 class NodeWithIceyContext : public NodeType {
 public:

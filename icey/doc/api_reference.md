@@ -13,6 +13,18 @@
 ```{doxygentypedef} icey::Parameter
 ```
 
+```{doxygentypedef} icey::Clock
+```
+```{doxygentypedef} icey::Time
+```
+```{doxygentypedef} icey::Duration
+```
+
+## Fundamentals
+```{doxygenstruct} icey::Nothing
+```
+```{doxygenstruct} icey::Result
+```
 ## Streams 
 These are all the available `Streams`, implementing subscribers, publishers/timers etc.
 
@@ -61,13 +73,13 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 
 The following filters handle synchronization, serialization  timeout and other operations on streams. 
 
-```{doxygensclass} icey::SimpleFilterAdapter
+```{doxygenstruct} icey::SimpleFilterAdapter
 ```
 
-```{doxygensclass} icey::SynchronizerStream
+```{doxygenclass} icey::SynchronizerStream
 ```
 
-```{doxygensclass} icey::SynchronizerStreamImpl
+```{doxygensstruct} icey::SynchronizerStreamImpl
 ```
 
 ```{doxygenstruct} icey::TF2MessageFilter
@@ -77,6 +89,12 @@ The following filters handle synchronization, serialization  timeout and other o
 ```
 
 ```{doxygenstruct} icey::TimeoutFilter
+```
+
+## Context
+The context owns all the Streams. 
+
+```{doxygenclass} icey::Context
 ```
 
 ## ROS-related 
@@ -93,10 +111,12 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenclass} icey::NodeWithIceyContext
 ```
 
-## Context
-The context owns all the Streams. 
-
-```{doxygenclass} icey::Context
+## Traits 
+```{doxygentypedef} icey::obs_err
+```
+```{doxygentypedef} icey::obs_val
+```
+```{doxygentypedef} icey::obs_msg
 ```
 
 ## C++20' coroutines support 

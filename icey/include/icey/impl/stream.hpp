@@ -9,8 +9,8 @@
 #include <variant>
 
 namespace icey {
-/// A special type that indicates that there is no value (note that using void causes many problems,
-/// defining an own struct is easier.)
+/// A special type that indicates that there is no value. (Using `void` for this would cause many problems,
+/// so defining an extra struct is easier.)
 struct Nothing {};
 /// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we
 /// will generally use in the following to recognize (unspecialized) class templates.
@@ -45,12 +45,13 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
 
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
-/// Some traits of the streams
+/// The value type the given Stream of type T holds. 
 template <class T>
 using obs_val = typename remove_shared_ptr_t<T>::Value;
+/// The error type the given Stream of type T holds. 
 template <class T>
 using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
-/// By stripping the shared_ptr, we usually get the ROS message that an stream holds
+/// The ROS-message type the given Stream of type T holds. 
 template <class T>
 using obs_msg = remove_shared_ptr_t<obs_val<T>>;
 
