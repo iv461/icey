@@ -4,7 +4,6 @@
 
 Sorted by decreasing priority. 
 
-
 - [ ] Up-to-date docs 
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
@@ -33,9 +32,6 @@ Sorted by decreasing priority.
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
-
-
-- [ ] Doxygen parsable comments -> low prio since internal is subject to change
 
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 
@@ -222,7 +218,8 @@ Sorted by decreasing priority.
 
 - [X] Parameter-struct refactoring: Use icey::Parameter for constrained types
 - [X] Implement parameter validators
-
+- [X] Doxygen parsable comments
+- [X] API-docs
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository

@@ -20,6 +20,7 @@ release = '0.1.0'
 extensions = [
     "breathe",
     "myst_parser",
+    "sphinx_copybutton",
 ]
 
 breathe_projects = {"icey": ".build/doxygenxml/"}
