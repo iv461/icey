@@ -28,7 +28,7 @@ void assert_is_not_lifecycle_node(const NodeBookkeeping &book) {
         "currently support image_transport with lifecycle nodes.");
 }
 
-struct ImageTransportSubscriberImpl  {
+struct ImageTransportSubscriberImpl {
   /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
   image_transport::Subscriber subscriber;
 };
@@ -36,8 +36,9 @@ struct ImageTransportSubscriberImpl  {
 struct ImageTransportSubscriber
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                     image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
-  ImageTransportSubscriber(NodeBookkeeping &node, const std::string &base_topic_name, const std::string &transport,
-                           const rclcpp::QoS qos, const rclcpp::SubscriptionOptions &options) {
+  ImageTransportSubscriber(NodeBookkeeping &node, const std::string &base_topic_name,
+                           const std::string &transport, const rclcpp::QoS qos,
+                           const rclcpp::SubscriptionOptions &options) {
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime
@@ -48,7 +49,7 @@ struct ImageTransportSubscriber
     try {
       this->impl()->subscriber =
           image_transport::create_subscription(node.node_.maybe_regular_node, base_topic_name, cb,
-                                                transport, qos.get_rmw_qos_profile(), options);
+                                               transport, qos.get_rmw_qos_profile(), options);
     } catch (const image_transport::TransportLoadException &exception) {
       this->impl()->reject(exception);
     }
@@ -56,22 +57,23 @@ struct ImageTransportSubscriber
 };
 
 struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPtr> {
-  ImageTransportPublisher(NodeBookkeeping &node, const std::string &base_topic_name, const rclcpp::QoS qos,
+  ImageTransportPublisher(NodeBookkeeping &node, const std::string &base_topic_name,
+                          const rclcpp::QoS qos,
                           const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
     this->impl()->name = base_topic_name;
-      assert_is_not_lifecycle_node(
-          node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
-                  /// lifecycle nodes, so we can only assert this at runtime
-      image_transport::Publisher publisher = image_transport::create_publisher(
-          node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
-      this->impl()->register_handler([publisher](const auto &new_state) {
-        publisher.publish(new_state.value()); /// There can be no error
-      });
+    assert_is_not_lifecycle_node(
+        node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
+                /// lifecycle nodes, so we can only assert this at runtime
+    image_transport::Publisher publisher = image_transport::create_publisher(
+        node.node_.maybe_regular_node, base_topic_name, qos.get_rmw_qos_profile());
+    this->impl()->register_handler([publisher](const auto &new_state) {
+      publisher.publish(new_state.value());  /// There can be no error
+    });
   }
 };
 
 // An stream representing a camera subscriber.
-struct CameraSubscriberImpl  {
+struct CameraSubscriberImpl {
   /// The image_transport sub/pub use PIMPL, so we can hold them by value.
   image_transport::CameraSubscriber subscriber;
 };
@@ -80,8 +82,8 @@ struct CameraSubscriber
     : public Stream<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
                                sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
                     image_transport::TransportLoadException, CameraSubscriberImpl> {
-  CameraSubscriber(NodeBookkeeping &node, const std::string &base_topic_name, const std::string &transport,
-                   const rclcpp::QoS qos) {
+  CameraSubscriber(NodeBookkeeping &node, const std::string &base_topic_name,
+                   const std::string &transport, const rclcpp::QoS qos) {
     this->impl()->name = base_topic_name;
     const auto cb = [impl = this->impl()](
                         sensor_msgs::msg::Image::ConstSharedPtr image,
@@ -93,8 +95,7 @@ struct CameraSubscriber
                 /// lifecycle nodes, so we can only assert this at runtime
     try {
       this->impl()->subscriber = image_transport::create_camera_subscription(
-          node.node_.maybe_regular_node, base_topic_name, cb, transport,
-          qos.get_rmw_qos_profile());
+          node.node_.maybe_regular_node, base_topic_name, cb, transport, qos.get_rmw_qos_profile());
     } catch (const image_transport::TransportLoadException &exception) {
       this->impl()->reject(exception);
     }
@@ -104,7 +105,8 @@ struct CameraSubscriber
 struct CameraPublisher
     : public Stream<
           std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>> {
-  CameraPublisher(NodeBookkeeping &node, const std::string &base_topic_name, const rclcpp::QoS qos) {
+  CameraPublisher(NodeBookkeeping &node, const std::string &base_topic_name,
+                  const rclcpp::QoS qos) {
     this->impl()->name = base_topic_name;
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
@@ -118,31 +120,29 @@ struct CameraPublisher
   }
 };
 
-auto create_image_transport_subscription(
-    Context &ctx,
-    const std::string &base_topic_name, const std::string &transport, const rclcpp::QoS &qos,
+/// Create an ImageTransportSubscriber using the given Context.
+ImageTransportSubscriber create_image_transport_subscription(
+    Context &ctx, const std::string &base_topic_name, const std::string &transport,
+    const rclcpp::QoS &qos,
     const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
   return ctx.create_stream<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
 };
 
-auto create_image_transport_publisher(
-  Context &ctx,
-    const std::string &base_topic_name, const rclcpp::QoS &qos,
+/// Create an ImageTransportPublisher using the given Context.
+ImageTransportPublisher create_image_transport_publisher(
+    Context &ctx, const std::string &base_topic_name, const rclcpp::QoS &qos,
     const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
   return ctx.create_stream<ImageTransportPublisher>(base_topic_name, qos, options);
 };
-
-auto create_camera_subscription(
-  Context &ctx,
-  const std::string &base_topic_name, const std::string &transport,
-                                const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
+/// Create an CameraSubscriber using the given Context.
+CameraSubscriber create_camera_subscription(Context &ctx, const std::string &base_topic_name,
+                                            const std::string &transport,
+                                            const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
   return ctx.create_stream<CameraSubscriber>(base_topic_name, transport, qos);
 };
-
-auto create_camera_publisher(
-  Context &ctx,
-  const std::string &base_topic_name,
-                             const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
+/// Create an CameraPublisher using the given Context.
+CameraPublisher create_camera_publisher(Context &ctx, const std::string &base_topic_name,
+                                        const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
   return ctx.create_stream<CameraPublisher>(base_topic_name, qos);
 };
 

@@ -208,6 +208,7 @@
 <li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html#support-for-image-transport">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a></li>
 </ul>
 
 </div>
@@ -251,6 +252,18 @@
   <h2>I</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="api_reference.html#_CPPv4N4icey15CameraPublisherE">icey::CameraPublisher (C++ struct)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey15CameraPublisher15CameraPublisherER15NodeBookkeepingRKNSt6stringEKN6rclcpp3QoSE">icey::CameraPublisher::CameraPublisher (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey16CameraSubscriberE">icey::CameraSubscriber (C++ struct)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey16CameraSubscriber16CameraSubscriberER15NodeBookkeepingRKNSt6stringERKNSt6stringEKN6rclcpp3QoSE">icey::CameraSubscriber::CameraSubscriber (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey20CameraSubscriberImplE">icey::CameraSubscriberImpl (C++ struct)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey20CameraSubscriberImpl10subscriberE">icey::CameraSubscriberImpl::subscriber (C++ member)</a>
+</li>
         <li><a href="api_reference.html#_CPPv4N4icey5ClockE">icey::Clock (C++ type)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4N4icey7ContextE">icey::Context (C++ class)</a>
@@ -289,11 +302,31 @@
 </li>
         <li><a href="api_reference.html#_CPPv4I0EN4icey7Context26synchronize_with_transformEDa6ParentNSt6stringEN6rclcpp8DurationE">icey::Context::synchronize_with_transform (C++ function)</a>
 </li>
+        <li><a href="api_reference.html#_CPPv4N4icey23create_camera_publisherER7ContextRKNSt6stringERKN6rclcpp3QoSE">icey::create_camera_publisher (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey26create_camera_subscriptionER7ContextRKNSt6stringERKNSt6stringERKN6rclcpp3QoSE">icey::create_camera_subscription (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey32create_image_transport_publisherER7ContextRKNSt6stringERKN6rclcpp3QoSERKN6rclcpp16PublisherOptionsE">icey::create_image_transport_publisher (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey35create_image_transport_subscriptionER7ContextRKNSt6stringERKNSt6stringERKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE">icey::create_image_transport_subscription (C++ function)</a>
+</li>
         <li><a href="api_reference.html#_CPPv4I0EN4icey11create_nodeEDaiPPcRKNSt6stringE">icey::create_node (C++ function)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4I0EN4icey24declare_parameter_structEvR7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE">icey::declare_parameter_struct (C++ function)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4N4icey8DurationE">icey::Duration (C++ type)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey23ImageTransportPublisherE">icey::ImageTransportPublisher (C++ struct)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey23ImageTransportPublisher23ImageTransportPublisherER15NodeBookkeepingRKNSt6stringEKN6rclcpp3QoSERKN6rclcpp16PublisherOptionsE">icey::ImageTransportPublisher::ImageTransportPublisher (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey24ImageTransportSubscriberE">icey::ImageTransportSubscriber (C++ struct)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey24ImageTransportSubscriber24ImageTransportSubscriberER15NodeBookkeepingRKNSt6stringERKNSt6stringEKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE">icey::ImageTransportSubscriber::ImageTransportSubscriber (C++ function)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey28ImageTransportSubscriberImplE">icey::ImageTransportSubscriberImpl (C++ struct)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey28ImageTransportSubscriberImpl10subscriberE">icey::ImageTransportSubscriberImpl::subscriber (C++ member)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4I0000EN4icey4impl6StreamE">icey::impl::Stream (C++ class)</a>
 </li>
@@ -495,6 +528,8 @@
 </li>
         <li><a href="api_reference.html#_CPPv4I0EN4icey15PublisherStreamE">icey::PublisherStream (C++ struct)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="api_reference.html#_CPPv4N4icey15PublisherStream7MessageE">icey::PublisherStream::Message (C++ type)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4NK4icey15PublisherStream7publishERK6_Value">icey::PublisherStream::publish (C++ function)</a>
@@ -507,8 +542,6 @@
 </li>
         <li><a href="api_reference.html#_CPPv4NK4icey6Result5errorEv">icey::Result::error (C++ function)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="api_reference.html#_CPPv4N4icey6Result10ErrorValueE">icey::Result::ErrorValue (C++ type)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4NK4icey6Result9has_errorEv">icey::Result::has_error (C++ function)</a>
@@ -643,6 +676,14 @@
 </li>
         <li><a href="api_reference.html#_CPPv4N4icey6StreamD0Ev">icey::Stream::~Stream (C++ function)</a>
 </li>
+        <li><a href="api_reference.html#_CPPv4N4icey17StreamImplDefaultE">icey::StreamImplDefault (C++ class)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey17StreamImplDefault10class_nameE">icey::StreamImplDefault::class_name (C++ member)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey17StreamImplDefault7contextE">icey::StreamImplDefault::context (C++ member)</a>
+</li>
+        <li><a href="api_reference.html#_CPPv4N4icey17StreamImplDefault4nameE">icey::StreamImplDefault::name (C++ member)</a>
+</li>
         <li><a href="api_reference.html#_CPPv4I0EN4icey18SubscriptionStreamE">icey::SubscriptionStream (C++ struct)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4N4icey18SubscriptionStream18SubscriptionStreamER15NodeBookkeepingRKNSt6stringERKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE">icey::SubscriptionStream::SubscriptionStream (C++ function)</a>
@@ -723,11 +764,11 @@
 </li>
         <li><a href="api_reference.html#_CPPv4N4icey11TimerStream11TimerStreamER15NodeBookkeepingRK8Durationb">icey::TimerStream::TimerStream (C++ function)</a>
 </li>
-        <li><a href="api_reference.html#_CPPv4N4icey24TransformPublisherStreamE">icey::TransformPublisherStream (C++ struct)</a>, <a href="api_reference.html#_CPPv4N4icey24TransformPublisherStreamE">[1]</a>
+        <li><a href="api_reference.html#_CPPv4N4icey24TransformPublisherStreamE">icey::TransformPublisherStream (C++ struct)</a>
 </li>
-        <li><a href="api_reference.html#_CPPv4N4icey24TransformPublisherStream24TransformPublisherStreamER15NodeBookkeeping">icey::TransformPublisherStream::TransformPublisherStream (C++ function)</a>, <a href="api_reference.html#_CPPv4N4icey24TransformPublisherStream24TransformPublisherStreamER15NodeBookkeeping">[1]</a>
+        <li><a href="api_reference.html#_CPPv4N4icey24TransformPublisherStream24TransformPublisherStreamER15NodeBookkeeping">icey::TransformPublisherStream::TransformPublisherStream (C++ function)</a>
 </li>
-        <li><a href="api_reference.html#_CPPv4N4icey24TransformPublisherStream5ValueE">icey::TransformPublisherStream::Value (C++ type)</a>, <a href="api_reference.html#_CPPv4N4icey24TransformPublisherStream5ValueE">[1]</a>
+        <li><a href="api_reference.html#_CPPv4N4icey24TransformPublisherStream5ValueE">icey::TransformPublisherStream::Value (C++ type)</a>
 </li>
         <li><a href="api_reference.html#_CPPv4N4icey27TransformSubscriptionStreamE">icey::TransformSubscriptionStream (C++ struct)</a>
 </li>

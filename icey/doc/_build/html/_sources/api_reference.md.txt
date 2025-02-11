@@ -82,10 +82,7 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```{doxygenstruct} icey::TransformPublisherStream
 ```
 
-```{doxygenstruct} icey::TransformPublisherStream
-```
-
-```{doxygenstruct} icey::StreamImplDefault
+```{doxygenclass} icey::StreamImplDefault
 ```
 
 ### Actual implementation of Stream 
@@ -146,5 +143,32 @@ TODO
 ```
 ```{doxygentypedef} icey::obs_msg
 ```
+# Support for `image_transport`
+
+```{doxygenstruct} icey::ImageTransportSubscriber
+```
+```{doxygenstruct} icey::ImageTransportSubscriberImpl
+```
+
+```{doxygenstruct} icey::ImageTransportPublisher
+```
 
 
+```{doxygenstruct} icey::CameraSubscriber
+```
+```{doxygenstruct} icey::CameraSubscriberImpl
+```
+
+```{doxygenstruct} icey::CameraPublisher
+```
+
+```{doxygenfunction} icey::create_image_transport_subscription
+```
+
+```{doxygenfunction} icey::create_image_transport_publisher
+```
+
+```{doxygenfunction} icey::create_camera_subscription
+```
+```{doxygenfunction} icey::create_camera_publisher
+```
