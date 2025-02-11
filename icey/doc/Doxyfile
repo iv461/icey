@@ -1,0 +1,24 @@
+PROJECT_NAME           = icey
+INPUT                  = ../include/icey/
+RECURSIVE              = YES
+
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = .build/doxygenxml
+XML_PROGRAMLISTING     = YES
+
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+EXPAND_AS_DEFINED      = PYBIND11_RUNTIME_EXCEPTION
+
+ALIASES                = "rst=\verbatim embed:rst"
+ALIASES               += "endrst=\endverbatim"
+
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+PREDEFINED             = PYBIND11_NOINLINE
+
+EXCLUDE =  ../include/icey/impl/bag_of_metaprogramming_tricks.hpp
+EXCLUDE =  ../include/icey/impl/field_reflection.hpp
