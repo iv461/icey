@@ -1,5 +1,6 @@
 # API Reference 
 
+
 ## Type aliases
 
 ```{doxygentypedef} icey::Node
