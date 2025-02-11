@@ -22,9 +22,6 @@ include_directories(
     include
 )
 
-
-#ament_auto_add_executable(mp_scratchpad examples/mp_scratchpad.cpp)
-
 if(BUILD_TESTING)
   # Automatic inclusion of lint-related tests
   #find_package(ament_lint_auto REQUIRED)
@@ -32,12 +29,11 @@ if(BUILD_TESTING)
 
   # Add gtests
   find_package(ament_cmake_gtest REQUIRED)
-  #add_subdirectory(test)
   
   ament_auto_add_gtest(promise_test test/promise_test.cpp) 
 
-  ##target_include_directories(promise_test PUBLIC include/)
-  #ament_target_dependencies(promise_test rclcpp) 
+  target_include_directories(promise_test PUBLIC include/)
+  ament_target_dependencies(promise_test rclcpp) 
 
 endif()
 

@@ -90,7 +90,7 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenclass} icey::SynchronizerStream
 ```
 
-```{doxygensstruct} icey::SynchronizerStreamImpl
+```{doxygenstruct} icey::SynchronizerStreamImpl
 ```
 
 ```{doxygenstruct} icey::TF2MessageFilter

@@ -451,7 +451,7 @@ public:
   }
 
   /// Returns the undelying pointer to the implementation. 
-  Impl impl() const { return impl_; }
+  std::shared_ptr<Impl> impl() const { return impl_; }
 
   /// Creates a new Stream that changes it's value to y every time the value x of the parent
   /// stream changes, where y = f(x).
@@ -504,7 +504,7 @@ public:
     static_assert(!std::is_same_v<Value, Nothing>,
         "This stream does not have a value, there is nothing to publish, so you cannot "
         "call publish() on it.");
-    return this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
+    this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
   }
 
   /// Publish a transform using the \ref TFBroadcaster in case this Stream holds a Value of type `geometry_msgs::msg::TransformStamped`.
@@ -514,7 +514,7 @@ public:
                   "The stream must hold a Value of type "
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
-    return this->impl()->context.lock()->create_transform_publisher(*this);
+    this->impl()->context.lock()->create_transform_publisher(*this);
   }
 
   /// Create a new ServiceClient stream, this stream holds the request.
@@ -530,6 +530,8 @@ public:
   }
 
   /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
+  /// Given that `Value` is of type std::tuple<Value1, Value2, ..., ValueN>, this returns 
+  /// `std::tuple< Stream<Value1>, Stream<Value2>, ..., Stream<ValueN>>`
   auto unpack() {
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, there is nothing to unpack().");
@@ -1286,7 +1288,7 @@ ParameterStream<ParameterT> declare_parameter(
   }
 
   template <class Parent>
-  PublisherStream<Message> create_publisher(Parent parent, const std::string &topic_name,
+  PublisherStream<obs_val<Parent>> create_publisher(Parent parent, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     stream_traits<Parent>{};
     using Message = obs_val<Parent>;

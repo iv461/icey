@@ -20,8 +20,8 @@
 namespace icey {
 
 /// @brief Declare all fields of a given parameter struct as ROS parameters.
-/// @tparam T the type of the Parameter struct. It is a struct with fields of either a supported ROS type or a `icey::ParameterStream` or another (nested) with more fields of these types.
-/// @param ctx the ICEY-Context
+/// @tparam T the type of the Parameter struct. It is a struct with fields of either a primitive type supported by ROS (e.g. `double`) or a `icey::ParameterStream`, or another (nested) struct with more such fields.
+/// @param ctx the icey-Context, required for registering the parameters.
 /// @param params The instance of the parameter struct where the values will be written to.
 /// @param notify_callback The callback that gets called when any field changes
 /// @param name_prefix Prefix for each parameter. Used by the recursive call to support nested structs.
