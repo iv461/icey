@@ -3,15 +3,14 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Using TF" href="using_tf.html" /><link rel="prev" title="Getting started" href="getting_started.html" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Getting started" href="getting_started.html" />
 
     <!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
-        <title>Using Parameters Structs for managing many parameters - icey 0.1.0 documentation</title>
+        <title>icey 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=302659d7" />
-    <link rel="stylesheet" type="text/css" href="_static/icey.css?v=bce3c9b0" />
     
     
 
@@ -26,12 +25,16 @@
     body[data-theme="dark"] {
       --color-code-background: #202020;
   --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #7C4DFF;
+  --color-brand-content: #7C4DFF;
   
     }
     @media (prefers-color-scheme: dark) {
       body:not([data-theme="light"]) {
         --color-code-background: #202020;
   --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #7C4DFF;
+  --color-brand-content: #7C4DFF;
   
       }
     }
@@ -168,7 +171,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">icey 0.1.0 documentation</div></a>
+      <a href="#"><div class="brand">icey 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -189,7 +192,7 @@
   <aside class="sidebar-drawer">
     <div class="sidebar-container">
       
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
   
   
   <span class="sidebar-brand-text">icey 0.1.0 documentation</span>
@@ -201,9 +204,9 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">Basics</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Using Parameters Structs for managing many parameters</a></li>
+<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a></li>
 <li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a></li>
 </ul>
@@ -233,7 +236,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="_sources/using_parameter_structs.md.txt" title="View this page">
+  <a class="muted-link" href="_sources/index.rst.txt" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -253,18 +256,89 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="using-parameters-structs-for-managing-many-parameters">
-<h1>Using Parameters Structs for managing many parameters<a class="headerlink" href="#using-parameters-structs-for-managing-many-parameters" title="Link to this heading">¶</a></h1>
-<p>TODO
-Many ROS 2 developers think that the API for declaring parameters is unnecessarily complex [1, 2].
-Here, I offer a solution to</p>
-<section id="references">
-<h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
-<ul class="simple">
-<li><p>[1] https://github.com/bit-bots/bitbots_tf_buffer</p></li>
-<li><p>[2] https://discourse.ros.org/t/c-parameters-api-feels-overly-complex/27968</p></li>
-<li><p>[3] https://github.com/TUMFTM/TAM__param_management</p></li>
+          <section id="icey-documentation">
+<h1>icey documentation<a class="headerlink" href="#icey-documentation" title="Link to this heading">¶</a></h1>
+<section id="table-of-contents">
+<h2>Table of Contents<a class="headerlink" href="#table-of-contents" title="Link to this heading">¶</a></h2>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Basics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#subscribing-and-publishing">Subscribing and publishing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#declare-and-use-parameters">Declare and use parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#subscribers">Subscribers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#managing-resources">Managing resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#managing-state">Managing state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#timers">Timers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#using-timers-as-signal-generators">Using timers as signal generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#using-timers-as-reference-signal-for-synchronization">Using timers as reference signal for synchronization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#signal-routing">Signal routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#single-input-multiple-output">Single input, multiple output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#stopping-the-data-flow-optional-return">Stopping the data flow: optional return</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#where-are-the-callback-groups">Where are the callback groups ?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#references">References</a></li>
 </ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="using_parameter_structs.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="using_tf.html#solution-in-icey">Solution in ICEY</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_tf.html#using-the-tf-buffer-directly">Using the TF-buffer directly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_tf.html#references">References:</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="translating_an_autoware_node.html#identifying-the-communication-pattern">Identifying the communication pattern</a></li>
+<li class="toctree-l2"><a class="reference internal" href="translating_an_autoware_node.html#notifying-on-waiting">Notifying on waiting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="translating_an_autoware_node.html#checking-for-timeout">Checking for timeout</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="extending_icey.html#the-stream-concept">The Stream concept</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extending_icey.html#extending-with-custom-subscribers-and-publishers-image-transport">Extending with custom subscribers and publishers: ìmage_transport</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="development.html#build">Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development.html#debug">Debug</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development.html#build-documentation">Build documentation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#type-aliases">Type aliases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#functions">Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#fundamentals">Fundamentals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#streams">Streams</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#filters">Filters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#context">Context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#ros-related">ROS-related</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#c-20-coroutines-support">C++20’ coroutines support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#traits">Traits</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html#support-for-image-transport">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey24ImageTransportSubscriberE"><code class="docutils literal notranslate"><span class="pre">icey::ImageTransportSubscriber</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey28ImageTransportSubscriberImplE"><code class="docutils literal notranslate"><span class="pre">icey::ImageTransportSubscriberImpl</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey23ImageTransportPublisherE"><code class="docutils literal notranslate"><span class="pre">icey::ImageTransportPublisher</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey16CameraSubscriberE"><code class="docutils literal notranslate"><span class="pre">icey::CameraSubscriber</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey20CameraSubscriberImplE"><code class="docutils literal notranslate"><span class="pre">icey::CameraSubscriberImpl</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey15CameraPublisherE"><code class="docutils literal notranslate"><span class="pre">icey::CameraPublisher</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey35create_image_transport_subscriptionER7ContextRKNSt6stringERKNSt6stringERKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE"><code class="docutils literal notranslate"><span class="pre">create_image_transport_subscription()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey32create_image_transport_publisherER7ContextRKNSt6stringERKN6rclcpp3QoSERKN6rclcpp16PublisherOptionsE"><code class="docutils literal notranslate"><span class="pre">create_image_transport_publisher()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey26create_camera_subscriptionER7ContextRKNSt6stringERKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_camera_subscription()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#_CPPv4N4icey23create_camera_publisherER7ContextRKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_camera_publisher()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
 </section>
 </section>
 
@@ -273,26 +347,16 @@ Here, I offer a solution to</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="using_tf.html">
+          <a class="next-page" href="getting_started.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Using TF</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
-          <a class="prev-page" href="getting_started.html">
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-              <div class="page-info">
-                <div class="context">
-                  <span>Previous</span>
-                </div>
-                
                 <div class="title">Getting started</div>
-                
               </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
+          
         </div>
         <div class="bottom-of-page">
           <div class="left-details">
@@ -323,8 +387,10 @@ Here, I offer a solution to</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Using Parameters Structs for managing many parameters</a><ul>
-<li><a class="reference internal" href="#references">References</a></li>
+<li><a class="reference internal" href="#">icey documentation</a><ul>
+<li><a class="reference internal" href="#table-of-contents">Table of Contents</a><ul>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
