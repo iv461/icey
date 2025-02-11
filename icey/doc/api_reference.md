@@ -46,6 +46,13 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```{doxygenstruct} icey::ParameterStream
 ```
 
+```{doxygenstruct} icey::Interval
+```
+```{doxygenstruct} icey::Set
+```
+```{doxygenstruct} icey::Validator
+```
+
 ```{doxygenstruct} icey::SubscriptionStream
 ```
 ```{doxygenstruct} icey::TimerStream
@@ -73,6 +80,12 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```
 
 ```{doxygenstruct} icey::TransformPublisherStream
+```
+
+```{doxygenstruct} icey::TransformPublisherStream
+```
+
+```{doxygenstruct} icey::StreamImplDefault
 ```
 
 ### Actual implementation of Stream 

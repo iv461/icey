@@ -691,8 +691,10 @@ struct is_valid_ros_param_type<std::vector<std::byte> > : std::true_type {};
 template <std::size_t N>
 struct is_valid_ros_param_type<std::array<std::byte, N> > : std::true_type {};
 
-/// For API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
+/// What follows, is an improved parameters API. For API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
 /// First, some constraints we can impose on parameters:
+
+
 /// A closed interval, meaning a value must be greater or equal to a minimum value
 /// and less or equal to a maximal value.
 template <class Value>
