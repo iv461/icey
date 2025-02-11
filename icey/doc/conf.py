@@ -21,8 +21,7 @@ breathe_default_members = ('members', 'undoc-members')
 templates_path = ['_templates']
 exclude_patterns = []
 
-
-#subprocess.call('doxygen Doxyfile', shell=True)
+subprocess.call('doxygen Doxyfile', shell=True)
 
 highlight_language = 'c++'
 
