@@ -3,7 +3,7 @@
       max-width: 140rem;
     }
     .bd-sidebar-secondary {
-        width: 22rem;
+        max-width: 25em;
     }
 }
 
@@ -11,4 +11,6 @@
   font-size: 0.875em;
 }
 
-
+.bd-sidebar-primary {
+  flex-basis: 15%;
+}

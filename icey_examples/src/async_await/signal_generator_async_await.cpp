@@ -1,5 +1,4 @@
 #include <icey/icey.hpp>
-#include <icey/parameters_struct.hpp>
 
 #include "std_msgs/msg/float32.hpp"
 

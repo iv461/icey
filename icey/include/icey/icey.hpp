@@ -8,6 +8,7 @@
 #include <functional>
 #include <icey/impl/bag_of_metaprogramming_tricks.hpp>
 #include <icey/impl/stream.hpp>
+#include <icey/impl/field_reflection.hpp>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -1527,6 +1528,81 @@ static auto create_node(int argc, char** argv, const std::string& node_name) {
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
   return std::make_shared<N>(node_name);
+}
+
+/*!
+ \brief Declare a given parameter struct to ROS.
+ \tparam T the type of the Parameter struct. It is a struct with fields of either a primitive type supported by ROS (e.g. `double`) or a `icey::ParameterStream`, or another (nested) struct with more such fields.
+ \param ctx the icey-Context, required for registering the parameters.
+ \param params The instance of the parameter struct where the values will be written to.
+ \param notify_callback The callback that gets called when any field changes
+ \param name_prefix Prefix for each parameter. Used by the recursive call to support nested structs.
+ \note The passed object `params` must have the same lifetime as the node, best is to store it as a member of the node class.  
+
+ Example usage: 
+ \verbatim 
+  /// Here you declare in a single struct all parameters of the node:
+struct NodeParameters {
+  /// We can have regular fields :
+  double amplitude{3};
+
+  /// And as well parameters with constraints and a description:
+  icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
+                                       std::string("The frequency of the sine")};
+  
+  icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
+  /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+  struct OtherParams {
+    double max_amp = 6.;
+    std::vector<double> cov;
+  } others;
+};
+
+  // Now create an object of the node-parameters that will be updated:
+  NodeParameters params;
+
+  /// Now simply declare the parameter struct and a callback that is called when any field updates: 
+  icey::declare_parameter_struct(node->icey(), params, [&](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(node->get_logger(),
+                           "Parameter " << changed_parameter << " changed");
+      });
+ \endverbatim
+*/
+template <class T>
+static void declare_parameter_struct(
+    Context &ctx, T &params, const std::function<void(const std::string &)> &notify_callback,
+    std::string name_prefix = "") {
+  
+  field_reflection::for_each_field(params, [&ctx, notify_callback, name_prefix](
+                                               std::string_view field_name, auto &field_value) {
+    using Field = std::remove_reference_t<decltype(field_value)>;
+    std::string field_name_r(field_name);
+    if constexpr (std::is_base_of_v<StreamTag, Field>) {
+      field_value.impl()->parameter_name = field_name_r;
+      field_value.impl()->register_handler([field_name_r, notify_callback](const auto &new_state) {
+            notify_callback(field_name_r);
+          });
+      field_value.register_with_ros(*ctx.node);
+    } else if constexpr (is_valid_ros_param_type<Field>::value) {
+      using ParamValue = std::remove_reference_t<decltype(field_value)>;
+      ctx.declare_parameter<ParamValue>(field_name_r, field_value)
+        .impl()->register_handler(
+            [&field_value, field_name_r, notify_callback](const auto &new_state) {
+              field_value = new_state.value();
+              notify_callback(field_name_r);
+            });
+    } else if constexpr (std::is_aggregate_v<Field>) {
+      /// Else recurse for supporting grouped params
+      declare_parameter_struct(ctx, field_value, notify_callback, name_prefix + std::string(field_name) + ".");
+    } else {
+      /// static_assert(false) would always trigger, that is why we use this workaround, see
+      /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
+      static_assert(
+          std::is_array_v<int>, 
+          "Every field of the parameters struct must be of type T or icey::Parameter<T> or a "
+          "struct of such, where T is a valid ROS param type (see rcl_interfaces/ParameterType)");
+    }
+  });
 }
 
 }  // namespace icey

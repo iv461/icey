@@ -33,8 +33,8 @@
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=a3416100" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="_static/icey.css?v=c17742c2" />
-    <link rel="stylesheet" type="text/css" href="_static/book_custom.css?v=a0cee321" />
+    <link rel="stylesheet" type="text/css" href="_static/icey.css?v=0aa09196" />
+    <link rel="stylesheet" type="text/css" href="_static/book_custom.css?v=d9ac15f4" />
   
   <!-- So that users can add custom icons -->
   <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
@@ -49,7 +49,7 @@
     <script src="_static/copybutton.js?v=f281be69"></script>
     <script src="_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api_reference';</script>
-    <script src="_static/js/fix_api_highlighting.js?v=675edcd9"></script>
+    <script src="_static/js/fix_api_highlighting.js?v=e405a6da"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="prev" title="Developing ICEY" href="development.html" />
@@ -755,7 +755,40 @@
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4I0EN4icey24declare_parameter_structEvR7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE">
 <span id="_CPPv3I0EN4icey24declare_parameter_structER7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE"></span><span id="_CPPv2I0EN4icey24declare_parameter_structER7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE"></span><span class="k"><span class="pre">template</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">T</span></span></span><span class="p"><span class="pre">&gt;</span></span><br /><span class="target" id="namespaceicey_1a5ddb5ca63470ab897546c2ca260b5819"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-prename descclassname"><span class="n"><span class="pre">icey</span></span><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">declare_parameter_struct</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N4icey7ContextE" title="icey::Context"><span class="n"><span class="pre">Context</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">ctx</span></span>, <a class="reference internal" href="#_CPPv4I0EN4icey24declare_parameter_structEvR7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE" title="icey::declare_parameter_struct::T"><span class="n"><span class="pre">T</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">params</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">(</span></span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">string</span></span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">notify_callback</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">string</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">name_prefix</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="s"><span class="pre">&quot;&quot;</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4I0EN4icey24declare_parameter_structEvR7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE" title="Link to this definition">#</a><br /></dt>
-<dd><p>Declare all fields of a given parameter struct as ROS parameters. </p>
+<dd><p>Declare a given parameter struct to ROS. </p>
+<p>
+Example usage: <div class="highlight-c++ notranslate"><div class="highlight"><pre><span></span><span class="w">  </span><span class="c1">/// Here you declare in a single struct all parameters of the node:</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">NodeParameters</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="c1">/// We can have regular fields :</span>
+<span class="w">  </span><span class="kt">double</span><span class="w"> </span><span class="n">amplitude</span><span class="p">{</span><span class="mi">3</span><span class="p">};</span>
+
+<span class="w">  </span><span class="c1">/// And as well parameters with constraints and a description:</span>
+<span class="w">  </span><span class="n">icey</span><span class="o">::</span><span class="n">Parameter</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">frequency</span><span class="p">{</span><span class="mf">10.</span><span class="p">,</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">Interval</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span><span class="w"> </span><span class="mf">25.</span><span class="p">),</span>
+<span class="w">                                       </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="p">(</span><span class="s">&quot;The frequency of the sine&quot;</span><span class="p">)};</span>
+<span class="w">  </span>
+<span class="w">  </span><span class="n">icey</span><span class="o">::</span><span class="n">Parameter</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">mode</span><span class="p">{</span><span class="s">&quot;single&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">icey</span><span class="o">::</span><span class="n">Set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="p">({</span><span class="s">&quot;single&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;double&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;pulse&quot;</span><span class="p">})};</span>
+<span class="w">  </span><span class="c1">/// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:</span>
+<span class="w">  </span><span class="k">struct</span><span class="w"> </span><span class="nc">OtherParams</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">max_amp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">6.</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">cov</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span><span class="w"> </span><span class="n">others</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="w">  </span><span class="c1">// Now create an object of the node-parameters that will be updated:</span>
+<span class="w">  </span><span class="n">NodeParameters</span><span class="w"> </span><span class="n">params</span><span class="p">;</span>
+
+<span class="w">  </span><span class="c1">/// Now simply declare the parameter struct and a callback that is called when any field updates: </span>
+<span class="w">  </span><span class="n">icey</span><span class="o">::</span><span class="n">declare_parameter_struct</span><span class="p">(</span><span class="n">node</span><span class="o">-&gt;</span><span class="n">icey</span><span class="p">(),</span><span class="w"> </span><span class="n">params</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="o">&amp;</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="o">&amp;</span><span class="n">changed_parameter</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">RCLCPP_INFO_STREAM</span><span class="p">(</span><span class="n">node</span><span class="o">-&gt;</span><span class="n">get_logger</span><span class="p">(),</span>
+<span class="w">                           </span><span class="s">&quot;Parameter &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">changed_parameter</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot; changed&quot;</span><span class="p">);</span>
+<span class="w">      </span><span class="p">});</span>
+</pre></div>
+</div>
+ </p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The passed object <code class="docutils literal notranslate"><span class="pre">params</span></code> must have the same lifetime as the node, best is to store it as a member of the node class. </p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Template Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>T</strong> – the type of the Parameter struct. It is a struct with fields of either a primitive type supported by ROS (e.g. <code class="docutils literal notranslate"><span class="pre">double</span></code>) or a <code class="docutils literal notranslate"><a class="reference internal" href="#structicey_1_1ParameterStream"><span class="std std-ref"><span class="pre">icey::ParameterStream</span></span></a></code>, or another (nested) struct with more such fields. </p>

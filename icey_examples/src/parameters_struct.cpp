@@ -1,5 +1,4 @@
 #include <icey/icey.hpp>
-#include <icey/parameters_struct.hpp>
 
 /// Here you declare in a single struct all parameters of the node:
 struct NodeParameters {
