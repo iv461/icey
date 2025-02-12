@@ -14,8 +14,9 @@ Table of Contents
    :maxdepth: 2
    
    getting_started
-   using_parameter_structs
+   async_flow
    using_tf
+   support_for_lifecycle_nodes
    translating_an_autoware_node
 
 .. toctree::    
@@ -23,5 +24,5 @@ Table of Contents
    :maxdepth: 2
    
    extending_icey
-   development 
    api_reference
+   development 
