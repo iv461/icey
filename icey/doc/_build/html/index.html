@@ -147,15 +147,24 @@
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">Basics</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a></li>
+
+
+<li class="toctree-l1"><a class="reference internal" href="async_flow.html">Asynchronous data-flow in ICEY</a></li>
 <li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="support_for_lifecycle_nodes.html">Support for lifecycle nodes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_streams.html">Streams</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_filters.html">Filters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_ros.html">ROS-related</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_it.html">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a></li>
+</ul><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a></li>
 </ul>
 
     </div>
@@ -322,15 +331,12 @@
 <div class="toctree-wrapper compound">
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Basics</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#subscribing-and-publishing">Subscribing and publishing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html#install-icey">Install ICEY</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html#your-first-icey-node">Your first ICEY-Node</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="getting_started.html#parameters">Parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#declare-and-use-parameters">Declare and use parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#subscribers">Subscribers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#managing-resources">Managing resources</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#managing-state">Managing state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#parameter-structs">Parameter structs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="getting_started.html#timers">Timers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#using-timers-as-signal-generators">Using timers as signal generators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="getting_started.html#using-timers-as-reference-signal-for-synchronization">Using timers as reference signal for synchronization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="getting_started.html#signal-routing">Signal routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="getting_started.html#single-input-multiple-output">Single input, multiple output</a></li>
@@ -339,16 +345,14 @@
 <li class="toctree-l2"><a class="reference internal" href="getting_started.html#references">References</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="using_parameter_structs.html#references">References</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="async_flow.html">Asynchronous data-flow in ICEY</a></li>
 <li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="using_tf.html#solution-in-icey">Solution in ICEY</a></li>
 <li class="toctree-l2"><a class="reference internal" href="using_tf.html#using-the-tf-buffer-directly">Using the TF-buffer directly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="using_tf.html#references">References:</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="support_for_lifecycle_nodes.html">Support for lifecycle nodes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="translating_an_autoware_node.html#identifying-the-communication-pattern">Identifying the communication pattern</a></li>
 <li class="toctree-l2"><a class="reference internal" href="translating_an_autoware_node.html#notifying-on-waiting">Notifying on waiting</a></li>
@@ -365,23 +369,14 @@
 <li class="toctree-l2"><a class="reference internal" href="extending_icey.html#extending-with-custom-subscribers-and-publishers-image-transport">Extending with custom subscribers and publishers: ìmage_transport</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_reference.html#table-of-contents">Table of Contents</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="development.html#build">Build</a></li>
 <li class="toctree-l2"><a class="reference internal" href="development.html#debug">Debug</a></li>
 <li class="toctree-l2"><a class="reference internal" href="development.html#build-documentation">Build documentation</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#type-aliases">Type aliases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#functions">Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#fundamentals">Fundamentals</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#streams">Streams</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#filters">Filters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#context">Context</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#ros-related">ROS-related</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#c-20-coroutines-support">C++20’ coroutines support</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#traits">Traits</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api_reference.html#support-for-image-transport">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a></li>
 </ul>
 </li>
 </ul>

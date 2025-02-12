@@ -5,10 +5,7 @@
 /// dependency: https://github.com/ros-perception/image_common/issues/311
 #pragma once
 
-#ifndef ICEY_ROS2_WAS_INCLUDED
-#error \
-    "You must first include the <icey/icey.hpp> header before you can include the <icey/icey_image_transport.hpp> header."
-#endif
+#include <icey/icey.hpp>
 
 #include <functional>
 #include <tuple>

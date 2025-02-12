@@ -33,8 +33,8 @@
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=a3416100" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
-    <link rel="stylesheet" type="text/css" href="_static/icey.css?v=c17742c2" />
-    <link rel="stylesheet" type="text/css" href="_static/book_custom.css?v=c7606508" />
+    <link rel="stylesheet" type="text/css" href="_static/icey.css?v=0aa09196" />
+    <link rel="stylesheet" type="text/css" href="_static/book_custom.css?v=bcfda321" />
   
   <!-- So that users can add custom icons -->
   <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
@@ -49,11 +49,11 @@
     <script src="_static/copybutton.js?v=f281be69"></script>
     <script src="_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'translating_an_autoware_node';</script>
-    <script src="_static/js/fix_api_highlighting.js?v=5a5de938"></script>
+    <script src="_static/js/fix_api_highlighting.js?v=e405a6da"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Extending ICEY" href="extending_icey.html" />
-    <link rel="prev" title="Using TF" href="using_tf.html" />
+    <link rel="prev" title="Support for lifecycle nodes" href="support_for_lifecycle_nodes.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -146,15 +146,30 @@
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">Basics</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a></li>
+
+
+<li class="toctree-l1"><a class="reference internal" href="async_flow.html">Asynchronous data-flow in ICEY</a></li>
 <li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="support_for_lifecycle_nodes.html">Support for lifecycle nodes</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Translating existing nodes to use ICEY: Autoware example</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_streams.html"><code class="docutils literal notranslate"><span class="pre">Clock</span></code></a></li>
+
+
+
+
+
+
+<li class="toctree-l2"><a class="reference internal" href="api_filters.html">Filters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_ros.html">ROS-related</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_it.html">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a></li>
+</ul><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary>
+</details></li>
 <li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a></li>
 </ul>
 
     </div>
@@ -428,12 +443,12 @@ and look at their callbacks:</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="using_tf.html"
+       href="support_for_lifecycle_nodes.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Using TF</p>
+        <p class="prev-next-title">Support for lifecycle nodes</p>
       </div>
     </a>
     <a class="right-next"

@@ -2,8 +2,9 @@
 
 ## Build 
 
-
-colcon build  --packages-select icey
+```
+colcon build  --packages-select icey --mixin=debug 
+```
 
 ## Debug 
 

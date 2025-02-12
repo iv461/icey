@@ -52,8 +52,7 @@
     <script src="_static/js/fix_api_highlighting.js?v=e405a6da"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="API Reference" href="api_reference.html" />
-    <link rel="prev" title="Extending ICEY" href="extending_icey.html" />
+    <link rel="prev" title="Support for image_transport" href="api_it.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -146,15 +145,30 @@
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">Basics</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a></li>
+
+
+<li class="toctree-l1"><a class="reference internal" href="async_flow.html">Asynchronous data-flow in ICEY</a></li>
 <li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="support_for_lifecycle_nodes.html">Support for lifecycle nodes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api_reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_streams.html"><code class="docutils literal notranslate"><span class="pre">Clock</span></code></a></li>
+
+
+
+
+
+
+<li class="toctree-l2"><a class="reference internal" href="api_filters.html">Filters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_ros.html">ROS-related</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_it.html">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a></li>
+</ul><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary>
+</details></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Developing ICEY</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Reference</a></li>
 </ul>
 
     </div>
@@ -318,7 +332,9 @@
 <h1>Developing ICEY<a class="headerlink" href="#developing-icey" title="Link to this heading">#</a></h1>
 <section id="build">
 <h2>Build<a class="headerlink" href="#build" title="Link to this heading">#</a></h2>
-<p>colcon build  –packages-select icey</p>
+<div class="highlight-c++ notranslate"><div class="highlight"><pre><span></span><span class="n">colcon</span><span class="w"> </span><span class="n">build</span><span class="w">  </span><span class="o">--</span><span class="n">packages</span><span class="o">-</span><span class="n">select</span><span class="w"> </span><span class="n">icey</span><span class="w"> </span><span class="o">--</span><span class="n">mixin</span><span class="o">=</span><span class="n">debug</span><span class="w"> </span>
+</pre></div>
+</div>
 </section>
 <section id="debug">
 <h2>Debug<a class="headerlink" href="#debug" title="Link to this heading">#</a></h2>
@@ -348,7 +364,7 @@ We parse the C++-code using doxygen</p>
 </div>
 </li>
 </ol>
-<p>Then, open the file <a class="reference download internal" download="" href="_downloads/c1f2d07f9954c54ec33801246d6d88ca/index.html"><span class="xref download myst">_build/html/index.html</span></a> in your browser for an offline view.</p>
+<p>Then, open the file <a class="reference internal" href="#_build/html/index.html"><span class="xref myst">_build/html/index.html</span></a> in your browser for an offline view.</p>
 <p>TODO deploy/GitHub actions</p>
 </section>
 </section>
@@ -365,22 +381,13 @@ We parse the C++-code using doxygen</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="extending_icey.html"
+       href="api_it.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Extending ICEY</p>
+        <p class="prev-next-title">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></p>
       </div>
-    </a>
-    <a class="right-next"
-       href="api_reference.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">API Reference</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
     </a>
 </div>
                 </footer>
