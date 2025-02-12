@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
   NodeParameters params;
 
   /// Now simply declare the parameter struct and a callback that is called when any field updates: 
-  icey::declare_parameter_struct(node->icey(), params, [&](const std::string &changed_parameter) {
+  node->icey().declare_parameter_struct(params, [&](const std::string &changed_parameter) {
         RCLCPP_INFO_STREAM(node->get_logger(),
                            "Parameter " << changed_parameter << " changed");
       });

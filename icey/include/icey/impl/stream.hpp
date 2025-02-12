@@ -15,8 +15,8 @@ struct Nothing {};
 /// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we
 /// will generally use in the following to recognize (unspecialized) class templates.
 struct ResultTag {};
-/// A Result-type like in Rust, it is a sum type that can either hold Value or Error, or, different
-/// to Rust, none.
+/// A Result-type is a sum type that can either hold Value or Error, or, different
+/// to Rust, none. It is used as the state for the Stream
 template <class _Value, class _ErrorValue>
 struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, public ResultTag {
   using Value = _Value;
@@ -63,16 +63,23 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   auto stream = std::make_shared<O>(std::forward<Args>(args)...);
   return stream;
 }
-/// A stream, conceptually very similar to a promise in JavaScript but the state transitions are not
-/// final. I saw that these implementations are very close to mine: [1]
-/// https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
+/// \brief A stream, an abstraction over an asynchronous sequence of values.
+/// It contains a state that is a Result and a list of callbacks that get notifyed when this state changes. 
+///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
+/// final. 
+/// \tparam _Value the type of the value 
+/// \tparam _ErrorValue the type of the error. It can also be an exception.
+/// \tparam Derived a class from which this class derives, used as an extention point.
+/// \tparam DefaultDerived When new `Stream`s get created using `then` and `except`, this is used as a template parameter for `Derived` so that a default extention does not get lost when we call `then` or `except`.
+///
+/// References:
+/// [1]https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
 /// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
 template <typename _Value, typename _ErrorValue, typename Derived, typename DefaultDerived>
 class Stream : private boost::noncopyable,
-               public Derived,
-               public std::enable_shared_from_this<Stream<_Value, _ErrorValue, Derived, DefaultDerived>> {
+               public Derived {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
@@ -88,13 +95,14 @@ public:
   const ErrorValue &error() const { return state_.error(); }
   State &get_state() { return state_; }
   const State &get_state() const { return state_; }
-
+  
+  /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the new state as an argument.
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
-  /// TODO disable_if these hold Nothing
+  /// Sets the state to hold none, but does not notify about the state change.
   void set_none() { state_.set_none(); }
   
-  /// TODO remove handling of optional
+  /// Sets the state to hold a value, but does not notify about the state change.
   void set_value(const MaybeValue &x) {
     if (x)
       state_.set_ok(*x);
@@ -102,9 +110,11 @@ public:
       state_.set_none();
   }
 
+  /// Sets the state to hold an error, but does not notify about the state change.
   void set_error(const ErrorValue &x) { state_.set_err(x); }
 
-  /// Notify about error or value, depending on the state. If there is no value, it does not notify
+  /// Notify about the state, but only in case it is error or value. If the state is none, it does not notify.
+  /// If the state is an error and the ErrorValue is an exception type (a subclass `std::runtime_error`) and no handlers were registered, the error is re-thrown.
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the
@@ -120,11 +130,13 @@ public:
     }
   }
 
+  /// Set the state to a value and notify.
   void resolve(const MaybeValue &x) {
     this->set_value(x);
     this->notify();
   }
 
+  /// Set the state to an error and notify.
   void reject(const ErrorValue &x) {
     this->set_error(x);
     this->notify();
