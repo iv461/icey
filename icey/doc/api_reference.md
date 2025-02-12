@@ -1,10 +1,16 @@
 # API Reference 
 
 
+```cpp
+auto Foo;
+```
+
+HEY 
+
+
 ## Type aliases
 
-```{doxygentypedef} icey::Node
-```
+
 ```{doxygentypedef} icey::LifecycleNode
 ```
 
@@ -20,6 +26,7 @@
 ```
 ```{doxygentypedef} icey::Duration
 ```
+
 
 ## Functions 
 ```{doxygenfunction} icey::create_node

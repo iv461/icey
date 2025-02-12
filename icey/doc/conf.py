@@ -35,3 +35,6 @@ html_theme_options = {
    "pygments_light_style": "tango",
    "pygments_dark_style": "github-dark"
 }
+html_js_files = [
+    'js/fix_api_highlighting.js',
+]

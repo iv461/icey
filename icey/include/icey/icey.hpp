@@ -484,7 +484,7 @@ public:
     this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
-  /// Creates an arbitrary new stream through the \ref Context
+  /// Creates an arbitrary new stream through the `Context`
   template <class O, typename... Args>
   auto create_stream(Args &&...args) { return this->impl()->context.lock()->template create_stream(args...); }
 
@@ -507,7 +507,7 @@ public:
     this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
   }
 
-  /// Publish a transform using the \ref TFBroadcaster in case this Stream holds a Value of type `geometry_msgs::msg::TransformStamped`.
+  /// Publish a transform using the `TFBroadcaster` in case this Stream holds a Value of type `geometry_msgs::msg::TransformStamped`.
   void publish_transform() {
     assert_we_have_context();
     static_assert(std::is_same_v<Value, geometry_msgs::msg::TransformStamped>,
@@ -666,9 +666,9 @@ public:
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
 };
 
-/// <imagine here some silly Ascii-art> What follows are parameters. 
-// Traits to recognize valid types for ROS parameters (Reference:
-// https://docs.ros.org/en/jazzy/p/rcl_interfaces/interfaces/msg/ParameterValue.html)
+/// What follows are parameters. 
+/// Traits to recognize valid types for ROS parameters (Reference:
+/// https://docs.ros.org/en/jazzy/p/rcl_interfaces/interfaces/msg/ParameterValue.html)
 template <class T>
 struct is_valid_ros_param_type : std::false_type {};
 template <>

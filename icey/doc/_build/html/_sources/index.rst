@@ -7,7 +7,6 @@ icey documentation
 ==================
 
 
-
 Table of Contents
 ^^^^^^^^^^^^^^^^^
 .. toctree::    
