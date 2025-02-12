@@ -4,9 +4,8 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-    auto node = icey::create_node<icey::Node>(argc, argv, "tf_listener_example");
-    auto &icey = node->icey();  // Get the ICEY context
-    auto map_base_link_tf = icey.create_transform_subscription("map", "base_link");
+    auto node = icey::create_node(argc, argv, "tf_listener_example");
+    auto map_base_link_tf = node->icey().create_transform_subscription("map", "base_link");
 
     map_base_link_tf.except([&](auto err) { 
             RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << err);

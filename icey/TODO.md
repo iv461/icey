@@ -4,6 +4,8 @@
 
 Sorted by decreasing priority. 
 
+- [ ] Test installing in Docker base image regarding dependencies 
+
 - [ ] Up-to-date docs 
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises

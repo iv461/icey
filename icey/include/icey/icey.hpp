@@ -1430,8 +1430,7 @@ ParameterStream<ParameterT> declare_parameter(
     }
   }
 
-  /// Serialize, pipe arbitrary number of parents of the same type into one. Needed for the
-  /// control-flow where the same publisher can be called from multiple callbacks
+  
   template <typename... Parents>
   static auto serialize(Parents... parents) {
     stream_traits<Parents...>{};
@@ -1449,9 +1448,11 @@ ParameterStream<ParameterT> declare_parameter(
     return child;
   }
 
+  /// Synchronizes a parent stream with a transform: The Streams outputs the parent value when the transform between it's header frame and the target_frame becomes available. 
+  /// It uses for this the `tf2::MessageFilter`
   template <class Parent>
-  auto synchronize_with_transform(Parent parent, std::string target_frame,
-                                  rclcpp::Duration buffer_timeout) {
+  TF2MessageFilter<obs_msg<Parent>> synchronize_with_transform(Parent parent, const std::string &target_frame,
+                                  const rclcpp::Duration &buffer_timeout) {
     auto child = create_stream<TF2MessageFilter<obs_msg<Parent>>>(target_frame, buffer_timeout);
     parent.then([child](const auto &x) { child.impl()->resolve(x); });
     return child;
@@ -1467,7 +1468,7 @@ ParameterStream<ParameterT> declare_parameter(
 template <class NodeType>
 class NodeWithIceyContext : public NodeType {
 public:
-  /// TODO support namespace 
+  /// Constructs a new new node an initializes the icey context.
   NodeWithIceyContext(std::string node_name, const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions()) : NodeType(node_name, node_options) {
      /// Note that here we cannot call shared_from_this() since it requires the object to be already constructed. But usually, 
     NodeInterfaces node_interfaces(this); 
@@ -1488,7 +1489,7 @@ public:
 using Node = NodeWithIceyContext<rclcpp::Node>;
 using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
 
-/// Blocking spawn of an existing node.
+/// Start spinning either a Node or a LifeCycleNode. Calls `rclcpp::shutdown()` at the end so you do not have to do it.
 template <class Node>
 static void spin(Node node) {
   /// We use single-threaded executor because the MT one can starve due to a bug

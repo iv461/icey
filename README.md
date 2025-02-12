@@ -1,8 +1,18 @@
 # ICEY 
 
-A new, simple asynchronous/data-driven library for the Robot Operating System (ROS) for fast prototyping and eliminating boilerplate code.
-ICEY enables using modern asynchronous programming techniques such as promises and C++-20's coroutines (async/await)
+ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for fast prototyping and eliminating boilerplate code by using modern asynchronous programming.
+It makes the asynchronous data-flow clearly visible and simplifies application code.
 
+It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: Parameter, Subscribers, Publishers, Timers, Services, Clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
+
+ICEY operates smoothly together with the  `message_filters` package, using it's synchronizers. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
+
+It offers additional goodies such as:
+- Automatic bookeeping of publishers/subscribers/timers so that you do not have to do it 
+- No callback groups needed for preventing deadlocks -- service calls are always asynchronous
+- Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
+
+ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 # Features 
 
 The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
@@ -13,11 +23,12 @@ The real power in ICEY is that you can declare computations, that will  be publi
 int main(int argc, char **argv) {
     
     icey::create_timer(100ms)
-      .then([&](size_t ticks) {
-        /// We can access parameters in callbacks using .value() because parameters are always initialized first.
-        double y = std::sin(0.1 * ticks * 2 * M_PI);
-        return y;
-    }).publish("sine_generator");
+        .then([&](size_t ticks) {
+            /// We can access parameters in callbacks using .value() because parameters are always initialized first.
+            double y = std::sin(0.1 * ticks * 2 * M_PI);
+            return y;
+        })
+        .publish("sine_generator");
 
     /// Create and spin the node:
     icey::spawn(argc, argv, "signal_generator_example"); 

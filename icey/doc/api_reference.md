@@ -1,15 +1,11 @@
 # API Reference 
 
-## Type aliases
+## Types
 
+```{doxygentypedef} icey::Node
+```
 
 ```{doxygentypedef} icey::LifecycleNode
-```
-
-```{doxygentypedef} icey::Timer
-```
-
-```{doxygentypedef} icey::Parameter
 ```
 
 ```{doxygentypedef} icey::Clock
@@ -25,20 +21,18 @@
 ```
 ```{doxygenfunction} icey::spin
 ```
-```{doxygenfunction} icey::spin_nodes
-```
+
 ```{doxygenfunction} icey::declare_parameter_struct
 ```
 
-
-## Fundamentals
 ```{doxygenstruct} icey::Nothing
 ```
 ```{doxygenstruct} icey::Result
 ```
-## Streams 
-These are all the available `Streams`, implementing subscribers, publishers/timers etc.
 
+## Streams 
+
+These are all the available `Streams`, implementing subscribers, publishers/timers etc.
 
 ```{doxygenclass} icey::Stream
 ```
@@ -118,19 +112,21 @@ The context owns all the Streams.
 ```{doxygenclass} icey::Context
 ```
 
-## ROS-related 
+## ROS-nodes
 
-```{doxygenclass} icey::NodeBookkeeping
+
+```{doxygenclass} icey::NodeWithIceyContext
 ```
 
 ```{doxygenstruct} icey::NodeInterfaces
 ```
 
+```{doxygenclass} icey::NodeBookkeeping
+```
+
 ```{doxygenstruct} icey::TFListener
 ```
 
-```{doxygenclass} icey::NodeWithIceyContext
-```
 
 ## C++20' coroutines support 
 

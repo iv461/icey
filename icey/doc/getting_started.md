@@ -1,5 +1,63 @@
 # Getting started
 
+ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for fast prototyping and eliminating boilerplate code by using modern asynchronous programming.
+It makes the asynchronous data-flow clearly visible and simplifies application code.
+
+It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: Parameter, Subscribers, Publishers, Timers, Services, Clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
+
+ICEY operates smoothly together with the  `message_filters` package, using it's synchronizers. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
+
+It offers additional goodies such as:
+- Automatic bookeeping of publishers/subscribers/timers so that you do not have to do it 
+- No callback groups needed for preventing deadlocks -- service calls are always asynchronous
+- Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
+
+ICEY supports ROS 2 Humble and ROS 2 Jazzy.
+
+# Install ICEY 
+
+ICEY comes as a regular ROS 2 package, to install it just clone it in you colcon workspace and build it:
+
+```sh
+git clone git@github.com:iv461/icey.git
+sudo apt install liboost-dev 
+colcon build  --packages-up-to icey icey_examples -DCMAKE_BUILD_TYPE=Release
+```
+
+We will need the examples later, so best is to build them right away. 
+
+# Your first ICEY-Node 
+
+In the following, we will assume you are already faimiliar writing ROS nodes in C++: How to write subscribers, publishers, and using callbacks. 
+
+The key difference between ROS 2 and ICEY is that you can chain functions that will be called after the callback of a subscriber/timer/service returns, which means:
+
+```cpp
+#include <icey/icey.hpp>
+int main(int argc, char **argv) {
+  auto node = icey::create_node(argc, argv, "sine_generator");
+
+  node->icey().create_timer(100ms)
+    .then([](size_t ticks) {
+        /// This function gets called each time the timer ticks
+        return std::sin(0.1 * ticks * 2 * M_PI);
+    })
+    /// The returned value is published on the topic "sine_signal" after the timer ticked.
+    .publish("sine_signal");
+    icey::spin(node);
+}
+```
+
+ICEY represents every ROS primitive (sub/pub etc.) as a `Stream`, an abstraction of an asynchronous sequence of values. 
+If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
+
+Subscibers are also Streams: 
+
+```
+  node->icey().create
+
+The first thing in ICEY is that write nodes direcly in your `main`-function, you do no need classes necessarily 
+
 ## Subscribing and publishing 
 TODO 
 
