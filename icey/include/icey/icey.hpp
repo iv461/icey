@@ -1284,7 +1284,7 @@ ParameterStream<ParameterT> declare_parameter(
   /*!
  \brief Declare a given parameter struct to ROS.
  \tparam T the type of the Parameter struct. It is a struct with fields of either a primitive type supported by ROS (e.g. `double`) or a `icey::ParameterStream`, or another (nested) struct with more such fields.
- \param ctx the icey-Context, required for registering the parameters.
+
  \param params The instance of the parameter struct where the values will be written to.
  \param notify_callback The callback that gets called when any field changes
  \param name_prefix Prefix for each parameter. Used by the recursive call to support nested structs.
@@ -1298,10 +1298,10 @@ struct NodeParameters {
   double amplitude{3};
 
   /// And as well parameters with constraints and a description:
-  icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
+  icey::ParameterStream<double> frequency{10., icey::Interval(0., 25.),
                                        std::string("The frequency of the sine")};
   
-  icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
+  icey::ParameterStream<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
   /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
   struct OtherParams {
     double max_amp = 6.;
@@ -1309,7 +1309,7 @@ struct NodeParameters {
   } others;
 };
 
-   auto node = icey::create_node("node_with_many_parameters");
+  auto node = icey::create_node("node_with_many_parameters");
   // Now create an object of the node-parameters that will be updated:
   NodeParameters params;
 
