@@ -51,10 +51,14 @@ int main(int argc, char **argv) {
 ICEY represents every ROS primitive (sub/pub etc.) as a `Stream`, an abstraction of an asynchronous sequence of values. 
 If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
 
-Subscibers are also Streams: 
 
+Subscibers are also Streams, an we can also have as many `.then` as we want:
+
+```cpp
+  auto kinemati_state = node->icey().create_subscription("kinematic_state", 1);
 ```
-  node->icey().create
+
+
 
 The first thing in ICEY is that write nodes direcly in your `main`-function, you do no need classes necessarily 
 
