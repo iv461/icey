@@ -43,3 +43,6 @@ html_theme_options = {
     ],
     "navbar_persistent": [],
 }
+html_sidebars = {
+  "**": []
+}
