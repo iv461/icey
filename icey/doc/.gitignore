@@ -1,2 +1,6 @@
 .build/*
 _build/*
+*.css
+*.html
+*.pickle
+*.inv

@@ -1,2 +1,7 @@
 .vscode/*
 icey/doc/_build/*
+
+*.css
+*.html
+*.pickle
+*.inv
