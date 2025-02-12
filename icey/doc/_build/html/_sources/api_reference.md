@@ -1,13 +1,5 @@
 # API Reference 
 
-
-```cpp
-auto Foo;
-```
-
-HEY 
-
-
 ## Type aliases
 
 
