@@ -1,0 +1,8 @@
+@media (min-width: 960px) {
+    .bd-page-width {
+      max-width: 140rem;
+    }
+    .bd-sidebar-secondary {
+        width: 22rem;
+    }
+}

@@ -28,5 +28,5 @@ highlight_language = 'c++'
 html_title = "ICEY Documentation"
 html_theme = 'sphinx_book_theme'
 html_static_path = ['_static']
-html_css_files = ["icey.css"]
+html_css_files = ["icey.css", "book_custom.css"]
 html_context = {"default_mode": "light"}
