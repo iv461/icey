@@ -423,10 +423,11 @@ struct TimeoutFilter;
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Stream : public StreamTag {
 public:
-  using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
-  using Value = typename Impl::Value;
-  using ErrorValue = typename Impl::ErrorValue;
-  using Self = Stream<_Value, _ErrorValue,  Derived >;
+using Value = _Value;
+using ErrorValue = _ErrorValue;
+using Self = Stream<_Value, _ErrorValue,  Derived>;
+/// The actual implementation of the Stream.
+using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
 
   Stream() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
@@ -518,7 +519,7 @@ public:
     this->impl()->context.lock()->create_transform_publisher(*this);
   }
 
-  /// Create a new ServiceClient stream, this stream holds the request.
+  /// Create a new ServiceClient stream, which gets called by this stream that holds the request.
   template <class ServiceT>
   auto call_service(const std::string &service_name, const Duration &timeout,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
@@ -556,7 +557,7 @@ public:
   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
   ////////////////////////////////////////////////////////
 
-  /// @brief Promise type alias for supporting C++20's coroutines.
+  /// @brief This alias is required to support C++20's coroutines.
   using promise_type = Self;
   //// Second, we are still a promise, so we return self:
   Self get_return_object() {
@@ -853,7 +854,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
     }
   }
 
-  /// Parameters are initialized always at the beginning, so they always have a value.
+  /// Get the value. Parameters are initialized always at the beginning, so they always have a value.
   const _Value &value() const {
     if (!this->impl()->has_value()) {
       throw std::runtime_error(
@@ -905,7 +906,7 @@ constexpr auto hana_is_interpolatable(T) {
 }
 
 /// A subscription for single transforms. It implements InterpolateableStream but by using
-/// lookupTransform, not an own buffer
+/// lookupTransform.
 struct TransformSubscriptionStreamImpl {
   using Message = geometry_msgs::msg::TransformStamped;
   std::string target_frame;
@@ -947,13 +948,12 @@ struct TransformSubscriptionStream
   }
 };
 
-/// Timer signal, saves the number of ticks as the value and also passes the timerobject as well to
-/// the callback
 struct TimerImpl  {
   size_t ticks_counter{0};
   rclcpp::TimerBase::SharedPtr timer;
 };
 
+/// A Stream representing a ROS-Timer. It saves the number of ticks as it's value.
 struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer){
     this->impl()->name = "timer";
@@ -966,7 +966,6 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   }
 };
 
-/// A publishabe state, read-only. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
 struct PublisherImpl {
   typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
@@ -987,6 +986,8 @@ struct PublisherImpl {
       publisher->publish(message);
   }
 };
+
+/// A Stream representing a ROS-publisher. Value can be either a Message or shared_ptr<Message>
 template <typename _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
@@ -1012,7 +1013,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   void publish(const _Value &message) const { this->impl()->publish(message); }
 };
 
-// A transform broadcaster stream
+// A Stream representing a transform broadcaster that publishes transforms on TF.
 struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
   using Value = geometry_msgs::msg::TransformStamped;
   TransformPublisherStream(NodeBookkeeping &node) {
@@ -1024,7 +1025,7 @@ struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformSta
   }
 };
 
-/// A service stream, storing it's request and response
+/// A Stream representing a ROS-service. It stores both the request and the response as it's value.
 template <typename _ServiceT>
 struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
                                                std::shared_ptr<typename _ServiceT::Response>>> {
@@ -1042,8 +1043,6 @@ struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _Service
   }
 };
 
-/// A service client is a remote procedure call (RPC). It is a computation, and therefore an edge in
-/// the DFG
 template <typename _ServiceT>
 struct ServiceClientImpl {
   using Client = rclcpp::Client<_ServiceT>;
@@ -1051,6 +1050,8 @@ struct ServiceClientImpl {
   Duration timeout{};
   std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request;
 };
+
+/// A Stream representing a service client. It stores the response as it's value.
 template <typename _ServiceT>
 struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
                                      ServiceClientImpl<_ServiceT>> {
@@ -1118,12 +1119,21 @@ protected:
   }
 };
 
-/// A filter that detects timeouts on different topics. It does so by creating an extra timer
-/// TODO assert message has a header stamp.
-/// TODO allow parameters as max_age
+/// A filter that detects timeouts, i.e. whether a value was received in a given time window. 
+/// It simply passes over the value if no timeout occured, and errors otherwise. 
+/// \tparam _Value the value must be a message that has a header stamp
+///
+/// \todo assert message has a header stamp.
+/// \todo allow parameters as max_age
 template <typename _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
+  /// Construct the filter an connect it to the parent. 
+  /// \param node the node is needed to know the current time 
+  /// \param parent another Stream which is the input to this filter 
+  /// \param max_age a maximum age the message is allowed to have. 
+  /// \param create_extra_timer If set to false, a timeout error will only happed if at least one value is received. 
+  ///    Otherwise, an extra timer will be created so that even if no message is received, the timeout can be detected.
   template<class Parent>
   explicit TimeoutFilter(NodeBookkeeping &node, Parent parent, 
     const rclcpp::Duration &max_age, bool create_extra_timer = true) {    
@@ -1158,13 +1168,13 @@ struct TimeoutFilter
 
 /// Adapts the `message_filters::SimpleFilter` to our
 /// `Stream` (which is a similar concept). 
-/// Note that this is the same as what 
+/// \note This is the same as what 
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 template <typename _Message, class _Base = Stream<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so that `signalMessage` is called once a value is received.
-  ///.. todo:: Use mfl::simplefilter as derive-impl, then do not capture this, and do not allocate this adapter dynamically 
+  /// \todo Use mfl::simplefilter as derive-impl, then do not capture this, and do not allocate this adapter dynamically 
   ///  but statically, and pass impl() (which will be then message_filters::SimpleFilter<_Message> ) to the synchroniuzer as input.
   SimpleFilterAdapter() {
     this->impl()->register_handler([this](const auto &new_state) {
