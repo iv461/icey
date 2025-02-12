@@ -24,7 +24,7 @@ sudo apt install liboost-dev
 colcon build  --packages-up-to icey icey_examples -DCMAKE_BUILD_TYPE=Release
 ```
 
-We will need the examples later, so best is to build them right away. 
+The `icey_examples` package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
 
 # Your first ICEY-Node 
 
@@ -48,143 +48,125 @@ int main(int argc, char **argv) {
 }
 ```
 
+See also the [signal generator example](../../icey_examples/src/signal_generator.cpp).
+
 ICEY represents every ROS primitive (sub/pub etc.) as a `Stream`, an abstraction of an asynchronous sequence of values. 
 If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
 
+In this simple example we already see some interesting features: You do not need to create a publisher beforehand, instead you declare that the result should be published on a topic. 
+Also, we do not store a timer object anywhere, ICEY stores it internally so that it does not get out of scope. This holds true for classes as well: In ICEY, you do not have to store 
+subscribers/timers/publisher etc. as members of the class, ICEY does this bookkeeping for you. 
 
-Subscibers are also Streams, an we can also have as many `.then` as we want:
+Subscibers are Streams as well, an we also can have as many `.then`s as we want:
 
 ```cpp
-  auto kinemati_state = node->icey().create_subscription("kinematic_state", 1);
+  auto car_pose = node->icey().create_subscription<geometry_msgs::msg::TwistStamped>("car_pose", 1);
+  
+  auto cos_theta_half = car_pose
+	.then([&](const geometry_msgs::msg::TwistStamped::SharedPtr &msg) {
+		return msg.twist.z;
+	});
+	
+  car_pose
+	.then([&](const auto &msg) { /// 'auto' is supported as well
+		return msg.twist.position;
+	})
+	.publish("car_position");
 ```
-
-
-
-The first thing in ICEY is that write nodes direcly in your `main`-function, you do no need classes necessarily 
-
-## Subscribing and publishing 
-TODO 
 
 ## Parameters 
 
-TODO update 
-## Declare and use parameters 
-
-ICEY tries as to make using parameters, as everything else, as simple as possible.
-Parameters are declared with:
+ICEY simplifies handling of parameters, we can declare them with:
 
 ```cpp
-auto offset_param = icey::declare_parameter<float>("offset", 0., true);
+auto offset_param = node->icey().declare_parameter<double>("offset", 0.);
 ```
 
 Where the argument `0.` is the default value and the argument `true` indicates this parameter is dynamic, i.e. it can be changed at runtime.
 
-If we cannot decide on meaningful default values for the parameters and instead require the user to always give the node this parameter, 
-
-
-We can also constrain the values of each parameter: 
+The variable `offset_param` is as everything else in ICEY a Stream as well, and we can therefore subscribe to updates of the parameters with `.then`:
 
 ```cpp
-auto offset_param = icey::parameter<float>("offset", 0., true, icey::Interval(0, 1));
+offset_param.then([&](const auto &new_value) {
+	RCLCPP_INFO_STREAM(node->get_logger(), "Offset changed: " << new_value);
+});
+```
+If you instead want to obtain the value, you can call `.value()`:
+
+```cpp
+RCLCPP_INFO_STREAM(node->get_logger(), "Initial offset: " << offset_param.value());
+```
+This inly works for parameters -- they always have initial values, which is generally not true for other Streams.
+
+We can also contrain parameters, for example in an interval:
+```cpp
+auto offset_param = icey::parameter<double>("offset", 0., icey::Interval(0, 1));
 ```
 
-We can also constraint it to a set of values: 
+Or to a set of values: 
 
 ```cpp
-auto offset_param = icey::parameter<float>("offset", 0., true, icey::Set(0, 0.5, 1));
+auto offset_param = icey::parameter<double>("offset", 0., icey::Set(0, 0.5, 1));
 ```
 
-The issue that parameters in ROS require much unnecessary boilerplate code is 
-widely known [1], and a couple of different solution were proposed.
+See also the [signal generator example](../../icey_examples/src/signal_generator.cpp). 
 
-Some noteworthy are: 
-- [PickNick’s code-generation solution based on YAML files](https://github.com/PickNikRobotics/generate_parameter_library)
-- [AutoWare's JSON schemas](https://github.com/orgs/autowarefoundation/discussions/3433)
+## Parameter structs 
 
-These approaches alleviate in my opinion the problem greatly and are well scalable. 
-If there is interest in integrating any of these great libraries into ICEY, please open an GitHub issue.
-
-ICEY implements a simpler approch, not based on external files, more akin to the great `dynamic_reconfigure` package that was present in ROS 1. We will see in the future how the official ROS 2 API will evolve and which approach will eventually become the standard way.
-
-### Using parameters: 
-
-Parameters can be used
-
-
-Do you commonly use a pareters struct that contains all your algorithm parameters ? 
-
-(https://github.com/ros-navigation/navigation2/blob/main/nav2_map_server/include/nav2_map_server/map_io.hpp#L31)
+Do you have many parameters ? 
+You can declare a single struct with all the parameters: 
 
 ```cpp
-struct LoadParameters
-{
-  std::string image_file_name;
-  double resolution{0};
-  std::vector<double> origin{0, 0, 0};
-  double free_thresh;
-  double occupied_thresh;
-  MapMode mode;
-  bool negate;
+struct NodeParameters {
+  /// We can have regular fields :
+  double amplitude{3};
+
+  /// And as well parameters with constraints and a description:
+  icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
+                                       std::string("The frequency of the sine")};
+  
+  icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
+  /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+  struct OtherParams {
+    double max_amp = 6.;
+    std::vector<double> cov;
+  } others;
 };
 ```
+And then let ICEY declare all of them automatically to ROS: 
 
-## Subscribers 
+```cpp
+auto node = icey::create_node<icey::Node>(argc, argv, "parameters_struct_example");
+  
+  /// Now create an object of the node-parameters that will be updated:
+  NodeParameters params;
 
-> [!NOTE]
-> A note to the message type: In ICEY, you always receive in the callback a regular C++ reference. 
-Under the hood, ICEY always receives to allow for zero-overhead message passing when using intra-process communication, it simply dereferences the shared pointer before passing it to the user callback. 
+  /// Now simply declare the parameter struct and a callback that is called when any field updates: 
+  icey::declare_parameter_struct(node->icey(), params, [&](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(node->get_logger(),
+                           "Parameter " << changed_parameter << " changed");
+  });
+```
 
-
-## Managing resources 
-
-In ICEY, everything that you spawsn is managed internally, you do not have to store subscribers, publishers, timers etc. internally as class field like you have to in ROS. 
-
-## Managing state 
-
-We understand that in robotics applications, we need to keep state somewhere: initialized algorithm libraries etc. Generally, you should try to use only state that is necessary, and pay attention to not store state redundantly. With that said, in ICEY the callbacks can always access variables from the outside, they do not need to be pure functions. This means, you simply capture your state in the lambda variable:
-
+See the [parameter structs example](../../icey_examples/src/parameters_struct.cpp) for details.
 
 ## Timers 
 
 Timers are also signals:
 
 ```cpp
-auto my_timer = icey::create_timer(100ms);
+auto my_timer = node->icey().create_timer(100ms);
 ```
 
 You can think of them as sources similar to subscribers but with no information, publishing periodically. 
 We can easily register a callback and use the timer like you usually would: 
 
 ```cpp
-auto my_timer = icey::create_timer(100ms);
+auto my_timer = node->icey().create_timer(100ms);
 
 my_timer.then([](size_t ticks) {
     /// Do work
 });
-```
-
-## Using timers as signal generators
-
-The power in ICEY comes from the fact that timers can be used as signal generators. For example, you can easily implement your own sine signal generator and publish it: 
-
-
-```cpp
-auto period_time = 100ms;
-auto frequency = icey::declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
-auto amplitude = icey::declare_parameter<double>("amplitude", 2.);
-
-auto timer_signal = icey::create_timer(period_time);
-
-auto sine_signal = timer_signal.then([&](size_t ticks) {
-    std_msgs::msg::Float32 float_val;
-    double period_time_s = 0.1;
-    /// We can .get() parameters since they are always initialized first, so at this point they are alreay there        
-    double y = amplitude->get() * std::sin((period_time_s * ticks) / frequency->get() * 2 * M_PI);
-    float_val.data = y;
-    return float_val;
-});
-
-sine_signal.publish("sine_generator");
 ```
 
 The signature of `create_timer` is `icey::create_timer(period_time, <use_wall_time>, <is_one_off_timer>)`, one-off timers can be implemented therefore as well.
