@@ -26,23 +26,7 @@ subprocess.call('doxygen Doxyfile', shell=True)
 highlight_language = 'c++'
 
 html_title = "ICEY Documentation"
-html_theme = 'pydata_sphinx_theme'
+html_theme = 'sphinx_book_theme'
 html_static_path = ['_static']
 html_css_files = ["icey.css"]
 html_context = {"default_mode": "light"}
-html_theme_options = {
-    "github_url": "https://github.com/iv461/icey",
-    "collapse_navigation": True,
-    "header_links_before_dropdown": 6,
-    # Add light/dark mode and documentation version switcher:
-    "navbar_end": [
-        "search-button",
-        "theme-switcher",
-        "version-switcher",
-        "navbar-icon-links"
-    ],
-    "navbar_persistent": [],
-}
-html_sidebars = {
-  "**": []
-}

@@ -5,3 +5,4 @@ breathe==4.35.0
 myst-parser==4.0.0
 sphinx-copybutton==0.5.2
 sphinxcontrib-spelling
+sphinx-book-theme

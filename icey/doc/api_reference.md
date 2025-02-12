@@ -144,7 +144,7 @@ TODO
 ```
 ```{doxygentypedef} icey::obs_msg
 ```
-# Support for `image_transport`
+## Support for `image_transport`
 
 ```{doxygenstruct} icey::ImageTransportSubscriber
 ```

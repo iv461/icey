@@ -31,6 +31,7 @@
 <link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=a3416100" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/icey.css?v=bce3c9b0" />
   
@@ -40,11 +41,12 @@
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
-    <script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/documentation_options.js?v=a1637f0b"></script>
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api_reference';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -76,8 +78,8 @@
   <input type="search"
          class="form-control"
          name="q"
-         placeholder="Search the docs ..."
-         aria-label="Search the docs ..."
+         placeholder="Search..."
+         aria-label="Search..."
          autocomplete="off"
          autocorrect="off"
          autocapitalize="off"
@@ -92,15 +94,28 @@
 
   
     <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
+    </header>
   
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
   
-  <div class="col-lg-3 navbar-header-items__start">
+  <div class="sidebar-header-items sidebar-primary__section">
     
-      <div class="navbar-item">
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
 
   
     
@@ -116,282 +131,33 @@
     <p class="title logo__title">ICEY Documentation</p>
   
 </a></div>
-    
-  </div>
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    <div class="me-auto navbar-header-items__center">
-      
-        <div class="navbar-item">
-<nav>
-  <ul class="bd-navbar-elements navbar-nav">
-    
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="getting_started.html">
-    Getting started
-  </a>
-</li>
+        <div class="sidebar-primary-item">
 
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">Basics</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="using_parameter_structs.html">Using Parameters Structs for managing many parameters</a></li>
+<li class="toctree-l1"><a class="reference internal" href="using_tf.html">Using TF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="translating_an_autoware_node.html">Translating existing nodes to use ICEY: Autoware example</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="extending_icey.html">Extending ICEY</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Developing ICEY</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">API Reference</a></li>
 
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="using_parameter_structs.html">
-    Using Parameters Structs for managing many parameters
-  </a>
-</li>
+</ul>
 
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="using_tf.html">
-    Using TF
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="translating_an_autoware_node.html">
-    Translating existing nodes to use ICEY: Autoware example
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="extending_icey.html">
-    Extending ICEY
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="development.html">
-    Developing ICEY
-  </a>
-</li>
-
-            <li class="nav-item dropdown">
-                <button class="btn dropdown-toggle nav-item" type="button"
-                data-bs-toggle="dropdown" aria-expanded="false"
-                aria-controls="pst-nav-more-links">
-                    More
-                </button>
-                <ul id="pst-nav-more-links" class="dropdown-menu">
-                    
-<li class=" current active">
-  <a class="nav-link dropdown-item nav-internal" href="#">
-    API Reference
-  </a>
-</li>
-
-                </ul>
-            </li>
-            
-  </ul>
-</nav></div>
-      
     </div>
-    
-    
-    <div class="navbar-header-items__end">
-      
-      
-        <div class="navbar-item">
-
-<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
-</button></div>
-      
-        <div class="navbar-item">
-
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
-      
-        <div class="navbar-item">
-<div class="version-switcher__container dropdown pst-js-only">
-  <button id="pst-version-switcher-button-2"
-    type="button"
-    class="version-switcher__button btn btn-sm dropdown-toggle"
-    data-bs-toggle="dropdown"
-    aria-haspopup="listbox"
-    aria-controls="pst-version-switcher-list-2"
-    aria-label="Version switcher list"
-  >
-    Choose version  <!-- this text may get changed later by javascript -->
-    <span class="caret"></span>
-  </button>
-  <div id="pst-version-switcher-list-2"
-    class="version-switcher__menu dropdown-menu list-group-flush py-0"
-    role="listbox" aria-labelledby="pst-version-switcher-button-2">
-    <!-- dropdown will be populated by javascript on page load -->
-  </div>
-</div></div>
-      
-        <div class="navbar-item"><ul class="navbar-icon-links"
-    aria-label="Icon Links">
-        <li class="nav-item">
-          
-          
-          
-          
-          
-          
-          
-          
-          <a href="https://github.com/iv461/icey" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
-        </li>
-</ul></div>
-      
-    </div>
-    
-  </div>
-  
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
-    </header>
-  
-
-  <div class="bd-container">
-    <div class="bd-container__inner bd-page-width">
-      
-      
-      
-      <dialog id="pst-primary-sidebar-modal"></dialog>
-      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
-        
-
-  
-  <div class="sidebar-header-items sidebar-primary__section">
-    
-    
-      <div class="sidebar-header-items__center">
-        
-          
-          
-            <div class="navbar-item">
-<nav>
-  <ul class="bd-navbar-elements navbar-nav">
-    
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="getting_started.html">
-    Getting started
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="using_parameter_structs.html">
-    Using Parameters Structs for managing many parameters
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="using_tf.html">
-    Using TF
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="translating_an_autoware_node.html">
-    Translating existing nodes to use ICEY: Autoware example
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="extending_icey.html">
-    Extending ICEY
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="development.html">
-    Developing ICEY
-  </a>
-</li>
-
-
-<li class="nav-item current active">
-  <a class="nav-link nav-internal" href="#">
-    API Reference
-  </a>
-</li>
-
-  </ul>
 </nav></div>
-          
-        
-      </div>
-    
-    
-    
-      <div class="sidebar-header-items__end">
-        
-          <div class="navbar-item">
-
-<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
-</button></div>
-        
-          <div class="navbar-item">
-
-<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
-  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
-  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
-  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
-</button></div>
-        
-          <div class="navbar-item">
-<div class="version-switcher__container dropdown pst-js-only">
-  <button id="pst-version-switcher-button-3"
-    type="button"
-    class="version-switcher__button btn btn-sm dropdown-toggle"
-    data-bs-toggle="dropdown"
-    aria-haspopup="listbox"
-    aria-controls="pst-version-switcher-list-3"
-    aria-label="Version switcher list"
-  >
-    Choose version  <!-- this text may get changed later by javascript -->
-    <span class="caret"></span>
-  </button>
-  <div id="pst-version-switcher-list-3"
-    class="version-switcher__menu dropdown-menu list-group-flush py-0"
-    role="listbox" aria-labelledby="pst-version-switcher-button-3">
-    <!-- dropdown will be populated by javascript on page load -->
-  </div>
-</div></div>
-        
-          <div class="navbar-item"><ul class="navbar-icon-links"
-    aria-label="Icon Links">
-        <li class="nav-item">
-          
-          
-          
-          
-          
-          
-          
-          
-          <a href="https://github.com/iv461/icey" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
-            <span class="sr-only">GitHub</span></a>
-        </li>
-</ul></div>
-        
-      </div>
-    
-  </div>
+    </div>
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
@@ -410,6 +176,9 @@
       <main id="main-content" class="bd-main" role="main">
         
         
+
+<div class="sbt-scroll-pixel-helper"></div>
+
           <div class="bd-content">
             <div class="bd-article-container">
               
@@ -418,28 +187,517 @@
   
     <div class="header-article-items__start">
       
-        <div class="header-article-item">
-
-<nav aria-label="Breadcrumb" class="d-print-none">
-  <ul class="bd-breadcrumbs">
-    
-    <li class="breadcrumb-item breadcrumb-home">
-      <a href="index.html" class="nav-link" aria-label="Home">
-        <i class="fa-solid fa-home"></i>
-      </a>
-    </li>
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">API Reference</span></li>
-  </ul>
-</nav>
-</div>
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
       
     </div>
   
   
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/api_reference.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
 </div>
 </div>
               
               
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>API Reference</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">API Reference</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#type-aliases">Type aliases</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4NodeE"><code class="docutils literal notranslate"><span class="pre">Node</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13LifecycleNodeE"><code class="docutils literal notranslate"><span class="pre">LifecycleNode</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey5TimerE"><code class="docutils literal notranslate"><span class="pre">Timer</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey9ParameterE"><code class="docutils literal notranslate"><span class="pre">Parameter</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey5ClockE"><code class="docutils literal notranslate"><span class="pre">Clock</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4TimeE"><code class="docutils literal notranslate"><span class="pre">Time</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey8DurationE"><code class="docutils literal notranslate"><span class="pre">Duration</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey11create_nodeEDaiPPcRKNSt6stringE"><code class="docutils literal notranslate"><span class="pre">create_node()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey4spinEv4Node"><code class="docutils literal notranslate"><span class="pre">spin()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10spin_nodesERKNSt6vectorINSt10shared_ptrI4NodeEEEE"><code class="docutils literal notranslate"><span class="pre">spin_nodes()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey24declare_parameter_structEvR7ContextR1TRKNSt8functionIFvRKNSt6stringEEEENSt6stringE"><code class="docutils literal notranslate"><span class="pre">declare_parameter_struct()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fundamentals">Fundamentals</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7NothingE"><code class="docutils literal notranslate"><span class="pre">icey::Nothing</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey6ResultE"><code class="docutils literal notranslate"><span class="pre">icey::Result</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result5ValueE"><code class="docutils literal notranslate"><span class="pre">Value</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result10ErrorValueE"><code class="docutils literal notranslate"><span class="pre">ErrorValue</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result4SelfE"><code class="docutils literal notranslate"><span class="pre">Self</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Result8has_noneEv"><code class="docutils literal notranslate"><span class="pre">has_none()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Result9has_valueEv"><code class="docutils literal notranslate"><span class="pre">has_value()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Result9has_errorEv"><code class="docutils literal notranslate"><span class="pre">has_error()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Result5valueEv"><code class="docutils literal notranslate"><span class="pre">value()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Result5errorEv"><code class="docutils literal notranslate"><span class="pre">error()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result8set_noneEv"><code class="docutils literal notranslate"><span class="pre">set_none()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result6set_okERK5Value"><code class="docutils literal notranslate"><span class="pre">set_ok()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result7set_errERK10ErrorValue"><code class="docutils literal notranslate"><span class="pre">set_err()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result4NoneEv"><code class="docutils literal notranslate"><span class="pre">None()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result2OkERK6_Value"><code class="docutils literal notranslate"><span class="pre">Ok()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Result3ErrERK11_ErrorValue"><code class="docutils literal notranslate"><span class="pre">Err()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streams">Streams</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I000EN4icey6StreamE"><code class="docutils literal notranslate"><span class="pre">icey::Stream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream4ImplE"><code class="docutils literal notranslate"><span class="pre">Impl</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream5ValueE"><code class="docutils literal notranslate"><span class="pre">Value</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream10ErrorValueE"><code class="docutils literal notranslate"><span class="pre">ErrorValue</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream4SelfE"><code class="docutils literal notranslate"><span class="pre">Self</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream12promise_typeE"><code class="docutils literal notranslate"><span class="pre">promise_type</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream6StreamEv"><code class="docutils literal notranslate"><span class="pre">Stream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6StreamD0Ev"><code class="docutils literal notranslate"><span class="pre">~Stream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream22assert_we_have_contextEv"><code class="docutils literal notranslate"><span class="pre">assert_we_have_context()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Stream13get_type_infoEv"><code class="docutils literal notranslate"><span class="pre">get_type_info()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Stream4implEv"><code class="docutils literal notranslate"><span class="pre">impl()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey6Stream4thenEDaRR1F"><code class="docutils literal notranslate"><span class="pre">then()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey6Stream6exceptEDaRR1F"><code class="docutils literal notranslate"><span class="pre">except()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0DpEN4icey6Stream7publishEvDpRR4Args"><code class="docutils literal notranslate"><span class="pre">publish()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0DpEN4icey6Stream13create_streamEDaDpRR4Args"><code class="docutils literal notranslate"><span class="pre">create_stream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream7timeoutEN6rclcpp8DurationEb"><code class="docutils literal notranslate"><span class="pre">timeout()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream7publishERKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">publish()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream17publish_transformEv"><code class="docutils literal notranslate"><span class="pre">publish_transform()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey6Stream12call_serviceEDaRKNSt6stringERK8DurationRKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">call_service()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream6unpackEv"><code class="docutils literal notranslate"><span class="pre">unpack()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream17get_return_objectEv"><code class="docutils literal notranslate"><span class="pre">get_return_object()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream15initial_suspendEv"><code class="docutils literal notranslate"><span class="pre">initial_suspend()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream12return_valueEv"><code class="docutils literal notranslate"><span class="pre">return_value()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0ENK4icey6Stream12return_valueEvRK1T"><code class="docutils literal notranslate"><span class="pre">return_value()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream19unhandled_exceptionEv"><code class="docutils literal notranslate"><span class="pre">unhandled_exception()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey6Stream13final_suspendEv"><code class="docutils literal notranslate"><span class="pre">final_suspend()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey6Stream15await_transformEDa10ReturnType"><code class="docutils literal notranslate"><span class="pre">await_transform()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream13spin_executorEv"><code class="docutils literal notranslate"><span class="pre">spin_executor()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream11await_readyEv"><code class="docutils literal notranslate"><span class="pre">await_ready()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream13await_suspendEDa"><code class="docutils literal notranslate"><span class="pre">await_suspend()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream12await_resumeEv"><code class="docutils literal notranslate"><span class="pre">await_resume()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00ENK4icey6Stream16create_from_implE6StreamI6NewVal6NewErrERKNSt10shared_ptrIN4impl6StreamI6NewVal6NewErr12WithDefaultsI7NothingE12WithDefaultsI7NothingEEEEE"><code class="docutils literal notranslate"><span class="pre">create_from_impl()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey6Stream5impl_E"><code class="docutils literal notranslate"><span class="pre">impl_</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey15ParameterStreamE"><code class="docutils literal notranslate"><span class="pre">icey::ParameterStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15ParameterStream15ParameterStreamERKNSt8optionalI6_ValueEERK9ValidatorI6_ValueENSt6stringEbb"><code class="docutils literal notranslate"><span class="pre">ParameterStream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15ParameterStream15ParameterStreamER15NodeBookkeepingRKNSt6stringERKNSt8optionalI6_ValueEERK9ValidatorI6_ValueENSt6stringEbb"><code class="docutils literal notranslate"><span class="pre">ParameterStream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15ParameterStream17register_with_rosER15NodeBookkeeping"><code class="docutils literal notranslate"><span class="pre">register_with_ros()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey15ParameterStream5valueEv"><code class="docutils literal notranslate"><span class="pre">value()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey15ParameterStreamcv6_ValueEv"><code class="docutils literal notranslate"><span class="pre">operator</span> <span class="pre">_Value()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey8IntervalE"><code class="docutils literal notranslate"><span class="pre">icey::Interval</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey8Interval8IntervalE5Value5Value"><code class="docutils literal notranslate"><span class="pre">Interval()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey8Interval7minimumE"><code class="docutils literal notranslate"><span class="pre">minimum</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey8Interval7maximumE"><code class="docutils literal notranslate"><span class="pre">maximum</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey3SetE"><code class="docutils literal notranslate"><span class="pre">icey::Set</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey3Set3SetENSt6vectorI5ValueEE"><code class="docutils literal notranslate"><span class="pre">Set()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey3Set13set_of_valuesE"><code class="docutils literal notranslate"><span class="pre">set_of_values</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey9ValidatorE"><code class="docutils literal notranslate"><span class="pre">icey::Validator</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator8ROSValueE"><code class="docutils literal notranslate"><span class="pre">ROSValue</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator8ValidateE"><code class="docutils literal notranslate"><span class="pre">Validate</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator9ValidatorEv"><code class="docutils literal notranslate"><span class="pre">Validator()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator9ValidatorERK8Validate"><code class="docutils literal notranslate"><span class="pre">Validator()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator9ValidatorERK8IntervalI5ValueE"><code class="docutils literal notranslate"><span class="pre">Validator()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator9ValidatorERK3SetI5ValueE"><code class="docutils literal notranslate"><span class="pre">Validator()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey9Validator21get_default_validatorEv"><code class="docutils literal notranslate"><span class="pre">get_default_validator()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator10descriptorE"><code class="docutils literal notranslate"><span class="pre">descriptor</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9Validator8validateE"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey18SubscriptionStreamE"><code class="docutils literal notranslate"><span class="pre">icey::SubscriptionStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey18SubscriptionStream5ValueE"><code class="docutils literal notranslate"><span class="pre">Value</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey18SubscriptionStream18SubscriptionStreamER15NodeBookkeepingRKNSt6stringERKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE"><code class="docutils literal notranslate"><span class="pre">SubscriptionStream()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey11TimerStreamE"><code class="docutils literal notranslate"><span class="pre">icey::TimerStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey11TimerStream11TimerStreamER15NodeBookkeepingRK8Durationb"><code class="docutils literal notranslate"><span class="pre">TimerStream()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9TimerImplE"><code class="docutils literal notranslate"><span class="pre">icey::TimerImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9TimerImpl13ticks_counterE"><code class="docutils literal notranslate"><span class="pre">ticks_counter</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey9TimerImpl5timerE"><code class="docutils literal notranslate"><span class="pre">timer</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey15PublisherStreamE"><code class="docutils literal notranslate"><span class="pre">icey::PublisherStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15PublisherStream7MessageE"><code class="docutils literal notranslate"><span class="pre">Message</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey15PublisherStream15PublisherStreamER15NodeBookkeepingRKNSt6stringEKN6rclcpp3QoSEP6Parent"><code class="docutils literal notranslate"><span class="pre">PublisherStream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey15PublisherStream7publishERK6_Value"><code class="docutils literal notranslate"><span class="pre">publish()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey13PublisherImplE"><code class="docutils literal notranslate"><span class="pre">icey::PublisherImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13PublisherImpl7publishERK6_Value"><code class="docutils literal notranslate"><span class="pre">publish()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13PublisherImpl9publisherE"><code class="docutils literal notranslate"><span class="pre">publisher</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey13ServiceStreamE"><code class="docutils literal notranslate"><span class="pre">icey::ServiceStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceStream7RequestE"><code class="docutils literal notranslate"><span class="pre">Request</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceStream8ResponseE"><code class="docutils literal notranslate"><span class="pre">Response</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceStream5ValueE"><code class="docutils literal notranslate"><span class="pre">Value</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceStream13ServiceStreamER15NodeBookkeepingRKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">ServiceStream()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey13ServiceClientE"><code class="docutils literal notranslate"><span class="pre">icey::ServiceClient</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceClient7RequestE"><code class="docutils literal notranslate"><span class="pre">Request</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceClient8ResponseE"><code class="docutils literal notranslate"><span class="pre">Response</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceClient6ClientE"><code class="docutils literal notranslate"><span class="pre">Client</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceClient6FutureE"><code class="docutils literal notranslate"><span class="pre">Future</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey13ServiceClient13ServiceClientER15NodeBookkeepingRKNSt6stringERK8DurationRKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">ServiceClient()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey13ServiceClient4callE7Request"><code class="docutils literal notranslate"><span class="pre">call()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey17ServiceClientImplE"><code class="docutils literal notranslate"><span class="pre">icey::ServiceClientImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17ServiceClientImpl6ClientE"><code class="docutils literal notranslate"><span class="pre">Client</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17ServiceClientImpl6clientE"><code class="docutils literal notranslate"><span class="pre">client</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17ServiceClientImpl7timeoutE"><code class="docutils literal notranslate"><span class="pre">timeout</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17ServiceClientImpl21maybe_pending_requestE"><code class="docutils literal notranslate"><span class="pre">maybe_pending_request</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey27TransformSubscriptionStreamE"><code class="docutils literal notranslate"><span class="pre">icey::TransformSubscriptionStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey27TransformSubscriptionStream7MessageE"><code class="docutils literal notranslate"><span class="pre">Message</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey27TransformSubscriptionStream10MaybeValueE"><code class="docutils literal notranslate"><span class="pre">MaybeValue</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey27TransformSubscriptionStream27TransformSubscriptionStreamER15NodeBookkeepingRKNSt6stringERKNSt6stringE"><code class="docutils literal notranslate"><span class="pre">TransformSubscriptionStream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey27TransformSubscriptionStream11get_at_timeERKN6rclcpp4TimeE"><code class="docutils literal notranslate"><span class="pre">get_at_time()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey31TransformSubscriptionStreamImplE"><code class="docutils literal notranslate"><span class="pre">icey::TransformSubscriptionStreamImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey31TransformSubscriptionStreamImpl7MessageE"><code class="docutils literal notranslate"><span class="pre">Message</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey31TransformSubscriptionStreamImpl12target_frameE"><code class="docutils literal notranslate"><span class="pre">target_frame</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey31TransformSubscriptionStreamImpl12source_frameE"><code class="docutils literal notranslate"><span class="pre">source_frame</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey31TransformSubscriptionStreamImpl12shared_valueE"><code class="docutils literal notranslate"><span class="pre">shared_value</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey31TransformSubscriptionStreamImpl12tf2_listenerE"><code class="docutils literal notranslate"><span class="pre">tf2_listener</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey24TransformPublisherStreamE"><code class="docutils literal notranslate"><span class="pre">icey::TransformPublisherStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey24TransformPublisherStream5ValueE"><code class="docutils literal notranslate"><span class="pre">Value</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey24TransformPublisherStream24TransformPublisherStreamER15NodeBookkeeping"><code class="docutils literal notranslate"><span class="pre">TransformPublisherStream()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17StreamImplDefaultE"><code class="docutils literal notranslate"><span class="pre">icey::StreamImplDefault</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17StreamImplDefault7contextE"><code class="docutils literal notranslate"><span class="pre">context</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17StreamImplDefault10class_nameE"><code class="docutils literal notranslate"><span class="pre">class_name</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey17StreamImplDefault4nameE"><code class="docutils literal notranslate"><span class="pre">name</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#actual-implementation-of-stream">Actual implementation of Stream</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0000EN4icey4impl6StreamE"><code class="docutils literal notranslate"><span class="pre">icey::impl::Stream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream5ValueE"><code class="docutils literal notranslate"><span class="pre">Value</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream10ErrorValueE"><code class="docutils literal notranslate"><span class="pre">ErrorValue</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream4SelfE"><code class="docutils literal notranslate"><span class="pre">Self</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream10MaybeValueE"><code class="docutils literal notranslate"><span class="pre">MaybeValue</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream5StateE"><code class="docutils literal notranslate"><span class="pre">State</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream7HandlerE"><code class="docutils literal notranslate"><span class="pre">Handler</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey4impl6Stream8has_noneEv"><code class="docutils literal notranslate"><span class="pre">has_none()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey4impl6Stream9has_valueEv"><code class="docutils literal notranslate"><span class="pre">has_value()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey4impl6Stream9has_errorEv"><code class="docutils literal notranslate"><span class="pre">has_error()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey4impl6Stream5valueEv"><code class="docutils literal notranslate"><span class="pre">value()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey4impl6Stream5errorEv"><code class="docutils literal notranslate"><span class="pre">error()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream9get_stateEv"><code class="docutils literal notranslate"><span class="pre">get_state()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey4impl6Stream9get_stateEv"><code class="docutils literal notranslate"><span class="pre">get_state()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream16register_handlerE7Handler"><code class="docutils literal notranslate"><span class="pre">register_handler()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream8set_noneEv"><code class="docutils literal notranslate"><span class="pre">set_none()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream9set_valueERK10MaybeValue"><code class="docutils literal notranslate"><span class="pre">set_value()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream9set_errorERK10ErrorValue"><code class="docutils literal notranslate"><span class="pre">set_error()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream6notifyEv"><code class="docutils literal notranslate"><span class="pre">notify()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream7resolveERK10MaybeValue"><code class="docutils literal notranslate"><span class="pre">resolve()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey4impl6Stream6rejectERK10ErrorValue"><code class="docutils literal notranslate"><span class="pre">reject()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey4impl6Stream4thenEDaRR1F"><code class="docutils literal notranslate"><span class="pre">then()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey4impl6Stream6exceptEDaRR1F"><code class="docutils literal notranslate"><span class="pre">except()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#filters">Filters</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey19SimpleFilterAdapterE"><code class="docutils literal notranslate"><span class="pre">icey::SimpleFilterAdapter</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey19SimpleFilterAdapter19SimpleFilterAdapterEv"><code class="docutils literal notranslate"><span class="pre">SimpleFilterAdapter()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4IDpEN4icey18SynchronizerStreamE"><code class="docutils literal notranslate"><span class="pre">icey::SynchronizerStream</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey18SynchronizerStream4SelfE"><code class="docutils literal notranslate"><span class="pre">Self</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey18SynchronizerStream18SynchronizerStreamE8uint32_t"><code class="docutils literal notranslate"><span class="pre">SynchronizerStream()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4IDpEN4icey22SynchronizerStreamImplE"><code class="docutils literal notranslate"><span class="pre">icey::SynchronizerStreamImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl6PolicyE"><code class="docutils literal notranslate"><span class="pre">Policy</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl4SyncE"><code class="docutils literal notranslate"><span class="pre">Sync</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl6InputsE"><code class="docutils literal notranslate"><span class="pre">Inputs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey22SynchronizerStreamImpl6inputsEv"><code class="docutils literal notranslate"><span class="pre">inputs()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl23create_mfl_synchronizerE8uint32_t"><code class="docutils literal notranslate"><span class="pre">create_mfl_synchronizer()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl11queue_size_E"><code class="docutils literal notranslate"><span class="pre">queue_size_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl7inputs_E"><code class="docutils literal notranslate"><span class="pre">inputs_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey22SynchronizerStreamImpl13synchronizer_E"><code class="docutils literal notranslate"><span class="pre">synchronizer_</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey16TF2MessageFilterE"><code class="docutils literal notranslate"><span class="pre">icey::TF2MessageFilter</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey16TF2MessageFilter4SelfE"><code class="docutils literal notranslate"><span class="pre">Self</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey16TF2MessageFilter7MessageE"><code class="docutils literal notranslate"><span class="pre">Message</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey16TF2MessageFilter16TF2MessageFilterER15NodeBookkeepingNSt6stringEN6rclcpp8DurationE"><code class="docutils literal notranslate"><span class="pre">TF2MessageFilter()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey16TF2MessageFilter10on_messageERKN8_Message9SharedPtrE"><code class="docutils literal notranslate"><span class="pre">on_message()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey20TF2MessageFilterImplE"><code class="docutils literal notranslate"><span class="pre">icey::TF2MessageFilterImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey20TF2MessageFilterImpl13input_adapterE"><code class="docutils literal notranslate"><span class="pre">input_adapter</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey20TF2MessageFilterImpl6filterE"><code class="docutils literal notranslate"><span class="pre">filter</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey13TimeoutFilterE"><code class="docutils literal notranslate"><span class="pre">icey::TimeoutFilter</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey13TimeoutFilter13TimeoutFilterER15NodeBookkeeping6ParentRKN6rclcpp8DurationEb"><code class="docutils literal notranslate"><span class="pre">TimeoutFilter()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#context">Context</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7ContextE"><code class="docutils literal notranslate"><span class="pre">icey::Context</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0DpEN4icey7Context13create_streamEDaDpRR4Args"><code class="docutils literal notranslate"><span class="pre">create_stream()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context17declare_parameterE15ParameterStreamI10ParameterTERKNSt6stringERKNSt8optionalI10ParameterTEERK9ValidatorI10ParameterTENSt6stringEbb"><code class="docutils literal notranslate"><span class="pre">declare_parameter()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context19create_subscriptionE18SubscriptionStreamI8MessageTERKNSt6stringERKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE"><code class="docutils literal notranslate"><span class="pre">create_subscription()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7Context29create_transform_subscriptionERKNSt6stringERKNSt6stringE"><code class="docutils literal notranslate"><span class="pre">create_transform_subscription()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context16create_publisherE15PublisherStreamI7MessageERKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_publisher()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context16create_publisherE15PublisherStreamI7obs_valI6ParentEE6ParentRKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_publisher()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context26create_transform_publisherE24TransformPublisherStream6Parent"><code class="docutils literal notranslate"><span class="pre">create_transform_publisher()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7Context12create_timerERK8Durationb"><code class="docutils literal notranslate"><span class="pre">create_timer()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context14create_serviceE13ServiceStreamI8ServiceTERKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_service()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context13create_clientE13ServiceClientI8ServiceTERKNSt6stringERK8DurationRKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_client()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey7Context13create_clientE13ServiceClientI8ServiceTE6ParentRKNSt6stringERK8DurationRKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_client()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7Context26synchronize_with_transformEDa6ParentNSt6stringEN6rclcpp8DurationE"><code class="docutils literal notranslate"><span class="pre">synchronize_with_transform()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7Context13stream_impls_E"><code class="docutils literal notranslate"><span class="pre">stream_impls_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7Context9executor_E"><code class="docutils literal notranslate"><span class="pre">executor_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey7Context4nodeE"><code class="docutils literal notranslate"><span class="pre">node</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0DpEN4icey7Context19sync_with_referenceEDa9ReferenceDp15Interpolatables"><code class="docutils literal notranslate"><span class="pre">sync_with_reference()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4IDpEN4icey7Context23synchronize_approx_timeE18SynchronizerStreamIDp7obs_msgI7ParentsEEDp7Parents"><code class="docutils literal notranslate"><span class="pre">synchronize_approx_time()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4IDpEN4icey7Context11synchronizeEDaDp7Parents"><code class="docutils literal notranslate"><span class="pre">synchronize()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4IDpEN4icey7Context9serializeEDaDp7Parents"><code class="docutils literal notranslate"><span class="pre">serialize()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ros-related">ROS-related</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeepingE"><code class="docutils literal notranslate"><span class="pre">icey::NodeBookkeeping</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping10MaybeErrorE"><code class="docutils literal notranslate"><span class="pre">MaybeError</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping9FValidateE"><code class="docutils literal notranslate"><span class="pre">FValidate</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping15NodeBookkeepingE14NodeInterfaces"><code class="docutils literal notranslate"><span class="pre">NodeBookkeeping()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping33add_parameter_validator_if_neededEv"><code class="docutils literal notranslate"><span class="pre">add_parameter_validator_if_needed()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey15NodeBookkeeping13add_parameterEDaRKNSt6stringERKNSt8optionalI10ParameterTEERR9CallbackTRKN14rcl_interfaces3msg19ParameterDescriptorE9FValidateb"><code class="docutils literal notranslate"><span class="pre">add_parameter()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey15NodeBookkeeping16add_subscriptionEvRKNSt6stringERR1FRKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE"><code class="docutils literal notranslate"><span class="pre">add_subscription()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey15NodeBookkeeping13add_publisherEDaRKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">add_publisher()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey15NodeBookkeeping9add_timerEDaRK8DurationRR9CallbackTN6rclcpp13CallbackGroup9SharedPtrE"><code class="docutils literal notranslate"><span class="pre">add_timer()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey15NodeBookkeeping11add_serviceEvRKNSt6stringERR9CallbackTRKN6rclcpp3QoSEN6rclcpp13CallbackGroup9SharedPtrE"><code class="docutils literal notranslate"><span class="pre">add_service()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey15NodeBookkeeping10add_clientEDaRKNSt6stringERKN6rclcpp3QoSEN6rclcpp13CallbackGroup9SharedPtrE"><code class="docutils literal notranslate"><span class="pre">add_client()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I00EN4icey15NodeBookkeeping19add_tf_subscriptionEDaNSt6stringENSt6stringERR11OnTransformRR7OnError"><code class="docutils literal notranslate"><span class="pre">add_tf_subscription()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping28add_tf_broadcaster_if_neededEv"><code class="docutils literal notranslate"><span class="pre">add_tf_broadcaster_if_needed()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping25add_tf_listener_if_neededEv"><code class="docutils literal notranslate"><span class="pre">add_tf_listener_if_needed()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping13get_tf_bufferEv"><code class="docutils literal notranslate"><span class="pre">get_tf_buffer()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping5node_E"><code class="docutils literal notranslate"><span class="pre">node_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping5book_E"><code class="docutils literal notranslate"><span class="pre">book_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping30extend_name_with_sub_namespaceERKNSt6stringERKNSt6stringE"><code class="docutils literal notranslate"><span class="pre">extend_name_with_sub_namespace()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBookE"><code class="docutils literal notranslate"><span class="pre">icey::NodeBookkeeping::IceyBook</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook11parameters_E"><code class="docutils literal notranslate"><span class="pre">parameters_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook21parameter_validators_E"><code class="docutils literal notranslate"><span class="pre">parameter_validators_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook18validate_param_cb_E"><code class="docutils literal notranslate"><span class="pre">validate_param_cb_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook12subscribers_E"><code class="docutils literal notranslate"><span class="pre">subscribers_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook11publishers_E"><code class="docutils literal notranslate"><span class="pre">publishers_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook9services_E"><code class="docutils literal notranslate"><span class="pre">services_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook17services_clients_E"><code class="docutils literal notranslate"><span class="pre">services_clients_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook7timers_E"><code class="docutils literal notranslate"><span class="pre">timers_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook16callback_groups_E"><code class="docutils literal notranslate"><span class="pre">callback_groups_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook13tf2_listener_E"><code class="docutils literal notranslate"><span class="pre">tf2_listener_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook15tf_broadcaster_E"><code class="docutils literal notranslate"><span class="pre">tf_broadcaster_</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15NodeBookkeeping8IceyBook14extra_baggage_E"><code class="docutils literal notranslate"><span class="pre">extra_baggage_</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfacesE"><code class="docutils literal notranslate"><span class="pre">icey::NodeInterfaces</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey14NodeInterfaces14NodeInterfacesEP5_Node"><code class="docutils literal notranslate"><span class="pre">NodeInterfaces()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces23get_node_base_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_base_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces24get_node_graph_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_graph_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces24get_node_clock_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_clock_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces26get_node_logging_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_logging_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces25get_node_timers_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_timers_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces25get_node_topics_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_topics_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces27get_node_services_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_services_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces29get_node_parameters_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_parameters_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK4icey14NodeInterfaces30get_node_time_source_interfaceEv"><code class="docutils literal notranslate"><span class="pre">get_node_time_source_interface()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces10node_base_E"><code class="docutils literal notranslate"><span class="pre">node_base_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces11node_graph_E"><code class="docutils literal notranslate"><span class="pre">node_graph_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces11node_clock_E"><code class="docutils literal notranslate"><span class="pre">node_clock_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces13node_logging_E"><code class="docutils literal notranslate"><span class="pre">node_logging_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces12node_timers_E"><code class="docutils literal notranslate"><span class="pre">node_timers_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces12node_topics_E"><code class="docutils literal notranslate"><span class="pre">node_topics_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces14node_services_E"><code class="docutils literal notranslate"><span class="pre">node_services_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces16node_parameters_E"><code class="docutils literal notranslate"><span class="pre">node_parameters_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces17node_time_source_E"><code class="docutils literal notranslate"><span class="pre">node_time_source_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces18maybe_regular_nodeE"><code class="docutils literal notranslate"><span class="pre">maybe_regular_node</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey14NodeInterfaces20maybe_lifecycle_nodeE"><code class="docutils literal notranslate"><span class="pre">maybe_lifecycle_node</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListenerE"><code class="docutils literal notranslate"><span class="pre">icey::TFListener</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener12TransformMsgE"><code class="docutils literal notranslate"><span class="pre">TransformMsg</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener11OnTransformE"><code class="docutils literal notranslate"><span class="pre">OnTransform</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener7OnErrorE"><code class="docutils literal notranslate"><span class="pre">OnError</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener10TFListenerE14NodeInterfaces"><code class="docutils literal notranslate"><span class="pre">TFListener()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener16add_subscriptionERKNSt6stringERKNSt6stringERK11OnTransformRK7OnError"><code class="docutils literal notranslate"><span class="pre">add_subscription()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener5node_E"><code class="docutils literal notranslate"><span class="pre">node_</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey10TFListener7buffer_E"><code class="docutils literal notranslate"><span class="pre">buffer_</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey19NodeWithIceyContextE"><code class="docutils literal notranslate"><span class="pre">icey::NodeWithIceyContext</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey19NodeWithIceyContext19NodeWithIceyContextENSt6stringERKN6rclcpp11NodeOptionsE"><code class="docutils literal notranslate"><span class="pre">NodeWithIceyContext()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey19NodeWithIceyContext4iceyEv"><code class="docutils literal notranslate"><span class="pre">icey()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey19NodeWithIceyContext26create_executor_in_contextEv"><code class="docutils literal notranslate"><span class="pre">create_executor_in_context()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey19NodeWithIceyContext13icey_context_E"><code class="docutils literal notranslate"><span class="pre">icey_context_</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#c-20-coroutines-support">C++20’ coroutines support</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#traits">Traits</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7obs_errE"><code class="docutils literal notranslate"><span class="pre">obs_err</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7obs_valE"><code class="docutils literal notranslate"><span class="pre">obs_val</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I0EN4icey7obs_msgE"><code class="docutils literal notranslate"><span class="pre">obs_msg</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#support-for-image-transport">Support for <code class="docutils literal notranslate"><span class="pre">image_transport</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey24ImageTransportSubscriberE"><code class="docutils literal notranslate"><span class="pre">icey::ImageTransportSubscriber</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey24ImageTransportSubscriber24ImageTransportSubscriberER15NodeBookkeepingRKNSt6stringERKNSt6stringEKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE"><code class="docutils literal notranslate"><span class="pre">ImageTransportSubscriber()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey28ImageTransportSubscriberImplE"><code class="docutils literal notranslate"><span class="pre">icey::ImageTransportSubscriberImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey28ImageTransportSubscriberImpl10subscriberE"><code class="docutils literal notranslate"><span class="pre">subscriber</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey23ImageTransportPublisherE"><code class="docutils literal notranslate"><span class="pre">icey::ImageTransportPublisher</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey23ImageTransportPublisher23ImageTransportPublisherER15NodeBookkeepingRKNSt6stringEKN6rclcpp3QoSERKN6rclcpp16PublisherOptionsE"><code class="docutils literal notranslate"><span class="pre">ImageTransportPublisher()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey16CameraSubscriberE"><code class="docutils literal notranslate"><span class="pre">icey::CameraSubscriber</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey16CameraSubscriber16CameraSubscriberER15NodeBookkeepingRKNSt6stringERKNSt6stringEKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">CameraSubscriber()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey20CameraSubscriberImplE"><code class="docutils literal notranslate"><span class="pre">icey::CameraSubscriberImpl</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey20CameraSubscriberImpl10subscriberE"><code class="docutils literal notranslate"><span class="pre">subscriber</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15CameraPublisherE"><code class="docutils literal notranslate"><span class="pre">icey::CameraPublisher</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey15CameraPublisher15CameraPublisherER15NodeBookkeepingRKNSt6stringEKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">CameraPublisher()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey35create_image_transport_subscriptionER7ContextRKNSt6stringERKNSt6stringERKN6rclcpp3QoSERKN6rclcpp19SubscriptionOptionsE"><code class="docutils literal notranslate"><span class="pre">create_image_transport_subscription()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey32create_image_transport_publisherER7ContextRKNSt6stringERKN6rclcpp3QoSERKN6rclcpp16PublisherOptionsE"><code class="docutils literal notranslate"><span class="pre">create_image_transport_publisher()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey26create_camera_subscriptionER7ContextRKNSt6stringERKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_camera_subscription()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N4icey23create_camera_publisherER7ContextRKNSt6stringERKN6rclcpp3QoSE"><code class="docutils literal notranslate"><span class="pre">create_camera_publisher()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+            </nav>
+        </div>
+    </div>
+</div>
+
               
                 
 <div id="searchbox"></div>
@@ -2248,6 +2506,7 @@
 
                 </article>
               
+
               
               
               
@@ -2276,12 +2535,10 @@
 
 
   <div class="sidebar-secondary-item">
-<div
-    id="pst-page-navigation-heading-2"
-    class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> On this page
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
   </div>
-  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+  <nav class="bd-toc-nav page-toc">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">API Reference</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#type-aliases">Type aliases</a><ul class="nav section-nav flex-column">
@@ -2680,23 +2937,46 @@
 
   </nav></div>
 
-  <div class="sidebar-secondary-item">
-  <div role="note" aria-label="source link">
-    <h3>This Page</h3>
-    <ul class="this-page-menu">
-      <li><a href="_sources/api_reference.md.txt"
-            rel="nofollow">Show Source</a></li>
-    </ul>
-   </div></div>
-
 </div></div>
               
             
           </div>
           <footer class="bd-footer-content">
             
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Ivo Ivanov
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025, Ivo Ivanov.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
           </footer>
         
+
       </main>
     </div>
   </div>
@@ -2706,44 +2986,6 @@
 <script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
   <footer class="bd-footer">
-<div class="bd-footer__inner bd-page-width">
-  
-    <div class="footer-items__start">
-      
-        <div class="footer-item">
-
-  <p class="copyright">
-    
-      © Copyright 2025, Ivo Ivanov.
-      <br/>
-    
-  </p>
-</div>
-      
-        <div class="footer-item">
-
-  <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
-    <br/>
-  </p>
-</div>
-      
-    </div>
-  
-  
-  
-    <div class="footer-items__end">
-      
-        <div class="footer-item">
-<p class="theme-version">
-  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
-</p></div>
-      
-    </div>
-  
-</div>
-
   </footer>
   </body>
 </html>
