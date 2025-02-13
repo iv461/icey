@@ -459,7 +459,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   /// stream changes, where y = f(x).
   template <typename F>
   auto then(F &&f) {
-    static_assert(not std::is_same_v<Value, Nothing>,
+    static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream cannot have values, so you cannot register then() on it.");
     return create_from_impl(impl()->then(f));
   }
@@ -467,7 +467,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   /// Creates a new Stream that reveices the error.
   template <typename F>
   auto except(F &&f) {
-    static_assert(not std::is_same_v<ErrorValue, Nothing>,
+    static_assert(!std::is_same_v<ErrorValue, Nothing>,
                   "This stream cannot have errors, so you cannot register except() on it.");
     return create_from_impl(impl()->except(f));
   }
@@ -477,8 +477,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   template <class T, typename... Args>
   void publish(Args &&...args) {
     assert_we_have_context();
-    static_assert(
-        not std::is_same_v<Value, Nothing>,
+    static_assert(!std::is_same_v<Value, Nothing>,
         "This stream does not have a value, there is nothing to publish, so you cannot "
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
@@ -524,7 +523,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   auto call_service(const std::string &service_name, const Duration &timeout,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     assert_we_have_context();
-    static_assert(not std::is_same_v<Value, Nothing>,
+    static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, there is nothing to publish, you cannot "
                   "call publish() on it.");
     return this->impl()->context.lock()->template create_client<ServiceT>(*this, service_name,
