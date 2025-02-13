@@ -94,8 +94,8 @@ GyroOdometerNode::GyroOdometerNode(const rclcpp::NodeOptions & node_options)
     /// We do not need QoS(100), i.e. keeping up to 100 messages in the RMW since we will use the synchronizer's queue
   /// Make subscribers, add timeout:
   auto twist_with_cov_sub = icey().create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
-    "vehicle/twist_with_covariance").timeout(rclcpp::Duration(1s)); // TODO use message_timeout_sec_param
-  auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu").timeout(rclcpp::Duration(1s)); // TODO use message_timeout_sec_param
+    "vehicle/twist_with_covariance").timeout(1s); // TODO use message_timeout_sec_param
+  auto imu_sub = icey().create_subscription<sensor_msgs::msg::Imu>("imu").timeout(1s); // TODO use message_timeout_sec_param
 
   /// Handle timeout:
   twist_with_cov_sub.except([](auto current_time, auto msg_time, auto max_age){});

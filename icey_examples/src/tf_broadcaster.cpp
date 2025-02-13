@@ -3,7 +3,7 @@ using namespace std::chrono_literals;
 
 /// You can put the creation of times/subscribers/publishers etc. into a separate function, you do not have
 /// to store them in variables explicity:
-auto create_yaw_rotation(icey::Node &node, const icey::Parameter<std::string>& base_frame_param) {
+auto create_yaw_rotation(icey::Node &node, const icey::ParameterStream<std::string>& base_frame_param) {
     /// Note we do not assign the timer to a variable here, instead we just call then() on it:
     return node.icey().create_timer(1s).then([&node, base_frame_param](size_t ticks) { 
         geometry_msgs::msg::TransformStamped t;
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     auto node = icey::create_node<icey::Node>(argc, argv, "tf_broadcaster_example");
     auto &icey = node->icey();  // Get the ICEY context
     
-    icey::Parameter<std::string> base_frame_param = icey.declare_parameter<std::string>("base_frame", "base_link");
+    icey::ParameterStream<std::string> base_frame_param = icey.declare_parameter<std::string>("base_frame", "base_link");
     /// We can simply pass here the parameter so that the frame_id of the published message 
     // gets updated dynamically when the parameter changes.
     create_yaw_rotation(*node, base_frame_param).publish_transform();

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     
     /// Register timeout detection
     map_base_link_tf
-        .timeout(rclcpp::Duration(500ms))
+        .timeout(500ms)
         .except([&](auto current_time, auto message_time, auto max_age) {
             auto message_age_sec = (current_time - message_time).seconds();
             RCLCPP_INFO_STREAM(node->get_logger(), "Timeout, message was too old:  " << message_age_sec << " seconds");

@@ -43,8 +43,6 @@ icey::create_timer(1s)
     .then([](size_t) {
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
-        RCLCPP_INFO_STREAM(icey::node->get_logger(),
-                            "Timer ticked, sending request: " << request->data);
         return request;
     })
     /// Now call the service with the request build
@@ -57,7 +55,6 @@ icey::create_timer(1s)
     })
     .call_service<ExampleService>("set_bool_service2", 1s)
     .then([](ExampleService::Response::SharedPtr response) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response2: " << response->success);
         ...
     })
     /// Here we catch timeout errors as well as unavailability of the service:
@@ -66,8 +63,6 @@ icey::create_timer(1s)
     });
 ```     
 This programming model is fully asynchronous and therefore there is danger of deadlocks when chaining multiple callbacks. 
-
-ICEY is a thin wrapper around the public ROS 2 API, it does not reinvent anything or use private implementation details.
 
 ## Parameter declaration: 
 ICEY also simplifies the declaration of many parameters: (very similar to the `dynamic_reconfigure`-package from ROS 1):
@@ -97,7 +92,6 @@ struct NodeParameters {
 - Automatic synchronization, unifying usage of TF as a form of synchronization
 - Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
 - Extensible: [We demonstrate](icey/doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
-
 - Easy asynchronous programming using promises, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html)
 
 - Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types instead of C++-exceptions
@@ -121,31 +115,16 @@ Still, there are some small limitations:
 - Memory strategy is not implemented, but could be easily
 - Sub-nodes
 
-# More features 
-
-TODO
-- 
 
 # Dependencies: 
 
-- ROS 2 (tested on Humble)
-- Boost Hana
+- ROS 2 
+- Boost (Hana)
 - C++20 is required for the parameters struct feature and coroutine-support
 
-# Build and test 
+# Documentation
 
-Simply clone into your ROS 2 workspace and build it. 
-
-To build the examples, do:
-```sh
-colcon build  --packages-up-to icey_examples
-```
-To run the unit-tests:
-
-```sh
-colcon test --packages-select icey 
-build/icey./promise_test
-```
+See TODO for documentation 
 
 # Coming soon: 
 

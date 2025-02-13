@@ -492,7 +492,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
 
   /// Returns a new Stream that sets an error on a timeout. 
   /// \param create_extra_timer If set to true, an extra ROS-timer will be started so that a timeout error is set independent if any value is received in this Stream or not.
-  TimeoutFilter<Value> timeout(rclcpp::Duration max_age, bool create_extra_timer = true) {
+  TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
     return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
@@ -1137,24 +1137,25 @@ struct TimeoutFilter
   ///    Otherwise, an extra timer will be created so that even if no message is received, the timeout can be detected.
   template<class Parent>
   explicit TimeoutFilter(NodeBookkeeping &node, Parent parent, 
-    const rclcpp::Duration &max_age, bool create_extra_timer = true) {    
+    const Duration &max_age, bool create_extra_timer = true) {    
     auto node_clock = node.node_.get_node_clock_interface();
-    auto check_state = [impl=this->impl(), node_clock, max_age](const auto &new_state) {
+    rclcpp::Duration max_age_ros(max_age);
+    auto check_state = [impl=this->impl(), node_clock, max_age_ros](const auto &new_state) {
       if(!new_state.has_value())
         return true;
       const auto &message = new_state.value(); 
       rclcpp::Time time_now = node_clock->get_clock()->now();
       rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
-      if ((time_now - time_message) <= max_age) {
+      if ((time_now - time_message) <= max_age_ros) {
         impl->resolve(message);
         return false;
       } else {
-        impl->reject(std::make_tuple(time_now, time_message, max_age));
+        impl->reject(std::make_tuple(time_now, time_message, max_age_ros));
         return true;
       }
     };
     if(create_extra_timer) {
-      auto timer = parent.impl()->context.lock()->create_timer(max_age.template to_chrono<Duration>());
+      auto timer = parent.impl()->context.lock()->create_timer(max_age);
       timer.then([timer, parent_impl = parent.impl(), check_state](size_t ticks) {
           bool timeout_occured = check_state(parent_impl->get_state());
           if(!timeout_occured)
@@ -1325,7 +1326,7 @@ template <class T>
  void declare_parameter_struct(T &params, const std::function<void(const std::string &)> &notify_callback,
     std::string name_prefix = "") {
   
-  field_reflection::for_each_field(params, [&ctx, notify_callback, name_prefix](
+  field_reflection::for_each_field(params, [this, notify_callback, name_prefix](
                                                std::string_view field_name, auto &field_value) {
     using Field = std::remove_reference_t<decltype(field_value)>;
     std::string field_name_r(field_name);
@@ -1334,10 +1335,10 @@ template <class T>
       field_value.impl()->register_handler([field_name_r, notify_callback](const auto &new_state) {
             notify_callback(field_name_r);
           });
-      field_value.register_with_ros(*ctx.node);
+      field_value.register_with_ros(*this->node);
     } else if constexpr (is_valid_ros_param_type<Field>::value) {
       using ParamValue = std::remove_reference_t<decltype(field_value)>;
-      ctx.declare_parameter<ParamValue>(field_name_r, field_value)
+      this->declare_parameter<ParamValue>(field_name_r, field_value)
         .impl()->register_handler(
             [&field_value, field_name_r, notify_callback](const auto &new_state) {
               field_value = new_state.value();
@@ -1345,13 +1346,13 @@ template <class T>
             });
     } else if constexpr (std::is_aggregate_v<Field>) {
       /// Else recurse for supporting grouped params
-      declare_parameter_struct(ctx, field_value, notify_callback, name_prefix + std::string(field_name) + ".");
+      declare_parameter_struct(field_value, notify_callback, name_prefix + std::string(field_name) + ".");
     } else {
       /// static_assert(false) would always trigger, that is why we use this workaround, see
       /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
       static_assert(
           std::is_array_v<int>, 
-          "Every field of the parameters struct must be of type T or icey::Parameter<T> or a "
+          "Every field of the parameters struct must be of type T or icey::ParameterStream<T> or a "
           "struct of such, where T is a valid ROS param type (see rcl_interfaces/ParameterType)");
     }
   });
@@ -1428,12 +1429,13 @@ template <class T>
     return service_client;
   }
   
-  /// Synchronizer that given a reference signal at its first argument, ouputs all the other topics
-  // interpolated
-  // TODO specialize when reference is a tuple of messages. In this case, we compute the arithmetic
-  // TODO impl receive time. For this, this synchronizer must be an attachable because it needs to
-  // know the node's clock (that may be simulated time, i.e sub on /clock)
-  // TODO error handling
+  /*!
+    Synchronizer that given a reference signal at its first argument, ouputs all the other topics
+
+    \todo specialize when reference is a tuple of messages. In this case, we compute the arithmetic
+    \todo implement receive time. For this, this synchronizer must be an attachable because it needs to know the current time, (that may be simulated time, i.e sub on /clock needed)
+    \todo error handling
+  */
   template <class Reference, class... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
     stream_traits<Reference>{};
@@ -1457,6 +1459,8 @@ template <class T>
 
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
+  /// \tparam Parents the input stream types, not necessarily all the same
+  /// \param parents the input streams, not necessarily all of the same type
   template <typename... Parents>
   static SynchronizerStream<obs_msg<Parents>...> synchronize_approx_time(Parents... parents) {
     stream_traits<Parents...>{};
@@ -1516,7 +1520,9 @@ template <class T>
     }
   }
 
-  
+  /*! 
+    \todo document well
+  */
   template <typename... Parents>
   static auto serialize(Parents... parents) {
     stream_traits<Parents...>{};

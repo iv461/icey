@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
       return float_val;
     })
-    .publish("sine_generator");
+    .publish("sine_signal");
 
   icey::spin(node);
 }
