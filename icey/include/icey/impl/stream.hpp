@@ -99,10 +99,10 @@ public:
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the new state as an argument.
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
-  /// Sets the state to hold none, but does not notify about the state change.
+  /// Sets the state to hold none, but does not notify about this state change.
   void set_none() { state_.set_none(); }
   
-  /// Sets the state to hold a value, but does not notify about the state change.
+  /// Sets the state to hold a value, but does not notify about this state change.
   void set_value(const MaybeValue &x) {
     if (x)
       state_.set_ok(*x);
@@ -110,11 +110,11 @@ public:
       state_.set_none();
   }
 
-  /// Sets the state to hold an error, but does not notify about the state change.
+  /// Sets the state to hold an error, but does not notify about this state change.
   void set_error(const ErrorValue &x) { state_.set_err(x); }
 
-  /// Notify about the state, but only in case it is error or value. If the state is none, it does not notify.
-  /// If the state is an error and the ErrorValue is an exception type (a subclass `std::runtime_error`) and no handlers were registered, the error is re-thrown.
+  /// Notify about the state change, but only in case it is error or value. If the state is none, it does not notify.
+  /// If the state is an error and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no handlers were registered, the exception is re-thrown.
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the
@@ -130,13 +130,13 @@ public:
     }
   }
 
-  /// Set the state to a value and notify.
+  /// Sets the state to a value and notifies.
   void resolve(const MaybeValue &x) {
     this->set_value(x);
     this->notify();
   }
 
-  /// Set the state to an error and notify.
+  /// Sets the state to an error and notifies.
   void reject(const ErrorValue &x) {
     this->set_error(x);
     this->notify();
