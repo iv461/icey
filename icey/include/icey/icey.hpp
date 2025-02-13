@@ -327,12 +327,17 @@ public:
     book_.tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
     return book_.tf2_listener_;
   }
-
+  
   auto get_tf_buffer() {
     add_tf_listener_if_needed();
     return book_.tf2_listener_->buffer_;
   }
-
+  
+  auto add_tf_broadcaster_if_needed() {
+    if (!book_.tf_broadcaster_)
+      book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
+    return book_.tf_broadcaster_;
+  }
 private:
    /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
   /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
@@ -368,11 +373,6 @@ private:
     this->book_.validate_param_cb_ = node_.node_parameters_->add_on_set_parameters_callback(set_param_cb);
   }
 
-  auto add_tf_broadcaster_if_needed() {
-    if (!book_.tf_broadcaster_)
-      book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
-    return book_.tf_broadcaster_;
-  }
 
   void add_tf_listener_if_needed() {
     if (book_.tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
@@ -459,6 +459,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
 
   /// Returns the undelying pointer to the implementation. 
   std::shared_ptr<Impl> impl() const { return impl_; }
+  std::shared_ptr<Impl> &impl() { return impl_; }
 
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives a value x, where y = f(x).
@@ -633,7 +634,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     while (this->impl()->has_none()) {
       /// Note that spinning once might not be enough, for example if we synchronize three topics
       /// and await the synchronizer output, we would need to spin at least three times.
-      this->impl()->context.lock()->executor_->spin_once();
+      this->impl()->context.lock()->get_executor()->spin_once();
     }
   }
 
@@ -672,7 +673,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   }
   ///////////////////// End coroutine support interface
 
-  // protected:
+protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
   /// (this is only needed for impl::Stream::done, which creates a new stream that always has Derived stripped off, i.e. set to Nothing.)
@@ -681,8 +682,8 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
       const std::shared_ptr<impl::Stream<NewVal, NewErr, 
           WithDefaults<Nothing>, WithDefaults<Nothing> >> &impl) const {
     Stream<NewVal, NewErr> new_obs;
-    new_obs.impl_ = impl;
-    new_obs.impl_->context = this->impl()->context;
+    new_obs.impl() = impl;
+    new_obs.impl()->context = this->impl()->context;
     return new_obs;
   }
 
@@ -1307,26 +1308,34 @@ struct TF2MessageFilter
 /// The context owns the streams.
 class Context : public std::enable_shared_from_this<Context> {
 public:
-  /// Creates a new stream of type O by passing the args to the constructor. It adds the impl to the list of streams so that it does not go out of scope. 
-  /// It also sets the context
-  template <class O, typename... Args>
-  auto create_stream(Args &&...args) {
-    O stream(*this->node, args...);
+  /// Construct a context using the given Node interface, initializing the `node` field. The interface must always be present because 
+  /// the Context creates new Streams and Streams need a the node for construction.
+  explicit Context(const NodeInterfaces &node_interface):
+       node(std::make_shared<NodeBookkeeping>(node_interface)),
+       executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) {
+      executor_->add_node(node_interface.get_node_base_interface());
+  }
+
+  /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the list of streams so that it does not go out of scope. 
+  /// It also sets the context.
+  template <class S, typename... Args>
+  S create_stream(Args &&...args) {
+    S stream(*this->node, args...);
     stream_impls_.push_back(stream.impl());  
     stream.impl()->context = this->shared_from_this();
     return stream;
   }
 
-/// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is created automatically matching the given Validator.
-template <typename ParameterT>
-ParameterStream<ParameterT> declare_parameter(  
-      const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = std::nullopt,
-                  const Validator<ParameterT> &validator = Validator<ParameterT>(),
-                        std::string description = "", bool read_only = false,
-                  bool ignore_override = false) {
-    return create_stream<ParameterStream<ParameterT>>(parameter_name, maybe_default_value,
-                                                          validator, description, read_only, ignore_override);
-  }
+  /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is created automatically matching the given Validator.
+  template <typename ParameterT>
+  ParameterStream<ParameterT> declare_parameter(  
+        const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = std::nullopt,
+                    const Validator<ParameterT> &validator = Validator<ParameterT>(),
+                          std::string description = "", bool read_only = false,
+                    bool ignore_override = false) {
+      return create_stream<ParameterStream<ParameterT>>(parameter_name, maybe_default_value,
+                                                            validator, description, read_only, ignore_override);
+    }
 
   /*!
   \brief Declare a given parameter struct to ROS.
@@ -1596,8 +1605,13 @@ ParameterStream<ParameterT> declare_parameter(
     return child;
   }
 
+  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_;}
+protected:
+  /// All the streams that were created are owned by the Context. 
   std::vector< std::shared_ptr < StreamImplDefault > > stream_impls_;
+  /// The executor is needed for async/await because the Streams need to be able to await themselves. For this, they acces the ROS executor through the Context.
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  /// The node bookeeping is needed in the Context because Streams need the ROS node so that they can register themselves to ROS.
   std::shared_ptr<NodeBookkeeping> node;
 };
 
@@ -1608,20 +1622,15 @@ class NodeWithIceyContext : public NodeType {
 public:
   /// Constructs a new new node an initializes the icey context.
   NodeWithIceyContext(std::string node_name, const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions()) : NodeType(node_name, node_options) {
-     /// Note that here we cannot call shared_from_this() since it requires the object to be already constructed. But usually, 
-    NodeInterfaces node_interfaces(this); 
-    this->icey_context_->node = std::make_shared<NodeBookkeeping>(node_interfaces);
-    //create_executor_in_context();
+     /// Note that here we cannot call shared_from_this() since it requires the object to be already constructed. 
+    this->icey_context_ = std::make_shared<Context>(NodeInterfaces(this));
   }
 
   /// Returns the context that is needed to create ICEY streams
   Context &icey() { return *this->icey_context_; }
-  /// TODO hacky
-  void create_executor_in_context() {
-    this->icey_context_->executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-    this->icey_context_->executor_->add_node(this->shared_from_this());
-  }
-  std::shared_ptr<Context> icey_context_{std::make_shared<Context>()};
+
+protected:
+  std::shared_ptr<Context> icey_context_;
 };
 
 /// The node type that you will use instead of an `rclcpp::Node`. It derives from the `rclcpp::Node`, so that you can do everything that you can also with an `rclcpp::Node`. See `NodeWithIceyContext` for details.
@@ -1634,9 +1643,9 @@ template <class Node>
 static void spin(Node node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
-  if(node->icey_context_->executor_) {
-    node->icey_context_->executor_->remove_node(node);
-    node->icey_context_->executor_.reset();
+  if(node->icey().get_executor()) {
+    node->icey().get_executor()->remove_node(node);
+    node->icey().get_executor().reset();
   }
   executor.add_node(node);
   executor.spin();
@@ -1649,9 +1658,9 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   /// https://robotics.stackexchange.com/a/89767. He references
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
   for (auto &node : nodes) {
-    if(node->icey_context_->executor_) {
-      node->icey_context_->executor_->remove_node(node);
-      node->icey_context_->executor_.reset();
+    if(node->icey().get_executor()) {
+      node->icey().get_executor()->remove_node(node);
+      node->icey().get_executor().reset();
     }
     executor.add_node(node);
   }

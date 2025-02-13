@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
         .timeout(500ms)
         .except([&](auto current_time, auto message_time, auto max_age) {
             auto message_age_sec = (current_time - message_time).seconds();
-            RCLCPP_INFO_STREAM(node->get_logger(), "Timeout, message was too old:  " << message_age_sec << " seconds");
+            RCLCPP_INFO_STREAM(node->get_logger(), "Timeout, message is " << message_age_sec << "s old, but the maximum allowed is " << max_age);
         });
     
     auto result = map_base_link_tf.then([&](geometry_msgs::msg::TransformStamped::SharedPtr new_transform) {
