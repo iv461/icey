@@ -383,9 +383,9 @@ class Context;
 /// The default augmentation of a stream implementation: The context, holding ROS-related stuff, and some names for easy debugging.
 class StreamImplDefault {
 public:
-  /// For creating new Streams, we need a reference to the context
+  /// A weak reference to the Context, it is needed so that Streams can create more streams that need access to the ROS node, i.e. `.publish`.
   std::weak_ptr<Context> context;
-  // The class name, i.e. the name of the type, for example "SubscriberStream<std::string>"
+  /// The class name, i.e. the name of the type, for example "SubscriberStream<std::string>"
   std::string class_name;
   /// A name to identify this node among multiple ones with the same type, usually the topic
   /// or service name
@@ -413,7 +413,7 @@ constexpr void assert_all_stream_values_are_same() {
                 "The values of all the streams must be the same");
 }
 
-/// Adds some things we want to put in inside the impl::Stream by default.
+/// Adds a default extention inside the impl::Stream by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details.
 template <class _Derived>
 struct WithDefaults : public _Derived, public StreamImplDefault {};
@@ -796,10 +796,18 @@ struct ParameterStreamImpl {
   bool ignore_override = false;
 };
 
-/// An stream for ROS parameters. Fires initially an event if a default_value set
+/// An stream for ROS parameters.
 template <typename _Value>
 struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Value> > {
   static_assert(is_valid_ros_param_type<_Value>::value, "Type is not an allowed ROS parameter type");
+
+  /// @brief A constructor that should only be used for parameter structs. It does not set the name of the parameter and therefore leaves this ParameterStream in a not fully initialized state. 
+  /// Context::declare_parameter_struct later infers the name from the field of the parameter struct and sets it before registering it with ROS.
+  /// @param default_value 
+  /// @param validator the validator implementing constraints
+  /// @param description the description written in the ParameterDescriptor
+  /// @param read_only if yes, the parameter cannot be modified
+  /// @param ignore_override 
   ParameterStream(const std::optional<_Value> &default_value,
                   const Validator<_Value> &validator = Validator<_Value>(),
                         std::string description = "", bool read_only = false,
@@ -808,10 +816,17 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
       this->impl()->validator = validator;
       this->impl()->description = description;
       this->impl()->read_only = read_only;
-      this->impl()->ignore_override = ignore_override;
-      
+      this->impl()->ignore_override = ignore_override;   
   }
-  /// A more traditional constructor
+  
+  /// @brief The standard constructor used when declaring parameters with Context::declare_parameter.
+  /// @param node 
+  /// @param parameter_name 
+  /// @param default_value 
+  /// @param validator the validator implementing constraints
+  /// @param description 
+  /// @param read_only if yes, the parameter cannot be modified
+  /// @param ignore_override 
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name, const std::optional<_Value> &default_value,
                   const Validator<_Value> &validator = Validator<_Value>(),
                         std::string description = "", bool read_only = false,
@@ -821,6 +836,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
     this->register_with_ros(node);
   }
 
+  /// Register this paremeter with the ROS node, meaning it actually calls node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
     const auto on_change_cb = [impl=this->impl()](const rclcpp::Parameter &new_param) {
       /// TODO Refactor to validator and converters. Convert to std::array but retrieve as
@@ -906,8 +922,6 @@ constexpr auto hana_is_interpolatable(T) {
     return hana::bool_c<false>;
 }
 
-/// A subscription for single transforms. It implements InterpolateableStream but by using
-/// lookupTransform.
 struct TransformSubscriptionStreamImpl {
   using Message = geometry_msgs::msg::TransformStamped;
   std::string target_frame;
@@ -918,6 +932,9 @@ struct TransformSubscriptionStreamImpl {
   /// We do not own the listener, the Book owns it
   std::weak_ptr<TFListener> tf2_listener;
 };
+
+/// A Stream that represents a subscription between two coordinate systems. (See TFListener)
+/// Values can also be pulled with get_at_time.
 struct TransformSubscriptionStream
     : public InterpolateableStream<geometry_msgs::msg::TransformStamped,
                                    TransformSubscriptionStreamImpl> {
@@ -936,6 +953,10 @@ struct TransformSubscriptionStream
         },
         [impl=this->impl()](const tf2::TransformException &ex) { impl->reject(ex.what()); });
   }
+  /// @brief Look up the transform at the given time point, does not wait but instead only return something if the transform is already in the buffer.
+  /// @param time 
+  /// @return The transform or nothing if it has not arrived yet.
+  /// \todo return Result<geometry_msgs::msg::TransformStamped, std::string>
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
     try {
       // Note that this call does not wait, the transform must already have arrived.
