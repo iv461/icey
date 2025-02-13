@@ -212,10 +212,11 @@ private:
   std::vector<TFSubscriptionInfo> subscribed_transforms_;
 };
 
-/// Implements holding the shared pointers to subscribers/timers/publishers etc., i.e. provides bookeeping, so that you do not have to do it.
+/// A node interface that does the same as a rclcpp::Node (of lifecycle node), but additionally implements holding the shared pointers to subscribers/timers/publishers etc., i.e. provides bookkeeping, so that you do not have to do it.
 class NodeBookkeeping {
 public:
   using MaybeError = std::optional<std::string>;
+  /// The parameter validation function that allows the parameter update if no error message is returned and rejects the parameter update with the error message otherwise.
   using FValidate = std::function<MaybeError(const rclcpp::Parameter &)>;
   /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
   struct IceyBook {
@@ -250,46 +251,13 @@ public:
 
   NodeInterfaces node_;
   IceyBook book_;
-  /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
-  /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
-  /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
-  /// regular nodes without templates.
-  static std::string extend_name_with_sub_namespace(const std::string &name,
-                                                    const std::string &sub_namespace) {
-    std::string name_with_sub_namespace(name);
-    if (!sub_namespace.empty() && name.front() != '/' && name.front() != '~') {
-      name_with_sub_namespace = sub_namespace + "/" + name;
-    }
-    return name_with_sub_namespace;
-  }
-
-  /// Installs the callback validator callback
-  void add_parameter_validator_if_needed() {
-    if(book_.validate_param_cb_)
-      return;
-    auto const set_param_cb = [this](const std::vector<rclcpp::Parameter> & parameters) {
-        rcl_interfaces::msg::SetParametersResult result;
-        result.successful = true;
-        for (const auto & parameter : parameters) {
-          const auto &validator = book_.parameter_validators_.at(parameter.get_name());
-          auto maybe_error = validator(parameter);
-          if (maybe_error) {
-            result.successful = false;
-            result.reason = *maybe_error;
-            break;
-          }
-        }
-        return result;
-    };
-    this->book_.validate_param_cb_ = node_.node_parameters_->add_on_set_parameters_callback(set_param_cb);
-  }
-
+  
+  /// Declares a parameter and registers a validator callback and a callback that will get called when the parameters updates.
   template <class ParameterT, class CallbackT>
   auto add_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
                      CallbackT &&update_callback,
-                     const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor =
-                         rcl_interfaces::msg::ParameterDescriptor(),
-                      FValidate f_validate = FValidate(),
+                     const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = {},
+                      FValidate f_validate = {},
                      bool ignore_override = false) {
     rclcpp::ParameterValue v =
         default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
@@ -360,6 +328,46 @@ public:
     return book_.tf2_listener_;
   }
 
+  auto get_tf_buffer() {
+    add_tf_listener_if_needed();
+    return book_.tf2_listener_->buffer_;
+  }
+
+private:
+   /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
+  /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
+  /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
+  /// regular nodes without templates.
+  static std::string extend_name_with_sub_namespace(const std::string &name,
+                                                    const std::string &sub_namespace) {
+    std::string name_with_sub_namespace(name);
+    if (!sub_namespace.empty() && name.front() != '/' && name.front() != '~') {
+      name_with_sub_namespace = sub_namespace + "/" + name;
+    }
+    return name_with_sub_namespace;
+  }
+
+  /// Installs the validator callback
+  void add_parameter_validator_if_needed() {
+    if(book_.validate_param_cb_)
+      return;
+    auto const set_param_cb = [this](const std::vector<rclcpp::Parameter> & parameters) {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        for (const auto & parameter : parameters) {
+          const auto &validator = book_.parameter_validators_.at(parameter.get_name());
+          auto maybe_error = validator(parameter);
+          if (maybe_error) {
+            result.successful = false;
+            result.reason = *maybe_error;
+            break;
+          }
+        }
+        return result;
+    };
+    this->book_.validate_param_cb_ = node_.node_parameters_->add_on_set_parameters_callback(set_param_cb);
+  }
+
   auto add_tf_broadcaster_if_needed() {
     if (!book_.tf_broadcaster_)
       book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
@@ -371,11 +379,6 @@ public:
                               /// transforms on which we listen to
       return;
     book_.tf2_listener_ = std::make_shared<TFListener>(node_);
-  }
-
-  auto get_tf_buffer() {
-    add_tf_listener_if_needed();
-    return book_.tf2_listener_->buffer_;
   }
 };
 
@@ -457,8 +460,16 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   /// Returns the undelying pointer to the implementation. 
   std::shared_ptr<Impl> impl() const { return impl_; }
 
-  /// Creates a new Stream that changes it's value to y every time the value x of the parent
-  /// stream changes, where y = f(x).
+  /// \returns A new Stream that changes it's value to y every time this
+  /// stream receives a value x, where y = f(x).
+  /// The type of the returned stream is: 
+  /// - Stream<Nothing, _ErrorValue> if F is (X) -> void
+  /// - Stream<NewValue, NewError> if F is (X) -> Result<NewValue, NewError>
+  /// - Stream<NewValue, _ErrorValue> if F is (X) -> std::optional<NewValue>
+  /// - Stream<Y, _ErrorValue> otherwise
+  /// \tparam F: Must be (X) -> Y, where X is:  
+  ///  - V_1, ..., V_n if Value is std::tuple<V_1, ..., V_n>
+  ///  - Value otherwise
   template <typename F>
   auto then(F &&f) {
     static_assert(!std::is_same_v<Value, Nothing>,
@@ -466,7 +477,16 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     return create_from_impl(impl()->then(f));
   }
 
-  /// Creates a new Stream that reveices the error.
+  /// \returns A new Stream that changes it's value to y every time this
+  /// stream receives an error x, where y = f(x).
+  /// The type of the returned stream is: 
+  /// - Stream<Nothing, Nothing> if F is (X) -> void
+  /// - Stream<NewValue, NewError> if F is (X) -> Result<NewValue, NewError>
+  /// - Stream<NewValue, Nothing> if F is (X) -> std::optional<NewValue>
+  /// - Stream<Y, Nothing> otherwise
+  /// \tparam F: Must be (X) -> Y, where X is:  
+  ///  - V_1, ..., V_n if Value is std::tuple<V_1, ..., V_n>
+  ///  - Value otherwise
   template <typename F>
   auto except(F &&f) {
     static_assert(!std::is_same_v<ErrorValue, Nothing>,
@@ -487,12 +507,13 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
-  /// Creates an arbitrary new stream through the `Context`
-  template <class O, typename... Args>
-  auto create_stream(Args &&...args) { return this->impl()->context.lock()->template create_stream(args...); }
+  /// Creates an arbitrary new stream of type S through the `Context`
+  template <class S, typename... Args>
+  S create_stream(Args &&...args) { return this->impl()->context.lock()->template create_stream<S>(args...); }
 
-  /// Returns a new Stream that sets an error on a timeout. 
-  /// \param create_extra_timer If set to true, an extra ROS-timer will be started so that a timeout error is set independent if any value is received in this Stream or not.
+  /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
+  /// \param create_extra_timer If set to false, a timeout error will only occur if at least one message is received. 
+  /// Otherwise, an extra timer is created so that the timeout can be detected even if no message is received.
   TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
@@ -533,7 +554,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   }
 
   /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
-  /// Given that `Value` is of type std::tuple<Value1, Value2, ..., ValueN>, this returns 
+  /// Given that `Value` is of type `std::tuple<Value1, Value2, ..., ValueN>`, this returns 
   /// `std::tuple< Stream<Value1>, Stream<Value2>, ..., Stream<ValueN>>`
   auto unpack() {
     static_assert(!std::is_same_v<Value, Nothing>,
@@ -717,16 +738,18 @@ struct Set {
   std::unordered_set<Value> set_of_values;
 };
 
-// A parameter validator, validating a parameter of type value.
+/*!
+   A parameter validator, validating parameter updates. It is able to constrain parameter values.
+   It is essentially a function that returns true if a value is allowed and false otherwise.
+   \tparam Value the parameter type (i.e. double)
+*/
 template <class Value>
 struct Validator {
-  /// In ROS, parameters can only be of certain types
   using ROSValue = std::conditional_t<std::is_unsigned_v<Value>, int, Value>;
   /// The type of the predicate
   using Validate = std::function< std::optional<std::string> (const rclcpp::Parameter &)>;
   
-  /// Allow default-constructed validator, by default allowing all values
-  /// in the set of values defined by the data type.
+  /// Allow default-constructed validator, by default allowing all values.
   Validator() {
     if constexpr (std::is_unsigned_v<Value>) {
       descriptor.integer_range.resize(1);
@@ -741,11 +764,11 @@ struct Validator {
     }
   }
 
-  /// Construct explicitly from a  validation predicate
+  /// Construct explicitly from a validation function (predicate).
   explicit Validator(const Validate &validate) : validate(validate) {}
 
   /// Allow implicit conversion from some easy sets:
-  Validator(const Interval<Value> &interval)  /// NOLINT
+  Validator(const Interval<Value> &interval)  // NOLINT
   {
     descriptor.floating_point_range.resize(1);
     descriptor.floating_point_range.front().from_value = interval.minimum;
@@ -756,7 +779,7 @@ struct Validator {
   }
 
   /// Implicit conversion from a Set of values
-  Validator(const Set<Value> &set)  /// NOLINT
+  Validator(const Set<Value> &set)  // NOLINT
   {
     validate = [set](const rclcpp::Parameter &new_param) {
       auto new_value = new_param.get_value<ROSValue>();
@@ -802,7 +825,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   static_assert(is_valid_ros_param_type<_Value>::value, "Type is not an allowed ROS parameter type");
 
   /// @brief A constructor that should only be used for parameter structs. It does not set the name of the parameter and therefore leaves this ParameterStream in a not fully initialized state. 
-  /// Context::declare_parameter_struct later infers the name from the field of the parameter struct and sets it before registering it with ROS.
+  /// Context::declare_parameter_struct later infers the name of this parameter from the name of the field in the parameter struct and sets it before registering the parameter with ROS.
   /// @param default_value 
   /// @param validator the validator implementing constraints
   /// @param description the description written in the ParameterDescriptor
@@ -881,7 +904,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   }
 
   /// Allow implicit conversion to the stored value type for consistent API between constrained and non-constrained parameters when using the parameter structs.
-  operator _Value() const  /// NOLINT
+  operator _Value() const  // NOLINT
   {
     return this->value();
   }
@@ -1155,8 +1178,8 @@ struct TimeoutFilter
   /// \param node the node is needed to know the current time 
   /// \param parent another Stream which is the input to this filter 
   /// \param max_age a maximum age the message is allowed to have. 
-  /// \param create_extra_timer If set to false, a timeout error will only happed if at least one value is received. 
-  ///    Otherwise, an extra timer will be created so that even if no message is received, the timeout can be detected.
+  /// \param create_extra_timer If set to false, a timeout error will only occur if at least one message is received. 
+  /// Otherwise, an extra timer is created so that the timeout can be detected even if no message is received.
   template<class Parent>
   explicit TimeoutFilter(NodeBookkeeping &node, Parent parent, 
     const Duration &max_age, bool create_extra_timer = true) {    

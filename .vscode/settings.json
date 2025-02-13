@@ -76,6 +76,8 @@
         "variant": "cpp",
         "__nullptr": "cpp",
         "coroutine": "cpp",
-        "source_location": "cpp"
+        "source_location": "cpp",
+        "xstring": "cpp",
+        "xtr1common": "cpp"
     }
 }

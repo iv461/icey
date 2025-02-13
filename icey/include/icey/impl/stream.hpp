@@ -222,11 +222,13 @@ protected:
     /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
+    /// Only if we resolve we pass over the error. except does not pass the error, only the handler may create a new error
+    using NewError = std::conditional_t<resolve, ErrorValue, Nothing>;
     using ReturnType = decltype(apply_if_tuple(f, std::declval<FunctionArgument>()));
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto child = create_stream<Stream<Nothing, ErrorValue, DefaultDerived, DefaultDerived>>();
+      auto child = create_stream<Stream<Nothing, NewError, DefaultDerived, DefaultDerived>>();
       create_handler<resolve>(child, std::forward<F>(f));
       return child;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
@@ -240,7 +242,7 @@ protected:
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
-      auto child = create_stream<Stream<ReturnTypeSome, ErrorValue,
+      auto child = create_stream<Stream<ReturnTypeSome, NewError,
                                 DefaultDerived, DefaultDerived>>();
       create_handler<resolve>(child, std::forward<F>(f));
       return child;

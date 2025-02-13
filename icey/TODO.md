@@ -4,6 +4,7 @@
 
 Sorted by decreasing priority. 
 
+
 - [ ] Test installing in Docker base image regarding dependencies 
 
 - [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
@@ -42,6 +43,7 @@ Sorted by decreasing priority.
 
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 
+- [ ] Consider renaming resolve to put and reject to put_error. A new method that gets state and sets it to none afterwards can be called "take"
 
 ## Error-handling
 
