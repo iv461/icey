@@ -90,10 +90,12 @@ struct NodeInterfaces {
 };
 
 /// A transform listener that allows to subscribe on a single transform between two coordinate
-/// systems. It is implemented similarly to the tf2_ros::TransformListener, but without a separate
-/// node. The implementation currently checks for relevant transforms (i.e. ones we subscribed)
-/// every time a new message is receved on /tf.
-/// We could speed up the code a bit here (not sure if significantly), for this we could obtain the
+/// systems. It is implemented similarly to the tf2_ros::TransformListener. 
+/// Every time a new message is receved on /tf, it checks whether a relevant transforms (i.e. ones we subscribed) was received.
+/// It is therefore an asynchronous interface to TF, similar to the tf2_ros::AsynchBuffer. But the key difference is that 
+/// tf2_ros::AsynchBuffer can only deliver the transform once -- it is a promise, not a stream. 
+/// We want however to receive a continous stream of transforms, like a subscriber. This TFListener is used to implement the TransformSubscriptionStream.
+/// \todo We could speed up the code a bit here (not sure if significantly), for this we could obtain the
 /// path in the TF tree between the source- and target-frame using tf2::BufferCore::_chainAsVector
 /// and then only react if any transform was received that is part of this path.
 struct TFListener {
