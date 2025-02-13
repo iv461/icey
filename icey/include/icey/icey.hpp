@@ -1129,6 +1129,7 @@ template <typename _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
   /// Construct the filter an connect it to the parent. 
+  /// \tparam Parent another Stream that holds as a value a ROS message with a header stamp
   /// \param node the node is needed to know the current time 
   /// \param parent another Stream which is the input to this filter 
   /// \param max_age a maximum age the message is allowed to have. 

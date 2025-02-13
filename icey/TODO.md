@@ -6,6 +6,11 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
+- [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
+- [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
+
+- [] API cleanup: Rename "obs_msg", "obs_val" etc to smth more meaningful 
+
 - [ ] Up-to-date docs 
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises

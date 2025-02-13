@@ -1,6 +1,4 @@
-# ROS-related
-
-Creating and spinning nodes:
+# Nodes
 
 ```{doxygentypedef} icey::Node
 ```

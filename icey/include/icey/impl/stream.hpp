@@ -142,6 +142,9 @@ public:
     this->notify();
   }
 
+  /*!
+    \todo document well
+  */
   template <class F>
   auto then(F &&f) {
     /// Note that it may only have errors
@@ -149,6 +152,10 @@ public:
                   "This stream does not have a value, so you cannot register .then() on it.");
     return this->done<true>(f);
   }
+  
+  /*!
+    \todo document well
+  */
   template <class F>
   auto except(F &&f) {
     static_assert(not std::is_same_v<ErrorValue, Nothing>,
