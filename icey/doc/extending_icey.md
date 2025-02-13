@@ -93,15 +93,15 @@ public:
 };
 ```
 
-And that's it already ! We have created a custom subscriber stream. To use it, we use the function `create_stream<T>` with our custom stream: 
+And that's it already ! We have created a custom subscriber stream. To use it, we use the function `create_ros_stream<T>` with our custom stream: 
 
 ```cpp
-auto image_transport_sub = icey::create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
+auto image_transport_sub = icey::create_ros_stream<ImageTransportSubscriber>(topic_name, transport, qos);
 ```
 or using the class-based API: 
 
 ```cpp
-auto image_transport_sub = icey().create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
+auto image_transport_sub = icey().create_ros_stream<ImageTransportSubscriber>(topic_name, transport, qos);
 ```
 
 ### Writing a publisher 

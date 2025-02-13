@@ -504,21 +504,17 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
         "This stream does not have a value, there is nothing to publish, so you cannot "
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto child = this->impl()->context.lock()->template create_stream<T>(args...);
+    auto child = this->impl()->context.lock()->template create_ros_stream<T>(args...);
     this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
-
-  /// Creates an arbitrary new stream of type S through the `Context`
-  template <class S, typename... Args>
-  S create_stream(Args &&...args) { return this->impl()->context.lock()->template create_stream<S>(args...); }
-
+  
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
   /// \param create_extra_timer If set to false, a timeout error will only occur if at least one message is received. 
   /// Otherwise, an extra timer is created so that the timeout can be detected even if no message is received.
   TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
-    return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
+    return this->impl()->context.lock()->template create_ros_stream<TimeoutFilter<_Value>>(
             *this, max_age, create_extra_timer);
   }
 
@@ -1320,11 +1316,15 @@ public:
   /// It also sets the context.
   template <class S, typename... Args>
   S create_stream(Args &&...args) {
-    S stream(*this->node, args...);
+    S stream(args...);
     stream_impls_.push_back(stream.impl());  
     stream.impl()->context = this->shared_from_this();
     return stream;
   }
+
+  /// Like Context::create_stream but additionally passes the node as the first argument. Needed for Stream that need to register to ROS.
+  template <class S, typename... Args>
+  S create_ros_stream(Args &&...args) { return create_stream<S>(*this->node, args...); }
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is created automatically matching the given Validator.
   template <typename ParameterT>
@@ -1333,7 +1333,7 @@ public:
                     const Validator<ParameterT> &validator = Validator<ParameterT>(),
                           std::string description = "", bool read_only = false,
                     bool ignore_override = false) {
-      return create_stream<ParameterStream<ParameterT>>(parameter_name, maybe_default_value,
+      return create_ros_stream<ParameterStream<ParameterT>>(parameter_name, maybe_default_value,
                                                             validator, description, read_only, ignore_override);
     }
 
@@ -1416,20 +1416,19 @@ public:
   SubscriptionStream<MessageT> create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-    auto stream = create_stream<SubscriptionStream<MessageT>>(name, qos, options);
-    return stream;
+    return create_ros_stream<SubscriptionStream<MessageT>>(name, qos, options);
   }
 
   /// Create a subscriber that subscribes to a single transform between two frames. 
   TransformSubscriptionStream create_transform_subscription(const std::string &target_frame,
                                      const std::string &source_frame) {
-    return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
+    return create_ros_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
   template <class Message>
   PublisherStream<Message> create_publisher(const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
-    return create_stream<PublisherStream<Message>>(topic_name, qos);
+    return create_ros_stream<PublisherStream<Message>>(topic_name, qos);
   }
 
   template <class Parent>
@@ -1437,31 +1436,31 @@ public:
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     stream_traits<Parent>{};
     using Message = obs_val<Parent>;
-    return create_stream<PublisherStream<Message>>(topic_name, qos, &parent);
+    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, &parent);
   }
 
   template <class Parent>
   TransformPublisherStream create_transform_publisher(Parent parent) {
     stream_traits<Parent>{};
-    auto child = create_stream<TransformPublisherStream>();
+    auto child = create_ros_stream<TransformPublisherStream>();
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
-    return create_stream<TimerStream>(interval, is_one_off_timer);
+    return create_ros_stream<TimerStream>(interval, is_one_off_timer);
   }
 
   template <typename ServiceT>
   ServiceStream<ServiceT> create_service(const std::string &service_name,
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_stream<ServiceStream<ServiceT>>(service_name, qos);
+    return create_ros_stream<ServiceStream<ServiceT>>(service_name, qos);
   }
 
   /// Add a service client
   template <typename ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
+    return create_ros_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
   /// Add a service client and connect it to the parent
@@ -1489,7 +1488,7 @@ public:
 
     \todo specialize when reference is a tuple of messages. In this case, we compute the arithmetic
     \todo implement receive time. For this, this synchronizer must be an attachable because it needs to know the current time, (that may be simulated time, i.e sub on /clock needed)
-    \todo error handling
+    \warning Errors are currently not passed through
   */
   template <class Reference, class... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
@@ -1516,14 +1515,14 @@ public:
   /// approximately
   /// \tparam Parents the input stream types, not necessarily all the same
   /// \param parents the input streams, not necessarily all of the same type
+  /// \warning Errors are currently not passed through
   template <typename... Parents>
-  static SynchronizerStream<obs_msg<Parents>...> synchronize_approx_time(Parents... parents) {
+  SynchronizerStream<obs_msg<Parents>...> synchronize_approx_time(Parents... parents) {
     stream_traits<Parents...>{};
     static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
-    /// TODO synchronizer does not need attaching
-    auto synchronizer = SynchronizerStream<obs_msg<Parents>...>(queue_size);
+    auto synchronizer = create_stream<SynchronizerStream<obs_msg<Parents>...>>(queue_size);
     auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer.impl()->inputs());
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &parent = input_output_tuple[0_c];
@@ -1537,7 +1536,7 @@ public:
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
   template <typename... Parents>
-  static auto synchronize(Parents... parents) {
+  auto synchronize(Parents... parents) {
     stream_traits<Parents...>{};
     static_assert(sizeof...(Parents) >= 2,
                   "You need to have at least two inputs for synchronization.");
@@ -1577,17 +1576,16 @@ public:
 
   /*! 
     \todo document well
+    \warning Errors are currently not passed through
   */
   template <typename... Parents>
-  static auto serialize(Parents... parents) {
+  auto serialize(Parents... parents) {
     stream_traits<Parents...>{};
-    // TODO assert_all_stream_values_are_same<Parents...>();
-    /// TODO simplify using obs_val, for this get first of variadic pack with hana
+    // assert_all_stream_values_are_same<Parents...>();
     using Parent = decltype(std::get<0>(std::forward_as_tuple(parents...)));
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
     /// First, create a new stream
-    /// TODO error handling
-    auto child = Stream<ParentValue>();
+    auto child = create_stream<Stream<ParentValue>>();
     /// Now connect each parent with the child with the identity function
     hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
       parent.then([child](const auto &x) { child.impl()->resolve(x); });

@@ -19,7 +19,7 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 ## Add examples 
-ament_auto_add_executable(signal_generator_example src/signal_generator.cpp)
+#ament_auto_add_executable(signal_generator_example src/signal_generator.cpp)
 ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
 ament_auto_add_executable(listener_example src/listener.cpp)
 ament_auto_add_executable(tf_approx_filter_example src/tf_approx_filter.cpp)

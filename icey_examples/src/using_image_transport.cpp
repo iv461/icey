@@ -17,10 +17,7 @@ using namespace std::chrono_literals;
 int main(int argc, char **argv) {
   /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
-  // Note to class-based API users: call
-  /// "icey().create_stream<icey::CameraSubscriber>("camera_center", "raw")" (this API is
-  /// somewhat rough, it might change in the future).
-
+  
   auto node = icey::create_node(argc, argv, "signal_generator");
   auto &icey = node->icey();
   auto camera_center_sub =

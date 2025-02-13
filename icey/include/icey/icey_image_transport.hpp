@@ -122,25 +122,25 @@ ImageTransportSubscriber create_image_transport_subscription(
     Context &ctx, const std::string &base_topic_name, const std::string &transport,
     const rclcpp::QoS &qos,
     const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-  return ctx.create_stream<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
+  return ctx.create_ros_stream<ImageTransportSubscriber>(base_topic_name, transport, qos, options);
 };
 
 /// Create an ImageTransportPublisher using the given Context.
 ImageTransportPublisher create_image_transport_publisher(
     Context &ctx, const std::string &base_topic_name, const rclcpp::QoS &qos,
     const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
-  return ctx.create_stream<ImageTransportPublisher>(base_topic_name, qos, options);
+  return ctx.create_ros_stream<ImageTransportPublisher>(base_topic_name, qos, options);
 };
 /// Create an CameraSubscriber using the given Context.
 CameraSubscriber create_camera_subscription(Context &ctx, const std::string &base_topic_name,
                                             const std::string &transport,
                                             const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
-  return ctx.create_stream<CameraSubscriber>(base_topic_name, transport, qos);
+  return ctx.create_ros_stream<CameraSubscriber>(base_topic_name, transport, qos);
 };
 /// Create an CameraPublisher using the given Context.
 CameraPublisher create_camera_publisher(Context &ctx, const std::string &base_topic_name,
                                         const rclcpp::QoS &qos = rclcpp::SensorDataQoS()) {
-  return ctx.create_stream<CameraPublisher>(base_topic_name, qos);
+  return ctx.create_ros_stream<CameraPublisher>(base_topic_name, qos);
 };
 
 }  // namespace icey
