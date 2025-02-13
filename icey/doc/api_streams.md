@@ -57,7 +57,11 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```{doxygenstruct} icey::TransformPublisherStream
 ```
 
+
 ```{doxygenclass} icey::StreamImplDefault
+```
+
+```{doxygenstruct} icey::WithDefaults
 ```
 
 Actual implementation of the stream.
