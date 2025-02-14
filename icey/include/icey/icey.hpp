@@ -93,9 +93,6 @@ struct NodeInterfaces {
 /// It is therefore an asynchronous interface to TF, similar to the tf2_ros::AsynchBuffer. But the key difference is that 
 /// tf2_ros::AsynchBuffer can only deliver the transform once, it is therefore a promise, not a stream. 
 /// We want however to receive a continous stream of transforms, like a subscriber. This class is used to implement the TransformSubscriptionStream.
-/// \todo We could speed up the code a bit here (not sure if significantly), for this we could obtain the
-/// path in the TF tree between the source- and target-frame using tf2::BufferCore::_chainAsVector
-/// and then only react if any transform was received that is part of this path.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
   using OnTransform = std::function<void(const TransformMsg &)>;
@@ -273,7 +270,6 @@ public:
   template <class Msg, class F>
   void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                         const rclcpp::SubscriptionOptions &options) {
-    /// TODO extend_name_with_sub_namespace(topic_name, this->get_sub_namespace())
     book_.subscribers_[topic] =
         rclcpp::create_subscription<Msg>(node_.node_topics_, topic, qos, cb, options);
   }
@@ -309,7 +305,6 @@ public:
   template <class Service>
   auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    /// TODO extend_name_with_sub_namespace(service_name, this->get_sub_namespace()),
     auto client =
         rclcpp::create_client<Service>(node_.node_base_, node_.node_graph_, node_.node_services_,
                                        service_name, qos.get_rmw_qos_profile(), group);
@@ -422,9 +417,122 @@ struct WithDefaults : public _Derived, public StreamImplDefault {};
 template<class V>
 struct TimeoutFilter;
 
+template <typename T, template<typename> class crtpType>
+struct crtp
+{
+    T& underlying() { return static_cast<T&>(*this); }
+    T const& underlying() const { return static_cast<T const&>(*this); }
+private:
+    crtp(){}
+    friend crtpType<T>;
+};
+
+template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
+class Stream;
+
+template<class Derived>
+struct StreamCoroutinesSupport : public crtp<Derived> {
+   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
+  ////////////////////////////////////////////////////////
+
+  /// @brief This alias is required to support C++20's coroutines.
+  using promise_type = Derived;
+  //// Second, we are still a promise, so we return self:
+  Derived get_return_object() {
+    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
+    return  this->underlying();
+  }
+  /// Third, we never already got something since this is a stream (we always first need to spin the
+  /// ROS executor to get a message), so we never suspend:
+  std::suspend_never initial_suspend() {
+    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
+    return {};
+  }
+  /// Fourth, we return_value returns the value of the promise:
+  Value return_value() { return  this->underlying().impl()->value(); }
+  /// Fifth, if the return_value function is called with a value, it *sets* the value, makes sense
+  /// right ? No ? Oh .. (Reference:
+  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+  template <class T>
+  void return_value(const T &x) const {
+    if (icey_coro_debug_print)
+      std::cout << get_type_info() << " return value for "
+                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+      this->underlying().impl()->set_value(x);
+  }
+  /// Sixth, we already handle exceptions in the promise.
+  void unhandled_exception() {}
+  /// Seventh, we do not need to do anything at the end, no extra cleanups needed.
+  std::suspend_never final_suspend() const noexcept { return {}; }
+
+  /// Eight, promisify a value if needed, meaning if it is not already a promise and set context
+  /// since we need to have the executor
+  template <class ReturnType>
+  auto await_transform(ReturnType x) {
+    if (icey_coro_debug_print) {
+      auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
+      std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
+    }
+
+    if constexpr (std::is_base_of_v<StreamTag, ReturnType>) {
+      this->underlying().impl()->context = x.impl()->context;  /// Get the context from the input promise
+      return x;
+    } else {
+      return this->underlying().
+      Stream<ReturnType, Nothing> new_obs;
+      new_obs.impl()->context = this->impl()->context;
+      return new_obs;
+    }
+  }
+
+  /// Spin the event loop, (the ROS executor) until this Promise is fulfilled
+  void spin_executor() {
+    while (this->impl()->has_none()) {
+      /// Note that spinning once might not be enough, for example if we synchronize three topics
+      /// and await the synchronizer output, we would need to spin at least three times.
+      this->impl()->context.lock()->get_executor()->spin_once();
+    }
+  }
+
+  //// Now the Awaiter interface for C++20 coroutines:
+  /// Do we have a value ?
+  bool await_ready() { return !this->impl()->has_none(); }
+  /// Spin the ROS event loop until we got a value.
+  bool await_suspend(auto) {
+    if (icey_coro_debug_print) std::cout << get_type_info() << " await_suspend called" << std::endl;
+
+    if (this->impl()->context.expired()) {
+      std::cout << "HELP! I have no context :( Guess I'll die now" << std::endl;
+      throw std::logic_error("I have no context, cannot spin the event loop");
+    }
+
+    this->spin_executor();
+    return false;  /// Resume the current coroutine, see
+                   /// https://en.cppreference.com/w/cpp/language/coroutines
+  }
+
+  /// Consume the result and return it.
+  auto await_resume() {
+    if (icey_coro_debug_print) std::cout << get_type_info() << " await_resume called" << std::endl;
+    /// Return the value if there can be no error
+    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
+      auto result = this->impl()->value();
+      /// Reset the state since we consumed this value
+      this->impl()->set_none();
+      return result;
+    } else {
+      auto result = this->impl()->get_state();
+      /// Reset the state since we consumed this value
+      this->impl()->set_none();
+      return result;
+    }
+  }
+  ///////////////////// End coroutine support interface
+};
+
 /// An stream, basis for all other streams. Similar to a promise in JavaScript.
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
-class Stream : public StreamTag {
+class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived> >{
 public:
 using Value = _Value;
 using ErrorValue = _ErrorValue;
@@ -554,7 +662,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   auto unpack() {
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, there is nothing to unpack().");
-    // TODO assert_stream_holds_tuple<Parent>();
+    static_assert(is_tuple_v<Value>, "The Value must be a tuple for .unpack()");
     constexpr size_t tuple_sz = std::tuple_size_v<obs_val<Self>>;
     /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see
     /// https://stackoverflow.com/a/33181700
@@ -570,102 +678,6 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     return hana::unpack(hana_tuple_output,
                         [](const auto &...args) { return std::make_tuple(args...); });
   }
-
-  ///// Everything that follows is to satisfy the interface for C++20's coroutines.
-  ////////////////////////////////////////////////////////
-
-  /// @brief This alias is required to support C++20's coroutines.
-  using promise_type = Self;
-  //// Second, we are still a promise, so we return self:
-  Self get_return_object() {
-    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-    return *this;
-  }
-  /// Third, we never already got something since this is a stream (we always first need to spin the
-  /// ROS executor to get a message), so we never suspend:
-  std::suspend_never initial_suspend() {
-    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
-    return {};
-  }
-  /// Fourth, we return_value returns the value of the promise:
-  Value return_value() { return this->impl()->value(); }
-  /// Fifth, if the return_value function is called with a value, it *sets* the value, makes sense
-  /// right ? No ? Oh .. (Reference:
-  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
-  template <class T>
-  void return_value(const T &x) const {
-    if (icey_coro_debug_print)
-      std::cout << get_type_info() << " return value for "
-                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
-    this->impl()->set_value(x);
-  }
-  /// Sixth, we already handle exceptions in the promise.
-  void unhandled_exception() {}
-  /// Seventh, we do not need to do anything at the end, no extra cleanups needed.
-  std::suspend_never final_suspend() const noexcept { return {}; }
-
-  /// Eight, promisify a value if needed, meaning if it is not already a promise and set context
-  /// since we need to have the executor
-  template <class ReturnType>
-  auto await_transform(ReturnType x) {
-    if (icey_coro_debug_print) {
-      auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
-      std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
-    }
-
-    if constexpr (std::is_base_of_v<StreamTag, ReturnType>) {
-      this->impl()->context = x.impl()->context;  /// Get the context from the input promise
-      return x;
-    } else {
-      Stream<ReturnType, Nothing> new_obs;
-      new_obs.impl()->context = this->impl()->context;
-      return new_obs;
-    }
-  }
-
-  /// Spin the event loop, (the ROS executor) until this Promise is fulfilled
-  void spin_executor() {
-    while (this->impl()->has_none()) {
-      /// Note that spinning once might not be enough, for example if we synchronize three topics
-      /// and await the synchronizer output, we would need to spin at least three times.
-      this->impl()->context.lock()->get_executor()->spin_once();
-    }
-  }
-
-  //// Now the Awaiter interface for C++20 coroutines:
-  /// Do we have a value ?
-  bool await_ready() { return !this->impl()->has_none(); }
-  /// Spin the ROS event loop until we got a value.
-  bool await_suspend(auto) {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " await_suspend called" << std::endl;
-
-    if (this->impl()->context.expired()) {
-      std::cout << "HELP! I have no context :( Guess I'll die now" << std::endl;
-      throw std::logic_error("I have no context, cannot spin the event loop");
-    }
-
-    this->spin_executor();
-    return false;  /// Resume the current coroutine, see
-                   /// https://en.cppreference.com/w/cpp/language/coroutines
-  }
-
-  /// Consume the result and return it.
-  auto await_resume() {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " await_resume called" << std::endl;
-    /// Return the value if there can be no error
-    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      auto result = this->impl()->value();
-      /// Reset the state since we consumed this value
-      this->impl()->set_none();
-      return result;
-    } else {
-      auto result = this->impl()->get_state();
-      /// Reset the state since we consumed this value
-      this->impl()->set_none();
-      return result;
-    }
-  }
-  ///////////////////// End coroutine support interface
 
 protected:
   /// Pattern-maching factory function that creates a New Self with different value and error types
@@ -719,7 +731,6 @@ struct is_valid_ros_param_type<std::array<std::byte, N> > : std::true_type {};
 template <class Value>
 struct Interval {
   static_assert(std::is_arithmetic_v<Value>, "The value type must be a number");
-  /// TODO make two template params and use common_type + CTAD to make a really nice UX
   Interval(Value minimum, Value maximum) : minimum(minimum), maximum(maximum) {}
   Value minimum;
   Value maximum;
@@ -768,7 +779,7 @@ struct Validator {
     descriptor.floating_point_range.resize(1);
     descriptor.floating_point_range.front().from_value = interval.minimum;
     descriptor.floating_point_range.front().to_value = interval.maximum;
-    descriptor.floating_point_range.front().step = 0.1; /// TODO I have no idea what to put in here ...
+    descriptor.floating_point_range.front().step = 0.1; 
     /// When an interval is set with the descriptor, ROS already validates the parameters, our custom validator won't even be called.
     validate = get_default_validator();
   }
@@ -857,8 +868,6 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   /// Register this paremeter with the ROS node, meaning it actually calls node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
     const auto on_change_cb = [impl=this->impl()](const rclcpp::Parameter &new_param) {
-      /// TODO Refactor to validator and converters. Convert to std::array but retrieve as
-      /// std::vector. T
       if constexpr (is_std_array<_Value>) {
         using Scalar = typename _Value::value_type;
         auto new_value = new_param.get_value<std::vector<Scalar>>();
@@ -881,10 +890,6 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
         this->impl()->ignore_override);
     /// Set default value if there is one
     if (this->impl()->default_value) {
-      // Value initial_value;
-      /// TODO I think I added this to crash in case no default is there, think regarding default
-      /// values of params
-      // node.get_parameter_or(parameter_name, initial_value, *default_value);
       this->impl()->resolve(*this->impl()->default_value);
     }
   }
@@ -918,7 +923,6 @@ struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
   }
 };
 
-/// TODO rem RTTI, recognize differently, use concepts for iface def for example.
 struct InterpolateableStreamTag {};
 template <typename _Message, typename DerivedImpl>
 struct InterpolateableStream
@@ -974,7 +978,6 @@ struct TransformSubscriptionStream
   /// @brief Look up the transform at the given time point, does not wait but instead only return something if the transform is already in the buffer.
   /// @param time 
   /// @return The transform or nothing if it has not arrived yet.
-  /// \todo return Result<geometry_msgs::msg::TransformStamped, std::string>
   MaybeValue get_at_time(const rclcpp::Time &time) const override {
     try {
       // Note that this call does not wait, the transform must already have arrived.
@@ -1162,9 +1165,6 @@ protected:
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window. 
 /// It simply passes over the value if no timeout occured, and errors otherwise. 
 /// \tparam _Value the value must be a message that has a header stamp
-///
-/// \todo assert message has a header stamp.
-/// \todo allow parameters as max_age
 template <typename _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
@@ -1226,11 +1226,6 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
   }
 };
 
-/// TODO this needs to check whether all inputs have the same QoS, so we will have do a walk
-/// TODO adapt queue size automatically if we detect very different frequencies so that
-/// synchronization still works. I would guess currently it works only if the lowest frequency topic
-/// has a frequency of at least 1/queue_size, given the highest frequency topic has a frequency of
-/// one.
 template <typename... Messages>
 struct SynchronizerStreamImpl {
   /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
@@ -1257,6 +1252,8 @@ struct SynchronizerStreamImpl {
   std::shared_ptr<Sync> synchronizer_;
 };
 
+/// A Stream representing an approximate time synchronizer. 
+/// \warning All inputs must have the same QoS accorcding to the documentation of message_filters
 template <typename... Messages>
 class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
                                          SynchronizerStreamImpl<Messages...>> {
@@ -1288,8 +1285,8 @@ struct TF2MessageFilter
     : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
   using Self = TF2MessageFilter<_Message>;
   using Message = _Message;
-  // TODO do not ignore buffer timeout
-  TF2MessageFilter(NodeBookkeeping &node, std::string target_frame, rclcpp::Duration buffer_timeout) {
+
+  TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame) {
     this->impl()->name = "tf_filter";
     this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
         this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
@@ -1299,7 +1296,7 @@ struct TF2MessageFilter
   void on_message(const typename _Message::SharedPtr &msg) { this->impl()->resolve(msg); }
 };
 
-/// The context owns the streams.
+/// The context owns the streams and is what is returned when calling `node->icey()` (NodeWithIceyContext::icey).
 class Context : public std::enable_shared_from_this<Context> {
 public:
   /// Construct a context using the given Node interface, initializing the `node` field. The interface must always be present because 
@@ -1469,10 +1466,6 @@ public:
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_client<ServiceT>(service_name, timeout, qos);
-    /// TODO maybe solve better. We would need to implement then(Promise<A>, F<A,
-    /// Promise<B>>)->Promise<B>, where the service call behaves already like F<A, Promise<B>>: Just
-    /// return self. We would also need to accumulate all kinds of errors, i.e. ErrorValue must
-    /// become a sum type of all the possible ErrorValues of the chain.
     parent.then([service_client](auto req) { service_client.call(req); });
     /// Pass the error since service calls are chainable
     if constexpr (not std::is_same_v<obs_err<Parent>, Nothing>) {
@@ -1483,9 +1476,6 @@ public:
   
   /*!
     Synchronizer that given a reference signal at its first argument, ouputs all the other topics
-
-    \todo specialize when reference is a tuple of messages. In this case, we compute the arithmetic
-    \todo implement receive time. For this, this synchronizer must be an attachable because it needs to know the current time, (that may be simulated time, i.e sub on /clock needed)
     \warning Errors are currently not passed through
   */
   template <class Reference, class... Interpolatables>
@@ -1573,11 +1563,11 @@ public:
   }
 
   /*! 
-    \todo document well
+    Outputs the Value of any of the inputs.
     \warning Errors are currently not passed through
   */
   template <typename... Parents>
-  auto serialize(Parents... parents) {
+  auto any(Parents... parents) {
     stream_traits<Parents...>{};
     // assert_all_stream_values_are_same<Parents...>();
     using Parent = decltype(std::get<0>(std::forward_as_tuple(parents...)));
@@ -1592,10 +1582,9 @@ public:
   }
 
   /// Synchronizes a parent stream with a transform: The Streams outputs the parent value when the transform between it's header frame and the target_frame becomes available. 
-  /// It uses for this the `tf2::MessageFilter`
+  /// It uses for this the `tf2_ros::MessageFilter`
   template <class Parent>
-  TF2MessageFilter<obs_msg<Parent>> synchronize_with_transform(Parent parent, const std::string &target_frame,
-                                  const rclcpp::Duration &buffer_timeout) {
+  TF2MessageFilter<obs_msg<Parent>> synchronize_with_transform(Parent parent, const std::string &target_frame) {
     auto child = create_stream<TF2MessageFilter<obs_msg<Parent>>>(target_frame, buffer_timeout);
     parent.then([child](const auto &x) { child.impl()->resolve(x); });
     return child;

@@ -142,9 +142,6 @@ public:
     this->notify();
   }
 
-  /*!
-    \todo document well
-  */
   template <class F>
   auto then(F &&f) {
     /// Note that it may only have errors
@@ -153,9 +150,6 @@ public:
     return this->done<true>(f);
   }
 
-  /*!
-    \todo document well
-  */
   template <class F>
   auto except(F &&f) {
     static_assert(!std::is_same_v<ErrorValue, Nothing>,
@@ -219,7 +213,6 @@ protected:
   /// for better code generation)
   template <bool resolve, typename F>
   auto done(F &&f) {
-    /// TODO static_assert here signature for better error messages
     /// Return type depending of if the it is called when the Promise resolves or rejects
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
     /// Only if we resolve we pass over the error. except does not pass the error, only the handler may create a new error

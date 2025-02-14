@@ -53,6 +53,16 @@ Sorted by decreasing priority.
 
 ## Other nice-to-have features, not for 0.1
 
+- [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
+- [ ] Remove use of RTTI in interpolateble stream 
+- [ ] Pass error through synchronizers -> for this return Result from Interpolatables
+- [ ] Allow chaining approx-time synchronizer with e.g. reference synchronizer by implementing averaging of all the header stampls of the tuple
+- [ ] Automatic adaption of queue size in ApproxTimeSync
+- [ ] Parents requiring a parent stream should take it in the constructor 
+- [ ] Maybe generalize concept of push/pull Stream 
+- [ ] Add static asserts that message has header stamp for better compiler error messages
+- [ ] Static_assert for the lambda signature 
+
 - [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 
 - [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
