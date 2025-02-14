@@ -44,6 +44,7 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
   void set_err(const ErrorValue &x) { this->template emplace<2>(x); }
 };
 
+/// Some pattern matching for type recognition
 template <class T>
 struct remove_optional {
   using type = T;
@@ -71,6 +72,24 @@ template <class T>
 using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
 
 template <class T>
+struct is_tuple : std::false_type {};
+
+template <typename... Args>
+struct is_tuple<std::tuple<Args...>> : std::true_type {};
+
+template <class T>
+struct is_pair : std::false_type {};
+
+template <typename... Args>
+struct is_pair<std::pair<Args...>> : std::true_type {};
+
+template <class T>
+constexpr bool is_tuple_v = is_tuple<T>::value;
+
+template <class T>
+constexpr bool is_pair_v = is_pair<T>::value;
+
+template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 /// The value type the given Stream of type T holds. 
 template <class T>
@@ -91,23 +110,6 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   return stream;
 }
 
-template <class T>
-struct is_tuple : std::false_type {};
-
-template <typename... Args>
-struct is_tuple<std::tuple<Args...>> : std::true_type {};
-
-template <class T>
-struct is_pair : std::false_type {};
-
-template <typename... Args>
-struct is_pair<std::pair<Args...>> : std::true_type {};
-
-template <class T>
-constexpr bool is_tuple_v = is_tuple<T>::value;
-
-template <class T>
-constexpr bool is_pair_v = is_pair<T>::value;
 
 /// Calls the function with the given argument arg but unpacks it if it is a tuple. 
 template <class Func, class Arg>

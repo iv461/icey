@@ -76,3 +76,8 @@ Actual implementation of the stream.
 ```
 ```{doxygentypedef} icey::obs_msg
 ```
+
+## C++20 coroutines support 
+
+```{doxygentypedef} icey::StreamCoroutinesSupport
+```

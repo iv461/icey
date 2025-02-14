@@ -36,6 +36,8 @@ Sorted by decreasing priority.
 
 - [ ] Result-type for error handling example
 
+- [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context
+
 - [ ] Buffer: Basis for `delay`-filter
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)

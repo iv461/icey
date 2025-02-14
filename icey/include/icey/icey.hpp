@@ -32,6 +32,15 @@
 
 namespace icey {
     
+template <class T>
+struct t_is_shared_ptr : std::false_type {};
+
+template <class T>
+struct t_is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+
+template <class T>
+constexpr bool is_shared_ptr = t_is_shared_ptr<T>::value;
+
 namespace hana = boost::hana;
 inline bool icey_debug_print = false;
 inline bool icey_coro_debug_print = false;
@@ -388,11 +397,15 @@ public:
 };
 
 struct StreamTag {};  /// A tag to be able to recognize the type "Stream" using traits
+template<class T>
+constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
+
 template <typename... Args>
 struct stream_traits {
-  static_assert((std::is_base_of_v<StreamTag, remove_shared_ptr_t<Args>> && ...),
+  static_assert((is_stream< remove_shared_ptr_t<Args>> && ...),
                 "The arguments must be an icey::Stream");
 };
+
 
 template <class T>
 constexpr void assert_stream_holds_tuple() {
@@ -408,6 +421,112 @@ constexpr void assert_all_stream_values_are_same() {
                 "The values of all the streams must be the same");
 }
 
+
+template <typename _Value, typename _ErrorValue, typename Derived>
+class Stream;
+
+template <typename T>
+struct crtp {
+    T& underlying() { return static_cast<T&>(*this); }
+    T const& underlying() const { return static_cast<T const&>(*this); }
+};
+
+/// Implements the required interface of C++20's coroutines so that Streams can be used with co_await syntax.
+template<class Derived, class ErrorValue>
+struct StreamCoroutinesSupport : public crtp<Derived> {
+  /// We are a promise
+  using promise_type = Derived;
+  /// We are still a promise, so we return self:
+  Derived get_return_object() {
+    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
+    return  this->underlying();
+  }
+
+  /// We never already got something since this is a stream (we always first need to spin the
+  /// ROS executor to get a message), so we never suspend:
+  std::suspend_never initial_suspend() {
+    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
+    return {};
+  }
+
+  /// return_value returns the value of the Steam :
+  auto return_value() { return  this->underlying().impl()->value(); }
+
+  /// If the return_value function is called with a value, it *sets* the value, makes sense
+  /// right ? No ? Oh .. (Reference:
+  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+  template <class T>
+  void return_value(const T &x) const {
+    if (icey_coro_debug_print)
+      std::cout << this->underlying().get_type_info() << " return value for "
+                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+      this->underlying().impl()->set_value(x);
+  }
+  /// We already handle exceptions in the Stream, so here we do nothing.
+  void unhandled_exception() {}
+
+  /// We do not need to do anything at the end, no extra cleanups needed.
+  std::suspend_never final_suspend() const noexcept { return {}; }
+
+  /// Make a Value to a stream (promisify it) if needed, meaning if it is not already a Stream. 
+  /// We also need to get the context from the given Stream and set it to our stream, 
+  /// since the compiler creates new Streams by just calling operator new. This creates Streams with no context, somethign we do not want. 
+  /// But luckily, we always got a Stream that already has a context so we obtain it from there.
+  template <class ReturnType>
+  auto await_transform(ReturnType x) {
+    if (icey_coro_debug_print) {
+      auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
+      std::cout << this->underlying().get_type_info() << " await_transform called to " << to_type << std::endl;
+    }
+    if constexpr (is_stream<ReturnType>) {
+      this->underlying().impl()->context = x.impl()->context;  /// Get the context from the input promise
+      return x;
+    } else {
+      return this->underlying().template transform_to<ReturnType, Nothing>();
+    }
+  }
+
+  /// Spin the event loop, (the ROS executor) until the Stream has a value or an error
+  void spin_executor() {
+    while (this->underlying().impl()->has_none()) {
+      /// Note that spinning once might not be enough, for example if we synchronize three topics
+      /// and await the synchronizer output, we would need to spin at least three times.
+      this->underlying().impl()->context.lock()->get_executor()->spin_once();
+    }
+  }
+
+  //// Now the Awaiter interface for C++20 coroutines:
+  /// Do we have a value ?
+  bool await_ready() { return !this->underlying().impl()->has_none(); }
+  /// Spin the ROS event loop until we got a value.
+  bool await_suspend(auto) {
+    if (icey_coro_debug_print) std::cout << this->underlying().get_type_info() << " await_suspend called" << std::endl;
+    if (this->underlying().impl()->context.expired()) {
+      throw std::logic_error("Stream has not context");
+    }
+    this->spin_executor();
+    return false;  /// Resume the current coroutine, see
+                   /// https://en.cppreference.com/w/cpp/language/coroutines
+  }
+
+  /// Consume the result and return it.
+  auto await_resume() {
+    if (icey_coro_debug_print) std::cout << this->underlying().get_type_info() << " await_resume called" << std::endl;
+    /// Return the value if there can be no error
+    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
+      auto result = this->underlying().impl()->value();
+      /// Reset the state since we consumed this value
+      this->underlying().impl()->set_none();
+      return result;
+    } else {
+      auto result = this->underlying().impl()->get_state();
+      /// Reset the state since we consumed this value
+      this->underlying().impl()->set_none();
+      return result;
+    }
+  }
+};
+
 /// Adds a default extention inside the impl::Stream by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details.
 template <class _Derived>
@@ -416,122 +535,9 @@ struct WithDefaults : public _Derived, public StreamImplDefault {};
 template<class V>
 struct TimeoutFilter;
 
-template <typename T, template<typename> class crtpType>
-struct crtp
-{
-    T& underlying() { return static_cast<T&>(*this); }
-    T const& underlying() const { return static_cast<T const&>(*this); }
-private:
-    crtp(){}
-    friend crtpType<T>;
-};
-
-template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
-class Stream;
-
-template<class Derived>
-struct StreamCoroutinesSupport : public crtp<Derived> {
-   ///// Everything that follows is to satisfy the interface for C++20's coroutines.
-  ////////////////////////////////////////////////////////
-
-  /// @brief This alias is required to support C++20's coroutines.
-  using promise_type = Derived;
-  //// Second, we are still a promise, so we return self:
-  Derived get_return_object() {
-    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-    return  this->underlying();
-  }
-  /// Third, we never already got something since this is a stream (we always first need to spin the
-  /// ROS executor to get a message), so we never suspend:
-  std::suspend_never initial_suspend() {
-    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
-    return {};
-  }
-  /// Fourth, we return_value returns the value of the promise:
-  Value return_value() { return  this->underlying().impl()->value(); }
-  /// Fifth, if the return_value function is called with a value, it *sets* the value, makes sense
-  /// right ? No ? Oh .. (Reference:
-  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
-  template <class T>
-  void return_value(const T &x) const {
-    if (icey_coro_debug_print)
-      std::cout << get_type_info() << " return value for "
-                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
-      this->underlying().impl()->set_value(x);
-  }
-  /// Sixth, we already handle exceptions in the promise.
-  void unhandled_exception() {}
-  /// Seventh, we do not need to do anything at the end, no extra cleanups needed.
-  std::suspend_never final_suspend() const noexcept { return {}; }
-
-  /// Eight, promisify a value if needed, meaning if it is not already a promise and set context
-  /// since we need to have the executor
-  template <class ReturnType>
-  auto await_transform(ReturnType x) {
-    if (icey_coro_debug_print) {
-      auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
-      std::cout << get_type_info() << " await_transform called to " << to_type << std::endl;
-    }
-
-    if constexpr (std::is_base_of_v<StreamTag, ReturnType>) {
-      this->underlying().impl()->context = x.impl()->context;  /// Get the context from the input promise
-      return x;
-    } else {
-      return this->underlying().
-      Stream<ReturnType, Nothing> new_obs;
-      new_obs.impl()->context = this->impl()->context;
-      return new_obs;
-    }
-  }
-
-  /// Spin the event loop, (the ROS executor) until this Promise is fulfilled
-  void spin_executor() {
-    while (this->impl()->has_none()) {
-      /// Note that spinning once might not be enough, for example if we synchronize three topics
-      /// and await the synchronizer output, we would need to spin at least three times.
-      this->impl()->context.lock()->get_executor()->spin_once();
-    }
-  }
-
-  //// Now the Awaiter interface for C++20 coroutines:
-  /// Do we have a value ?
-  bool await_ready() { return !this->impl()->has_none(); }
-  /// Spin the ROS event loop until we got a value.
-  bool await_suspend(auto) {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " await_suspend called" << std::endl;
-
-    if (this->impl()->context.expired()) {
-      std::cout << "HELP! I have no context :( Guess I'll die now" << std::endl;
-      throw std::logic_error("I have no context, cannot spin the event loop");
-    }
-
-    this->spin_executor();
-    return false;  /// Resume the current coroutine, see
-                   /// https://en.cppreference.com/w/cpp/language/coroutines
-  }
-
-  /// Consume the result and return it.
-  auto await_resume() {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " await_resume called" << std::endl;
-    /// Return the value if there can be no error
-    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      auto result = this->impl()->value();
-      /// Reset the state since we consumed this value
-      this->impl()->set_none();
-      return result;
-    } else {
-      auto result = this->impl()->get_state();
-      /// Reset the state since we consumed this value
-      this->impl()->set_none();
-      return result;
-    }
-  }
-  ///////////////////// End coroutine support interface
-};
-
 /// An stream, basis for all other streams. Similar to a promise in JavaScript.
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
-class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived> >{
+class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived>, _ErrorValue >{
 public:
 using Value = _Value;
 using ErrorValue = _ErrorValue;
@@ -549,9 +555,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
 
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
-      throw std::runtime_error(
-          "This stream does not have context, we cannot do stuff with it that depends on the "
-          "context.");
+      throw std::runtime_error("This stream does not have context");
   }
 
   std::string get_type_info() const {
@@ -560,6 +564,13 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     ss << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << " (impl @ "
        << size_t(this->impl().get()) << ")] ";
     return ss.str();
+  }
+
+  template<class NewValue, class NewError>
+  auto transform_to() const {
+    Stream<NewValue, NewError> new_stream;
+    new_stream.impl()->context = this->impl()->context;
+    return new_stream;
   }
 
   /// Returns the undelying pointer to the implementation. 
@@ -1386,7 +1397,7 @@ public:
                                                 std::string_view field_name, auto &field_value) {
       using Field = std::remove_reference_t<decltype(field_value)>;
       std::string field_name_r(field_name);
-      if constexpr (std::is_base_of_v<StreamTag, Field>) {
+      if constexpr (is_stream< Field>) {
         field_value.impl()->parameter_name = field_name_r;
         field_value.impl()->register_handler([field_name_r, notify_callback](const auto &new_state) {
               notify_callback(field_name_r);
@@ -1592,7 +1603,7 @@ public:
   /// It uses for this the `tf2_ros::MessageFilter`
   template <class Parent>
   TF2MessageFilter<obs_msg<Parent>> synchronize_with_transform(Parent parent, const std::string &target_frame) {
-    auto child = create_stream<TF2MessageFilter<obs_msg<Parent>>>(target_frame, buffer_timeout);
+    auto child = create_stream<TF2MessageFilter<obs_msg<Parent>>>(target_frame);
     parent.then([child](const auto &x) { child.impl()->resolve(x); });
     return child;
   }
