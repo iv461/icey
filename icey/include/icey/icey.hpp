@@ -436,20 +436,20 @@ template<class Derived, class ErrorValue>
 struct StreamCoroutinesSupport : public crtp<Derived> {
   /// We are a promise
   using promise_type = Derived;
-  /// We are still a promise, so we return self:
+  /// We are still a promise, so we return self.
   Derived get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
     return  this->underlying();
   }
 
   /// We never already got something since this is a stream (we always first need to spin the
-  /// ROS executor to get a message), so we never suspend:
+  /// ROS executor to get a message), so we never suspend.
   std::suspend_never initial_suspend() {
     // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
     return {};
   }
 
-  /// return_value returns the value of the Steam :
+  /// return_value returns the value of the Steam.
   auto return_value() { return  this->underlying().impl()->value(); }
 
   /// If the return_value function is called with a value, it *sets* the value, makes sense
@@ -495,10 +495,9 @@ struct StreamCoroutinesSupport : public crtp<Derived> {
     }
   }
 
-  //// Now the Awaiter interface for C++20 coroutines:
-  /// Do we have a value ?
+  /// Returns whether the stream has a value or an error.
   bool await_ready() { return !this->underlying().impl()->has_none(); }
-  /// Spin the ROS event loop until we got a value.
+  /// Spin the ROS event loop until we have a value or an error.
   bool await_suspend(auto) {
     if (icey_coro_debug_print) std::cout << this->underlying().get_type_info() << " await_suspend called" << std::endl;
     if (this->underlying().impl()->context.expired()) {
@@ -509,7 +508,8 @@ struct StreamCoroutinesSupport : public crtp<Derived> {
                    /// https://en.cppreference.com/w/cpp/language/coroutines
   }
 
-  /// Consume the result and return it.
+  /// Take the value out of the stream and return it (this function gets called after await_suspend has finished spinning the ROS executor).
+  /// \returns If an error is possible (ErrorValue is not Nothing), we return a Result<Value, ErrorValue>, otherwise we return just the Value to not force the user to write unnecessary error handling/unwraping code.
   auto await_resume() {
     if (icey_coro_debug_print) std::cout << this->underlying().get_type_info() << " await_resume called" << std::endl;
     /// Return the value if there can be no error

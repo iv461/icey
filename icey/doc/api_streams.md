@@ -79,5 +79,5 @@ Actual implementation of the stream.
 
 ## C++20 coroutines support 
 
-```{doxygentypedef} icey::StreamCoroutinesSupport
+```{doxygenstruct} icey::StreamCoroutinesSupport
 ```
