@@ -44,12 +44,13 @@ void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
 
 These patterns are found everywhere in the Nav2 stack for example when searching for `lookupTransform`.
 
-## Solution in ICEY
+## How TF works in ICEY
+
 
 In ICEY, you subscribe to a transform between two frames and use this as a signal:
 
 ```cpp
-auto map_base_link_tf = icey::create_transform_subscription("map", "base_link");
+auto map_base_link_tf = node->icey().create_transform_subscription("map", "base_link");
 auto result = map_base_link_tf.then([](const geometry_msgs::msg::TransformStamped &new_transform) {
         std_msgs::msg::Float32 out_msg;
         auto cos_theta_half = new_transform.transform.rotation.z;
