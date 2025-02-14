@@ -1,11 +1,10 @@
 # Getting started
 
-ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for fast prototyping and eliminating boilerplate code by using modern asynchronous programming.
-It makes the asynchronous data-flow clearly visible and simplifies application code.
+ICEY is a a new API for the Robot Operating System (ROS) 2 that uses modern asynchronous programming with Streams and async/await syntax. It makes the asynchronous data-flow clearly visible and simplifies application code. It enables fast prototyping with less boilerplate code.
 
-It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: Parameter, Subscribers, Publishers, Timers, Services, Clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
+It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: parameters, subscribers, publishers, timers, services, clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
 
-ICEY operates smoothly together with the  `message_filters` package, using it's synchronizers. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
+ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
 
 It offers additional goodies such as:
 - Automatic bookeeping of publishers/subscribers/timers so that you do not have to do it 
@@ -14,17 +13,20 @@ It offers additional goodies such as:
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
+The [icey_examples](../../icey_examples) package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
+
 # Install ICEY 
 
 ICEY comes as a regular ROS 2 package, to install it just clone it in you colcon workspace and build it:
 
+TODO update link 
+
 ```sh
 git clone git@github.com:iv461/icey.git
-sudo apt install liboost-dev 
+sudo apt install liboost-dev
 colcon build  --packages-up-to icey icey_examples -DCMAKE_BUILD_TYPE=Release
 ```
 
-The `icey_examples` package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
 
 # Your first ICEY-Node 
 
