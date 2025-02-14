@@ -10,7 +10,7 @@ using ExampleService = std_srvs::srv::SetBool;
 
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
-  auto node = icey::create_node(argc, argv, "signal_generator_async_await_example");
+  auto node = icey::create_node(argc, argv, "service_client_async_await_example");
   auto &icey = node->icey();
 
   auto timer = icey.create_timer(1s);
