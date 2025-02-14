@@ -62,6 +62,8 @@ Sorted by decreasing priority.
 - [ ] Maybe generalize concept of push/pull Stream 
 - [ ] Add static asserts that message has header stamp for better compiler error messages
 - [ ] Static_assert for the lambda signature 
+- [ ] Support better parameter API: icey::Interval(0, 5.5) (i.e. determine the common type between the int and double literal) and allow for icey::Set("normal", "pulse", "single"), i.e. determine the common type of fixed-size char arrays correctly as std::string. 
+- [ ] Allow std::array as parameter type with automatic validation for the size -> generally, add parameter type convertes.
 
 - [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 

@@ -3,7 +3,8 @@
 
 #include <boost/noncopyable.hpp>
 #include <functional>
-#include <icey/impl/bag_of_metaprogramming_tricks.hpp>
+#include <tuple>
+#include <optional>
 #include <memory>
 #include <type_traits>
 #include <variant>
@@ -44,6 +45,32 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
 };
 
 template <class T>
+struct remove_optional {
+  using type = T;
+};
+
+template <class T>
+struct remove_optional<std::optional<T>> {
+  using type = T;
+};
+
+template <class T>
+using remove_optional_t = typename remove_optional<T>::type;
+
+template <class T>
+struct remove_shared_ptr {
+  using type = T;
+};
+
+template <class T>
+struct remove_shared_ptr<std::shared_ptr<T>> {
+  using type = T;
+};
+
+template <class T>
+using remove_shared_ptr_t = typename remove_shared_ptr<T>::type;
+
+template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 /// The value type the given Stream of type T holds. 
 template <class T>
@@ -63,6 +90,37 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   auto stream = std::make_shared<O>(std::forward<Args>(args)...);
   return stream;
 }
+
+template <class T>
+struct is_tuple : std::false_type {};
+
+template <typename... Args>
+struct is_tuple<std::tuple<Args...>> : std::true_type {};
+
+template <class T>
+struct is_pair : std::false_type {};
+
+template <typename... Args>
+struct is_pair<std::pair<Args...>> : std::true_type {};
+
+template <class T>
+constexpr bool is_tuple_v = is_tuple<T>::value;
+
+template <class T>
+constexpr bool is_pair_v = is_pair<T>::value;
+
+/// Calls the function with the given argument arg but unpacks it if it is a tuple. 
+template <class Func, class Arg>
+inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
+  if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
+    // Tuple detected, unpack and call the function
+    return std::apply(std::forward<Func>(func), std::forward<Arg>(arg));
+  } else {
+    // Not a tuple, just call the function directly
+    return func(std::forward<Arg>(arg));
+  }
+}
+
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It contains a state that is a Result and a list of callbacks that get notifyed when this state changes. 
 ///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
@@ -163,16 +221,16 @@ protected:
   template <class Output, class F>
   auto call_depending_on_signature(Output output, F &&f) {
     return [output, f = std::forward<F>(f)](const auto &x) {
-      using ReturnType = decltype(apply_if_tuple(f, x));
+      using ReturnType = decltype(unpack_if_tuple(f, x));
       if constexpr (std::is_void_v<ReturnType>) {
-        apply_if_tuple(f, x);
+        unpack_if_tuple(f, x);
       } else if constexpr (is_result<ReturnType>) {
         /// support callbacks that at runtime may return value or error
-        output->state_ = apply_if_tuple(f, x);
+        output->state_ = unpack_if_tuple(f, x);
         output->notify();
       } else {  /// Other return types are interpreted as values that resolve the promise. Here, we
                 /// also support returning std::optional.
-        ReturnType ret = apply_if_tuple(f, x);
+        ReturnType ret = unpack_if_tuple(f, x);
         output->resolve(ret);
       }
     };
@@ -217,7 +275,7 @@ protected:
     using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
     /// Only if we resolve we pass over the error. except does not pass the error, only the handler may create a new error
     using NewError = std::conditional_t<resolve, ErrorValue, Nothing>;
-    using ReturnType = decltype(apply_if_tuple(f, std::declval<FunctionArgument>()));
+    using ReturnType = decltype(unpack_if_tuple(f, std::declval<FunctionArgument>()));
     /// Now we want to call resolve only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {

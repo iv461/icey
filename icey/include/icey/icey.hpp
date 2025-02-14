@@ -6,7 +6,6 @@
 #include <boost/type_index.hpp>
 #include <coroutine>
 #include <functional>
-#include <icey/impl/bag_of_metaprogramming_tricks.hpp>
 #include <icey/impl/stream.hpp>
 #include <icey/impl/field_reflection.hpp>
 #include <iostream>
@@ -722,9 +721,17 @@ struct is_valid_ros_param_type<std::vector<std::byte> > : std::true_type {};
 template <std::size_t N>
 struct is_valid_ros_param_type<std::array<std::byte, N> > : std::true_type {};
 
+template <class T>
+struct t_is_std_array : std::false_type{};
+
+template <class T, std::size_t N>
+struct t_is_std_array< std::array<T, N> > : std::true_type{};
+
+template <class T>
+constexpr bool is_std_array = t_is_std_array<T>::value;
+
 /// What follows, is an improved parameters API. For API docs, see https://docs.ros.org/en/jazzy/p/rcl_interfaces
 /// First, some constraints we can impose on parameters:
-
 
 /// A closed interval, meaning a value must be greater or equal to a minimum value
 /// and less or equal to a maximal value.
