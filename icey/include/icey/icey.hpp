@@ -526,30 +526,33 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
 
 /// Adds a default extention inside the impl::Stream by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details.
-template <class _Derived>
-struct WithDefaults : public _Derived, public StreamImplDefault {};
+template <class Base>
+struct WithDefaults : public Base, public StreamImplDefault {};
 
 template<class V>
 struct TimeoutFilter;
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes. 
-/// It is conceptually very similar to a promise in JavaScript but the state transitions are not
+/// It is conceptually very similar to a promise in JavaScript except that state transitions are not
 /// final. This is the base class for all the other streams.
 ///
 /// \tparam _Value the type of the value 
 /// \tparam _ErrorValue the type of the error. It can also be an exception.
-/// \tparam Derived a class from which the implementation (impl::Stream) derives, used as an extention point.
-///
-template <class _Value, class _ErrorValue = Nothing, class Derived = Nothing>
-class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived> >{
+/// \tparam ImplBase a class from which the implementation (impl::Stream) derives, used as an extention point.
+/// \note This class does not any fields other than a pointer to the actual implementation, `std::shared_ptr<Impl>`, 
+/// i.e. it uses the PIMPL idiom. 
+/// When deriving from this class to implement new Streams, you should never add additional fields because this Stream may go out of scope. 
+/// Instead, put the additional fields that you need in a separate struct `MyStreamImpl` and pass it as the `ImplBase` template parameter. 
+/// Then, these fields become available through `impl().<my_field>`, i.e. the Impl-class will derive from ImplBase. This is how you should extend the Stream class when implementing your own Streams.
+template <class _Value, class _ErrorValue = Nothing, class ImplBase = Nothing>
+class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue, ImplBase> >{
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Stream<_Value, _ErrorValue,  Derived>;
+  using Self = Stream<_Value, _ErrorValue,  ImplBase>;
   /// The actual implementation of the Stream.
-  using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
-
+  using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing> >;
 
   /// Returns the undelying pointer to the implementation. 
   const std::shared_ptr<Impl> &impl() const { return impl_; }
