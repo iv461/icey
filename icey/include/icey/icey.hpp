@@ -530,7 +530,7 @@ template<class V>
 struct TimeoutFilter;
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
-/// It contains a state that is a Result and a list of callbacks that get notifyed when this state changes. 
+/// It has a state of type Result and a list of callbacks that get notified when this state changes. 
 /// It is conceptually very similar to a promise in JavaScript but the state transitions are not
 /// final. This is the base class for all the other streams.
 ///
@@ -622,8 +622,8 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
         "This stream does not have a value, there is nothing to publish, so you cannot "
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto child = this->impl()->context.lock()->template create_ros_stream<T>(args...);
-    this->impl()->then([child](const auto &x) { child.impl()->put_value(x); });
+    auto output = this->impl()->context.lock()->template create_ros_stream<T>(args...);
+    this->impl()->register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
   }
   
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
@@ -1459,8 +1459,8 @@ public:
 
   template <IsStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
-    auto child = create_ros_stream<TransformPublisherStream>();
-    input.impl()->then([child](const auto &x) { child.impl()->put_value(x); });
+    auto output = create_ros_stream<TransformPublisherStream>();
+    input.impl()->register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
@@ -1538,10 +1538,10 @@ public:
     return synchronizer;
   }
 
-  /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer if the inputs
+  /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer (i.e. calls synchronize_approx_time) if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
-  template <class... Inputs>
+  template <IsStream... Inputs>
   auto synchronize(Inputs... inputs) {
     static_assert(sizeof...(Inputs) >= 2,
                   "You need to have at least two inputs for synchronization.");
@@ -1589,21 +1589,21 @@ public:
     using Input = decltype(std::get<0>(std::forward_as_tuple(inputs...)));
     using InputValue = typename std::remove_reference_t<Input>::Value;
     /// First, create a new stream
-    auto child = create_stream<Stream<InputValue>>();
-    /// Now connect each input with the child with the identity function
-    hana::for_each(std::forward_as_tuple(inputs...), [child](auto &input) {
-      input.then([child](const auto &x) { child.impl()->put_value(x); });
+    auto output = create_stream<Stream<InputValue>>();
+    /// Now connect each input with the output
+    hana::for_each(std::forward_as_tuple(inputs...), [output](auto &input) {
+      input.register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
     });
-    return child;
+    return output;
   }
 
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the transform between it's header frame and the target_frame becomes available. 
   /// It uses for this the `tf2_ros::MessageFilter`
   template <IsStream Input>
   TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
-    auto child = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
-    input.then([child](const auto &x) { child.impl()->put_value(x); });
-    return child;
+    auto output = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
+    input.register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
+    return output;
   }
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_;}

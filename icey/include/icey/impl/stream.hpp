@@ -124,7 +124,7 @@ inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
 }
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
-/// It contains a state that is a Result and a list of callbacks that get notifyed when this state changes. 
+/// It has a state of type Result and a list of callbacks that get notified when this state changes. 
 ///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
 /// final. 
 /// \tparam _Value the type of the value 
@@ -132,11 +132,6 @@ inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
 /// \tparam Derived a class from which this class derives, used as an extention point.
 /// \tparam DefaultDerived When new `Stream`s get created using `then` and `except`, this is used as a template parameter for `Derived` so that a default extention does not get lost when we call `then` or `except`.
 ///
-/// References:
-/// [1]https://www.boost.org/doc/libs/1_67_0/libs/fiber/doc/html/fiber/synchronization/futures/promise.html
-/// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
-/// And for a thread-safe implementation at the cost of insane complexity, see this:
-/// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
 template <class _Value, class _ErrorValue, class Derived, class DefaultDerived>
 class Stream : private boost::noncopyable,
                public Derived {
@@ -279,24 +274,24 @@ protected:
     /// Now we want to call put_value only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto child = create_stream<Stream<Nothing, NewError, DefaultDerived, DefaultDerived>>();
-      create_handler<put_value>(child, std::forward<F>(f));
-      return child;
+      auto output = create_stream<Stream<Nothing, NewError, DefaultDerived, DefaultDerived>>();
+      create_handler<put_value>(output, std::forward<F>(f));
+      return output;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
-      auto child =
+      auto output =
           create_stream<Stream<typename ReturnType::Value,
                                    typename ReturnType::ErrorValue, 
                                    DefaultDerived, DefaultDerived>>();  // Must pass over error
-      create_handler<put_value>(child, std::forward<F>(f));
-      return child;
+      create_handler<put_value>(output, std::forward<F>(f));
+      return output;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
-      auto child = create_stream<Stream<ReturnTypeSome, NewError,
+      auto output = create_stream<Stream<ReturnTypeSome, NewError,
                                 DefaultDerived, DefaultDerived>>();
-      create_handler<put_value>(child, std::forward<F>(f));
-      return child;
+      create_handler<put_value>(output, std::forward<F>(f));
+      return output;
     }
   }
 

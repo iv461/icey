@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
   auto float2 = icey.create_subscription<std_msgs::msg::Float32>("float2");
   auto float3 = icey.create_subscription<std_msgs::msg::Float32>("float3");
 
-  icey.serialize(float1, float2, float3).publish("float_serialized");
+  icey.any(float1, float2, float3).publish("float_serialized");
 
   /// And directly publish this signal:
   map_base_link_tf.publish("map_to_base_link_transform");
