@@ -1133,53 +1133,50 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   }
 
   auto &call(Request request) const {
-    if (!wait_for_service()) return *this;
+    if (!wait_for_service(this->impl())) return *this;
     this->impl()->maybe_pending_request = this->impl()->client->async_send_request(
-        request, [this](Future response_futur) { on_response(response_futur); });
+        request, [impl=this->impl()](Future response_futur) { on_response(impl, response_futur); });
     return *this;
   }
 
 protected:
-  bool wait_for_service() const {
-    if (!this->impl()->client->wait_for_service(this->impl()->timeout)) {
+  static bool wait_for_service(auto impl) {
+    if (!impl->client->wait_for_service(impl->timeout)) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
-        this->impl()->put_error("INTERRUPTED");
+        impl->put_error("INTERRUPTED");
       } else {
-        this->impl()->put_error("SERVICE_UNAVAILABLE");
+        impl->put_error("SERVICE_UNAVAILABLE");
       }
       return false;
     }
     return true;
   }
 
-  void on_response(Future response_futur) const {
+  static void on_response(auto impl, Future response_futur) {
     if (response_futur.valid()) {
-      this->impl()->maybe_pending_request = {};
-      this->impl()->put_value(response_futur.get().second);
+      impl->maybe_pending_request = {};
+      impl->put_value(response_futur.get().second);
     } else {
-      /// The FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
-      /// Since the async_send_request waits on the executor, we cannot only interrupt it with
-      /// Ctrl-C
       // Reference:
       // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
-        this->impl()->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
+        impl->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
       } else {
-        this->impl()->put_error("rclcpp::FutureReturnCode::TIMEOUT");
+        impl->put_error("rclcpp::FutureReturnCode::TIMEOUT");
       }
       /// Now do the weird cleanup thing that the API-user definitely neither does need to care
       /// nor know about:
-      this->impl()->client->remove_pending_request(this->impl()->maybe_pending_request.value());
+      impl->client->remove_pending_request(impl->maybe_pending_request.value());
       /// I'm not sure this will still not leak memory smh:
-      /// https://github.com/ros2/rclcpp/issues/1697. Some ROS examples use stuff like timers that
-      /// poll for dead requests and clean them up. That's why I'll put this assertion here:
-      if (size_t num_requests_pruned = this->impl()->client->prune_pending_requests() != 0) {
+      /// https://github.com/ros2/rclcpp/issues/1697. There is a ROS example that launches a timer which
+      /// polls for dead requests and cleans them up. That's why I'll put this assertion here:
+      if (size_t num_requests_pruned = impl->client->prune_pending_requests() != 0) {
         throw std::runtime_error(
             "Pruned some more requests even after calling remove_pending_request(), you should buy "
             "a new RPC library.");
       }
-      this->impl()->maybe_pending_request = {};
+      impl->maybe_pending_request = {};
     }
   }
 };
