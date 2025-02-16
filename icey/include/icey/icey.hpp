@@ -531,6 +531,8 @@ struct WithDefaults : public Base, public StreamImplDefault {};
 
 template<class V>
 struct TimeoutFilter;
+template<class V>
+struct ServiceClient;
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes. 
@@ -650,7 +652,7 @@ public:
 
   /// Create a new ServiceClient stream, which gets called by this stream that holds the request.
   template <class ServiceT>
-  auto call_service(const std::string &service_name, const Duration &timeout,
+  ServiceClient<ServiceT> call_service(const std::string &service_name, const Duration &timeout,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>,

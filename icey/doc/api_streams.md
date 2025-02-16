@@ -2,19 +2,19 @@
 
 These are all the available `Streams`, implementing subscribers, publishers/timers etc.
 
+```{doxygenstruct} icey::Result
+```
+```{doxygenstruct} icey::Nothing
+```
+
+```{doxygenclass} icey::Stream
+```
+
 ```{doxygentypedef} icey::Clock
 ```
 ```{doxygentypedef} icey::Time
 ```
 ```{doxygentypedef} icey::Duration
-```
-
-```{doxygenstruct} icey::Nothing
-```
-```{doxygenstruct} icey::Result
-```
-
-```{doxygenclass} icey::Stream
 ```
 
 ```{doxygenstruct} icey::ParameterStream
