@@ -124,7 +124,7 @@ TEST_F(PromiseTest, TakeTest) {
 
   EXPECT_EQ(stream->value(), value);  
 
-  auto current_state = stream.take();
+  icey::Result<std::string, std::string> current_state = stream->take();
 
   EXPECT_FALSE(stream->has_value());
   EXPECT_TRUE(stream->has_none());

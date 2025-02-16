@@ -97,6 +97,7 @@ using ValueOf = typename remove_shared_ptr_t<T>::Value;
 /// The value type of the given Stream type
 template <class T>
 using ErrorOf = class remove_shared_ptr_t<T>::ErrorValue;
+
 /// The ROS-message of the given Stream type
 template <class T>
 using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
@@ -141,6 +142,9 @@ public:
   using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;
   using MaybeValue = std::optional<Value>;
   using State = Result<Value, ErrorValue>;
+
+  /// If no error is possible (ErrorValue is not Nothing), this it just the Value instead of the State to not force the user to write unnecessary error handling/unwraping code.
+  using MaybeResult = std::conditional_t<std::is_same_v<ErrorValue, Nothing>, Value, State>;
   using Handler = std::function<void(const State &)>;
 
   bool has_none() const { return state_.has_none(); }
@@ -150,7 +154,7 @@ public:
   const ErrorValue &error() const { return state_.error(); }
   State &get_state() { return state_; }
   const State &get_state() const { return state_; }
-  
+                
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the new state as an argument.
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
@@ -158,6 +162,7 @@ public:
   void set_none() { state_.set_none(); }
   
   /// Sets the state to hold a value, but does not notify about this state change.
+  /// TODO rem maybe
   void set_value(const MaybeValue &x) {
     if (x)
       state_.set_ok(*x);
@@ -168,7 +173,24 @@ public:
   /// Sets the state to hold an error, but does not notify about this state change.
   void set_error(const ErrorValue &x) { state_.set_err(x); }
 
-  /// Notify about the state change, but only in case it is error or value. If the state is none, it does not notify.
+  /// Returns the current state and sets it to none.
+  State take_state() {
+    auto current_state = state_;
+    this->set_none();
+    return current_state;
+  }
+
+  /// Returns the current state and sets it to none. If no error is possible (ErrorValue is not Nothing), it just the Value to not force the user to write unnecessary error handling/unwraping code.
+  MaybeResult take() {
+    auto current_state = this->take_state();
+    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
+      return current_state.value();
+    } else {
+      return current_state;
+    }
+  }
+
+  /// It takes (calls take) the current state and notifies the callbacks. It notifies only in case we have an error or value. If the state is none, it does not notify.
   /// If the state is an error and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no handlers were registered, the exception is re-thrown.
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
@@ -193,23 +215,6 @@ public:
   void put_error(const ErrorValue &x) {
     this->set_error(x);
     this->notify();
-  }
-
-  /// Returns the current state and sets it to none.
-  State take_state() {
-    auto current_state = state_;
-    this->set_none();
-    return current_state;
-  }
-
-  /// Returns the current state and sets it to none. If no error is possible (ErrorValue is not Nothing), it just the Value to not force the user to write unnecessary error handling/unwraping code.
-  auto take() {
-    auto current_state = this->take();
-    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      return current_state.value();
-    } else {
-      return current_state;
-    }
   }
 
   template <class F>

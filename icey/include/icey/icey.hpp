@@ -426,12 +426,12 @@ struct crtp {
 };
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with co_await syntax and inside coroutines.
-template<class Derived>
-struct StreamCoroutinesSupport : public crtp<Derived> {
+template<class DerivedStream>
+struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   /// We are a promise
-  using promise_type = Derived;
+  using promise_type = DerivedStream;
   /// We are still a promise
-  Derived get_return_object() {
+  DerivedStream get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
     return  this->underlying();
   }
@@ -507,6 +507,7 @@ struct StreamCoroutinesSupport : public crtp<Derived> {
   auto await_resume() {
     if (icey_coro_debug_print) std::cout << this->underlying().get_type_info() << " await_resume called" << std::endl;
     return this->underlying().impl()->take();
+  }
 };
 
 /// Adds a default extention inside the impl::Stream by default.
@@ -601,14 +602,14 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     return create_from_impl(impl()->except(f));
   }
 
-  /// Connect this Stream to the given output stream so that the output stream receives all the values and errors.
-  void connect(Self output) {
+  /// Connect this Stream to the given output stream so that the output stream receives all the values.
+  template<IsStream Output>
+  void connect_values(Output output) {
     this->impl()->register_handler(
         [output](const auto &new_state) { 
           if(new_state.has_value()) {
             output.impl()->put_value(new_state.value()); 
           } else if (new_state.has_error()) {
-            output.impl()->put_error(new_state.error()); 
           }
         }
     );
@@ -624,7 +625,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
     auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(args...);
-    this->connect(output);
+    this->connect_values(output);
   }
   
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
@@ -1069,9 +1070,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
     });
     if(maybe_input) {
       maybe_input->impl()->register_handler([impl = this->impl()](const auto &new_state) {
-        if(new_state.has_value()) {
           impl->put_value(new_state.value());
-        }
       });
     }
   }
@@ -1085,7 +1084,7 @@ struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformSta
     this->impl()->name = "tf_pub";
     auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
     this->impl()->register_handler([tf_broadcaster](const auto &new_state) {
-      tf_broadcaster->sendTransform(new_state.value()); /// There can be no error
+      tf_broadcaster->sendTransform(new_state.value()); 
     });
   }
 };
@@ -1243,7 +1242,7 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
   SimpleFilterAdapter() {
     this->impl()->register_handler([this](const auto &new_state) {
       using Event = message_filters::MessageEvent<const _Message>;
-      this->signalMessage(Event(new_state.value())); /// There can be no error
+      this->signalMessage(Event(new_state.value())); 
     });
   }
 };
@@ -1461,7 +1460,7 @@ public:
   template <IsStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
     auto output = create_ros_stream<TransformPublisherStream>();
-    input.connect(output);
+    input.connect_values(output);
     return output;
   }
 
@@ -1535,7 +1534,7 @@ public:
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &input = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];
-      input.then([synchronizer_input](const auto &x) { synchronizer_input->impl()->put_value(x); });
+      input.connect_values(synchronizer_input);
     });
     return synchronizer;
   }
@@ -1594,7 +1593,7 @@ public:
     auto output = create_stream<Stream<InputValue, InputError>>();
     /// Now connect each input with the output
     hana::for_each(std::forward_as_tuple(inputs...), [output](auto &input) {
-      input.connect(output);
+      input.connect_values(output);
     });
     return output;
   }
@@ -1604,7 +1603,7 @@ public:
   template <IsStream Input>
   TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
     auto output = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
-    input.connect(output);
+    input.connect_values(output);
     return output;
   }
 
