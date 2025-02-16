@@ -627,8 +627,8 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   }
   
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
-  /// \param create_extra_timer If set to false, a timeout error will only occur if at least one message is received. 
-  /// Otherwise, an extra timer is created so that the timeout can be detected even if no message is received.
+  /// \param create_extra_timer If set to false, the timeout will only be detected after at least one message was received.
+  /// If set to true, an extra timer is created so that timeouts can be detected even if no message is received.
   TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
@@ -1194,8 +1194,8 @@ struct TimeoutFilter
   /// \param node the node is needed to know the current time 
   /// \param input another Stream which is the input to this filter 
   /// \param max_age a maximum age the message is allowed to have. 
-  /// \param create_extra_timer If set to false, a timeout error will only occur if at least one message is received. 
-  /// Otherwise, an extra timer is created so that the timeout can be detected even if no message is received.
+  /// \param create_extra_timer If set to false, the timeout will only be detected after at least one message was received.
+  /// If set to true, an extra timer is created so that timeouts can be detected even if no message is received
   template<class Input>
   explicit TimeoutFilter(NodeBookkeeping &node, Input input, 
     const Duration &max_age, bool create_extra_timer = true) {    
@@ -1267,8 +1267,8 @@ struct SynchronizerStreamImpl {
         inputs_);
     synchronizer_->setAgePenalty(0.50);
   }
-  /// The input filters
   uint32_t queue_size_{10};
+
   Inputs inputs_;
   std::shared_ptr<Sync> synchronizer_;
 };
