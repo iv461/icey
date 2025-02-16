@@ -416,9 +416,6 @@ constexpr void assert_all_stream_values_are_same() {
                 "The values of all the streams must be the same");
 }
 
-template <class _Value, class _ErrorValue, class Derived>
-class Stream;
-
 template <class T>
 struct crtp {
     T& underlying() { return static_cast<T&>(*this); }
@@ -430,6 +427,23 @@ template<class DerivedStream>
 struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   /// We are a promise
   using promise_type = DerivedStream;
+  
+  StreamCoroutinesSupport() {
+    if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
+  }
+
+  ~StreamCoroutinesSupport() {
+    if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
+  }
+
+  std::string get_type_info() const {
+    std::stringstream ss;
+    auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
+    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ "
+       << size_t(this->underlying().impl().get()) << ")] ";
+    return ss.str();
+  }
+
   /// We are still a promise
   DerivedStream get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
@@ -530,31 +544,15 @@ struct TimeoutFilter;
 template <class _Value, class _ErrorValue = Nothing, class Derived = Nothing>
 class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived> >{
 public:
-using Value = _Value;
-using ErrorValue = _ErrorValue;
-using Self = Stream<_Value, _ErrorValue,  Derived>;
-/// The actual implementation of the Stream.
-using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
-
-  Stream() {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
-  }
-
-  ~Stream() {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
-  }
+  using Value = _Value;
+  using ErrorValue = _ErrorValue;
+  using Self = Stream<_Value, _ErrorValue,  Derived>;
+  /// The actual implementation of the Stream.
+  using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
 
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
       throw std::runtime_error("This stream does not have context");
-  }
-
-  std::string get_type_info() const {
-    std::stringstream ss;
-    auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
-    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ "
-       << size_t(this->impl().get()) << ")] ";
-    return ss.str();
   }
 
   template<class NewValue, class NewError>
@@ -565,7 +563,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   }
 
   /// Returns the undelying pointer to the implementation. 
-  std::shared_ptr<Impl> impl() const { return impl_; }
+  const std::shared_ptr<Impl> &impl() const { return impl_; }
   std::shared_ptr<Impl> &impl() { return impl_; }
 
   /// \returns A new Stream that changes it's value to y every time this
@@ -701,10 +699,10 @@ protected:
   Stream<NewVal, NewErr> create_from_impl(
       const std::shared_ptr<impl::Stream<NewVal, NewErr, 
           WithDefaults<Nothing>, WithDefaults<Nothing> >> &impl) const {
-    Stream<NewVal, NewErr> new_obs;
-    new_obs.impl() = impl;
-    new_obs.impl()->context = this->impl()->context;
-    return new_obs;
+    Stream<NewVal, NewErr> new_stream;
+    new_stream.impl() = impl;
+    new_stream.impl()->context = this->impl()->context;
+    return new_stream;
   }
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
