@@ -1247,8 +1247,6 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
 
 template <class... Messages>
 struct SynchronizerStreamImpl {
-  /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
-  /// `TImeSynchronizer` uses by default ExactTime
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Sync = message_filters::Synchronizer<Policy>;
   using Inputs = std::tuple<std::shared_ptr<SimpleFilterAdapter<Messages>>...>;

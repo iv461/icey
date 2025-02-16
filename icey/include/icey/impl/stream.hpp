@@ -120,7 +120,6 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   return stream;
 }
 
-
 /// Calls the function with the given argument arg but unpacks it if it is a tuple. 
 template <class Func, class Arg>
 inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
@@ -148,8 +147,7 @@ class Stream : private boost::noncopyable,
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;
-  using MaybeValue = std::optional<Value>;
+  using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;  
   using State = Result<Value, ErrorValue>;
 
   /// If no error is possible (ErrorValue is not Nothing), this it just the Value instead of the State to not force the user to write unnecessary error handling/unwraping code.

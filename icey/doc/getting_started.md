@@ -59,6 +59,14 @@ In this simple example we already see some interesting features: You do not need
 Also, we do not store a timer object anywhere, ICEY stores it internally so that it does not get out of scope. This holds true for classes as well: In ICEY, you do not have to store 
 subscribers/timers/publisher etc. as members of the class, ICEY does this bookkeeping for you. 
 
+## Lifecycle nodes: 
+
+ICEY supports lifecylce nodes, for this you simply need to: 
+
+```cpp
+auto lifecycle_node = icey::create_node<icey::LifecycleNode>(argc, argv, "planner_node");
+```
+
 Subscibers are Streams as well, an we also can have as many `.then`s as we want:
 
 ```cpp
