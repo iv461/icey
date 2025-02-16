@@ -99,7 +99,7 @@ struct NodeInterfaces {
 /// systems. It is implemented similarly to the tf2_ros::TransformListener. 
 /// Every time a new message is receved on /tf, it checks whether a relevant transforms (i.e. ones we subscribed) was received.
 /// It is therefore an asynchronous interface to TF, similar to the tf2_ros::AsynchBuffer. But the key difference is that 
-/// tf2_ros::AsynchBuffer can only deliver the transform once, it is therefore a promise, not a stream. 
+/// tf2_ros::AsynchBuffer can only deliver the transform once, it is therefore a [promise](https://github.com/ros2/geometry2/blob/rolling/tf2_ros/src/buffer.cpp#L179), not a stream. 
 /// We want however to receive a continous stream of transforms, like a subscriber. This class is used to implement the TransformSubscriptionStream.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
@@ -219,7 +219,7 @@ private:
 class NodeBookkeeping {
 public:
   using MaybeError = std::optional<std::string>;
-  /// The parameter validation function that allows the parameter update if no error message is returned and rejects the parameter update with the error message otherwise.
+  /// The parameter validation function that allows the parameter update if no error message is returned and put_errors the parameter update with the error message otherwise.
   using FValidate = std::function<MaybeError(const rclcpp::Parameter &)>;
   /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
   struct IceyBook {
@@ -425,12 +425,12 @@ struct crtp {
     T const& underlying() const { return static_cast<T const&>(*this); }
 };
 
-/// Implements the required interface of C++20's coroutines so that Streams can be used with co_await syntax.
+/// Implements the required interface of C++20's coroutines so that Streams can be used with co_await syntax and inside coroutines.
 template<class Derived, class ErrorValue>
 struct StreamCoroutinesSupport : public crtp<Derived> {
   /// We are a promise
   using promise_type = Derived;
-  /// We are still a promise, so we return self.
+  /// We are still a promise
   Derived get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
     return  this->underlying();
@@ -473,7 +473,7 @@ struct StreamCoroutinesSupport : public crtp<Derived> {
       std::cout << this->underlying().get_type_info() << " await_transform called to " << to_type << std::endl;
     }
     if constexpr (is_stream<ReturnType>) {
-      this->underlying().impl()->context = x.impl()->context;  /// Get the context from the input promise
+      this->underlying().impl()->context = x.impl()->context;  /// Get the context from the input stream
       return x;
     } else {
       return this->underlying().template transform_to<ReturnType, Nothing>();
@@ -529,7 +529,15 @@ struct WithDefaults : public _Derived, public StreamImplDefault {};
 template<class V>
 struct TimeoutFilter;
 
-/// An stream, basis for all other streams. Similar to a promise in JavaScript.
+/// \brief A stream, an abstraction over an asynchronous sequence of values.
+/// It contains a state that is a Result and a list of callbacks that get notifyed when this state changes. 
+/// It is conceptually very similar to a promise in JavaScript but the state transitions are not
+/// final. This is the base class for all the other streams.
+///
+/// \tparam _Value the type of the value 
+/// \tparam _ErrorValue the type of the error. It can also be an exception.
+/// \tparam Derived a class from which the implementation (impl::Stream) derives, used as an extention point.
+///
 template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
 class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived>, _ErrorValue >{
 public:
@@ -615,7 +623,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
     auto child = this->impl()->context.lock()->template create_ros_stream<T>(args...);
-    this->impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+    this->impl()->then([child](const auto &x) { child.impl()->put_value(x); });
   }
   
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
@@ -888,10 +896,10 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
         }
         _Value new_val_arr{};
         std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
-        impl->resolve(new_val_arr);
+        impl->put_value(new_val_arr);
       } else {
         _Value new_value = new_param.get_value<_Value>();
-        impl->resolve(new_value);
+        impl->put_value(new_value);
       }
     };
     node.add_parameter<_Value>(
@@ -902,7 +910,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
         this->impl()->ignore_override);
     /// Set default value if there is one
     if (this->impl()->default_value) {
-      this->impl()->resolve(*this->impl()->default_value);
+      this->impl()->put_value(*this->impl()->default_value);
     }
   }
 
@@ -930,7 +938,7 @@ struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
                      const rclcpp::SubscriptionOptions &options){
     this->impl()->name = topic_name;
     node.add_subscription<_Message>(
-        topic_name, [impl=this->impl()](typename _Message::SharedPtr new_value) { impl->resolve(new_value); },
+        topic_name, [impl=this->impl()](typename _Message::SharedPtr new_value) { impl->put_value(new_value); },
         qos, options);
   }
 };
@@ -983,9 +991,9 @@ struct TransformSubscriptionStream
         this->impl()->target_frame, this->impl()->source_frame,
         [impl=this->impl()](const geometry_msgs::msg::TransformStamped &new_value) {
           *impl->shared_value = new_value;
-          impl->resolve(impl->shared_value);
+          impl->put_value(impl->shared_value);
         },
-        [impl=this->impl()](const tf2::TransformException &ex) { impl->reject(ex.what()); });
+        [impl=this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
   }
   /// @brief Look up the transform at the given time point, does not wait but instead only return something if the transform is already in the buffer.
   /// @param time 
@@ -997,7 +1005,7 @@ struct TransformSubscriptionStream
           this->impl()->target_frame, this->impl()->source_frame, time);
       return this->impl()->shared_value;
     } catch (const tf2::TransformException &e) {
-      this->impl()->reject(e.what());
+      this->impl()->put_error(e.what());
       return {};
     }
   }
@@ -1013,7 +1021,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer){
     this->impl()->name = "timer";
     this->impl()->timer = node.add_timer(interval, [impl = this->impl(), is_one_off_timer]() {
-      impl->resolve(impl->ticks_counter);
+      impl->put_value(impl->ticks_counter);
       /// Needed as separate state as it might be resetted in async/await mode
       impl->ticks_counter++;
       if (is_one_off_timer) impl->timer->cancel();
@@ -1060,7 +1068,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
     if(maybe_input) {
       maybe_input->impl()->register_handler([impl = this->impl()](const auto &new_state) {
         if(new_state.has_value()) {
-          impl->resolve(new_state.value());
+          impl->put_value(new_state.value());
         }
       });
     }
@@ -1092,7 +1100,7 @@ struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _Service
     node.add_service<_ServiceT>(
       service_name,
       [impl=this->impl()](Request request, Response response) {
-        impl->resolve(std::make_pair(request, response));
+        impl->put_value(std::make_pair(request, response));
       },
       qos);    
   }
@@ -1134,9 +1142,9 @@ protected:
     if (!this->impl()->client->wait_for_service(this->impl()->timeout)) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
-        this->impl()->reject("INTERRUPTED");
+        this->impl()->put_error("INTERRUPTED");
       } else {
-        this->impl()->reject("SERVICE_UNAVAILABLE");
+        this->impl()->put_error("SERVICE_UNAVAILABLE");
       }
       return false;
     }
@@ -1146,7 +1154,7 @@ protected:
   void on_response(Future response_futur) const {
     if (response_futur.valid()) {
       this->impl()->maybe_pending_request = {};
-      this->impl()->resolve(response_futur.get().second);
+      this->impl()->put_value(response_futur.get().second);
     } else {
       /// The FutureReturnCode enum has SUCCESS, INTERRUPTED, TIMEOUT as possible values.
       /// Since the async_send_request waits on the executor, we cannot only interrupt it with
@@ -1154,9 +1162,9 @@ protected:
       // Reference:
       // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
-        this->impl()->reject("rclcpp::FutureReturnCode::INTERRUPTED");
+        this->impl()->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
       } else {
-        this->impl()->reject("rclcpp::FutureReturnCode::TIMEOUT");
+        this->impl()->put_error("rclcpp::FutureReturnCode::TIMEOUT");
       }
       /// Now do the weird cleanup thing that the API-user definitely neither does need to care
       /// nor know about:
@@ -1199,10 +1207,10 @@ struct TimeoutFilter
       rclcpp::Time time_now = node_clock->get_clock()->now();
       rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
       if ((time_now - time_message) <= max_age_ros) {
-        impl->resolve(message);
+        impl->put_value(message);
         return false;
       } else {
-        impl->reject(std::make_tuple(time_now, time_message, max_age_ros));
+        impl->put_error(std::make_tuple(time_now, time_message, max_age_ros));
         return true;
       }
     };
@@ -1281,7 +1289,7 @@ public:
 
 private:
   void on_messages(typename Messages::SharedPtr... msgs) {
-    this->impl()->resolve(std::forward_as_tuple(msgs...));
+    this->impl()->put_value(std::forward_as_tuple(msgs...));
   }
 };
 
@@ -1305,7 +1313,7 @@ struct TF2MessageFilter
         node.node_.get_node_logging_interface(), node.node_.get_node_clock_interface());
     this->impl()->filter->registerCallback(&Self::on_message, this);
   }
-  void on_message(const typename _Message::SharedPtr &msg) { this->impl()->resolve(msg); }
+  void on_message(const typename _Message::SharedPtr &msg) { this->impl()->put_value(msg); }
 };
 
 /// The context owns the streams and is what is returned when calling `node->icey()` (NodeWithIceyContext::icey).
@@ -1447,7 +1455,7 @@ public:
   template <IsStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
     auto child = create_ros_stream<TransformPublisherStream>();
-    input.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+    input.impl()->then([child](const auto &x) { child.impl()->put_value(x); });
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
@@ -1477,7 +1485,7 @@ public:
     input.then([service_client](auto req) { service_client.call(req); });
     /// Pass the error since service calls are chainable
     if constexpr (not std::is_same_v<ErrorOf<Input>, Nothing>) {
-      input.except([service_client](auto err) { service_client.impl()->reject(err); });
+      input.except([service_client](auto err) { service_client.impl()->put_error(err); });
     }
     return service_client;
   }
@@ -1520,7 +1528,7 @@ public:
     hana::for_each(zipped, [](auto &input_output_tuple) {
       auto &input = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];
-      input.then([synchronizer_input](const auto &x) { synchronizer_input->impl()->resolve(x); });
+      input.then([synchronizer_input](const auto &x) { synchronizer_input->impl()->put_value(x); });
     });
     return synchronizer;
   }
@@ -1571,7 +1579,7 @@ public:
     \warning Errors are currently not passed through
   */
   template <IsStream... Inputs>
-  auto any(Inputs... inputs) {
+  auto any(Inputs... inputs) {  
     // assert_all_stream_values_are_same<Inputs...>();
     using Input = decltype(std::get<0>(std::forward_as_tuple(inputs...)));
     using InputValue = typename std::remove_reference_t<Input>::Value;
@@ -1579,7 +1587,7 @@ public:
     auto child = create_stream<Stream<InputValue>>();
     /// Now connect each input with the child with the identity function
     hana::for_each(std::forward_as_tuple(inputs...), [child](auto &input) {
-      input.then([child](const auto &x) { child.impl()->resolve(x); });
+      input.then([child](const auto &x) { child.impl()->put_value(x); });
     });
     return child;
   }
@@ -1589,7 +1597,7 @@ public:
   template <IsStream Input>
   TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
     auto child = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
-    input.then([child](const auto &x) { child.impl()->resolve(x); });
+    input.then([child](const auto &x) { child.impl()->put_value(x); });
     return child;
   }
 

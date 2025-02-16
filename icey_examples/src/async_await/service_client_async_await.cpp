@@ -1,5 +1,5 @@
 /// This example shows how by using async/await we achieve a synchronously-looking service call.
-/// Under the hood, everything is asynchronous, we actually call async_send_request, but promises
+/// Under the hood, everything is asynchronous, we actually call async_send_request, but Streams
 /// combined with await-syntax make the code look synchronous and easier to see what is going on.
 #include <icey/icey.hpp>
 

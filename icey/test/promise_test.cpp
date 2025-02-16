@@ -1,6 +1,7 @@
 /// This test tests whether the Streams behave like promises in JavaScript, especially
 /// regarding catch-handlers executed correctly (fall-through behavior).
-/// Note that for our use-case, we need only resolving with values, not with other promises
+/// Note that for our use-case, we need only resolving with values, not with other promises.
+/// In the following, "put_value" corresponds to "resolve" and "put_error" corresponds to "reject" of a stream.
 #include <gtest/gtest.h>
 
 #include <icey/impl/stream.hpp>
@@ -26,8 +27,8 @@ protected:
 
   using ResolveValue = std::string;
   using ErrorValue = std::string;
-  using Obs = icey::impl::Stream<ResolveValue, ErrorValue, icey::Nothing, icey::Nothing>;
-  std::shared_ptr<Obs> promise{icey::impl::create_stream<Obs>()};
+  using Stream = icey::impl::Stream<ResolveValue, ErrorValue, icey::Nothing, icey::Nothing>;
+  std::shared_ptr<Stream> stream{icey::impl::create_stream<Stream>()};
 
   std::vector<size_t> events;
 };
@@ -35,28 +36,28 @@ protected:
 /// Smoke, tests correct chaining and skipping of except-handler in case of no exception, including
 /// skipping everything after the except-handler
 TEST_F(PromiseTest, Smoke) {
-  promise->then(marker<Some>(1))
+  stream->then(marker<Some>(1))
       ->then(marker<Some>(2))
       ->then(marker<Some>(3))
       ->except(marker<Some>(4))
       ->then(marker<Some>(5));
 
   EXPECT_TRUE(events.empty());  /// Negative test
-  promise->resolve("hello");
+  stream->put_value("hello");
 
   std::vector<size_t> target_order1{1, 2, 3};
 
   EXPECT_EQ(target_order1, events);
   events.clear();
 
-  promise->reject("BigExcEptiOn");
+  stream->put_error("BigExcEptiOn");
   std::vector<size_t> target_order2{4, 5};
   EXPECT_EQ(target_order2, events);
 }
 
 /// Test error from then-handler and no return from except handler
 TEST_F(PromiseTest, VoidCatch) {
-  promise->then(marker<Some>(1))
+  stream->then(marker<Some>(1))
       ->then(marker<Err>(2))
       ->then(marker<Some>(3))
       ->except(marker<None>(4))
@@ -64,19 +65,19 @@ TEST_F(PromiseTest, VoidCatch) {
 
   EXPECT_TRUE(events.empty());
 
-  promise->resolve("hello2");
+  stream->put_value("hello2");
   std::vector<size_t> target_order{1, 2, 4};
   EXPECT_EQ(target_order, events);
 
   events.clear();
-  promise->reject("BigExcEptiOn");
+  stream->put_error("BigExcEptiOn");
   target_order = {4};
   EXPECT_EQ(target_order, events);
 }
 
 /// Test that .then() can error
 TEST_F(PromiseTest, ThenErroring) {
-  promise->then(marker<Err>(1))
+  stream->then(marker<Err>(1))
       ->then(marker<Err>(2))
       ->then(marker<Some>(3))
       ->except(marker<Err>(4))
@@ -86,14 +87,14 @@ TEST_F(PromiseTest, ThenErroring) {
 
   EXPECT_TRUE(events.empty());
 
-  promise->resolve("GoodVal");
+  stream->put_value("GoodVal");
   std::vector<size_t> target_order{1, 4, 5};
   EXPECT_EQ(target_order, events);
 }
 
 /// Test whether a .then() handler that returns void still propagates correctly errors
 TEST_F(PromiseTest, VoidThenPropagating) {
-  promise->then(marker<Some>(1))
+  stream->then(marker<Some>(1))
       ->then(marker<Some>(2))
       ->then(marker<Err>(3))
       ->then(marker<None>(4))
@@ -102,12 +103,12 @@ TEST_F(PromiseTest, VoidThenPropagating) {
 
   EXPECT_TRUE(events.empty());
 
-  promise->resolve("GoodVal");
+  stream->put_value("GoodVal");
   std::vector<size_t> target_order{1, 2, 3, 5, 6};
   EXPECT_EQ(target_order, events);
 
   events.clear();
-  promise->reject("BigExcEptiOn3");
+  stream->put_error("BigExcEptiOn3");
   target_order = {5, 6};
   EXPECT_EQ(target_order, events);
 }

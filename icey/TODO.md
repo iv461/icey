@@ -34,8 +34,6 @@ Sorted by decreasing priority.
 
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 
-- [ ] Consider renaming resolve to put_value and reject to put_error. A new method that gets state and sets it to none afterwards can be called "take"
-
 ## Error-handling
 
 ## Examples 
@@ -242,6 +240,7 @@ Sorted by decreasing priority.
 - [X] API cleanup: Rename "obs_msg", "obs_val" etc to smth more meaningful 
 - [X] Rename parent to input
 
+- [X] Consider renaming resolve to put_value and reject to put_error. A new method that gets state and sets it to none afterwards can be called "take"
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository

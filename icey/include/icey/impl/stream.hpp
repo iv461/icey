@@ -180,8 +180,6 @@ public:
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the
       // error unhandled.
       if (this->has_error() && handlers_.empty()) {
-        // std::cout << "Unhandled promise rejection with an ErrorValue  that is an exception,
-        // re-throwing .." << std::endl;
         throw this->error();
       }
     }
@@ -191,13 +189,13 @@ public:
   }
 
   /// Sets the state to a value and notifies.
-  void resolve(const MaybeValue &x) {
+  void put_value(const MaybeValue &x) {
     this->set_value(x);
     this->notify();
   }
 
   /// Sets the state to an error and notifies.
-  void reject(const ErrorValue &x) {
+  void put_error(const ErrorValue &x) {
     this->set_error(x);
     this->notify();
   }
@@ -230,59 +228,59 @@ protected:
         /// support callbacks that at runtime may return value or error
         output->state_ = unpack_if_tuple(f, x);
         output->notify();
-      } else {  /// Other return types are interpreted as values that resolve the promise. Here, we
+      } else {  /// Other return types are interpreted as values that are put into the stream. Here, we
                 /// also support returning std::optional.
         ReturnType ret = unpack_if_tuple(f, x);
-        output->resolve(ret);
+        output->put_value(ret);
       }
     };
   }
 
-  /// @brief This function creates a handler for the promise and returns it as a function object.
+  /// @brief This function creates a handler for the Steam and returns it as a function object.
   /// It' behvarior closely matches promises in JavaScript.
   /// It is basis for implementing the .then() function but it does two things differently:
-  /// First, it does not create the new promise, it receives an already created "output" promise.
+  /// First, it does not create the new Strean, it receives an already created "output"-Stream.
   /// Second, we can only register a "onResolve"- or an "onReject"-handler, not both. But
   /// "onResolve" is already implemented such that implicitly the "onReject"-handler passes over the
   /// error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.
-  /// @param this (implicit): Stream<V, E>* The input promise
-  /// @param output: SharedPtr< Stream<V2, E> > or derived, the resulting promise
-  /// @param f:  (V) -> V2 The user callback function to call when the input promises resolves or
-  /// rejects
-  template <bool resolve, class Output, class F>
+  /// @param this (implicit): Stream<V, E>* The input
+  /// @param output: SharedPtr< Stream<V2, E> >, the ouput Stream where the result is written in
+  /// @param f:  (V) -> V2 The user callback function to call when the input Stream receives a value or
+  /// an error
+  template <bool put_value, class Output, class F>
   void create_handler(Output output, F &&f) {
-    auto handler = [output, call_and_resolve =
+    auto handler = [output, call_and_put_value =
                         std::move(call_depending_on_signature(output, f))](const State &state) {
-      if constexpr (resolve) {  /// If we handle values with .then()
+      if constexpr (put_value) {  /// If we handle values with .then()
         if (state.has_value()) {
-          call_and_resolve(state.value());
+          call_and_put_value(state.value());
         } else if (state.has_error()) {
-          output->reject(state.error());  /// Do not execute f, but propagate the error
+          output->put_error(state.error());  /// Do not execute f, but propagate the error
         }
       } else {                     /// if we handle errors with .except()
-        if (state.has_error()) {  /// Then only resolve with the error if there is one
-          call_and_resolve(state.error());
+        if (state.has_error()) {  /// Then only put_value with the error if there is one
+          call_and_put_value(state.error());
         }  /// Else do nothing
       }
     };
     this->register_handler(handler);
   }
 
-  /// Common function for both .then and .except. The template argument "resolve" says whether f is
-  /// the resolve or the reject handler (Unlike JS, we can only register one at the time, this is
+  /// Common function for both .then and .except. The template argument "put_value" says whether f is
+  /// the put_value or the put_error handler (Unlike JS, we can only register one at the time, this is
   /// for better code generation)
-  template <bool resolve, typename F>
+  template <bool put_value, typename F>
   auto done(F &&f) {
-    /// Return type depending of if the it is called when the Promise resolves or rejects
-    using FunctionArgument = std::conditional_t<resolve, Value, ErrorValue>;
-    /// Only if we resolve we pass over the error. except does not pass the error, only the handler may create a new error
-    using NewError = std::conditional_t<resolve, ErrorValue, Nothing>;
+    /// Return type depending of if the it is called when the Promise put_values or put_errors
+    using FunctionArgument = std::conditional_t<put_value, Value, ErrorValue>;
+    /// Only if we put_value we pass over the error. except does not pass the error, only the handler may create a new error
+    using NewError = std::conditional_t<put_value, ErrorValue, Nothing>;
     using ReturnType = decltype(unpack_if_tuple(f, std::declval<FunctionArgument>()));
-    /// Now we want to call resolve only if it is not none, so strip optional
+    /// Now we want to call put_value only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
       auto child = create_stream<Stream<Nothing, NewError, DefaultDerived, DefaultDerived>>();
-      create_handler<resolve>(child, std::forward<F>(f));
+      create_handler<put_value>(child, std::forward<F>(f));
       return child;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
@@ -290,14 +288,14 @@ protected:
           create_stream<Stream<typename ReturnType::Value,
                                    typename ReturnType::ErrorValue, 
                                    DefaultDerived, DefaultDerived>>();  // Must pass over error
-      create_handler<resolve>(child, std::forward<F>(f));
+      create_handler<put_value>(child, std::forward<F>(f));
       return child;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
       auto child = create_stream<Stream<ReturnTypeSome, NewError,
                                 DefaultDerived, DefaultDerived>>();
-      create_handler<resolve>(child, std::forward<F>(f));
+      create_handler<put_value>(child, std::forward<F>(f));
       return child;
     }
   }

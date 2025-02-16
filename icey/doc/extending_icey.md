@@ -73,15 +73,15 @@ We now created the subscriber as we normally would in ROS.
 ### Setting the value of the Stream
 
 We now make the Stream do something by implementing the subscriber callback to set the value.
-The stream stores a promise that we first get with `get_promise` and then `resolve` it with the message inside the callback:
+The stream stores a pointer to the actual implementation, the `impl::Stream` that we first get with `impl()` and then call `put_value` inside the callback on it with the message:
 ```cpp
 class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
 public:
     ImageTransportSubscriber(const std::string &topic_name, std::string &transport,  rclcpp::QoS qos) {  
-        auto promise = this->get_promise(); /// Get the promise holding the value
-        /// Now implement the callabck to resolve with the message:
-        auto subscriber_callback = [promise](sensor_msgs::Image::ConstSharedPtr message) {
-            promise->resolve(message);
+        auto stream_impl = this->impl(); /// Get the stream implementation
+        /// Now implement the callabck to put_value with the message:
+        auto subscriber_callback = [stream_impl](sensor_msgs::Image::ConstSharedPtr message) {
+            stream_impl->put_value(message);
         };
 
         this->attach_ = [this, topic_name, transport, qos](icey::NodeBookkeeping &node) {
@@ -112,8 +112,7 @@ Creating a custom publisher is very similar to the subscriber, but this time we 
 class ImageTransportPublisher : icey::Stream< sensor_msgs::Image::SharedPtr > {
 public:
     ImageTransportPublisher(const std::string &topic_name, rclcpp::QoS qos) {  
-        auto promise = this->get_promise(); /// Get the promise holding the value
-        this->attach_ = [this, topic_name, qos](icey::NodeBookkeeping &node) {
+        this->attach_ = [impl = this->impl(), topic_name, qos](icey::NodeBookkeeping &node) {
             /// Create the publisher
             auto publisher = image_transport::create_publisher(node, qos);
         };
@@ -121,19 +120,17 @@ public:
 };
 ```
 
-This time however, we listen to changes of the Stream by calling `register_handler` on the promise and publish the message: 
+This time however, we listen to changes of the Stream by calling `register_handler` and publish the message: 
 
 ```cpp
 class ImageTransportPublisher : icey::Stream< sensor_msgs::Image::SharedPtr > {
 public:
     ImageTransportPublisher(const std::string &topic_name, rclcpp::QoS qos) {  
-        auto promise = this->get_promise(); /// Get the promise holding the value
-        this->attach_ = [promise, topic_name, qos](icey::NodeBookkeeping &node) {
+        this->attach_ = [impl = this->impl(), topic_name, qos](icey::NodeBookkeeping &node) {
             /// Create the publisher
             auto publisher = image_transport::create_publisher(node, qos);
-
-            promise->register_handler([publisher](const auto &new_state) {
-                publisher.publish(promise.value());
+            impl->register_handler([publisher](const auto &new_state) {
+                publisher.publish(new_state.value());
             })
         };
     }

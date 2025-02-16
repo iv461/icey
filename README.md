@@ -94,7 +94,7 @@ struct NodeParameters {
 - Automatic synchronization, unifying usage of TF as a form of synchronization
 - Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
 - Extensible: [We demonstrate](icey/doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
-- Easy asynchronous programming using promises, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html)
+- Easy asynchronous programming using Stream, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html)
 
 - Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types instead of C++-exceptions
 
@@ -102,7 +102,7 @@ struct NodeParameters {
 
 TODO summarize 
 
-The promises implemented are generally very fast, they have a small (non-zero), but in practice neglible overhead compared to plain callbacks. 
+The Streams implemented are generally very fast, they have a small (non-zero), but in practice neglible overhead compared to plain callbacks. 
 To demonstrate this, we translated a typical node from the Autoware project with multiple subscribers/publishers and measured the performance with perf. 
 The evaluation showed an overall latency increase of only X.X % and no significant increase of the latency variance (jitter). 
 See the [Evaluation]-section for more details. 

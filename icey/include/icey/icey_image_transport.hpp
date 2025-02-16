@@ -41,14 +41,14 @@ struct ImageTransportSubscriber
                 /// lifecycle nodes, so we can only assert this at runtime
     this->impl()->name = base_topic_name;
     const auto cb = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
-      impl->resolve(image);
+      impl->put_value(image);
     };
     try {
       this->impl()->subscriber =
           image_transport::create_subscription(node.node_.maybe_regular_node, base_topic_name, cb,
                                                transport, qos.get_rmw_qos_profile(), options);
     } catch (const image_transport::TransportLoadException &exception) {
-      this->impl()->reject(exception);
+      this->impl()->put_error(exception);
     }
   }
 };
@@ -85,7 +85,7 @@ struct CameraSubscriber
     const auto cb = [impl = this->impl()](
                         sensor_msgs::msg::Image::ConstSharedPtr image,
                         sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
-      impl->resolve(std::make_tuple(image, camera_info));
+      impl->put_value(std::make_tuple(image, camera_info));
     };
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
@@ -94,7 +94,7 @@ struct CameraSubscriber
       this->impl()->subscriber = image_transport::create_camera_subscription(
           node.node_.maybe_regular_node, base_topic_name, cb, transport, qos.get_rmw_qos_profile());
     } catch (const image_transport::TransportLoadException &exception) {
-      this->impl()->reject(exception);
+      this->impl()->put_error(exception);
     }
   }
 };

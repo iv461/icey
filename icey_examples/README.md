@@ -4,7 +4,7 @@ ROS Package that shows how to consume the ICEY library.
 
 We demonstrate how to: 
 
-- Write simple publisher/subscribers with promises, chaining then
+- Write simple publisher/subscribers, demonstrating Streams
 - Using C++20 coroutines to achieve synchronous-looking, async/await-style code 
 - Automatic synchronization between multiple topics 
 - Subscribing single transforms and looking them transforms by synchronizing with other topics 
