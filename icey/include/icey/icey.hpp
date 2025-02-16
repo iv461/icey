@@ -550,17 +550,6 @@ public:
   /// The actual implementation of the Stream.
   using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaults<Nothing> >;
 
-  void assert_we_have_context() {
-    if (!this->impl()->context.lock())
-      throw std::runtime_error("This stream does not have context");
-  }
-
-  template<class NewValue, class NewError>
-  auto transform_to() const {
-    Stream<NewValue, NewError> new_stream;
-    new_stream.impl()->context = this->impl()->context;
-    return new_stream;
-  }
 
   /// Returns the undelying pointer to the implementation. 
   const std::shared_ptr<Impl> &impl() const { return impl_; }
@@ -691,7 +680,20 @@ public:
                         [](const auto &...args) { return std::make_tuple(args...); });
   }
 
-protected:
+  
+  protected:
+  void assert_we_have_context() {
+    if (!this->impl()->context.lock())
+      throw std::runtime_error("This stream does not have context");
+  }
+  
+  template<class NewValue, class NewError>
+  Stream<NewValue, NewError> transform_to() const {
+    Stream<NewValue, NewError> new_stream;
+    new_stream.impl()->context = this->impl()->context;
+    return new_stream;
+  }
+
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
   /// (this is only needed for impl::Stream::done, which creates a new stream that always has Derived stripped off, i.e. set to Nothing.)
