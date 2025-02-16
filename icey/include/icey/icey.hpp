@@ -848,6 +848,7 @@ struct ParameterStreamImpl {
 /// An stream for ROS parameters.
 template <typename _Value>
 struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Value> > {
+  using Value = _Value;
   static_assert(is_valid_ros_param_type<_Value>::value, "Type is not an allowed ROS parameter type");
 
   /// @brief A constructor that should only be used for parameter structs. It does not set the name of the parameter and therefore leaves this ParameterStream in a not fully initialized state. 
@@ -857,8 +858,8 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   /// @param description the description written in the ParameterDescriptor
   /// @param read_only if yes, the parameter cannot be modified
   /// @param ignore_override 
-  ParameterStream(const std::optional<_Value> &default_value,
-                  const Validator<_Value> &validator = Validator<_Value>(),
+  ParameterStream(const std::optional<Value> &default_value,
+                  const Validator<Value> &validator = {},
                         std::string description = "", bool read_only = false,
                   bool ignore_override = false) {
       this->impl()->default_value = default_value;
@@ -876,8 +877,8 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   /// @param description 
   /// @param read_only if yes, the parameter cannot be modified
   /// @param ignore_override 
-  ParameterStream(NodeBookkeeping &node, const std::string &parameter_name, const std::optional<_Value> &default_value,
-                  const Validator<_Value> &validator = Validator<_Value>(),
+  ParameterStream(NodeBookkeeping &node, const std::string &parameter_name, const std::optional<Value> &default_value,
+                  const Validator<Value> &validator = {},
                         std::string description = "", bool read_only = false,
                   bool ignore_override = false) : ParameterStream(default_value, validator, description, 
                     read_only, ignore_override) {
@@ -888,21 +889,21 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   /// Register this paremeter with the ROS node, meaning it actually calls node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
     const auto on_change_cb = [impl=this->impl()](const rclcpp::Parameter &new_param) {
-      if constexpr (is_std_array<_Value>) {
-        using Scalar = typename _Value::value_type;
+      if constexpr (is_std_array<Value>) {
+        using Scalar = typename Value::value_type;
         auto new_value = new_param.get_value<std::vector<Scalar>>();
-        if (std::declval<_Value>().max_size() != new_value.size()) {
+        if (std::declval<Value>().max_size() != new_value.size()) {
           throw std::invalid_argument("Wrong size of array parameter");
         }
-        _Value new_val_arr{};
+        Value new_val_arr{};
         std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
         impl->put_value(new_val_arr);
       } else {
-        _Value new_value = new_param.get_value<_Value>();
+        Value new_value = new_param.get_value<_Value>();
         impl->put_value(new_value);
       }
     };
-    node.add_parameter<_Value>(
+    node.add_parameter<Value>(
         this->impl()->parameter_name, this->impl()->default_value,
         on_change_cb,
         this->impl()->create_descriptor(), 
@@ -915,7 +916,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   }
 
   /// Get the value. Parameters are initialized always at the beginning, so they always have a value.
-  const _Value &value() const {
+  const Value &value() const {
     if (!this->impl()->has_value()) {
       throw std::runtime_error(
           "Parameter '" + this->impl()->name + "' does not have a value");
@@ -924,7 +925,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   }
 
   /// Allow implicit conversion to the stored value type for consistent API between constrained and non-constrained parameters when using the parameter structs.
-  operator _Value() const  // NOLINT
+  operator Value() const  // NOLINT
   {
     return this->value();
   }
@@ -1354,7 +1355,7 @@ public:
 
   /*!
   \brief Declare a given parameter struct to ROS.
-  \tparam T the type of the Parameter struct. It is a struct with fields of either a primitive type supported by ROS (e.g. `double`) or a `icey::ParameterStream`, or another (nested) struct with more such fields.
+  \tparam ParameterStruct the type of the parameter struct. It must be a struct/class with fields of either a primitive type supported by ROS (e.g. `double`) or a `icey::ParameterStream`, or another (nested) struct with more such fields.
 
   \param params The instance of the parameter struct where the values will be written to.
   \param notify_callback The callback that gets called when any field changes
@@ -1391,8 +1392,8 @@ public:
         });
   \endverbatim
   */
-  template <class T>
-  void declare_parameter_struct(T &params, const std::function<void(const std::string &)> &notify_callback,
+  template <class ParameterStruct>
+  void declare_parameter_struct(ParameterStruct &params, const std::function<void(const std::string &)> &notify_callback,
       std::string name_prefix = "") {
     
     field_reflection::for_each_field(params, [this, notify_callback, name_prefix](
