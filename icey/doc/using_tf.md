@@ -47,19 +47,21 @@ These patterns are found everywhere in the Nav2 stack for example when searching
 ## How TF works in ICEY
 
 
-In ICEY, you subscribe to a transform between two frames and use this as a signal:
+In ICEY, you subscribe to a transform between two frames which yields a Stream:
 
 ```cpp
 auto map_base_link_tf = node->icey().create_transform_subscription("map", "base_link");
-auto result = map_base_link_tf.then([](const geometry_msgs::msg::TransformStamped &new_transform) {
+
+auto theta_angle = map_base_link_tf
+    .then([&](const geometry_msgs::msg::TransformStamped &new_transform) {
         std_msgs::msg::Float32 out_msg;
-        auto cos_theta_half = new_transform.transform.rotation.z;
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Received a new transform, cos_theta_half was: " << cos_theta_half);
-        return out_msg;
-    }
-    );    
+        const double cos_theta_half = new_transform.transform.rotation.z;
+        const double theta = std::acos(2. * cos_theta_half)
+        RCLCPP_INFO_STREAM(node->get_logger(), "Received a new transform, orientation angle theta was: " << cos_theta_half);
+        return theta;
+    });
     
-result.publish("new_velocity");
+theta_angle.publish("theta_angle");
 ```
 
 But how do we interpolate the transforms in the buffer to get the transform for a given time ? 
