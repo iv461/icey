@@ -405,14 +405,14 @@ concept IsStream = std::is_base_of_v<StreamTag, T>;
 
 template <class T>
 constexpr void assert_stream_holds_tuple() {
-  static_assert(is_tuple_v<obs_msg<T>>, "The Stream must hold a tuple as a value for unpacking.");
+  static_assert(is_tuple_v<MessageOf<T>>, "The Stream must hold a tuple as a value for unpacking.");
 }
 
 // Assert that all Streams types hold the same value
 template <IsStream First, IsStream... Rest>
 constexpr void assert_all_stream_values_are_same() {
   // Static assert that each T::Value is the same as First::Value
-  static_assert((std::is_same_v<obs_msg<First>, obs_msg<Rest>> && ...),
+  static_assert((std::is_same_v<MessageOf<First>, MessageOf<Rest>> && ...),
                 "The values of all the streams must be the same");
 }
 
@@ -667,7 +667,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, there is nothing to unpack().");
     static_assert(is_tuple_v<Value>, "The Value must be a tuple for .unpack()");
-    constexpr size_t tuple_sz = std::tuple_size_v<obs_val<Self>>;
+    constexpr size_t tuple_sz = std::tuple_size_v<ValueOf<Self>>;
     /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see
     /// https://stackoverflow.com/a/33181700
     constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, tuple_sz>);
@@ -1048,17 +1048,17 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  template<class Parent = Stream<_Value, Nothing> >
+  template<class Input = Stream<_Value, Nothing> >
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                     const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
-                      Parent *maybe_parent=nullptr) {
+                      Input *maybe_input=nullptr) {
     this->impl()->name = topic_name;
     this->impl()->publisher = node.add_publisher<Message>(topic_name, qos);
     this->impl()->register_handler([impl=this->impl()](const auto &new_state) {
       impl->publish(new_state.value());
     });
-    if(maybe_parent) {
-      maybe_parent->impl()->register_handler([impl = this->impl()](const auto &new_state) {
+    if(maybe_input) {
+      maybe_input->impl()->register_handler([impl = this->impl()](const auto &new_state) {
         if(new_state.has_value()) {
           impl->resolve(new_state.value());
         }
@@ -1180,15 +1180,15 @@ protected:
 template <typename _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
-  /// Construct the filter an connect it to the parent. 
-  /// \tparam Parent another Stream that holds as a value a ROS message with a header stamp
+  /// Construct the filter an connect it to the input. 
+  /// \tparam Input another Stream that holds as a value a ROS message with a header stamp
   /// \param node the node is needed to know the current time 
-  /// \param parent another Stream which is the input to this filter 
+  /// \param input another Stream which is the input to this filter 
   /// \param max_age a maximum age the message is allowed to have. 
   /// \param create_extra_timer If set to false, a timeout error will only occur if at least one message is received. 
   /// Otherwise, an extra timer is created so that the timeout can be detected even if no message is received.
-  template<class Parent>
-  explicit TimeoutFilter(NodeBookkeeping &node, Parent parent, 
+  template<class Input>
+  explicit TimeoutFilter(NodeBookkeeping &node, Input input, 
     const Duration &max_age, bool create_extra_timer = true) {    
     auto node_clock = node.node_.get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
@@ -1207,14 +1207,14 @@ struct TimeoutFilter
       }
     };
     if(create_extra_timer) {
-      auto timer = parent.impl()->context.lock()->create_timer(max_age);
-      timer.then([timer, parent_impl = parent.impl(), check_state](size_t ticks) {
-          bool timeout_occured = check_state(parent_impl->get_state());
+      auto timer = input.impl()->context.lock()->create_timer(max_age);
+      timer.then([timer, input_impl = input.impl(), check_state](size_t ticks) {
+          bool timeout_occured = check_state(input_impl->get_state());
           if(!timeout_occured)
             timer.impl()->timer->reset();
       });
     } else {
-      parent.impl()->register_handler(check_state);
+      input.impl()->register_handler(check_state);
     }
 
   }
@@ -1437,17 +1437,17 @@ public:
     return create_ros_stream<PublisherStream<Message>>(topic_name, qos);
   }
 
-  template <IsStream Parent>
-  PublisherStream<obs_val<Parent>> create_publisher(Parent parent, const std::string &topic_name,
+  template <IsStream Input>
+  PublisherStream<ValueOf<Input>> create_publisher(Input input, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
-    using Message = obs_val<Parent>;
-    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, &parent);
+    using Message = ValueOf<Input>;
+    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, &input);
   }
 
-  template <IsStream Parent>
-  TransformPublisherStream create_transform_publisher(Parent parent) {
+  template <IsStream Input>
+  TransformPublisherStream create_transform_publisher(Input input) {
     auto child = create_ros_stream<TransformPublisherStream>();
-    parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
+    input.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
@@ -1467,17 +1467,17 @@ public:
     return create_ros_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
-  /// Add a service client and connect it to the parent
-  template <typename ServiceT, IsStream Parent>
-  ServiceClient<ServiceT> create_client(Parent parent, const std::string &service_name, const Duration &timeout,
+  /// Add a service client and connect it to the input
+  template <typename ServiceT, IsStream Input>
+  ServiceClient<ServiceT> create_client(Input input, const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
-                  "The parent triggering the service must hold a value of type Request::SharedPtr");
+    static_assert(std::is_same_v<ValueOf<Input>, typename ServiceT::Request::SharedPtr>,
+                  "The input triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_client<ServiceT>(service_name, timeout, qos);
-    parent.then([service_client](auto req) { service_client.call(req); });
+    input.then([service_client](auto req) { service_client.call(req); });
     /// Pass the error since service calls are chainable
-    if constexpr (not std::is_same_v<obs_err<Parent>, Nothing>) {
-      parent.except([service_client](auto err) { service_client.impl()->reject(err); });
+    if constexpr (not std::is_same_v<ErrorOf<Input>, Nothing>) {
+      input.except([service_client](auto err) { service_client.impl()->reject(err); });
     }
     return service_client;
   }
@@ -1489,38 +1489,38 @@ public:
   template <IsStream Reference, IsStream... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
     using namespace message_filters::message_traits;
-    using RefMsg = obs_msg<Reference>;
+    using RefMsg = MessageOf<Reference>;
     static_assert(HasHeader<RefMsg>::value,
                   "The ROS message type must have a header with the timestamp to be synchronized");
     auto interpolatables_tuple = std::make_tuple(interpolatables...);
     /// TOOD somehow does not work
-    // auto all_are_interpolatables = hana::all_of(parents_tuple,  [](auto t) { return
+    // auto all_are_interpolatables = hana::all_of(inputs_tuple,  [](auto t) { return
     // hana_is_interpolatable(t); }); static_assert(all_are_interpolatables, "All inputs must be
     // interpolatable when using the sync_with_reference");
     return reference.then([interpolatables_tuple](const auto &new_value) {
-      auto parent_maybe_values = hana::transform(interpolatables_tuple, [&](auto parent) {
-        return parent.get_at_time(rclcpp::Time(new_value->header.stamp));
+      auto input_maybe_values = hana::transform(interpolatables_tuple, [&](auto input) {
+        return input.get_at_time(rclcpp::Time(new_value->header.stamp));
       });
-      return hana::prepend(parent_maybe_values, new_value);
+      return hana::prepend(input_maybe_values, new_value);
     });
   }
 
   /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
   /// approximately
-  /// \tparam Parents the input stream types, not necessarily all the same
-  /// \param parents the input streams, not necessarily all of the same type
+  /// \tparam Inputs the input stream types, not necessarily all the same
+  /// \param inputs the input streams, not necessarily all of the same type
   /// \warning Errors are currently not passed through
-  template <IsStream... Parents>
-  SynchronizerStream<obs_msg<Parents>...> synchronize_approx_time(Parents... parents) {
-    static_assert(sizeof...(Parents) >= 2, "You need to synchronize at least two inputs.");
+  template <IsStream... Inputs>
+  SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(Inputs... inputs) {
+    static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
-    auto synchronizer = create_stream<SynchronizerStream<obs_msg<Parents>...>>(queue_size);
-    auto zipped = hana::zip(std::forward_as_tuple(parents...), synchronizer.impl()->inputs());
+    auto synchronizer = create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size);
+    auto zipped = hana::zip(std::forward_as_tuple(inputs...), synchronizer.impl()->inputs());
     hana::for_each(zipped, [](auto &input_output_tuple) {
-      auto &parent = input_output_tuple[0_c];
+      auto &input = input_output_tuple[0_c];
       auto &synchronizer_input = input_output_tuple[1_c];
-      parent.then([synchronizer_input](const auto &x) { synchronizer_input->impl()->resolve(x); });
+      input.then([synchronizer_input](const auto &x) { synchronizer_input->impl()->resolve(x); });
     });
     return synchronizer;
   }
@@ -1528,15 +1528,15 @@ public:
   /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
-  template <typename... Parents>
-  auto synchronize(Parents... parents) {
-    static_assert(sizeof...(Parents) >= 2,
+  template <typename... Inputs>
+  auto synchronize(Inputs... inputs) {
+    static_assert(sizeof...(Inputs) >= 2,
                   "You need to have at least two inputs for synchronization.");
-    auto parents_tuple = std::make_tuple(parents...);
+    auto inputs_tuple = std::make_tuple(inputs...);
     auto interpolatables =
-        hana::remove_if(parents_tuple, [](auto t) { return not hana_is_interpolatable(t); });
+        hana::remove_if(inputs_tuple, [](auto t) { return not hana_is_interpolatable(t); });
     auto non_interpolatables =
-        hana::remove_if(parents_tuple, [](auto t) { return hana_is_interpolatable(t); });
+        hana::remove_if(inputs_tuple, [](auto t) { return hana_is_interpolatable(t); });
     constexpr int num_interpolatables = hana::length(interpolatables);
     constexpr int num_non_interpolatables = hana::length(non_interpolatables);
     static_assert(num_interpolatables <= 0 || num_non_interpolatables != 0,
@@ -1548,8 +1548,8 @@ public:
     // two entities. Given the condition above, the statement follows.
     if constexpr (num_non_interpolatables > 1) {
       /// We need the ApproxTime
-      auto approx_time_output = hana::unpack(non_interpolatables, [](auto... parents) {
-        return synchronize_approx_time(parents...);
+      auto approx_time_output = hana::unpack(non_interpolatables, [](auto... inputs) {
+        return synchronize_approx_time(inputs...);
       });
       if constexpr (num_interpolatables > 1) {
         /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
@@ -1570,26 +1570,26 @@ public:
     Outputs the Value of any of the inputs.
     \warning Errors are currently not passed through
   */
-  template <IsStream... Parents>
-  auto any(Parents... parents) {
-    // assert_all_stream_values_are_same<Parents...>();
-    using Parent = decltype(std::get<0>(std::forward_as_tuple(parents...)));
-    using ParentValue = typename std::remove_reference_t<Parent>::Value;
+  template <IsStream... Inputs>
+  auto any(Inputs... inputs) {
+    // assert_all_stream_values_are_same<Inputs...>();
+    using Input = decltype(std::get<0>(std::forward_as_tuple(inputs...)));
+    using InputValue = typename std::remove_reference_t<Input>::Value;
     /// First, create a new stream
-    auto child = create_stream<Stream<ParentValue>>();
-    /// Now connect each parent with the child with the identity function
-    hana::for_each(std::forward_as_tuple(parents...), [child](auto &parent) {
-      parent.then([child](const auto &x) { child.impl()->resolve(x); });
+    auto child = create_stream<Stream<InputValue>>();
+    /// Now connect each input with the child with the identity function
+    hana::for_each(std::forward_as_tuple(inputs...), [child](auto &input) {
+      input.then([child](const auto &x) { child.impl()->resolve(x); });
     });
     return child;
   }
 
-  /// Synchronizes a parent stream with a transform: The Streams outputs the parent value when the transform between it's header frame and the target_frame becomes available. 
+  /// Synchronizes a input stream with a transform: The Streams outputs the input value when the transform between it's header frame and the target_frame becomes available. 
   /// It uses for this the `tf2_ros::MessageFilter`
-  template <class Parent>
-  TF2MessageFilter<obs_msg<Parent>> synchronize_with_transform(Parent parent, const std::string &target_frame) {
-    auto child = create_stream<TF2MessageFilter<obs_msg<Parent>>>(target_frame);
-    parent.then([child](const auto &x) { child.impl()->resolve(x); });
+  template <IsStream Input>
+  TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
+    auto child = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
+    input.then([child](const auto &x) { child.impl()->resolve(x); });
     return child;
   }
 

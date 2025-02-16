@@ -70,11 +70,11 @@ Actual implementation of the stream.
 ```
 
 ## Traits 
-```{doxygentypedef} icey::obs_err
+```{doxygentypedef} icey::ErrorOf
 ```
-```{doxygentypedef} icey::obs_val
+```{doxygentypedef} icey::ValueOf
 ```
-```{doxygentypedef} icey::obs_msg
+```{doxygentypedef} icey::MessageOf
 ```
 
 ## C++20 coroutines support 

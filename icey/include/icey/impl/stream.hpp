@@ -93,13 +93,13 @@ template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 /// The value type the given Stream of type T holds. 
 template <class T>
-using obs_val = typename remove_shared_ptr_t<T>::Value;
+using ValueOf = typename remove_shared_ptr_t<T>::Value;
 /// The error type the given Stream of type T holds. 
 template <class T>
-using obs_err = typename remove_shared_ptr_t<T>::ErrorValue;
-/// The ROS-message type the given Stream of type T holds. 
+using ErrorOf = typename remove_shared_ptr_t<T>::ErrorValue;
+/// The ROS-message of the given Stream type
 template <class T>
-using obs_msg = remove_shared_ptr_t<obs_val<T>>;
+using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 
 namespace impl {
 /// Creates a new stream of type O by passing the args to the constructor. Streams are

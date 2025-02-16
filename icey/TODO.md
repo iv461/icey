@@ -47,14 +47,13 @@ Sorted by decreasing priority.
 - [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
 - [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
 
-- [] API cleanup: Rename "obs_msg", "obs_val" etc to smth more meaningful 
 
 - [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
 - [ ] Remove use of RTTI in interpolateble stream 
 - [ ] Pass error through synchronizers -> for this return Result from Interpolatables
 - [ ] Allow chaining approx-time synchronizer with e.g. reference synchronizer by implementing averaging of all the header stampls of the tuple
 - [ ] Automatic adaption of queue size in ApproxTimeSync
-- [ ] Parents requiring a parent stream should take it in the constructor 
+- [ ] Inputs requiring a parent stream should take it in the constructor 
 - [ ] Maybe generalize concept of push/pull Stream 
 - [ ] Add static asserts that message has header stamp for better compiler error messages
 - [ ] Static_assert for the lambda signature 
@@ -240,6 +239,8 @@ Sorted by decreasing priority.
 
 - [X] Consider removing the filters, parameters etc out of the Context and moving them to separate files. Then, create a class_based_api that simply defines the Node and wraps the free-functions synchronize and passed them the this->context instead of the global context. -> Done by removing functional API, class-based API is still called Context. Difficult to split into different files because we cannot extend an already defined class
 - [X] Decide on whether streams should be default-constructable to be able to store them as members -> they already are
+- [X] API cleanup: Rename "obs_msg", "obs_val" etc to smth more meaningful 
+- [X] Rename parent to input
 
 # Run clang-tidy: 
 
