@@ -1345,8 +1345,8 @@ public:
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is created automatically matching the given Validator.
   template <class ParameterT>
   ParameterStream<ParameterT> declare_parameter(  
-        const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = std::nullopt,
-                    const Validator<ParameterT> &validator = Validator<ParameterT>(),
+        const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = {},
+                    const Validator<ParameterT> &validator = {},
                           std::string description = "", bool read_only = false,
                     bool ignore_override = false) {
       return create_ros_stream<ParameterStream<ParameterT>>(parameter_name, maybe_default_value,
@@ -1393,7 +1393,7 @@ public:
   \endverbatim
   */
   template <class ParameterStruct>
-  void declare_parameter_struct(ParameterStruct &params, const std::function<void(const std::string &)> &notify_callback,
+  void declare_parameter_struct(ParameterStruct &params, const std::function<void(const std::string &)> &notify_callback = {},
       std::string name_prefix = "") {
     
     field_reflection::for_each_field(params, [this, notify_callback, name_prefix](
@@ -1402,16 +1402,20 @@ public:
       std::string field_name_r(field_name);
       if constexpr (is_stream< Field>) {
         field_value.impl()->parameter_name = field_name_r;
-        field_value.impl()->register_handler([field_name_r, notify_callback](const auto &new_state) {
-              notify_callback(field_name_r);
-            });
+        if(notify_callback) {
+          field_value.impl()->register_handler([field_name_r, notify_callback](const auto &new_state) {
+                notify_callback(field_name_r);
+              });
+        }
         field_value.register_with_ros(*this->node);
       } else if constexpr (is_valid_ros_param_type<Field>::value) {
         this->declare_parameter<Field>(field_name_r, field_value)
           .impl()->register_handler(
               [&field_value, field_name_r, notify_callback](const auto &new_state) {
                 field_value = new_state.value();
-                notify_callback(field_name_r);
+                if(notify_callback) {
+                  notify_callback(field_name_r);
+                }
               });
       } else if constexpr (std::is_aggregate_v<Field>) {
         /// Else recurse for supporting grouped params
@@ -1613,11 +1617,11 @@ protected:
 };
 
 /// The ROS node, additionally owning the context that holds the Streams.
-/// \tparam NodeType can either be rclcpp::Node or rclcpp_lifecycle::LifecycleNode, meaning it is used to support lifecycle_nodes
+/// \tparam NodeType can either be rclcpp::Node or rclcpp_lifecycle::LifecycleNode
 template <class NodeType>
 class NodeWithIceyContext : public NodeType {
 public:
-  /// Constructs a new new node an initializes the icey context.
+  /// Constructs a new new node and initializes the ICEY context.
   NodeWithIceyContext(std::string node_name, const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions()) : NodeType(node_name, node_options) {
      /// Note that here we cannot call shared_from_this() since it requires the object to be already constructed. 
     this->icey_context_ = std::make_shared<Context>(NodeInterfaces(this));
@@ -1665,7 +1669,7 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   rclcpp::shutdown();
 }
 
-/// Creates a node by simply calling `std::make_shared`, but it additionally calls `rclcpp::init` beforehand so that you do not have to do it.
+/// Creates a node by simply calling `std::make_shared`, but it additionally calls `rclcpp::init` if not done already, so that you don't have to do it.
 template<class N = Node>
 static auto create_node(int argc, char** argv, const std::string& node_name) {
   if (!rclcpp::contexts::get_global_default_context()
