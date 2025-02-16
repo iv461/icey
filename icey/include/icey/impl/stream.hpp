@@ -162,12 +162,8 @@ public:
   void set_none() { state_.set_none(); }
   
   /// Sets the state to hold a value, but does not notify about this state change.
-  /// TODO rem maybe
-  void set_value(const MaybeValue &x) {
-    if (x)
-      state_.set_ok(*x);
-    else
-      state_.set_none();
+  void set_value(const Value &x) {
+    state_.set_ok(*x);
   }
 
   /// Sets the state to hold an error, but does not notify about this state change.
@@ -245,6 +241,10 @@ protected:
         /// support callbacks that at runtime may return value or error
         output->state_ = unpack_if_tuple(f, x);
         output->notify();
+      } else if constexpr (is_optional<ReturnType>) {
+        auto ret = unpack_if_tuple(f, x);
+        if(ret) 
+          output->put_value(*ret);
       } else {  /// Other return types are interpreted as values that are put into the stream. 
         ReturnType ret = unpack_if_tuple(f, x);
         output->put_value(ret);
