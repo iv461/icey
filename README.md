@@ -13,6 +13,8 @@ It offers additional goodies such as:
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
+Currently support only C++, Python-support is coming soon. 
+
 The [icey_examples](../../icey_examples) package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
 
 # Features 

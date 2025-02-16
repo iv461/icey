@@ -1370,14 +1370,16 @@ public:
                                           std::string("The frequency of the sine")};
       
       icey::ParameterStream<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
+
       /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
       struct OtherParams {
         double max_amp = 6.;
         std::vector<double> cov;
       } others;
+       
     };
 
-    auto node = icey::create_node("node_with_many_parameters");
+    auto node = icey::create_node(argc, argv, "node_with_many_parameters");
     // Now create an object of the node-parameters that will be updated:
     NodeParameters params;
 
