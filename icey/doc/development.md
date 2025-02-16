@@ -6,6 +6,8 @@
 colcon build  --packages-select icey --mixin=debug 
 ```
 
+Useful: Install mixins: https://github.com/colcon/colcon-mixin-repository
+
 ## Debug 
 
 ```sh
@@ -14,7 +16,6 @@ ros2 run --prefix 'gdb -ex run --args' icey tf_approx_filter_example
 
 ## Run clang-tidy: 
 
-1. Install mixins: https://github.com/colcon/colcon-mixin-repository
 
 1. Compile with compile-commands:
     ```sh
