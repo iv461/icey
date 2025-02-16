@@ -1,4 +1,6 @@
-# Nodes
+# The ICEY Context 
+
+The ICEY context becomes available by calling `node->icey()` and is your new Node-API that you use instead of `rclcpp::Node`. 
 
 ```{doxygentypedef} icey::Node
 ```
@@ -12,14 +14,11 @@
 ```{doxygenfunction} icey::spin
 ```
 
-The context owns all the Streams and is the Node-API visible when calling `node->icey()`:
-
-```{doxygenclass} icey::Context
-```
-
 ```{doxygenclass} icey::NodeWithIceyContext
 ```
 
+```{doxygenclass} icey::Context
+```
 
 ```{doxygenclass} icey::NodeBookkeeping
 ```
