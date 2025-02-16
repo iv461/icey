@@ -56,7 +56,7 @@ struct ImageTransportSubscriber
 struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPtr> {
   ImageTransportPublisher(NodeBookkeeping &node, const std::string &base_topic_name,
                           const rclcpp::QoS qos,
-                          const rclcpp::PublisherOptions &options = rclcpp::PublisherOptions()) {
+                          const rclcpp::PublisherOptions & /*options*/ = rclcpp::PublisherOptions()) {
     this->impl()->name = base_topic_name;
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and

@@ -19,7 +19,6 @@ Sorted by decreasing priority.
 
 - [ ] We still got a crash in service_client_async_await_example
 
-
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
@@ -32,8 +31,6 @@ Sorted by decreasing priority.
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
-- [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
-
 ## Error-handling
 
 ## Examples 
@@ -44,7 +41,6 @@ Sorted by decreasing priority.
 
 - [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
 - [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
-
 
 - [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
 - [ ] Remove use of RTTI in interpolateble stream 
@@ -64,15 +60,14 @@ Sorted by decreasing priority.
 
 - [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
 
-- [ ] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
+- [X] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
 - [ ] Maybe support cascading the synchronizers -> not for 0.1
 
-- [ ] Auto-pipelining ...
+- [ ] Auto-pipelining with TBB graph
 
 - [] Bus names: When returning multiple things from a callback, we can use strings instead of indices to unpack everything by index. (credit Bene) Possible implementation: another argument to then or Wrap the function in a NamedFunction("mybus", lambda). We coul even use hana::map to ensure at compile time that only existing names are looked up (That was the events  demo from Louis' talk at cppcon 2017)
-
 
 - [ ] Message converters to subscribe directly to https://github.com/ros2/examples/blob/rolling/rclcpp/topics/minimal_publisher/member_function_with_type_adapter.cpp, 
 - [ ] See also https://github.com/CursedRock17/ros2_common_type_adaptations
@@ -80,8 +75,6 @@ Sorted by decreasing priority.
 - [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
 
 - [ ] Maybe Simulink-style blocks, i.e. constant, step, function etc.
-- [ ] tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
-- [ ] `StaticTransformBroadcaster` -> low prio since even the official do mentions you should use the executable instead of writing this code yourself: https://docs.ros.org/en/foxy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Static-Broadcaster-Cpp.html#the-proper-way-to-publish-static-transforms
 - [ ] Actions ? See https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble
 
 ## API elegance/clarity
@@ -241,19 +234,8 @@ Sorted by decreasing priority.
 - [X] Rename parent to input
 
 - [X] Consider renaming resolve to put_value and reject to put_error. A new method that gets state and sets it to none afterwards can be called "take"
-# Run clang-tidy: 
 
-1. Install mxins: https://github.com/colcon/colcon-mixin-repository
+- [X] tf2_ros Message filter: Just another filter: https://github.com/ros-perception/imu_pipeline/tree/ros2/imu_transformer
+- [X] `StaticTransformBroadcaster` -> low prio since even the official do mentions you should use the executable instead of writing this code yourself: https://docs.ros.org/en/foxy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Static-Broadcaster-Cpp.html#the-proper-way-to-publish-static-transforms
 
-```sh
-colcon build  --packages-select icey --cmake-args -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-```
-
-
-```sh
-clang-tidy -p ~/autoware/build/icey/ include/icey/*.hpp --fix -fix-errors
-```
-
-colcon build  --packages-select icey --cmake-args -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15
-
-clang-tidy-15 -p ~/autoware/build/icey/compile_commands.json examples/*.cpp --fix
+- [X] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.

@@ -12,6 +12,26 @@ colcon build  --packages-select icey --mixin=debug
 ros2 run --prefix 'gdb -ex run --args' icey tf_approx_filter_example
 ```
 
+## Run clang-tidy: 
+
+1. Install mixins: https://github.com/colcon/colcon-mixin-repository
+
+1. Compile with compile-commands:
+    ```sh
+    colcon build  --packages-select icey --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    ```
+
+1. Install clang-15 and clang-tidy-15 apt packages, other versions do not work for me
+1. Run clang-tidy
+    ```sh
+    ~/autoware/src/icey/icey
+    clang-tidy -p ~/autoware/build/icey/ include/icey/*.hpp --fix -fix-errors
+    ```
+
+To fix the compilation with clang in case it does not build: 
+```sh
+colcon build  --packages-select icey --cmake-args -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15
+```
 
 ## Build documentation 
 
