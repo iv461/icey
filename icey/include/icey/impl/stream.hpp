@@ -84,6 +84,15 @@ template <typename... Args>
 struct is_pair<std::pair<Args...>> : std::true_type {};
 
 template <class T>
+struct is_optional : std::false_type {};
+
+template <class T>
+struct is_optional<std::optional<T>> : std::true_type {};
+
+template <class T>
+constexpr bool is_optional_v = is_optional<T>::value;
+
+template <class T>
 constexpr bool is_tuple_v = is_tuple<T>::value;
 
 template <class T>
@@ -241,7 +250,7 @@ protected:
         /// support callbacks that at runtime may return value or error
         output->state_ = unpack_if_tuple(f, x);
         output->notify();
-      } else if constexpr (is_optional<ReturnType>) {
+      } else if constexpr (is_optional_v<ReturnType>) {
         auto ret = unpack_if_tuple(f, x);
         if(ret) 
           output->put_value(*ret);
