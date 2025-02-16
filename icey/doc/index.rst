@@ -30,7 +30,6 @@ Table of Contents
    getting_started
    async_flow
    using_tf
-   support_for_lifecycle_nodes
    translating_an_autoware_node
 
 .. toctree::    
