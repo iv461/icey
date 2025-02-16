@@ -150,7 +150,7 @@ public:
   using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;  
   using State = Result<Value, ErrorValue>;
 
-  /// If no error is possible (ErrorValue is not Nothing), this it just the Value instead of the State to not force the user to write unnecessary error handling/unwraping code.
+  /// If no error is possible (ErrorValue is Nothing), this it just the Value instead of the State to not force the user to write unnecessary error handling/unwraping code.
   using MaybeResult = std::conditional_t<std::is_same_v<ErrorValue, Nothing>, Value, State>;
   using Handler = std::function<void(const State &)>;
 
