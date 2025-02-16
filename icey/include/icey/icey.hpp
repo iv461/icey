@@ -1518,8 +1518,8 @@ public:
     });
   }
 
-  /// Synchronizer that synchronizes non-interpolatable signals by matching the time-stamps
-  /// approximately
+  /// Synchronizer that synchronizes streams by approximately matching the header time-stamps (using the synchronizer from the `message_filters` package)
+  /// 
   /// \tparam Inputs the input stream types, not necessarily all the same
   /// \param inputs the input streams, not necessarily all of the same type
   /// \warning Errors are currently not passed through

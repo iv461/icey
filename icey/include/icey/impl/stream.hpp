@@ -91,10 +91,10 @@ constexpr bool is_pair_v = is_pair<T>::value;
 
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
-/// The value type the given Stream of type T holds. 
+/// The error type of the given Stream type
 template <class T>
 using ValueOf = typename remove_shared_ptr_t<T>::Value;
-/// The error type the given Stream of type T holds. 
+/// The value type of the given Stream type
 template <class T>
 using ErrorOf = class remove_shared_ptr_t<T>::ErrorValue;
 /// The ROS-message of the given Stream type
