@@ -240,8 +240,7 @@ protected:
         /// support callbacks that at runtime may return value or error
         output->state_ = unpack_if_tuple(f, x);
         output->notify();
-      } else {  /// Other return types are interpreted as values that are put into the stream. Here, we
-                /// also support returning std::optional.
+      } else {  /// Other return types are interpreted as values that are put into the stream. 
         ReturnType ret = unpack_if_tuple(f, x);
         output->put_value(ret);
       }

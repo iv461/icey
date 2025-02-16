@@ -113,6 +113,28 @@ TEST_F(PromiseTest, VoidThenPropagating) {
   EXPECT_EQ(target_order, events);
 }
 
+/// Test whether there is no value after calling .take()
+TEST_F(PromiseTest, TakeTest) {
+  const std::string value = "GoodVal";
+  stream->put_value(value);
+
+  EXPECT_TRUE(stream->has_value());
+  EXPECT_FALSE(stream->has_error());
+  EXPECT_FALSE(stream->has_none());
+
+  EXPECT_EQ(stream->value(), value);  
+
+  auto current_state = stream.take();
+
+  EXPECT_FALSE(stream->has_value());
+  EXPECT_TRUE(stream->has_none());
+
+  EXPECT_TRUE(current_state.has_value());
+  EXPECT_EQ(current_state.value(), value);
+}
+
+
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
