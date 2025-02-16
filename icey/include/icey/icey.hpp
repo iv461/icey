@@ -401,7 +401,7 @@ template<class T>
 constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
 
 template<class T>
-concept IsStream = std::is_base_of_v<StreamTag, T>;
+concept AnyStream = std::is_base_of_v<StreamTag, T>;
 
 template <class T>
 constexpr void assert_stream_holds_tuple() {
@@ -409,7 +409,7 @@ constexpr void assert_stream_holds_tuple() {
 }
 
 // Assert that all Streams types hold the same value
-template <IsStream First, IsStream... Rest>
+template <AnyStream First, AnyStream... Rest>
 constexpr void assert_all_stream_values_are_same() {
   // Static assert that each T::Value is the same as First::Value
   static_assert((std::is_same_v<MessageOf<First>, MessageOf<Rest>> && ...),
@@ -593,7 +593,7 @@ public:
   }
 
   /// Connect this Stream to the given output stream so that the output stream receives all the values.
-  template<IsStream Output>
+  template<AnyStream Output>
   void connect_values(Output output) {
     this->impl()->register_handler(
         [output_impl=output.impl()](const auto &new_state) { 
@@ -1376,7 +1376,7 @@ public:
         double max_amp = 6.;
         std::vector<double> cov;
       } others;
-       
+
     };
 
     auto node = icey::create_node(argc, argv, "node_with_many_parameters");
@@ -1448,14 +1448,14 @@ public:
     return create_ros_stream<PublisherStream<Message>>(topic_name, qos);
   }
 
-  template <IsStream Input>
+  template <AnyStream Input>
   PublisherStream<ValueOf<Input>> create_publisher(Input input, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
     using Message = ValueOf<Input>;
     return create_ros_stream<PublisherStream<Message>>(topic_name, qos, &input);
   }
 
-  template <IsStream Input>
+  template <AnyStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
     auto output = create_ros_stream<TransformPublisherStream>();
     input.connect_values(output);
@@ -1480,7 +1480,7 @@ public:
   }
 
   /// Add a service client and connect it to the input
-  template <class ServiceT, IsStream Input>
+  template <class ServiceT, AnyStream Input>
   ServiceClient<ServiceT> create_client(Input input, const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     static_assert(std::is_same_v<ValueOf<Input>, typename ServiceT::Request::SharedPtr>,
@@ -1498,7 +1498,7 @@ public:
     Synchronizer that given a reference signal at its first argument, ouputs all the other topics
     \warning Errors are currently not passed through
   */
-  template <IsStream Reference, IsStream... Interpolatables>
+  template <AnyStream Reference, AnyStream... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
     using namespace message_filters::message_traits;
     using RefMsg = MessageOf<Reference>;
@@ -1522,7 +1522,7 @@ public:
   /// \tparam Inputs the input stream types, not necessarily all the same
   /// \param inputs the input streams, not necessarily all of the same type
   /// \warning Errors are currently not passed through
-  template <IsStream... Inputs>
+  template <AnyStream... Inputs>
   SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(Inputs... inputs) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     using namespace hana::literals;
@@ -1540,7 +1540,7 @@ public:
   /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer (i.e. calls synchronize_approx_time) if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
-  template <IsStream... Inputs>
+  template <AnyStream... Inputs>
   auto synchronize(Inputs... inputs) {
     static_assert(sizeof...(Inputs) >= 2,
                   "You need to have at least two inputs for synchronization.");
@@ -1581,7 +1581,7 @@ public:
   /*! 
     Outputs the value or error of any of the inputs. All the inputs must have the same Value and ErrorValue type.
   */
-  template <IsStream... Inputs>
+  template <AnyStream... Inputs>
   auto any(Inputs... inputs) {  
     // assert_all_stream_values_are_same<Inputs...>();
     using Input = decltype(std::get<0>(std::forward_as_tuple(inputs...)));
@@ -1598,7 +1598,7 @@ public:
 
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the transform between it's header frame and the target_frame becomes available. 
   /// It uses for this the `tf2_ros::MessageFilter`
-  template <IsStream Input>
+  template <AnyStream Input>
   TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
     auto output = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
     input.connect_values(output);
