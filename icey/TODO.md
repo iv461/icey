@@ -4,48 +4,37 @@
 
 Sorted by decreasing priority. 
 
-
 - [ ] Test installing in Docker base image regarding dependencies 
 
-- [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
-- [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
+- [ ] Docs: Explain synchronization 
+- [ ] Docs: Explain Result-type for error handling 
+- [ ] Docs: Up-to-date extention tutorial
 
-- [] API cleanup: Rename "obs_msg", "obs_val" etc to smth more meaningful 
-
-- [ ] Up-to-date docs 
+- [ ] Unit-test that service client-server example driven by timer
+- [ ] Unit-test the synchronizers, is the lookupTransform correct ?
+- [ ] Unit-Test context: does it create everything ? 
+- [ ] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
 - [ ] We still got a crash in service_client_async_await_example
 
-- [ ] Unit-test the synchronizers, is the lookupTransform correct ?
-
-- [ ] Consider removing the filters, parameters etc out of the Context and moving them to separate files. Then, create a class_based_api that simply defines the Node and wraps the free-functions synchronize and passed them the this->context instead of the global context. 
-
-- [ ] Decide on whether streams should be default-constructable to be able to store them as members
 
 - [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
 
-- [ ] Unit-Test context: does it create everything ? 
-
-- [ ] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
-
-- [ ] Unit-test that service client-server example driven by timer
-
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
-- [ ] Result-type for error handling example
-
-- [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context
+- [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. But 
 
 - [ ] Buffer: Basis for `delay`-filter
 - [ ] `delay` with 
 - [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
+
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
 - [ ] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 
-- [ ] Consider renaming resolve to put and reject to put_error. A new method that gets state and sets it to none afterwards can be called "take"
+- [ ] Consider renaming resolve to put_value and reject to put_error. A new method that gets state and sets it to none afterwards can be called "take"
 
 ## Error-handling
 
@@ -54,6 +43,11 @@ Sorted by decreasing priority.
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
 
 ## Other nice-to-have features, not for 0.1
+
+- [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
+- [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
+
+- [] API cleanup: Rename "obs_msg", "obs_val" etc to smth more meaningful 
 
 - [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
 - [ ] Remove use of RTTI in interpolateble stream 
@@ -243,6 +237,10 @@ Sorted by decreasing priority.
 - [X] Implement parameter validators
 - [X] Doxygen parsable comments
 - [X] API-docs
+
+- [X] Consider removing the filters, parameters etc out of the Context and moving them to separate files. Then, create a class_based_api that simply defines the Node and wraps the free-functions synchronize and passed them the this->context instead of the global context. -> Done by removing functional API, class-based API is still called Context. Difficult to split into different files because we cannot extend an already defined class
+- [X] Decide on whether streams should be default-constructable to be able to store them as members -> they already are
+
 # Run clang-tidy: 
 
 1. Install mxins: https://github.com/colcon/colcon-mixin-repository

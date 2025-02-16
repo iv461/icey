@@ -1404,8 +1404,7 @@ public:
             });
         field_value.register_with_ros(*this->node);
       } else if constexpr (is_valid_ros_param_type<Field>::value) {
-        using ParamValue = std::remove_reference_t<decltype(field_value)>;
-        this->declare_parameter<ParamValue>(field_name_r, field_value)
+        this->declare_parameter<Field>(field_name_r, field_value)
           .impl()->register_handler(
               [&field_value, field_name_r, notify_callback](const auto &new_state) {
                 field_value = new_state.value();
@@ -1413,7 +1412,7 @@ public:
               });
       } else if constexpr (std::is_aggregate_v<Field>) {
         /// Else recurse for supporting grouped params
-        declare_parameter_struct(field_value, notify_callback, name_prefix + std::string(field_name) + ".");
+        declare_parameter_struct(field_value, notify_callback, name_prefix + field_name_r + ".");
       } else {
         /// static_assert(false) would always trigger, that is why we use this workaround, see
         /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
