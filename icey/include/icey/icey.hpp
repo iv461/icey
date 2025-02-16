@@ -400,12 +400,8 @@ struct StreamTag {};  /// A tag to be able to recognize the type "Stream" using 
 template<class T>
 constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
 
-template <typename... Args>
-struct stream_traits {
-  static_assert((is_stream< remove_shared_ptr_t<Args>> && ...),
-                "The arguments must be an icey::Stream");
-};
-
+template<class T>
+concept IsStream = std::is_base_of_v<StreamTag, T>;
 
 template <class T>
 constexpr void assert_stream_holds_tuple() {
@@ -413,14 +409,12 @@ constexpr void assert_stream_holds_tuple() {
 }
 
 // Assert that all Streams types hold the same value
-template <typename First, typename... Rest>
+template <IsStream First, IsStream... Rest>
 constexpr void assert_all_stream_values_are_same() {
-  stream_traits<First, Rest...>{};  /// Only Streams are expected to have ::Value
   // Static assert that each T::Value is the same as First::Value
   static_assert((std::is_same_v<obs_msg<First>, obs_msg<Rest>> && ...),
                 "The values of all the streams must be the same");
 }
-
 
 template <typename _Value, typename _ErrorValue, typename Derived>
 class Stream;
@@ -1443,17 +1437,15 @@ public:
     return create_ros_stream<PublisherStream<Message>>(topic_name, qos);
   }
 
-  template <class Parent>
+  template <IsStream Parent>
   PublisherStream<obs_val<Parent>> create_publisher(Parent parent, const std::string &topic_name,
                         const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
-    stream_traits<Parent>{};
     using Message = obs_val<Parent>;
     return create_ros_stream<PublisherStream<Message>>(topic_name, qos, &parent);
   }
 
-  template <class Parent>
+  template <IsStream Parent>
   TransformPublisherStream create_transform_publisher(Parent parent) {
-    stream_traits<Parent>{};
     auto child = create_ros_stream<TransformPublisherStream>();
     parent.impl()->then([child](const auto &x) { child.impl()->resolve(x); });
   }
@@ -1476,10 +1468,9 @@ public:
   }
 
   /// Add a service client and connect it to the parent
-  template <typename ServiceT, typename Parent>
+  template <typename ServiceT, IsStream Parent>
   ServiceClient<ServiceT> create_client(Parent parent, const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    stream_traits<Parent>{};
     static_assert(std::is_same_v<obs_val<Parent>, typename ServiceT::Request::SharedPtr>,
                   "The parent triggering the service must hold a value of type Request::SharedPtr");
     auto service_client = create_client<ServiceT>(service_name, timeout, qos);
@@ -1495,10 +1486,8 @@ public:
     Synchronizer that given a reference signal at its first argument, ouputs all the other topics
     \warning Errors are currently not passed through
   */
-  template <class Reference, class... Interpolatables>
+  template <IsStream Reference, IsStream... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
-    stream_traits<Reference>{};
-    stream_traits<Interpolatables...>{};
     using namespace message_filters::message_traits;
     using RefMsg = obs_msg<Reference>;
     static_assert(HasHeader<RefMsg>::value,
@@ -1521,10 +1510,9 @@ public:
   /// \tparam Parents the input stream types, not necessarily all the same
   /// \param parents the input streams, not necessarily all of the same type
   /// \warning Errors are currently not passed through
-  template <typename... Parents>
+  template <IsStream... Parents>
   SynchronizerStream<obs_msg<Parents>...> synchronize_approx_time(Parents... parents) {
-    stream_traits<Parents...>{};
-    static_assert(sizeof...(Parents), "You need to synchronize at least two inputs.");
+    static_assert(sizeof...(Parents) >= 2, "You need to synchronize at least two inputs.");
     using namespace hana::literals;
     uint32_t queue_size = 10;
     auto synchronizer = create_stream<SynchronizerStream<obs_msg<Parents>...>>(queue_size);
@@ -1542,7 +1530,6 @@ public:
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
   template <typename... Parents>
   auto synchronize(Parents... parents) {
-    stream_traits<Parents...>{};
     static_assert(sizeof...(Parents) >= 2,
                   "You need to have at least two inputs for synchronization.");
     auto parents_tuple = std::make_tuple(parents...);
@@ -1583,9 +1570,8 @@ public:
     Outputs the Value of any of the inputs.
     \warning Errors are currently not passed through
   */
-  template <typename... Parents>
+  template <IsStream... Parents>
   auto any(Parents... parents) {
-    stream_traits<Parents...>{};
     // assert_all_stream_values_are_same<Parents...>();
     using Parent = decltype(std::get<0>(std::forward_as_tuple(parents...)));
     using ParentValue = typename std::remove_reference_t<Parent>::Value;
