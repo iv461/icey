@@ -686,7 +686,7 @@ public:
   }
 
   
-  protected:
+protected:
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
       throw std::runtime_error("This stream does not have context");
