@@ -172,7 +172,7 @@ public:
   
   /// Sets the state to hold a value, but does not notify about this state change.
   void set_value(const Value &x) {
-    state_.set_ok(*x);
+    state_.set_ok(x);
   }
 
   /// Sets the state to hold an error, but does not notify about this state change.
@@ -211,7 +211,7 @@ public:
   }
 
   /// Sets the state to a value and notifies.
-  void put_value(const MaybeValue &x) {
+  void put_value(const Value &x) {
     this->set_value(x);
     this->notify();
   }
