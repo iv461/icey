@@ -426,7 +426,7 @@ struct crtp {
 };
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with co_await syntax and inside coroutines.
-template<class Derived, class ErrorValue>
+template<class Derived>
 struct StreamCoroutinesSupport : public crtp<Derived> {
   /// We are a promise
   using promise_type = Derived;
@@ -506,19 +506,7 @@ struct StreamCoroutinesSupport : public crtp<Derived> {
   /// \returns If an error is possible (ErrorValue is not Nothing), we return a Result<Value, ErrorValue>, otherwise we return just the Value to not force the user to write unnecessary error handling/unwraping code.
   auto await_resume() {
     if (icey_coro_debug_print) std::cout << this->underlying().get_type_info() << " await_resume called" << std::endl;
-    /// Return the value if there can be no error
-    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      auto result = this->underlying().impl()->value();
-      /// Reset the state since we consumed this value
-      this->underlying().impl()->set_none();
-      return result;
-    } else {
-      auto result = this->underlying().impl()->get_state();
-      /// Reset the state since we consumed this value
-      this->underlying().impl()->set_none();
-      return result;
-    }
-  }
+    return this->underlying().impl()->take();
 };
 
 /// Adds a default extention inside the impl::Stream by default.
@@ -539,7 +527,7 @@ struct TimeoutFilter;
 /// \tparam Derived a class from which the implementation (impl::Stream) derives, used as an extention point.
 ///
 template <class _Value, class _ErrorValue = Nothing, class Derived = Nothing>
-class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived>, _ErrorValue >{
+class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived> >{
 public:
 using Value = _Value;
 using ErrorValue = _ErrorValue;
@@ -613,17 +601,30 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
     return create_from_impl(impl()->except(f));
   }
 
-  /// Creates a ROS publisher by creating a new stream of type T and connecting it to this
+  /// Connect this Stream to the given output stream so that the output stream receives all the values and errors.
+  void connect(Self output) {
+    this->impl()->register_handler(
+        [output](const auto &new_state) { 
+          if(new_state.has_value()) {
+            output.impl()->put_value(new_state.value()); 
+          } else if (new_state.has_error()) {
+            output.impl()->put_error(new_state.error()); 
+          }
+        }
+    );
+  }
+
+  /// Creates a ROS publisher by creating a new stream of type PublisherType and connecting it to this
   /// stream.
-  template <class T, class... Args>
+  template <class PublisherType, class... Args>
   void publish(Args &&...args) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>,
         "This stream does not have a value, there is nothing to publish, so you cannot "
         "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto output = this->impl()->context.lock()->template create_ros_stream<T>(args...);
-    this->impl()->register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
+    auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(args...);
+    this->connect(output);
   }
   
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any value for some time `max_age`. 
@@ -1460,7 +1461,8 @@ public:
   template <IsStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
     auto output = create_ros_stream<TransformPublisherStream>();
-    input.impl()->register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
+    input.connect(output);
+    return output;
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
@@ -1580,19 +1582,19 @@ public:
   }
 
   /*! 
-    Outputs the Value of any of the inputs.
-    \warning Errors are currently not passed through
+    Outputs the value or error of any of the inputs. All the inputs must have the same Value and ErrorValue type.
   */
   template <IsStream... Inputs>
   auto any(Inputs... inputs) {  
     // assert_all_stream_values_are_same<Inputs...>();
     using Input = decltype(std::get<0>(std::forward_as_tuple(inputs...)));
     using InputValue = typename std::remove_reference_t<Input>::Value;
+    using InputError = typename std::remove_reference_t<Input>::ErrorValue;
     /// First, create a new stream
-    auto output = create_stream<Stream<InputValue>>();
+    auto output = create_stream<Stream<InputValue, InputError>>();
     /// Now connect each input with the output
     hana::for_each(std::forward_as_tuple(inputs...), [output](auto &input) {
-      input.register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
+      input.connect(output);
     });
     return output;
   }
@@ -1602,7 +1604,7 @@ public:
   template <IsStream Input>
   TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
     auto output = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
-    input.register_handler([output](const auto &new_state) { output.impl()->put_value(new_state.value()); });
+    input.connect(output);
     return output;
   }
 

@@ -195,6 +195,23 @@ public:
     this->notify();
   }
 
+  /// Returns the current state and sets it to none.
+  State take_state() {
+    auto current_state = state_;
+    this->set_none();
+    return current_state;
+  }
+
+  /// Returns the current state and sets it to none. If no error is possible (ErrorValue is not Nothing), it just the Value to not force the user to write unnecessary error handling/unwraping code.
+  auto take() {
+    auto current_state = this->take();
+    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
+      return current_state.value();
+    } else {
+      return current_state;
+    }
+  }
+
   template <class F>
   auto then(F &&f) {
     /// Note that it may only have errors
