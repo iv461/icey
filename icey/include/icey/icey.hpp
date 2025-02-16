@@ -416,10 +416,10 @@ constexpr void assert_all_stream_values_are_same() {
                 "The values of all the streams must be the same");
 }
 
-template <typename _Value, typename _ErrorValue, typename Derived>
+template <class _Value, class _ErrorValue, class Derived>
 class Stream;
 
-template <typename T>
+template <class T>
 struct crtp {
     T& underlying() { return static_cast<T&>(*this); }
     T const& underlying() const { return static_cast<T const&>(*this); }
@@ -538,7 +538,7 @@ struct TimeoutFilter;
 /// \tparam _ErrorValue the type of the error. It can also be an exception.
 /// \tparam Derived a class from which the implementation (impl::Stream) derives, used as an extention point.
 ///
-template <typename _Value, typename _ErrorValue = Nothing, typename Derived = Nothing>
+template <class _Value, class _ErrorValue = Nothing, class Derived = Nothing>
 class Stream : public StreamTag, public StreamCoroutinesSupport< Stream<_Value, _ErrorValue,  Derived>, _ErrorValue >{
 public:
 using Value = _Value;
@@ -562,8 +562,8 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
 
   std::string get_type_info() const {
     std::stringstream ss;
-    auto this_typename = boost::typeindex::type_id_runtime(*this).pretty_name();
-    ss << "[" << this_typename << " @ 0x" << std::hex << size_t(this) << " (impl @ "
+    auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
+    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ "
        << size_t(this->impl().get()) << ")] ";
     return ss.str();
   }
@@ -589,7 +589,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   /// \tparam F: Must be (X) -> Y, where X is:  
   ///  - V_1, ..., V_n if Value is std::tuple<V_1, ..., V_n>
   ///  - Value otherwise
-  template <typename F>
+  template <class F>
   auto then(F &&f) {
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream cannot have values, so you cannot register then() on it.");
@@ -606,7 +606,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   /// \tparam F: Must be (X) -> Y, where X is:  
   ///  - V_1, ..., V_n if Value is std::tuple<V_1, ..., V_n>
   ///  - Value otherwise
-  template <typename F>
+  template <class F>
   auto except(F &&f) {
     static_assert(!std::is_same_v<ErrorValue, Nothing>,
                   "This stream cannot have errors, so you cannot register except() on it.");
@@ -615,7 +615,7 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
 
   /// Creates a ROS publisher by creating a new stream of type T and connecting it to this
   /// stream.
-  template <class T, typename... Args>
+  template <class T, class... Args>
   void publish(Args &&...args) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>,
@@ -846,7 +846,7 @@ struct ParameterStreamImpl {
 };
 
 /// An stream for ROS parameters.
-template <typename _Value>
+template <class _Value>
 struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Value> > {
   using Value = _Value;
   static_assert(is_valid_ros_param_type<_Value>::value, "Type is not an allowed ROS parameter type");
@@ -932,7 +932,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
 };
 
 /// A stream that represents a regular ROS subscriber. It stores as its value always a shared pointer to the message.
-template <typename _Message>
+template <class _Message>
 struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
@@ -945,7 +945,7 @@ struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
 };
 
 struct InterpolateableStreamTag {};
-template <typename _Message, typename DerivedImpl>
+template <class _Message, class DerivedImpl>
 struct InterpolateableStream
     : public InterpolateableStreamTag,
       public Stream<typename _Message::SharedPtr, std::string, DerivedImpl> {
@@ -957,7 +957,7 @@ struct InterpolateableStream
 
 /// An interpolatable stream is one that buffers the incoming messages using a circular buffer
 /// and allows to query the message at a given point, using interpolation.
-template <typename T>
+template <class T>
 constexpr auto hana_is_interpolatable(T) {
   if constexpr (std::is_base_of_v<InterpolateableStreamTag, T>)
     return hana::bool_c<true>;
@@ -1030,7 +1030,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   }
 };
 
-template <typename _Value>
+template <class _Value>
 struct PublisherImpl {
   typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
   void publish(const _Value &message) {
@@ -1052,7 +1052,7 @@ struct PublisherImpl {
 };
 
 /// A Stream representing a ROS-publisher. Value can be either a Message or shared_ptr<Message>
-template <typename _Value>
+template <class _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
@@ -1090,7 +1090,7 @@ struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformSta
 };
 
 /// A Stream representing a ROS-service. It stores both the request and the response as it's value.
-template <typename _ServiceT>
+template <class _ServiceT>
 struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
                                                std::shared_ptr<typename _ServiceT::Response>>> {
   using Request = std::shared_ptr<typename _ServiceT::Request>;
@@ -1107,7 +1107,7 @@ struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _Service
   }
 };
 
-template <typename _ServiceT>
+template <class _ServiceT>
 struct ServiceClientImpl {
   using Client = rclcpp::Client<_ServiceT>;
   typename Client::SharedPtr client;
@@ -1116,7 +1116,7 @@ struct ServiceClientImpl {
 };
 
 /// A Stream representing a service client. It stores the response as it's value.
-template <typename _ServiceT>
+template <class _ServiceT>
 struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
                                      ServiceClientImpl<_ServiceT>> {
   using Request = typename _ServiceT::Request::SharedPtr;
@@ -1186,7 +1186,7 @@ protected:
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window. 
 /// It simply passes over the value if no timeout occured, and errors otherwise. 
 /// \tparam _Value the value must be a message that has a header stamp
-template <typename _Value>
+template <class _Value>
 struct TimeoutFilter
     : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
   /// Construct the filter an connect it to the input. 
@@ -1234,7 +1234,7 @@ struct TimeoutFilter
 /// \note This is the same as what 
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
-template <typename _Message, class _Base = Stream<typename _Message::SharedPtr>>
+template <class _Message, class _Base = Stream<typename _Message::SharedPtr>>
 struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so that `signalMessage` is called once a value is received.
   /// \todo Use mfl::simplefilter as derive-impl, then do not capture this, and do not allocate this adapter dynamically 
@@ -1247,7 +1247,7 @@ struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<
   }
 };
 
-template <typename... Messages>
+template <class... Messages>
 struct SynchronizerStreamImpl {
   /// Approx time will work as exact time if the stamps are exactly the same, so I wonder why the
   /// `TImeSynchronizer` uses by default ExactTime
@@ -1275,7 +1275,7 @@ struct SynchronizerStreamImpl {
 
 /// A Stream representing an approximate time synchronizer. 
 /// \warning All inputs must have the same QoS accorcding to the documentation of message_filters
-template <typename... Messages>
+template <class... Messages>
 class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
                                          SynchronizerStreamImpl<Messages...>> {
 public:
@@ -1330,7 +1330,7 @@ public:
 
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the list of streams so that it does not go out of scope. 
   /// It also sets the context.
-  template <class S, typename... Args>
+  template <class S, class... Args>
   S create_stream(Args &&...args) {
     S stream(args...);
     stream_impls_.push_back(stream.impl());  
@@ -1339,11 +1339,11 @@ public:
   }
 
   /// Like Context::create_stream but additionally passes the node as the first argument. Needed for Stream that need to register to ROS.
-  template <class S, typename... Args>
+  template <class S, class... Args>
   S create_ros_stream(Args &&...args) { return create_stream<S>(*this->node, args...); }
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is created automatically matching the given Validator.
-  template <typename ParameterT>
+  template <class ParameterT>
   ParameterStream<ParameterT> declare_parameter(  
         const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = std::nullopt,
                     const Validator<ParameterT> &validator = Validator<ParameterT>(),
@@ -1427,7 +1427,7 @@ public:
     });
   }
 
-  template <typename MessageT>
+  template <class MessageT>
   SubscriptionStream<MessageT> create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
@@ -1463,21 +1463,21 @@ public:
     return create_ros_stream<TimerStream>(interval, is_one_off_timer);
   }
 
-  template <typename ServiceT>
+  template <class ServiceT>
   ServiceStream<ServiceT> create_service(const std::string &service_name,
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_ros_stream<ServiceStream<ServiceT>>(service_name, qos);
   }
 
   /// Add a service client
-  template <typename ServiceT>
+  template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_ros_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
   /// Add a service client and connect it to the input
-  template <typename ServiceT, IsStream Input>
+  template <class ServiceT, IsStream Input>
   ServiceClient<ServiceT> create_client(Input input, const std::string &service_name, const Duration &timeout,
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     static_assert(std::is_same_v<ValueOf<Input>, typename ServiceT::Request::SharedPtr>,
@@ -1537,7 +1537,7 @@ public:
   /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer if the inputs
   /// are not interpolatable or an interpolation-based synchronizer based on a given
   /// (non-interpolatable) reference. Or, a combination of both, this is decided at compile-time.
-  template <typename... Inputs>
+  template <class... Inputs>
   auto synchronize(Inputs... inputs) {
     static_assert(sizeof...(Inputs) >= 2,
                   "You need to have at least two inputs for synchronization.");

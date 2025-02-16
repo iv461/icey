@@ -96,7 +96,7 @@ template <class T>
 using ValueOf = typename remove_shared_ptr_t<T>::Value;
 /// The error type the given Stream of type T holds. 
 template <class T>
-using ErrorOf = typename remove_shared_ptr_t<T>::ErrorValue;
+using ErrorOf = class remove_shared_ptr_t<T>::ErrorValue;
 /// The ROS-message of the given Stream type
 template <class T>
 using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
@@ -104,7 +104,7 @@ using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 namespace impl {
 /// Creates a new stream of type O by passing the args to the constructor. Streams are
 /// always reference counted, currently implemented with std::shared_ptr.
-template <class O, typename... Args>
+template <class O, class... Args>
 static std::shared_ptr<O> create_stream(Args &&...args) {
   auto stream = std::make_shared<O>(std::forward<Args>(args)...);
   return stream;
@@ -137,7 +137,7 @@ inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
 /// [2] https://devblogs.microsoft.com/oldnewthing/20210406-00/?p=105057
 /// And for a thread-safe implementation at the cost of insane complexity, see this:
 /// [3] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp
-template <typename _Value, typename _ErrorValue, typename Derived, typename DefaultDerived>
+template <class _Value, class _ErrorValue, class Derived, class DefaultDerived>
 class Stream : private boost::noncopyable,
                public Derived {
 public:
@@ -269,7 +269,7 @@ protected:
   /// Common function for both .then and .except. The template argument "put_value" says whether f is
   /// the put_value or the put_error handler (Unlike JS, we can only register one at the time, this is
   /// for better code generation)
-  template <bool put_value, typename F>
+  template <bool put_value, class F>
   auto done(F &&f) {
     /// Return type depending of if the it is called when the Promise put_values or put_errors
     using FunctionArgument = std::conditional_t<put_value, Value, ErrorValue>;

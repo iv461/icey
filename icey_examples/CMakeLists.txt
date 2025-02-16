@@ -27,9 +27,9 @@ ament_auto_add_executable(tf_broadcaster_example src/tf_broadcaster.cpp)
 #ament_auto_add_executable(multi_node_example src/multi_node.cpp)
 #ament_auto_add_executable(message_filters_interoperability_example src/message_filters_interoperability.cpp)
 #
-#ament_auto_add_executable(class_based_api_example src/class_based_api.cpp)
-#ament_auto_add_executable(service_client_example src/service_client.cpp)
-#ament_auto_add_executable(service_server_example src/service_server.cpp)
+ament_auto_add_executable(class_based_api_example src/class_based_api.cpp)
+ament_auto_add_executable(service_client_example src/service_client.cpp)
+ament_auto_add_executable(service_server_example src/service_server.cpp)
 #
 ament_auto_add_executable(service_client_class_api_example src/service_client_class_api.cpp)
 
