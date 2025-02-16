@@ -606,9 +606,9 @@ using Impl = impl::Stream<_Value, _ErrorValue, WithDefaults<Derived>, WithDefaul
   template<IsStream Output>
   void connect_values(Output output) {
     this->impl()->register_handler(
-        [output](const auto &new_state) { 
+        [output_impl=output.impl()](const auto &new_state) { 
           if(new_state.has_value()) {
-            output.impl()->put_value(new_state.value()); 
+            output_impl->put_value(new_state.value()); 
           } else if (new_state.has_error()) {
           }
         }
@@ -1069,9 +1069,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
       impl->publish(new_state.value());
     });
     if(maybe_input) {
-      maybe_input->impl()->register_handler([impl = this->impl()](const auto &new_state) {
-          impl->put_value(new_state.value());
-      });
+      maybe_input->connect_values(*this);
     }
   }
   void publish(const _Value &message) const { this->impl()->publish(message); }
