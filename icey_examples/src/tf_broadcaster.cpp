@@ -21,10 +21,9 @@ auto create_yaw_rotation(icey::Node &node, const icey::ParameterStream<std::stri
     });
 }
 int main(int argc, char **argv) {
-    auto node = icey::create_node<icey::Node>(argc, argv, "tf_broadcaster_example");
-    auto &icey = node->icey();  // Get the ICEY context
-    
-    icey::ParameterStream<std::string> base_frame_param = icey.declare_parameter<std::string>("base_frame", "base_link");
+    auto node = icey::create_node(argc, argv, "tf_broadcaster_example");
+
+    icey::ParameterStream<std::string> base_frame_param = node->icey().declare_parameter<std::string>("base_frame", "base_link");
     /// We can simply pass here the parameter so that the frame_id of the published message 
     // gets updated dynamically when the parameter changes.
     create_yaw_rotation(*node, base_frame_param).publish_transform();

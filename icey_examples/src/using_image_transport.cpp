@@ -7,10 +7,8 @@
 /// is useful to be able to record images into a rosbag and prevent it from growing to tens of
 /// gigabytes after just a few minutes.
 
-// clang-format off
 #include <icey/icey.hpp>             
-#include <icey/icey_image_transport.hpp>  /// Include the message_transport header after (!) the ICEY header
-// clang-format on
+#include <icey/icey_image_transport.hpp> 
 
 using namespace std::chrono_literals;
 

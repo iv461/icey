@@ -24,8 +24,6 @@ public:
           return float_val;
         })
         .publish("sine_generator");
-
-    
   }  
 };
 

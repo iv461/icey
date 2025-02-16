@@ -18,6 +18,5 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Got value: " << derived_string);
     });
 
-    icey::spin(node);
-    return 0;           
+    icey::spin(node);       
 }

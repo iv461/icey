@@ -1,6 +1,6 @@
-/// This example shows how by using async/await we achieve a synchronously-looking service call.
-/// Under the hood, everything is asynchronous, we actually call async_send_request, but Streams
-/// combined with await-syntax make the code look synchronous and easier to see what is going on.
+/// This example shows how by using async/await syntax (i.e. C++20 coroutines) we achieve a synchronously-looking service calls.
+/// Under the hood, everything is asynchronous, ICEY actually calls client->async_send_request, but Streams
+/// combined with await-syntax make the code look synchronous so that it is easier to see what is going on.
 #include <icey/icey.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -8,11 +8,13 @@
 using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
+/// This function creates and spins the node (the main cannot be a coroutine)
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   auto node = icey::create_node(argc, argv, "service_client_async_await_example");
   auto &icey = node->icey();
-
+  
+  /// When using async/await, we need to create all service clients/publishers/subscribers/timers etc. beforehand.
   auto timer = icey.create_timer(1s);
   auto service1 = icey.create_client<ExampleService>("set_bool_service1", 1s);
   auto service2 = icey.create_client<ExampleService>("set_bool_service2", 1s);
@@ -23,7 +25,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   /// Main spinning loop
   while (rclcpp::ok()) {
-    /// Receive timer updates
+    /// Now await the timer callback: This will happen every second
     co_await timer;
 
     auto request = std::make_shared<ExampleService::Request>();
@@ -31,6 +33,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     RCLCPP_INFO_STREAM(node->get_logger(),
                        "Timer ticked, sending request: " << request->data);
 
+    /// Call the service and await it's response
     icey::Result<Response, std::string> result1 = co_await service1.call(request);
 
     if (result1.has_error()) {
