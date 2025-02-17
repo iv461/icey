@@ -25,24 +25,22 @@ The real power in ICEY is that you can declare computations, that will  be publi
 ```cpp
 #include <icey/icey.hpp>
 int main(int argc, char **argv) {
-    
-    icey::create_timer(100ms)
+    auto node = icey::create_node(argc, argv, "signal_generator_example");
+    node->icey().create_timer(100ms)
         .then([&](size_t ticks) {
             /// We can access parameters in callbacks using .value() because parameters are always initialized first.
             double y = std::sin(0.1 * ticks * 2 * M_PI);
             return y;
         })
         .publish("sine_generator");
-
-    /// Create and spin the node:
-    icey::spawn(argc, argv, "signal_generator_example"); 
+    icey::spin(node);
 }
 ```
 
 Using Streams (promises), you can build your own data-driven pipeline of computations, for example sequencing service calls: 
 
 ```cpp
-icey::create_timer(1s)
+node->icey().create_timer(1s)
     /// Build a request when the timer ticks
     .then([](size_t) {
         auto request = std::make_shared<ExampleService::Request>();
@@ -89,17 +87,6 @@ struct NodeParameters {
       });
 ```
 
-# Key features: 
-
-- ICEY introduces modern asynchronous programming to ROS using Streams (Promises) and coroutines (async/await)
-- ICEY minimizes boilerplate code needed for using parameters, creating and spawning nodes and synchronization 
-- Automatic synchronization, unifying usage of TF as a form of synchronization
-- Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
-- Extensible: [We demonstrate](icey/doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
-- Easy asynchronous programming using Stream, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html)
-
-- Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types instead of C++-exceptions
-
 # Performance: 
 
 TODO summarize 
@@ -119,20 +106,11 @@ Still, there are some small limitations:
 - Memory strategy is not implemented, but could be easily
 - Sub-nodes
 
-
 # Dependencies: 
 
-- ROS 2 
+- ROS 2 Humble or Jazzy
 - Boost (Hana)
 - C++20 is required for the parameters struct feature and coroutine-support
-
-# Documentation
-
-See TODO for documentation 
-
-# Coming soon: 
-
-- Python/`rclpy` support
 
 # Related effords
 
