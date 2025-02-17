@@ -685,6 +685,13 @@ public:
                         [](const auto &...args) { return std::make_tuple(args...); });
   }
 
+  auto filter(std::function<bool(const Value &)> f) {
+    this->then([f](auto x) -> std::optional<Value> {
+        if(!f(x))
+          return {};
+        return x;
+    });
+  }
   
   protected:
   void assert_we_have_context() {

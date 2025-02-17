@@ -1,31 +1,52 @@
 # Asynchronous data-flow in ICEY 
 
-ICEY allows to express asynchronous data-flow very easily, which is very usefull for implementing service calls:
-
+ICEY allows to express asynchronous data-flow very easily, which is very useful for implementing service calls:
 
 ## Chaining of service calls 
-
-TODO 
 
 One typical use-case is calling service calls periodically by a timer:
 
 ```cpp
 icey().create_timer(1s)
-    /// Build a request when the timer ticks
     .then([this](size_t) {
+        /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
-        RCLCPP_INFO_STREAM(this->get_logger(),
-                            "Timer ticked, sending request: " << request->data);
         return request;
     })
+    .call_service<ExampleService>("my_service")
+    .then([](ExampleService::Response::SharedPtr response) {
+        /// Builda  second request
+        return std::make_shared<ExampleService::Request>();
+    })
+    .call_service<ExampleService>("my_service2")
+    .except([](std::string error) {});
 ```
+
+See also the [service_client](../../icey_examples/src/service_client.cpp) example.
+
+This operation is asynchronous in ICEY and so no dead-locks can occur. Services can be called from any other Stream, for example synchronizers
 
 ## Synchronization
 
-You can use timer signals as a reference point to bring multiple topics to the same frequency by simply adding a timer signal to the `ApproxTime` filter as an input source:
+Topics in ICEY can be synchronized in a very simple way using a single `synchronize` function:
+```cpp 
+auto camera_image_sub = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
+auto point_cloud_sub = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 
-In the following, more advanced signal routing strategies are explained.
+///
+node->icey().synchronize(camera_image_sub, point_cloud_sub)
+    .then([](sensor_msgs::msg::Image::SharedPtr img, 
+             sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
+
+    });
+```
+
+See also the [automatic_synchronization](../../icey_examples/src/automatic_synchronization.cpp) example.
+
+This method will synchronize both topics by approximately matching their header timestamps. For this, ICEY uses the `message_filters::Synchronizer` with the `ApproxTime` policy. 
+
+TODO sync_with_reference 
 
 ## Control flow: Multiple inputs and multiple outputs
 
@@ -33,33 +54,33 @@ In the following, more advanced signal routing strategies are explained.
 ### Single input, multiple output
 You may wonder how you can express the control flow of publishing multiple times inside a callback:
 ```cpp 
-auto first_publisher = node->create_subscription<Out1>("output_topic1", 1);
-auto second_publisher = node->create_subscription<Out2>("output_topic1", 1);
+auto first_publisher = node->create_publisher<Out1>("output_topic1", 1);
+auto second_publisher = node->create_publisher<Out2>("output_topic1", 1);
 auto sub = node->create_subscription<Msg>("topic", 1, 
     [](Msg::SharedPtr input) {
 
-        auto output1 = do_computation(input);
-        auto output2 = do_another_computation(input);
+        auto output_msg1 = do_computation(input);
+        auto output_msg2 = do_another_computation(input);
 
-        first_publisher->publish(output1);
-        second_publisher->publish(output2);
+        first_publisher->publish(output_msg1);
+        second_publisher->publish(output_msg2);
     });
 ```
 
 In ICEY, you can directly call `.publish` on publisher streams (which is needed anyway for writing hardware ROS-drivers):
 
 ```cpp 
-    auto first_publisher = node->icey().create_subscription<Out1>("output_topic1", 1);
-    auto second_publisher = node->icey().create_subscription<Out2>("output_topic1", 1);
+    auto first_publisher = node->icey().create_publisher<Out1>("output_topic1", 1);
+    auto second_publisher = node->icey().create_publisher<Out2>("output_topic1", 1);
 
     node->icey().create_subscription<Msg>("topic", 1)
         .then([&](Msg::SharedPtr input) {
 
-            auto output1 = do_computation(input);
-            auto output2 = do_another_computation(input);
+            auto output_msg1 = do_computation(input);
+            auto output_msg2 = do_another_computation(input);
 
-            first_publisher.publish(output1);
-            second_publisher.publish(output2);
+            first_publisher.publish(output_msg1);
+            second_publisher.publish(output_msg2);
         });
 ```
 
@@ -68,11 +89,11 @@ Another way to do this in ICEY is the *pull-pattern*: (this is how Streams work 
 
 ```cpp 
     auto [output1, output2] = node->icey().create_subscription<Msg>("topic", 1)
-        .then([](::SharedPtr input) {
+        .then([](Msg::SharedPtr input) {
 
-            auto output1 = do_computation(input);
-            auto output2 = do_another_computation(input);
-            return std::make_tuple(output1, output2);
+            auto output_msg1 = do_computation(input);
+            auto output_msg2 = do_another_computation(input);
+            return std::make_tuple(output_msg1, output_msg2);
         }).unpack();
     output1.publish("output_topic1");
     output2.publish("output_topic2");
@@ -82,6 +103,7 @@ Another way to do this in ICEY is the *pull-pattern*: (this is how Streams work 
 
 We sometimes need to call the same function from multiple subscriber callbacks: 
 
+TODO show here any
 
 ```cpp 
     navsat_fix_sub_ = node->create_subscription<NavsatFix>("/navsat_fix", 1, 
@@ -105,14 +127,13 @@ TODO finish with any filter
 
 ## Cancellation (stopping the data-flow)
 
-One common control flow is to return early in a callback:
+Commonly, control flow includes to return early in a callback:
 
 ```cpp
 void VelocitySmoother::inputCommandCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
 {
   // If message contains NaN or Inf, ignore
   if (!nav2_util::validateTwist(*msg)) {
-    RCLCPP_ERROR(get_logger(), "Velocity message contains NaNs or Infs! Ignoring as invalid!");
     return;
   }
   
@@ -121,24 +142,23 @@ void VelocitySmoother::inputCommandCallback(const geometry_msgs::msg::Twist::Sha
 }
 ```
 
-In ICEY, we can achieve the exact same by returning an `std::optional<T>`: If there is value, it is propagated further. If not, then the next stage won't be called.
+In ICEY, we can achieve this by returning an `std::optional<T>`: If there is value, it is propagated further. If not, then the next stage won't be called.
 
 ```cpp
     node->icey().create_subscription<geometry_msgs::msg::Twist>("twist_input")
         .then([](const geometry_msgs::msg::Twist::SharedPtr msg) {
-            std::optional<double> maybe_result;
+            std::optional<geometry_msgs::msg::Twist::SharedPtr> maybe_result;
             // If message contains NaN or Inf, ignore
             if (!nav2_util::validateTwist(*msg)) {
-                RCLCPP_ERROR(get_logger(), "Velocity message contains NaNs or Infs! Ignoring as invalid!");
                 return maybe_result;
             }
-            
-            /// Otherwise, continue to do stuff
-            maybe_result = doCalculation(msg);
+            maybe_result = msg; 
             return maybe_result;
-    });
+        })
+        .then([](geometry_msgs::msg::Twist::SharedPtr msg) {
+            /// This will only be called if the previous stage returned something
+        });
 ```
-This is especially important for conditional publishing based on a parameter for example. 
 
 If this filtering can be efficiently implemented in a single function, we can write this even shorter: 
 
@@ -149,6 +169,16 @@ If this filtering can be efficiently implemented in a single function, we can wr
             doCalculation(msg);
         });
 ```
+
+Filtering is also useful for conditional publishing. 
+
+## Error-handling 
+
+Some streams in ICEY can have errors: A service call might fail, or a transform might not be available.
+If no error occurs a *value* is returned, otherwise an error. We handle errors by 
+
+
+TODO explain promises here 
 
 ## Where are the callback groups ? 
 

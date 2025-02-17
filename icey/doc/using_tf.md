@@ -5,19 +5,17 @@ Using TF with ICEY is a bit different that in regular ROS: Since everything is a
 In the following, we explain based on example patterns why this is what you actually want most of the time.
 After this motivation, we explain how TF works in ICEY.
 
-The following patterns of using TF are the most often.
+The following patterns of using TF are the most often:
 
 1: Getting the transform at the time the measurement was done (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main///nav2_amcl/src/amcl_node.cpp#L577)): 
 ```cpp
 /// On receiving a measurement, for example an image:
-void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
+void on_camera_image(sensor_msgs::Image::SharedPtr img) {
     auto camera_stamp = img->header.stamp;
     /// Get the pose of the camera with respect to the map at the time the image was shot:
     auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2_ros::fromMsg(camera_stamp));
 }
 ```
-
-So, we are usually always interested in getting the transform for a time of another topic: We are therefore *synchronizing* the transform with another topic.
 
 
 Other variants of this pattern (that are rather anti-patterns) are:
@@ -42,12 +40,11 @@ void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
 }
 ```
 
-These patterns are found everywhere in the Nav2 stack for example when searching for `lookupTransform`.
+
+So, we are usually always interested in getting the transform for a time of another topic: We are therefore *synchronizing* the transform with another topic.
 
 ## How TF works in ICEY
-
-
-In ICEY, you subscribe to a transform between two frames which yields a Stream:
+In ICEY, you *subscribe* to a transform between two frames:
 
 ```cpp
 auto map_base_link_tf = node->icey().create_transform_subscription("map", "base_link");
@@ -63,28 +60,23 @@ auto theta_angle = map_base_link_tf
     
 theta_angle.publish("theta_angle");
 ```
-
-But how do we interpolate the transforms in the buffer to get the transform for a given time ? 
-
-This is where we use the `SynchExactTime` filter, which always outputs something since the transform signal can be interpolated: 
+To handle the lookup at a given time, we simply call `icey.synchronize` with another subscription. This will call `lookupTransform` with the header stamp everyt time a new message arrives. Our previous example becomes in ICEY:
 
 ```cpp
-auto camera_feed = icey::create_subscription("camera_front");
-auto cam_to_map_transfom = icey::create_transform_subscription("camera_frame", "map");
+auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera_front");
+auto cam_to_map_transform = node->icey().create_transform_subscription("camera_frame", "map");
 
-icey::synchronize(camera_feed, cam_to_map_signal).then([](sensor_msgs::Camera::ConstSharedPtr image, geometry_msgs::TransfromStamped::ConstSharedPtr camera_to_map) {
+node->icey().synchronize(camera_image, cam_to_map_transform)
+    .then([](sensor_msgs::Camera::SharedPtr image, geometry_msgs::TransfromStamped::SharedPtr camera_to_map) {
 
-});
-
+    });
 ```
 
-The exact-time synchronizer matches the header time stamps of two topics exactly. This filter usually won't output anything for topics that are not stamped exactly the same. But in this case, one of the signals, namely the transform, is `Interpolatable`: this means, the filter receives the image, and the looks up the transform for the header timestamp of the image. As usual, the filter outputs something only if the result can be syncrhonized, in this case this means if the transform is available and can be looked up. 
-
-Overall, this means the above code is equivalent to this pattern:
+The above ICEY-code is equivalent to this pattern:
 
 ```cpp
 
-void on_image(sensor_msgs::Camera::ConstSharedPtr image) {
+void on_image(sensor_msgs::Camera::SharedPtr image) {
     geometry_msgs::TransfromStamped camera_to_map_transform;
     try {
         camera_to_map_transform = 
@@ -93,7 +85,6 @@ void on_image(sensor_msgs::Camera::ConstSharedPtr image) {
         return; // Return if the transform is not available yet.
     }
 
-    /// Otherwise, process the synchronized image and camera_to_map_transform ...
 }
 ```
 
