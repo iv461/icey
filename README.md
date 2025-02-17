@@ -1,79 +1,144 @@
 # ICEY 
 
-A new, simple interface library for the Robot Operating System (ROS). 
-In Icey, you can rapidly prototype Nodes in data-flow oriented manner: 
+ICEY is a a new API for the Robot Operating System (ROS) 2 that uses modern asynchronous programming with Streams and async/await syntax. It makes the asynchronous data-flow clearly visible and simplifies application code. It enables fast prototyping with less boilerplate code.
+
+It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: parameters, subscribers, publishers, timers, services, clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
+
+ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
+
+It offers additional goodies such as:
+- Automatic bookeeping of publishers/subscribers/timers so that you do not have to do it 
+- No callback groups needed for preventing deadlocks -- service calls are always asynchronous
+- Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
+
+ICEY supports ROS 2 Humble and ROS 2 Jazzy.
+
+Currently support only C++, Python-support is coming soon. 
+
+The [icey_examples](icey_examples) package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
 
 # Features 
 
-The core idea is that in common robotics applications, almost everything published is either a state or a signal: The pose of the robot is a state, similar to the state of algorithms (i.e. "initialized"). Sensors on the other hand yield signals: Cameras, yaw rates etc.
+The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
 
-In Icey, signals roughly correspond to subscribers and states to publishers.
-The real power comes in Icey that you can simply declare a data-driven pipeline of computations:
-
+[Signal generator example](examples/signal_generator.cpp)
 ```cpp
-#include <icey/icey_ros2.hpp>
-
+#include <icey/icey.hpp>
 int main(int argc, char **argv) {
-    auto current_velocity = icey::create_signal<float>("current_velocity");
+    
+    icey::create_timer(100ms)
+        .then([&](size_t ticks) {
+            /// We can access parameters in callbacks using .value() because parameters are always initialized first.
+            double y = std::sin(0.1 * ticks * 2 * M_PI);
+            return y;
+        })
+        .publish("sine_generator");
 
-    icey::spawn(argc, argv, "ppc_controller_node"); /// Create and start node
-
+    /// Create and spin the node:
+    icey::spawn(argc, argv, "signal_generator_example"); 
 }
 ```
 
-## Parameters 
-
-Paramters are persisted, but updates are communicated similar to topics. That is why they are very similar to states:
+Using Streams (promises), you can build your own data-driven pipeline of computations, for example sequencing service calls: 
 
 ```cpp
-auto max_velocity_parameter = icey::create_parameter<float>("maximum_velocity");
-```
+icey::create_timer(1s)
+    /// Build a request when the timer ticks
+    .then([](size_t) {
+        auto request = std::make_shared<ExampleService::Request>();
+        request->data = true;
+        return request;
+    })
+    /// Now call the service with the request build
+    .call_service<ExampleService>("set_bool_service1", 1s)
+    .then([](ExampleService::Response::SharedPtr response) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
+        auto request = std::make_shared<ExampleService::Request>();
+        request->data = false;
+        return request;
+    })
+    .call_service<ExampleService>("set_bool_service2", 1s)
+    .then([](ExampleService::Response::SharedPtr response) {
+        ...
+    })
+    /// Here we catch timeout errors as well as unavailability of the service:
+    .except([](const std::string& error_code) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
+    });
+```     
+This programming model is fully asynchronous and therefore there is danger of deadlocks when chaining multiple callbacks. 
 
-
-## Mixing with old ROS 2 API: 
-
-Icey is a thin wrapper around ROS 2/1 and you can always switch and also mix 
-with the regular ROS-API. It has virtually no buy-in cost: You can always still use callbacks for some topics, mix it with the regular ROS 2 API. 
-
-You can always listen on changes of a state, like a subscriber callback:
+## Parameter declaration: 
+ICEY also simplifies the declaration of many parameters: (very similar to the `dynamic_reconfigure`-package from ROS 1):
 
 ```cpp
-
-auto max_velocity_parameter = icey::SubscribedState<float>("maximum_velocity");
-max_velocity_parameter.on_change([](const auto &new_value) {
-    ...
-});
-
-auto max_velocity_parameter = icey::ParameterState<float>("maximum_velocity");
-max_velocity_parameter.on_change([](const auto &new_value) {
-    ...
-});
+/// All parameters of the node in a struct:
+struct NodeParameters {
+  /// We set a default value, allowed interval and a description
+  icey::DynParameter<double> frequency{10., icey::Interval(0., 25.), std::string("The frequency of the sine")};
+  icey::DynParameter<double> amplitude{3};
+  icey::DynParameter<std::string> map_path{""};
+  ...
+};
+ /// The object holding all the parameters:
+ NodeParameters params;
+  /// Declare parameter struct and receive updates each time a parameter changes:
+  icey::declare_parameter_struct(params, [](const std::string &changed_parameter) {
+        RCLCPP_INFO_STREAM(icey::node->get_logger(),
+                           "Parameter " << changed_parameter << " changed");
+      });
 ```
 
-Likewise, you can publish a state by calling `set()`: 
+# Key features: 
 
-```cpp
-auto slip_angle_state = icey::create_state<float>("/states/slip_angle");
-slip_angle_state.set(0.01f) /// This will get published
-```
+- ICEY introduces modern asynchronous programming to ROS using Streams (Promises) and coroutines (async/await)
+- ICEY minimizes boilerplate code needed for using parameters, creating and spawning nodes and synchronization 
+- Automatic synchronization, unifying usage of TF as a form of synchronization
+- Fully featured: Parameters, Pub/Sub, TF, Services, Lifecycle Nodes, `message_filters`, `image_transport` 
+- Extensible: [We demonstrate](icey/doc/extending_icey.md) the extension of ICEY for custom `image_transport`-publishers/subscribers
+- Easy asynchronous programming using Stream, you do not [have to deal with callback groups in order to prevent deadlocks](https://docs.ros.org/en/jazzy/How-To-Guides/Using-callback-groups.html)
 
-# Robustness 
+- Efficiency: No additional dynamic memory allocations compared to plain ROS happen after the node is initialized, also not for error handling thanks to using Result-types instead of C++-exceptions
 
-This library is designed to be robust against common usage mistakes: It will detect problems like cyclic dependencies that would cause infinite update cycles. It enforces this by creating a Directed Acyclic Graph (DAG) and using topological sorting to ensure a well-defined order of updates. 
+# Performance: 
 
-# Similar projects 
+TODO summarize 
 
-Some similar projects exist, but not quite close:
+The Streams implemented are generally very fast, they have a small (non-zero), but in practice neglible overhead compared to plain callbacks. 
+To demonstrate this, we translated a typical node from the Autoware project with multiple subscribers/publishers and measured the performance with perf. 
+The evaluation showed an overall latency increase of only X.X % and no significant increase of the latency variance (jitter). 
+See the [Evaluation]-section for more details. 
 
-- [SMACC] https://github.com/robosoft-ai/SMACC
-- [RXROS] https://github.com/rosin-project/rxros2
 
-# References 
+# (small) limitations
 
-- [1] https://en.wikipedia.org/wiki/Reactive_programming 
-- [2] https://cs.brown.edu/~sk/Publications/Papers/Published/ck-frtime/
-- [3] https://en.wikipedia.org/wiki/Functional_reactive_programming
-- [4] https://svelte.dev/tutorial/
-- [5] https://www.youtube.com/watch?v=cELFZQAMdhQ
-- [6] https://docs.ros.org/en/jazzy/p/rclcpp/generated/
+We generally aim with ICEY to support everything that ROS also supports. 
+Still, there are some small limitations: 
+
+- Only the SingleThreadedExecutor is supported currently
+- Memory strategy is not implemented, but could be easily
+- Sub-nodes
+
+
+# Dependencies: 
+
+- ROS 2 
+- Boost (Hana)
+- C++20 is required for the parameters struct feature and coroutine-support
+
+# Documentation
+
+See TODO for documentation 
+
+# Coming soon: 
+
+- Python/`rclpy` support
+
+# Related effords
+
+- Autoware's `autoware::component_interface_utils::NodeAdaptor` simplifies the ROS-API as well 
+- [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept for reactive programming
+- [RXROS](https://github.com/rosin-project/rxros2) Proof on concept for reactive programming
+- [fuse](https://github.com/locusrobotics/fuse) Allows to model data flows, but it is focused on one application: sensor fusion. ICEY on the other hand is general 
+- [r2r](https://github.com/m-dahl/r2r_minimal_node/blob/master/r2r_minimal_node/src/main.rs) Rust wrapper for ROS 2, at parts surprisingly similar since it uses tokio (an asynchronous programming library for Rust)
 

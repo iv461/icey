@@ -1,0 +1,52 @@
+#include <icey/icey.hpp>
+
+#include "std_msgs/msg/float32.hpp"
+
+using namespace std::chrono_literals;
+
+icey::Stream<int> create_and_spin_node(int argc, char **argv) {
+  std::cout << "Starting node .. " << std::endl;
+
+  
+  
+  auto node = icey::create_node(argc, argv, "signal_generator");
+  auto frequency = node->icey().declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
+  auto amplitude = node->icey().declare_parameter<double>("amplitude", 2.);
+  
+  auto period_time = 100ms;
+  auto timer = node->icey().create_timer(period_time);
+
+  auto rectangle_pub = node->icey().create_publisher<std_msgs::msg::Float32>("rectangle_signal", rclcpp::SystemDefaultsQoS());
+  auto sine_pub = node->icey().create_publisher<std_msgs::msg::Float32>("sine_signal", rclcpp::SystemDefaultsQoS());
+
+  std::cout << "Starting loop .. " << std::endl;
+  /// Main spinning loop
+  while (rclcpp::ok()) {
+    /// Receive timer updates
+    size_t ticks = co_await timer;
+
+    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
+    
+    if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
+      std_msgs::msg::Float32 result;
+      result.data = (ticks % 20 == 0) ? 1.f : 0.f;  
+      rectangle_pub.publish(result);
+    } 
+    
+    /// Add another computation for the timer
+    std_msgs::msg::Float32 float_val;
+    double period_time_s = 0.1;
+    /// We can access parameters in callbacks using .value() because parameters are always
+    /// initialized first.
+    double y = amplitude * std::sin((period_time_s * ticks) * frequency * 2 * M_PI);
+    float_val.data = y;
+    RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
+    sine_pub.publish(float_val);
+  
+  }
+  co_return 0;
+}
+
+int main(int argc, char **argv) {
+  create_and_spin_node(argc, argv);
+}

@@ -1,0 +1,21 @@
+PROJECT_NAME           = icey
+INPUT                  = ../include/icey/
+RECURSIVE              = YES
+
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = .build/doxygenxml
+
+
+ALIASES                = "rst=\verbatim embed:rst"
+ALIASES               += "endrst=\endverbatim"
+
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+
+EXCLUDE =  ../include/icey/impl/field_reflection.hpp
+EXCLUDE_SYMBOLS        = detail::*,*::detail::*
+
+EXAMPLE_PATH = ../../icey_examples/src
