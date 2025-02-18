@@ -3,15 +3,15 @@
 
 #include <boost/noncopyable.hpp>
 #include <functional>
-#include <tuple>
-#include <optional>
 #include <memory>
+#include <optional>
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
 namespace icey {
-/// A special type that indicates that there is no value. (Using `void` for this would cause many problems,
-/// so defining an extra struct is easier.)
+/// A special type that indicates that there is no value. (Using `void` for this would cause many
+/// problems, so defining an extra struct is easier.)
 struct Nothing {};
 /// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we
 /// will generally use in the following to recognize (unspecialized) class templates.
@@ -120,7 +120,7 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   return stream;
 }
 
-/// Calls the function with the given argument arg but unpacks it if it is a tuple. 
+/// Calls the function with the given argument arg but unpacks it if it is a tuple.
 template <class Func, class Arg>
 inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
   if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
@@ -133,24 +133,26 @@ inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
 }
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
-/// It has a state of type Result and a list of callbacks that get notified when this state changes. 
+/// It has a state of type Result and a list of callbacks that get notified when this state changes.
 ///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
-/// final. 
-/// \tparam _Value the type of the value 
+/// final.
+/// \tparam _Value the type of the value
 /// \tparam _ErrorValue the type of the error. It can also be an exception.
 /// \tparam Derived a class from which this class derives, used as an extention point.
-/// \tparam DefaultDerived When new `Stream`s get created using `then` and `except`, this is used as a template parameter for `Derived` so that a default extention does not get lost when we call `then` or `except`.
+/// \tparam DefaultDerived When new `Stream`s get created using `then` and `except`, this is used as
+/// a template parameter for `Derived` so that a default extention does not get lost when we call
+/// `then` or `except`.
 ///
 template <class _Value, class _ErrorValue, class Derived, class DefaultDerived>
-class Stream : private boost::noncopyable,
-               public Derived {
+class Stream : private boost::noncopyable, public Derived {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;  
+  using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;
   using State = Result<Value, ErrorValue>;
 
-  /// If no error is possible (ErrorValue is Nothing), this it just the Value instead of the State to not force the user to write unnecessary error handling/unwraping code.
+  /// If no error is possible (ErrorValue is Nothing), this it just the Value instead of the State
+  /// to not force the user to write unnecessary error handling/unwraping code.
   using MaybeResult = std::conditional_t<std::is_same_v<ErrorValue, Nothing>, Value, State>;
   using Handler = std::function<void(const State &)>;
 
@@ -161,17 +163,16 @@ public:
   const ErrorValue &error() const { return state_.error(); }
   State &get_state() { return state_; }
   const State &get_state() const { return state_; }
-                
-  /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the new state as an argument.
+
+  /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the
+  /// new state as an argument.
   void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
 
   /// Sets the state to hold none, but does not notify about this state change.
   void set_none() { state_.set_none(); }
-  
+
   /// Sets the state to hold a value, but does not notify about this state change.
-  void set_value(const Value &x) {
-    state_.set_ok(x);
-  }
+  void set_value(const Value &x) { state_.set_ok(x); }
 
   /// Sets the state to hold an error, but does not notify about this state change.
   void set_error(const ErrorValue &x) { state_.set_err(x); }
@@ -183,7 +184,9 @@ public:
     return current_state;
   }
 
-  /// Returns the current state and sets it to none. If no error is possible (ErrorValue is not Nothing), it just the Value to not force the user to write unnecessary error handling/unwraping code.
+  /// Returns the current state and sets it to none. If no error is possible (ErrorValue is not
+  /// Nothing), it just the Value to not force the user to write unnecessary error
+  /// handling/unwraping code.
   MaybeResult take() {
     auto current_state = this->take_state();
     if constexpr (std::is_same_v<ErrorValue, Nothing>) {
@@ -193,8 +196,10 @@ public:
     }
   }
 
-  /// It takes (calls take) the current state and notifies the callbacks. It notifies only in case we have an error or value. If the state is none, it does not notify.
-  /// If the state is an error and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no handlers were registered, the exception is re-thrown.
+  /// It takes (calls take) the current state and notifies the callbacks. It notifies only in case
+  /// we have an error or value. If the state is none, it does not notify. If the state is an error
+  /// and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no
+  /// handlers were registered, the exception is re-thrown.
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the
@@ -250,9 +255,8 @@ protected:
         output->notify();
       } else if constexpr (is_optional_v<ReturnType>) {
         auto ret = unpack_if_tuple(f, x);
-        if(ret) 
-          output->put_value(*ret);
-      } else {  /// Other return types are interpreted as values that are put into the stream. 
+        if (ret) output->put_value(*ret);
+      } else {  /// Other return types are interpreted as values that are put into the stream.
         ReturnType ret = unpack_if_tuple(f, x);
         output->put_value(ret);
       }
@@ -268,19 +272,19 @@ protected:
   /// error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.
   /// @param this (implicit): Stream<V, E>* The input
   /// @param output: SharedPtr< Stream<V2, E> >, the ouput Stream where the result is written in
-  /// @param f:  (V) -> V2 The user callback function to call when the input Stream receives a value or
-  /// an error
+  /// @param f:  (V) -> V2 The user callback function to call when the input Stream receives a value
+  /// or an error
   template <bool put_value, class Output, class F>
   void create_handler(Output output, F &&f) {
-    auto handler = [output, call_and_put_value =
-                        std::move(call_depending_on_signature(output, f))](const State &state) {
+    auto handler = [output, call_and_put_value = std::move(call_depending_on_signature(output, f))](
+                       const State &state) {
       if constexpr (put_value) {  /// If we handle values with .then()
         if (state.has_value()) {
           call_and_put_value(state.value());
         } else if (state.has_error()) {
           output->put_error(state.error());  /// Do not execute f, but propagate the error
         }
-      } else {                     /// if we handle errors with .except()
+      } else {                    /// if we handle errors with .except()
         if (state.has_error()) {  /// Then only put_value with the error if there is one
           call_and_put_value(state.error());
         }  /// Else do nothing
@@ -289,14 +293,15 @@ protected:
     this->register_handler(handler);
   }
 
-  /// Common function for both .then and .except. The template argument "put_value" says whether f is
-  /// the put_value or the put_error handler (Unlike JS, we can only register one at the time, this is
-  /// for better code generation)
+  /// Common function for both .then and .except. The template argument "put_value" says whether f
+  /// is the put_value or the put_error handler (Unlike JS, we can only register one at the time,
+  /// this is for better code generation)
   template <bool put_value, class F>
   auto done(F &&f) {
     /// Return type depending of if the it is called when the Promise put_values or put_errors
     using FunctionArgument = std::conditional_t<put_value, Value, ErrorValue>;
-    /// Only if we put_value we pass over the error. except does not pass the error, only the handler may create a new error
+    /// Only if we put_value we pass over the error. except does not pass the error, only the
+    /// handler may create a new error
     using NewError = std::conditional_t<put_value, ErrorValue, Nothing>;
     using ReturnType = decltype(unpack_if_tuple(f, std::declval<FunctionArgument>()));
     /// Now we want to call put_value only if it is not none, so strip optional
@@ -308,16 +313,15 @@ protected:
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto output =
-          create_stream<Stream<typename ReturnType::Value,
-                                   typename ReturnType::ErrorValue, 
-                                   DefaultDerived, DefaultDerived>>();  // Must pass over error
+          create_stream<Stream<typename ReturnType::Value, typename ReturnType::ErrorValue,
+                               DefaultDerived, DefaultDerived>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
-      auto output = create_stream<Stream<ReturnTypeSome, NewError,
-                                DefaultDerived, DefaultDerived>>();
+      auto output =
+          create_stream<Stream<ReturnTypeSome, NewError, DefaultDerived, DefaultDerived>>();
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     }

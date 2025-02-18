@@ -21,7 +21,7 @@ The [icey_examples](icey_examples) package contains over one dozen of different 
 
 The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
 
-[Signal generator example](examples/signal_generator.cpp)
+[Signal generator example](icey_examples/src_signal_generator.cpp)
 ```cpp
 #include <icey/icey.hpp>
 int main(int argc, char **argv) {
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 ```
 
 Using Streams (promises), you can build your own data-driven pipeline of computations, for example sequencing service calls: 
-
+[Service call example](icey_examples/src/service_client.cpp)
 ```cpp
 node->icey().create_timer(1s)
     /// Build a request when the timer ticks
@@ -69,6 +69,7 @@ This programming model is fully asynchronous and therefore there is danger of de
 ## Parameter declaration: 
 ICEY also simplifies the declaration of many parameters: (very similar to the `dynamic_reconfigure`-package from ROS 1):
 
+[Parameter struct example](icey_examples/src/parameters_struct.cpp)
 ```cpp
 /// All parameters of the node in a struct:
 struct NodeParameters {
