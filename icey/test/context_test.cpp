@@ -8,6 +8,7 @@
 using ExampleService = std_srvs::srv::SetBool;
 using namespace std::chrono_literals;
 
+
 TEST_F(NodeTest, ContextCreatesEntities) {
     EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/maydup_camera"), 0);
     node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
@@ -47,6 +48,35 @@ TEST_F(NodeTest, ContextCreatesParameters) {
 
     EXPECT_EQ(node_->get_parameter_or<int64_t>("icey_my_test_param1", -1LL), 3);
 }
+
+/// Checks if Streams created in all possible ways have a context
+TEST_F(NodeTest, StreamsHaveContext) {
+    /// Entities
+    auto sub = node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
+    EXPECT_EQ(sub.impl()->context.lock().get(), &node_->icey());
+
+    auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
+    EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
+
+    auto tf_sub = node_->icey().create_transform_subscription("map", "base_link");
+    EXPECT_EQ(tf_sub.impl()->context.lock().get(), &node_->icey());
+
+    //// Transformations:
+    auto thened_stream = sub.then([](auto x) { return x; });
+    EXPECT_EQ(thened_stream.impl()->context.lock().get(), &node_->icey());
+
+    auto timeouted_stream = sub.timeout(1s); 
+    EXPECT_EQ(timeouted_stream.impl()->context.lock().get(), &node_->icey());
+    
+    auto exceped_stream = timeouted_stream.except([](auto x, auto y, auto z) { return x; });
+    EXPECT_EQ(exceped_stream.impl()->context.lock().get(), &node_->icey());
+
+    //// Filters:
+    auto any_value_stream = node_->icey().any(tg_sub, sub);
+    EXPECT_EQ(any_value_stream.impl()->context.lock().get(), &node_->icey());
+}
+
+
 
 
 TEST_F(NodeTest, StreamsUseCount) {
