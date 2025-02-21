@@ -29,9 +29,6 @@ class NodeTest : public testing::Test {
      // before the destructor).
   }
 
-  void spin_all() {
-   node_->icey().get_executor()->spin_some(1s);
-  }
 
   std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_test_node")};  
 };
@@ -45,25 +42,37 @@ TEST_F(NodeTest, ContextCreatesEntities) {
 }
 
 TEST_F(NodeTest, TimerTest) {
-
    size_t timer_ticked{0};
    auto timer = node_->icey().create_timer(100ms);
 
    EXPECT_EQ(timer_ticked, 0);
-
    timer
      .then([&](size_t ticks) {
-         timer_ticked++;
+        EXPECT_EQ(timer_ticked, ticks);
+        timer_ticked++;
          if(timer_ticked == 10) {
             timer.impl()->timer->cancel();
+            node_->icey().get_executor()->cancel(); /// Cancel the executor because otherwise spin() will block forever. And nothing except spin works (i.e spin_once, spin_all, seems like a bug to me) This idea is from test_timer.cpp in rclcpp.
          }
-     });
-   
+     });   
    EXPECT_EQ(timer_ticked, 0);
-   spin_all();
+   node_->icey().get_executor()->spin();
    EXPECT_EQ(timer_ticked, 10);   
 }
 
+TEST_F(NodeTest, OneOffTimerTest) {
+   /// Test one-off timer 
+   auto timer2 = node_->icey().create_timer(100ms, true);
+   timer_ticked = 0;
+   EXPECT_EQ(timer_ticked, 0);
+   timer2
+     .then([&](size_t ticks) {
+        EXPECT_EQ(timer_ticked, ticks);
+        timer_ticked++;
+     });
+   node_->icey().get_executor()->spin();
+   EXPECT_EQ(timer_ticked, 1);
+}
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
