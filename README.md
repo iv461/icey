@@ -125,8 +125,6 @@ Of course (and after you read this far) you can set it to whatever value you lik
 We just want to prevent your first experience with ICEY from being "it freezes your system and you have to reboot", which would be very unpleasant.
 </details>
 
-See the documentation for more details. 
-
 # Documentation 
 
 The documentation can be found here: TODO link 
@@ -140,7 +138,6 @@ To demonstrate this, we translated a typical node from the Autoware project with
 The evaluation showed an overall latency increase of only X.X % and no significant increase of the latency variance (jitter). 
 See the [Evaluation]-section for more details. 
 
-
 # (small) limitations
 
 We generally aim with ICEY to support everything that ROS also supports. 
@@ -150,7 +147,7 @@ Still, there are some small limitations:
 - Memory strategy is not implemented
 - Sub-nodes are not supported
 
-# Feature coming soon 
+# Features coming soon:
 
 - Python support 
 - Actions 

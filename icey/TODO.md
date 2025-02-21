@@ -25,7 +25,7 @@ Sorted by decreasing priority.
 
 - [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep
 
-- [ ] .buffer(N): Basis for `delay`-filter
+- [X] .buffer(N): Basis for `delay`-filter
 - [ ] `delay` with 
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
@@ -53,7 +53,7 @@ Sorted by decreasing priority.
 
 - [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
 
-- [] [Stream] member-then with static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
+- [] [Stream] member-then with static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17) -> p2300 does pipe then
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
 - [ ] Maybe support cascading the synchronizers -> not for 0.1

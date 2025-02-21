@@ -549,7 +549,8 @@ template <class V>
 struct TimeoutFilter;
 template <class V>
 struct ServiceClient;
-
+template <class V>
+struct Buffer;
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
 /// It is conceptually very similar to a promise in JavaScript except that state transitions are not
@@ -614,7 +615,8 @@ public:
   }
 
   /// Connect this Stream to the given output stream so that the output stream receives all the
-  /// values.
+  /// values. 
+  /// \todo remove this, use unwrap
   template <AnyStream Output>
   void connect_values(Output output) {
     this->impl()->register_handler([output_impl = output.impl()](const auto &new_state) {
@@ -705,11 +707,26 @@ public:
                         [](const auto &...args) { return std::make_tuple(args...); });
   }
 
+  /// Returns a new Stream that cannot have Errors by handling the error
+  /// \todo implement more cleanly
+  template<class F>
+  Stream<Value, Nothing> unwrap_or(F f) {
+    this->impl().except(f);
+    auto new_stream = this->template transform_to<Value, Nothing>();
+    this->connect_values(new_stream);
+    return new_stream;
+  }
+
   auto filter(std::function<bool(const Value &)> f) {
     this->then([f](auto x) -> std::optional<Value> {
       if (!f(x)) return {};
       return x;
     });
+  }
+
+  /// Buffers N elements 
+  Buffer<Value> buffer(std::size_t N) const {
+    return this->template create_stream<Buffer<Value>>(N, *this);
   }
 
 protected:
@@ -718,12 +735,12 @@ protected:
       throw std::runtime_error("This stream does not have context");
   }
 
+  /// Creates a new stream of type S using the Context. See Context::create_stream
+  template <AnyStream S, class... Args>
+  S create_stream(Args &&...args) { return this->impl()->context.lock().template create_stream<S>(args...); }
+
   template <class NewValue, class NewError>
-  Stream<NewValue, NewError> transform_to() const {
-    Stream<NewValue, NewError> new_stream;
-    new_stream.impl()->context = this->impl()->context;
-    return new_stream;
-  }
+  Stream<NewValue, NewError> transform_to() const { return create_stream< Stream<NewValue, NewError> >(); }
 
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
@@ -735,6 +752,7 @@ protected:
           impl::Stream<NewVal, NewErr, WithDefaults<Nothing>, WithDefaults<Nothing>>> &impl) const {
     Stream<NewVal, NewErr> new_stream;
     new_stream.impl() = impl;
+    this->impl()->context.lock()->add_stream_impl(impl);
     new_stream.impl()->context = this->impl()->context;
     return new_stream;
   }
@@ -742,6 +760,31 @@ protected:
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
 };
+
+template <class Value>
+struct BufferImpl {
+  std::size_t N{1};
+  std::shared_ptr<std::vector<Value>> buffer{std::make_shared<std::vector<Value>>()};
+};
+
+/// A Buffer is a Stream that holds an array of values. It accumulates a certain amount of values and only then it has itself a value. 
+/// It does not have errors since it does not make much sense to accumulate errors.
+template <class Value>
+struct Buffer : public Stream< std::shared_ptr< std::vector<Value> >, Nothing, BufferImpl<Value> > {
+  template<AnyStream Input>
+  explicit Buffer(std::size_t N, Input input) {
+    this->impl()->N = N;
+    input->impl()->register_handler([impl=this->impl()](auto x) {
+      if(impl->buffer->size() == impl->N) {
+        impl->put_value(impl->buffer); 
+        impl->buffer.clear();
+      } else {
+        impl->buffer->push_back(x);
+      }
+    });
+  }
+};
+
 
 /// What follows are parameters.
 /// Traits to recognize valid types for ROS parameters (Reference:
@@ -1365,13 +1408,17 @@ public:
         executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) {
     executor_->add_node(node_interface.get_node_base_interface());
   }
+  /// Adds a stream impl to the list so that it does not go out of scope.
+  void add_stream_impl(std::shared_ptr<StreamImplDefault> impl) {
+    stream_impls_.push_back(impl);
+  }
 
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
   /// list of streams so that it does not go out of scope. It also sets the context.
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
     S stream(args...);
-    stream_impls_.push_back(stream.impl());
+    this->add_stream_impl(stream.impl());
     stream.impl()->context = this->shared_from_this();
     return stream;
   }

@@ -1,7 +1,8 @@
 API Reference 
 ==============
 
-The API reference documents all available functions/classes in ICEY with all the details.
+This API reference documents all of the public API of ICEY.
+Everything not documented here is not a public API.
 
 Table of Contents
 ^^^^^^^^^^^^^^^^^
