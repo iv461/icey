@@ -432,7 +432,7 @@ struct crtp {
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
-template <AnyStream DerivedStream>
+template <class DerivedStream>
 struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   /// We are a promise
   using promise_type = DerivedStream;
@@ -1101,10 +1101,10 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  
+  template<AnyStream Input>
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
-                  Stream<_Value, Nothing> *maybe_input = nullptr) {
+                  Input *maybe_input = nullptr) {
     this->impl()->name = topic_name;
     this->impl()->publisher = node.add_publisher<Message>(topic_name, qos);
     this->impl()->register_handler(
@@ -1234,7 +1234,8 @@ struct TimeoutFilter
   /// \param create_extra_timer If set to false, the timeout will only be detected after at least
   /// one message was received. If set to true, an extra timer is created so that timeouts can be
   /// detected even if no message is received
-  TimeoutFilter(NodeBookkeeping &node, Stream<Value> input, const Duration &max_age,
+  template<AnyStream Input>
+  TimeoutFilter(NodeBookkeeping &node, Input input, const Duration &max_age,
                          bool create_extra_timer = true) {
     auto node_clock = node.node_.get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
@@ -1717,7 +1718,9 @@ static void spin(NodeType node) {
   rclcpp::shutdown();
 }
 
-static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
+
+template <class NodeType>
+static void spin_nodes(const std::vector<std::shared_ptr<NodeType>> &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
   /// This is how nodes should be composed according to ROS guru wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references

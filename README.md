@@ -94,6 +94,39 @@ node->icey().declare_parameter_struct(params, [&](const std::string &changed_par
                         "Parameter " << changed_parameter << " changed");
     });
 ```
+# Dependencies: 
+
+- C++20 
+- ROS 2 Humble or Jazzy
+- Boost (Hana)
+
+Note that ROS 2 Humble supports building with C++20 (`-std=c++20`) only recently (around mid-2024): Many fixes have been merged and then backported to Humble. The information you will find online that ROS 2 does not support C++20 is outdated. 
+
+# Install 
+
+Just clone this repository to your workspace, install dependencies and compile: 
+
+```sh
+git clone https://github.com/DriverlessMobility/icey.git
+sudo apt install libboost-dev
+MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
+```
+
+Note: Use `MAKEFLAGS="-j4"` to prevent you system from freezing. 
+
+<details>
+
+<summary>Explaination</summary>
+
+By default, `colcon` will start as many compiler processes as there are CPU cores, if there are enough translation units (TU) to compile in parallel. The `icey_example` package contains ~20 examples and therefore TUs. Since GCC requires 1-3 GiB of RAM to compile a single TU using icey, on a machine with 20 CPU cores (such as a 12th generation Intel i7) and only 32 GiB of RAM, this will require more RAM than is available. So Linux starts swapping, which takes a very long time because at the same time the CPU load is also high. The result is an effectively unresponsive system.
+Linux has an out-of-memory killer (OOM killer), but by default it is configured to be effectively useless, it won't kill the GCC processes.
+By passing the option `MAKEFLAGS="-j4"`, only four jobs will be used, i.e. only 4 TUs will be compiled in parallel. This will prevent your system from freezing assuming you have at least 12 GiB of RAM.
+Of course (and after you read this far) you can set it to whatever value you like.
+We just want to prevent your first experience with ICEY from being "it freezes your system and you have to reboot", which would be very unpleasant.
+</details>
+
+See the documentation for more details. 
+
 # Documentation 
 
 The documentation can be found here: TODO link 
@@ -114,16 +147,13 @@ We generally aim with ICEY to support everything that ROS also supports.
 Still, there are some small limitations: 
 
 - Only the SingleThreadedExecutor is supported currently
-- Memory strategy is not implemented, but could be easily
-- Sub-nodes
+- Memory strategy is not implemented
+- Sub-nodes are not supported
 
-# Dependencies: 
+# Feature coming soon 
 
-- C++20 
-- ROS 2 Humble or Jazzy
-- Boost (Hana)
-
-Note that ROS 2 Humble supports building with C++20 (`-std=c++20`) only recently (around mid-2024): Many fixes have been merged and then backported to Humble. The info you will find online that ROS 2 does not support C++20 is outdated. 
+- Python support 
+- Actions 
 
 # Related effords
 
