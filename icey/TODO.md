@@ -23,11 +23,10 @@ Sorted by decreasing priority.
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
-- [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. But 
+- [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep
 
-- [ ] Buffer: Basis for `delay`-filter
+- [ ] .buffer(N): Basis for `delay`-filter
 - [ ] `delay` with 
-- [ ] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
 
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
@@ -39,8 +38,6 @@ Sorted by decreasing priority.
 
 ## Other nice-to-have features, not for 0.1
 
-- [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
-- [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
 
 - [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
 - [ ] Remove use of RTTI in interpolateble stream 
@@ -54,11 +51,9 @@ Sorted by decreasing priority.
 - [ ] Support better parameter API: icey::Interval(0, 5.5) (i.e. determine the common type between the int and double literal) and allow for icey::Set("normal", "pulse", "single"), i.e. determine the common type of fixed-size char arrays correctly as std::string. 
 - [ ] Allow std::array as parameter type with automatic validation for the size -> generally, add parameter type convertes.
 
-- [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
-
 - [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
 
-- [] [Stream] member-then with Static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
+- [] [Stream] member-then with static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17)
 
 - [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
 - [ ] Maybe support cascading the synchronizers -> not for 0.1
@@ -77,8 +72,9 @@ Sorted by decreasing priority.
 
 ## API elegance/clarity
 
-- SEE https://github.com/ros-navigation/navigation2/blob/humble/nav2_util/include/nav2_util/service_client.hpp
-- [ ] Search for code that fixes the most common issues like setting int to an double param should be allowed
+- [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
+- [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
+- [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 
 ## Examples
 
@@ -236,3 +232,5 @@ Sorted by decreasing priority.
 
 - [X] Comment each line, do the icey-specific part ourselves, the rest can be done by LLMs. Everything output by LLMs is checked for factual accuracy of course.
 - [X] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
+
+- [X] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)

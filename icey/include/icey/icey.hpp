@@ -432,7 +432,7 @@ struct crtp {
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
-template <class DerivedStream>
+template <AnyStream DerivedStream>
 struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   /// We are a promise
   using promise_type = DerivedStream;
@@ -506,7 +506,7 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
     }
   }
 
-  /// Spin the event loop, (the ROS executor) until the Stream has a value or an error
+  /// Spin the ROS executor until this Stream has something (a value or an error).
   void spin_executor() {
     while (this->underlying().impl()->has_none()) {
       /// Note that spinning once might not be enough, for example if we synchronize three topics
@@ -575,7 +575,7 @@ public:
   /// The actual implementation of the Stream.
   using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
 
-  /// Returns the undelying pointer to the implementation.
+  /// Returns the underlying pointer to the implementation.
   const std::shared_ptr<Impl> &impl() const { return impl_; }
   std::shared_ptr<Impl> &impl() { return impl_; }
 
@@ -627,7 +627,7 @@ public:
 
   /// Creates a ROS publisher by creating a new stream of type PublisherType and connecting it to
   /// this stream.
-  template <class PublisherType, class... Args>
+  template <AnyStream PublisherType, class... Args>
   void publish(Args &&...args) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>,
@@ -1101,10 +1101,10 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  template <class Input = Stream<_Value, Nothing>>
+  
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
-                  Input *maybe_input = nullptr) {
+                  Stream<_Value, Nothing> *maybe_input = nullptr) {
     this->impl()->name = topic_name;
     this->impl()->publisher = node.add_publisher<Message>(topic_name, qos);
     this->impl()->register_handler(
@@ -1223,9 +1223,9 @@ protected:
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window.
 /// It simply passes over the value if no timeout occured, and errors otherwise.
 /// \tparam _Value the value must be a message that has a header stamp
-template <class _Value>
+template <class Value>
 struct TimeoutFilter
-    : public Stream<_Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
+    : public Stream<Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
   /// Construct the filter an connect it to the input.
   /// \tparam Input another Stream that holds as a value a ROS message with a header stamp
   /// \param node the node is needed to know the current time
@@ -1234,8 +1234,7 @@ struct TimeoutFilter
   /// \param create_extra_timer If set to false, the timeout will only be detected after at least
   /// one message was received. If set to true, an extra timer is created so that timeouts can be
   /// detected even if no message is received
-  template <class Input>
-  explicit TimeoutFilter(NodeBookkeeping &node, Input input, const Duration &max_age,
+  TimeoutFilter(NodeBookkeeping &node, Stream<Value> input, const Duration &max_age,
                          bool create_extra_timer = true) {
     auto node_clock = node.node_.get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
@@ -1269,8 +1268,8 @@ struct TimeoutFilter
 /// \note This is the same as what
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
-template <class _Message, class _Base = Stream<typename _Message::SharedPtr>>
-struct SimpleFilterAdapter : public _Base, public message_filters::SimpleFilter<_Message> {
+template <class _Message>
+struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr>, public message_filters::SimpleFilter<_Message> {
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so
   /// that `signalMessage` is called once a value is received. \todo Use mfl::simplefilter as
   /// derive-impl, then do not capture this, and do not allocate this adapter dynamically
@@ -1300,9 +1299,10 @@ struct SynchronizerStreamImpl {
     std::apply(
         [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
         inputs_);
+    /// This parameter setting is from the examples
     synchronizer_->setAgePenalty(0.50);
   }
-  uint32_t queue_size_{10};
+  uint32_t queue_size_{100};
 
   Inputs inputs_;
   std::shared_ptr<Sync> synchronizer_;
@@ -1367,7 +1367,7 @@ public:
 
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
   /// list of streams so that it does not go out of scope. It also sets the context.
-  template <class S, class... Args>
+  template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
     S stream(args...);
     stream_impls_.push_back(stream.impl());
@@ -1377,7 +1377,7 @@ public:
 
   /// Like Context::create_stream but additionally passes the node as the first argument. Needed for
   /// Stream that need to register to ROS.
-  template <class S, class... Args>
+  template <AnyStream S, class... Args>
   S create_ros_stream(Args &&...args) {
     return create_stream<S>(*this->node, args...);
   }
@@ -1572,12 +1572,13 @@ public:
   ///
   /// \tparam Inputs the input stream types, not necessarily all the same
   /// \param inputs the input streams, not necessarily all of the same type
+  /// \note The queue size is 100, it cannot be changed currently
   /// \warning Errors are currently not passed through
   template <AnyStream... Inputs>
   SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(Inputs... inputs) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     using namespace hana::literals;
-    uint32_t queue_size = 10;
+    const uint32_t queue_size = 100;
     auto synchronizer = create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size);
     auto zipped = hana::zip(std::forward_as_tuple(inputs...), synchronizer.impl()->inputs());
     hana::for_each(zipped, [](auto &input_output_tuple) {
@@ -1703,8 +1704,8 @@ using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
 
 /// Start spinning either a Node or a LifeCycleNode. Calls `rclcpp::shutdown()` at the end so you do
 /// not have to do it.
-template <class Node>
-static void spin(Node node) {
+template <class NodeType>
+static void spin(NodeType node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
   if (node->icey().get_executor()) {
@@ -1734,12 +1735,12 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
 
 /// Creates a node by simply calling `std::make_shared`, but it additionally calls `rclcpp::init` if
 /// not done already, so that you don't have to do it.
-template <class N = Node>
+template <class NodeType = Node>
 static auto create_node(int argc, char **argv, const std::string &node_name) {
   if (!rclcpp::contexts::get_global_default_context()
            ->is_valid())  /// Create a context if it is the first spawn
     rclcpp::init(argc, argv);
-  return std::make_shared<N>(node_name);
+  return std::make_shared<NodeType>(node_name);
 }
 
 }  // namespace icey

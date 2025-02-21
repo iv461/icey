@@ -87,6 +87,9 @@ struct NodeParameters {
                            "Parameter " << changed_parameter << " changed");
       });
 ```
+# Documentation 
+
+The documentation can be found here: TODO link 
 
 # Performance: 
 
@@ -109,9 +112,11 @@ Still, there are some small limitations:
 
 # Dependencies: 
 
+- C++20 
 - ROS 2 Humble or Jazzy
 - Boost (Hana)
-- C++20 is required for the parameters struct feature and coroutine-support
+
+Note that ROS 2 Humble supports building with C++20 (`-std=c++20`) only recently (around mid-2024): Many fixes have been merged and then backported to Humble. The info you will find online that ROS 2 does not support C++20 is outdated. 
 
 # Related effords
 

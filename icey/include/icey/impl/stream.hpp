@@ -132,6 +132,7 @@ inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
   }
 }
 
+
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
 ///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
