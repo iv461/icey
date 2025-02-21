@@ -717,7 +717,9 @@ public:
     return new_stream;
   }
 
-  auto filter(std::function<bool(const Value &)> f) {
+  /// Outputs the Value only if the given predicate f returns true.
+  template<class F>
+  Stream<Value, ErrorValue> filter(F f) {
     this->then([f](auto x) -> std::optional<Value> {
       if (!f(x)) return {};
       return x;
