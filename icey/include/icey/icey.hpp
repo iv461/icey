@@ -720,7 +720,7 @@ public:
   /// Outputs the Value only if the given predicate f returns true.
   template<class F>
   Stream<Value, ErrorValue> filter(F f) {
-    this->then([f](auto x) -> std::optional<Value> {
+    return this->then([f](auto x) -> std::optional<Value> {
       if (!f(x)) return {};
       return x;
     });
@@ -899,7 +899,7 @@ struct Validator {
   }
 
   Validate get_default_validator() const {
-    return [](const rclcpp::Parameter &new_param) { return std::optional<std::string>{}; };
+    return [](const rclcpp::Parameter &) { return std::optional<std::string>{}; };
   }
 
   rcl_interfaces::msg::ParameterDescriptor descriptor;
@@ -1299,7 +1299,7 @@ struct TimeoutFilter
     };
     if (create_extra_timer) {
       auto timer = input.impl()->context.lock()->create_timer(max_age);
-      timer.then([timer, input_impl = input.impl(), check_state](size_t ticks) {
+      timer.then([timer, input_impl = input.impl(), check_state](size_t) {
         bool timeout_occured = check_state(input_impl->get_state());
         if (!timeout_occured) timer.impl()->timer->reset();
       });

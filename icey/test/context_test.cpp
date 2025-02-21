@@ -23,6 +23,11 @@ TEST_F(NodeTest, ContextCreatesEntities) {
     node_->icey().create_transform_subscription("map", "base_link");
     EXPECT_GE(node_->get_node_graph_interface()->count_subscribers("/tf"), 1);
 
+    auto timer = node_->icey().create_timer(90ms);
+    EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/tf"), 0);
+    timer.then([](auto ticks) { return geometry_msgs::msg::TransformStamped{}; }).publish_transform();
+    EXPECT_GE(node_->get_node_graph_interface()->count_publishers("/tf"), 1);
+
     /* Does not work on Humble
     EXPECT_EQ(node_->get_node_graph_interface()->count_clients("set_bool_service_icey_test"), 0);
     node_->icey().call_service<ExampleService>("set_bool_service_icey_test", 1s);
@@ -52,12 +57,19 @@ TEST_F(NodeTest, ContextCreatesParameters) {
 /// Checks if Streams created in all possible ways have a context
 TEST_F(NodeTest, StreamsHaveContext) {
     /// Entities
+    auto timer = node_->icey().create_timer(90ms);
+    EXPECT_EQ(timer.impl()->context.lock().get(), &node_->icey());
+
     auto sub = node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
     EXPECT_EQ(sub.impl()->context.lock().get(), &node_->icey());
 
     auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
     EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
 
+    auto tf_stream = node_->icey().create_timer(90ms).then([](auto ticks) { return geometry_msgs::msg::TransformStamped{}; });
+    auto tf_pub = node_->icey().create_transform_publisher(tf_stream);
+    EXPECT_EQ(tf_pub.impl()->context.lock().get(), &node_->icey());
+    
     auto tf_sub = node_->icey().create_transform_subscription("map", "base_link");
     EXPECT_EQ(tf_sub.impl()->context.lock().get(), &node_->icey());
 
@@ -68,15 +80,17 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto timeouted_stream = sub.timeout(1s); 
     EXPECT_EQ(timeouted_stream.impl()->context.lock().get(), &node_->icey());
     
-    auto exceped_stream = timeouted_stream.except([](auto x, auto y, auto z) { return x; });
+    auto exceped_stream = timeouted_stream.except([](auto, auto, auto) { return x; });
     EXPECT_EQ(exceped_stream.impl()->context.lock().get(), &node_->icey());
 
     //// Filters:
-    auto any_value_stream = node_->icey().any(tg_sub, sub);
+    auto filtered_stream = sub.filter([](auto img) { return img->width > 0;});
+    EXPECT_EQ(filtered_stream.impl()->context.lock().get(), &node_->icey());
+
+    auto other_tf_sub = node_->icey().create_transform_subscription("map", "odom");
+    auto any_value_stream = node_->icey().any(tf_sub, other_tf_sub);
     EXPECT_EQ(any_value_stream.impl()->context.lock().get(), &node_->icey());
 }
-
-
 
 
 TEST_F(NodeTest, StreamsUseCount) {
