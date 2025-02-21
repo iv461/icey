@@ -66,7 +66,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
     EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
 
-    auto tf_stream = node_->icey().create_timer(90ms).then([](auto ticks) { return geometry_msgs::msg::TransformStamped{}; });
+    auto tf_stream = node_->icey().create_timer(90ms).then([](auto) { return geometry_msgs::msg::TransformStamped{}; });
     auto tf_pub = node_->icey().create_transform_publisher(tf_stream);
     EXPECT_EQ(tf_pub.impl()->context.lock().get(), &node_->icey());
     
@@ -80,7 +80,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto timeouted_stream = sub.timeout(1s); 
     EXPECT_EQ(timeouted_stream.impl()->context.lock().get(), &node_->icey());
     
-    auto exceped_stream = timeouted_stream.except([](auto, auto, auto) { return x; });
+    auto exceped_stream = timeouted_stream.except([](auto, auto, auto) { return double{}; });
     EXPECT_EQ(exceped_stream.impl()->context.lock().get(), &node_->icey());
 
     //// Filters:
@@ -90,6 +90,12 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto other_tf_sub = node_->icey().create_transform_subscription("map", "odom");
     auto any_value_stream = node_->icey().any(tf_sub, other_tf_sub);
     EXPECT_EQ(any_value_stream.impl()->context.lock().get(), &node_->icey());
+
+    auto tuple_stream = timer.then([](auto) { return std::make_tuple(double{}, geometry_msgs::msg::TransformStamped{}, std::string{}); });
+    auto [double_stream, tf_stream2, string_stream] = tuple_stream.unpack();
+    EXPECT_EQ(double_stream.impl()->context.lock().get(), &node_->icey());
+    EXPECT_EQ(tf_stream2.impl()->context.lock().get(), &node_->icey());
+    EXPECT_EQ(string_stream.impl()->context.lock().get(), &node_->icey());
 }
 
 

@@ -28,6 +28,10 @@ Sorted by decreasing priority.
 - [X] .buffer(N): Basis for `delay`-filter
 - [ ] `delay` with 
 
+- [ ] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function 
+
+- [ ] Do not use the TF2 filter but instead make the TF 2 subscriber more flexible. The only reason we need the TF2 message filter is that we might do not know the source frame and want to read it from the message header. But the TF2 message filter does excessive locking and is not equivalent to manually looking up
+
 - [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
 
 ## Error-handling

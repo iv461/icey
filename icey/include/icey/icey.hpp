@@ -672,7 +672,7 @@ public:
     this->impl()->context.lock()->create_transform_publisher(*this);
   }
 
-  /// Create a new ServiceClient stream, which gets called by this stream that holds the request.
+  /// Calls a ROS service with the Value that this Stream holds. It returns a new ServiceClient stream, which gets called by this stream.
   template <class ServiceT>
   ServiceClient<ServiceT> call_service(const std::string &service_name, const Duration &timeout,
                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
@@ -695,8 +695,8 @@ public:
     /// hana::to<> is needed to make a sequence from a range, otherwise we cannot transform it, see
     /// https://stackoverflow.com/a/33181700
     constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, tuple_sz>);
-    auto hana_tuple_output = hana::transform(indices, [impl = this->impl()](auto I) {
-      return impl->then([I](const auto &...args) {  /// Need to take variadic because then()
+    auto hana_tuple_output = hana::transform(indices, [*this](auto I) mutable {
+      return then([I](const auto &...args) {  /// Need to take variadic because then()
                                                     /// automatically unpacks tuples
         return std::get<I>(std::forward_as_tuple(
             args...));  /// So we need to pack this again in a tuple and get the index.
