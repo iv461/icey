@@ -71,21 +71,28 @@ ICEY also simplifies the declaration of many parameters: (very similar to the `d
 
 [Parameter struct example](icey_examples/src/parameters_struct.cpp)
 ```cpp
-/// All parameters of the node in a struct:
+/// Here you declare in a single struct all parameters of the node:
 struct NodeParameters {
-  /// We set a default value, allowed interval and a description
-  icey::DynParameter<double> frequency{10., icey::Interval(0., 25.), std::string("The frequency of the sine")};
-  icey::DynParameter<double> amplitude{3};
-  icey::DynParameter<std::string> map_path{""};
-  ...
+  /// We can have regular fields :
+  double amplitude{3};
+
+  /// And as well parameters with constraints and a description:
+  icey::ParameterStream<double> frequency{10., icey::Interval(0., 25.),
+                                       std::string("The frequency of the sine")};
+  /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+  struct OtherParams {
+    double max_amp = 6.;
+    std::vector<double> cov;
+  } others;
 };
- /// The object holding all the parameters:
- NodeParameters params;
-  /// Declare parameter struct and receive updates each time a parameter changes:
-  icey::declare_parameter_struct(params, [](const std::string &changed_parameter) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(),
-                           "Parameter " << changed_parameter << " changed");
-      });
+
+auto node = icey::create_node<icey::Node>(argc, argv, "parameters_struct_example");
+  /// Now create an object of the node-parameters that will be updated:
+NodeParameters params;
+node->icey().declare_parameter_struct(params, [&](const std::string &changed_parameter) {
+    RCLCPP_INFO_STREAM(node->get_logger(),
+                        "Parameter " << changed_parameter << " changed");
+    });
 ```
 # Documentation 
 
