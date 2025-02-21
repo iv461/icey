@@ -38,6 +38,8 @@ Sorted by decreasing priority.
 
 ## Other nice-to-have features, not for 0.1
 
+- [ ] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct
+- [ ] rclcpp also has a TimerInfo (previously called TimerEvent) with the time, use it as the state. 
 
 - [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
 - [ ] Remove use of RTTI in interpolateble stream 

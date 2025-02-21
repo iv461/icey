@@ -35,8 +35,8 @@ if(BUILD_TESTING)
   ament_target_dependencies(promise_test rclcpp)
 
   ament_auto_add_gtest(ros_entity_creation_test test/ros_entity_creation_test.cpp) 
-  target_include_directories(promise_test PUBLIC include/)
-  ament_target_dependencies(promise_test rclcpp)
+  ament_auto_add_gtest(context_test test/context_test.cpp) 
+  
 endif()
 
 ament_auto_package(
