@@ -29,13 +29,12 @@ if(BUILD_TESTING)
 
   # Add gtests
   find_package(ament_cmake_gtest REQUIRED)
-  
-  ament_auto_add_gtest(promise_test test/promise_test.cpp) 
-  target_include_directories(promise_test PUBLIC include/)
-  ament_target_dependencies(promise_test rclcpp)
 
-  ament_auto_add_gtest(entities_test test/entities_test.cpp) 
-  ament_auto_add_gtest(context_test test/context_test.cpp) 
+  ament_auto_add_gtest(test_main 
+    test/promise_test.cpp
+    test/entities_test.cpp
+    test/test_main.cpp
+    test/context_test.cpp) 
   
 endif()
 

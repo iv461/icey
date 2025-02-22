@@ -367,6 +367,9 @@ private:
       rcl_interfaces::msg::SetParametersResult result;
       result.successful = true;
       for (const auto &parameter : parameters) {
+        /// We want to skip validating parameters that we didn't declare, for example here have other parameters like qos_overrides./tf.publisher.durability.
+        if(!book_.parameter_validators_.contains(parameter.get_name()))
+          continue;
         const auto &validator = book_.parameter_validators_.at(parameter.get_name());
         auto maybe_error = validator(parameter);
         if (maybe_error) {

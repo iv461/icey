@@ -8,7 +8,6 @@
 using ExampleService = std_srvs::srv::SetBool;
 using namespace std::chrono_literals;
 
-
 TEST_F(NodeTest, ContextCreatesEntities) {
     EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/maydup_camera"), 0);
     node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
@@ -29,18 +28,15 @@ TEST_F(NodeTest, ContextCreatesEntities) {
     timer.then([](auto) { return geometry_msgs::msg::TransformStamped{}; }).publish_transform();
     EXPECT_GT(node_->get_node_graph_interface()->count_publishers("/tf"), num_pubs_before);
 
-    /* Does not work on Humble
+    /* Does not work on Humble since the functions are not available (they are internally implemented via rcl, so we cannot just copy some rclcpp code from Jazzy unfortunatelly.)
     EXPECT_EQ(node_->get_node_graph_interface()->count_clients("set_bool_service_icey_test"), 0);
     node_->icey().call_service<ExampleService>("set_bool_service_icey_test", 1s);
     EXPECT_EQ(node_->get_node_graph_interface()->count_clients("set_bool_service_icey_test"), 1);
-    
     
     EXPECT_EQ(node_->get_node_graph_interface()->count_services("set_bool_other_service_icey_test"), 0);
     node_->icey().create_service<ExampleService>("set_bool_other_service_icey_test");
     EXPECT_EQ(node_->get_node_graph_interface()->count_services("set_bool_other_service_icey_test"), 1);
     */
-    
-
 
     /// Here are some assertions relevant for testing ROS nodes: 
     //  auto endpoint_info_vec = pub_node_->get_publishers_info_by_topic("camera/image");
@@ -61,7 +57,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto timer = node_->icey().create_timer(90ms);
     EXPECT_EQ(timer.impl()->context.lock().get(), &node_->icey());
 
-    auto param = node_->icey().declare_parameter<std::string>("my_param");
+    auto param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");
     EXPECT_EQ(param.impl()->context.lock().get(), &node_->icey());
 
     auto sub = node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
@@ -120,16 +116,3 @@ TEST_F(NodeTest, StreamsHaveContext) {
     
 }
 
-
-TEST_F(NodeTest, StreamsUseCount) {
-    //auto timer = node_->icey().create_timer(100ms);
-    //EXPECT_EQ(timer.impl().use_count(), 2); 
-}
-
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  rclcpp::init(argc, argv);
-  int ret = RUN_ALL_TESTS();
-  rclcpp::shutdown();
-  return ret;
-}

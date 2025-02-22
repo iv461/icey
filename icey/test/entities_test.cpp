@@ -62,13 +62,3 @@ TEST_F(TwoNodesFixture, PublisherTest) {
    spin(1100ms);
    EXPECT_EQ(received_cnt, 10);
 }
-
-
-
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  rclcpp::init(argc, argv);
-  int ret = RUN_ALL_TESTS();
-  rclcpp::shutdown();
-  return ret;
-}

@@ -15,7 +15,7 @@ protected:
     return [this, i](auto v) {
       using Result = icey::Result<std::string, std::string>;
       events.push_back(i);
-      std::cout << "Marker " << i << " called with val " << v << std::endl;
+      //std::cout << "Marker " << i << " called with val " << v << std::endl;
       if constexpr (behavior == MarkerBehavior::Some)
         return std::string("marker_from_" + std::to_string(i));
       else if constexpr (behavior == MarkerBehavior::None)
@@ -131,11 +131,4 @@ TEST_F(PromiseTest, TakeTest) {
 
   EXPECT_TRUE(current_state.has_value());
   EXPECT_EQ(current_state.value(), value);
-}
-
-
-
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
