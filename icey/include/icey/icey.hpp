@@ -724,8 +724,10 @@ public:
   template<class F>
   Stream<Value, ErrorValue> filter(F f) {
     return this->then([f](auto x) -> std::optional<Value> {
-      if (!f(x)) return {};
-      return x;
+      if (!f(x))
+         return {};
+      else
+        return x;
     });
   }
 

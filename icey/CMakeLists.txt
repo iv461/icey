@@ -34,6 +34,7 @@ if(BUILD_TESTING)
     test/promise_test.cpp
     test/entities_test.cpp
     test/test_main.cpp
+    test/filter_test.cpp
     test/context_test.cpp) 
   
 endif()
