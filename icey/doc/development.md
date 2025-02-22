@@ -1,18 +1,42 @@
 # Developing ICEY
 
-## Build 
+## Run tests: 
+
+Tests are build by default, run them with: 
+
+```sh
+cd <colcon-ws root>
+./build/icey/test_main
+```
+
+## Debug build 
+
+Useful: Install mixins: https://github.com/colcon/colcon-mixin-repository
 
 ```
 colcon build  --packages-select icey --mixin=debug 
 ```
 
-Useful: Install mixins: https://github.com/colcon/colcon-mixin-repository
-
-## Debug 
+## Run with GDB
 
 ```sh
-ros2 run --prefix 'gdb -ex run --args' icey tf_approx_filter_example
+ros2 run --prefix 'gdb -ex run --args' icey_examples <node name>
 ```
+
+## GDB 101: 
+
+- `r` run 
+- `c`: continue 
+- `s, n`: step, next, respectively 
+- `b <function name>`: just type the function name to set a breakpoint
+
+- `bt` backtrace 
+- `p <expression name>` : print the content of a variable
+
+If you want to look at an exception that gets catched: 
+- `catch throw`
+If your node crashes at Ctrl+C:
+- `handle SIGINT noprint nostop pass`
 
 ## Run clang-tidy: 
 
