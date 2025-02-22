@@ -61,11 +61,20 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto timer = node_->icey().create_timer(90ms);
     EXPECT_EQ(timer.impl()->context.lock().get(), &node_->icey());
 
+    auto param = node_->icey().declare_parameter<std::string>("my_param");
+    EXPECT_EQ(param.impl()->context.lock().get(), &node_->icey());
+
     auto sub = node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
     EXPECT_EQ(sub.impl()->context.lock().get(), &node_->icey());
 
     auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
     EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
+
+    auto client = node_->icey().create_client<ExampleService>("icey_test_service", 1s);
+    EXPECT_EQ(client.impl()->context.lock().get(), &node_->icey());
+    
+    auto service = node_->icey().create_service<ExampleService>("icey_test_service");
+    EXPECT_EQ(service.impl()->context.lock().get(), &node_->icey());
 
     auto tf_stream = node_->icey().create_timer(90ms).then([](auto) { return geometry_msgs::msg::TransformStamped{}; });
     auto tf_pub = node_->icey().create_transform_publisher(tf_stream);
@@ -103,6 +112,13 @@ TEST_F(NodeTest, StreamsHaveContext) {
 
     auto buffered_stream = sub.buffer(100);
     EXPECT_EQ(buffered_stream.impl()->context.lock().get(), &node_->icey());
+
+    auto ref_synched = node_->icey().sync_with_reference(sub, tf_sub);
+    EXPECT_EQ(ref_synched.impl()->context.lock().get(), &node_->icey());
+
+    /*auto approx_time_synched = node_->icey().synchronize_approx_time(sub, tf_sub.unwrap_or([](auto) {}) );
+    EXPECT_EQ(approx_time_synched.impl()->context.lock().get(), &node_->icey());*/
+    
 }
 
 
