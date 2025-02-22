@@ -33,10 +33,10 @@ ament_auto_add_executable(signal_generator_async_await_example src/async_await/s
 ament_auto_add_executable(service_client_async_await_example src/async_await/service_client_async_await.cpp)
 ament_auto_add_executable(using_image_transport_example src/using_image_transport.cpp)
 
-#ament_auto_add_executable(listener_example src/listener.cpp)
-#ament_auto_add_executable(multi_node_example src/multi_node.cpp)
-#ament_auto_add_executable(message_filters_interoperability_example src/message_filters_interoperability.cpp)
-#ament_auto_add_executable(automatic_synchronization_example src/automatic_synchronization.cpp)
+ament_auto_add_executable(listener_example src/listener.cpp)
+ament_auto_add_executable(multi_node_example src/multi_node.cpp)
+ament_auto_add_executable(message_filters_interoperability_example src/message_filters_interoperability.cpp)
+ament_auto_add_executable(automatic_synchronization_example src/automatic_synchronization.cpp)
 
 # ament_auto_add_library(icey_autoware_gyro_odometer SHARED
 #  autoware_gyro_odometer/gyro_odometer_core.cpp

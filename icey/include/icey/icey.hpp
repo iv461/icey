@@ -1711,14 +1711,14 @@ public:
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
 
 protected:
-  /// All the streams that were created are owned by the Context.
-  std::vector<std::shared_ptr<StreamImplDefault>> stream_impls_;
-  /// The executor is needed for async/await because the Streams need to be able to await
-  /// themselves. For this, they acces the ROS executor through the Context.
-  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   /// The node bookeeping is needed in the Context because Streams need the ROS node so that they
   /// can register themselves to ROS.
   std::shared_ptr<NodeBookkeeping> node;
+  /// The executor is needed for async/await because the Streams need to be able to await
+  /// themselves. For this, they acces the ROS executor through the Context.
+  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  /// All the streams that were created are owned by the Context.
+  std::vector<std::shared_ptr<StreamImplDefault>> stream_impls_;
 };
 
 /// The ROS node, additionally owning the context that holds the Streams.
@@ -1768,7 +1768,7 @@ static void spin(NodeType node) {
 
 
 template <class NodeType>
-static void spin_nodes(const std::vector<std::shared_ptr<NodeType>> &nodes) {
+static void spin_nodes(const std::vector<NodeType> &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
   /// This is how nodes should be composed according to ROS guru wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references
