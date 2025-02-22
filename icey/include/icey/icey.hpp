@@ -711,7 +711,7 @@ public:
   /// \todo implement more cleanly
   template<class F>
   Stream<Value, Nothing> unwrap_or(F f) {
-    this->impl().except(f);
+    this->except(f);
     auto new_stream = this->template transform_to<Value, Nothing>();
     this->connect_values(new_stream);
     return new_stream;
@@ -739,7 +739,7 @@ protected:
 
   /// Creates a new stream of type S using the Context. See Context::create_stream
   template <AnyStream S, class... Args>
-  S create_stream(Args &&...args) { return this->impl()->context.lock().template create_stream<S>(args...); }
+  S create_stream(Args &&...args) const { return this->impl()->context.lock()->template create_stream<S>(args...); }
 
   template <class NewValue, class NewError>
   Stream<NewValue, NewError> transform_to() const { return create_stream< Stream<NewValue, NewError> >(); }
@@ -776,17 +776,16 @@ struct Buffer : public Stream< std::shared_ptr< std::vector<Value> >, Nothing, B
   template<AnyStream Input>
   explicit Buffer(std::size_t N, Input input) {
     this->impl()->N = N;
-    input->impl()->register_handler([impl=this->impl()](auto x) {
+    input.impl()->register_handler([impl=this->impl()](auto x) {
       if(impl->buffer->size() == impl->N) {
         impl->put_value(impl->buffer); 
-        impl->buffer.clear();
+        impl->buffer->clear();
       } else {
-        impl->buffer->push_back(x);
+        impl->buffer->push_back(x.value());
       }
     });
   }
 };
-
 
 /// What follows are parameters.
 /// Traits to recognize valid types for ROS parameters (Reference:

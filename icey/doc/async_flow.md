@@ -180,6 +180,35 @@ If no error occurs a *value* is returned, otherwise an error. We handle errors b
 
 TODO explain promises here 
 
+
+
+## Unwrapping: Handling the error and continuing with an error-free Stream
+
+Filters generally emit new types of errors. But since the error of a Stream can only have a single type, filters cannot accept input Streams that already have errors, possibly of different type. We of course do not want to leave errors unhandled. 
+So we need to first handle the error and only then can return an error-free stream. 
+
+This is exactly for what the Stream-method `unwrap_or` exists: It takes a callback that receives the error value, this callback should not return anyghing.
+It then returns a stream that is error-free. This is handy if we want to handle a timeout and then synchronize a topic for example: 
+
+```cpp
+
+auto cam_sub = node->icey().create_subscription<sensor_msgs::msg::Image>("/camera_center");
+
+/// The resulting Stream does not have an error:
+icey::Stream<sensor_msgs::msg::Image::SharedPtr, icey::Nothing> cam_sub_with_timeout_handled = cam_sub
+    .timeout(300ms)
+    .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
+        RCLCPP_WARN_STREAM(node->get_logger(), "Image timed out");
+    });
+    
+/// And can be synchronized therefore: 
+node->icey().synchronize(cam_sub_with_timeout_handled, ...);
+```
+
+
+
+
+
 ## Where are the callback groups ? 
 
 Callback groups were introduced in ROS 2 mostly for two things: Speeding up computation by allowing callbacks to be called by the executor from different threads in parallel, and avoid deadlocks [1]. 

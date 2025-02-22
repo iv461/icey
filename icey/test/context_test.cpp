@@ -96,6 +96,12 @@ TEST_F(NodeTest, StreamsHaveContext) {
     EXPECT_EQ(double_stream.impl()->context.lock().get(), &node_->icey());
     EXPECT_EQ(tf_stream2.impl()->context.lock().get(), &node_->icey());
     EXPECT_EQ(string_stream.impl()->context.lock().get(), &node_->icey());
+
+    auto unwrapped_stream = timeouted_stream.unwrap_or([](auto, auto, auto) {});
+    EXPECT_EQ(unwrapped_stream.impl()->context.lock().get(), &node_->icey());
+
+    auto buffered_stream = sub.buffer(100);
+    EXPECT_EQ(buffered_stream.impl()->context.lock().get(), &node_->icey());
 }
 
 
