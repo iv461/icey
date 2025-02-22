@@ -83,20 +83,16 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto tf_sub = node_->icey().create_transform_subscription("map", "base_link");
     EXPECT_EQ(tf_sub.impl()->context.lock().get(), &node_->icey());
 
-    //// Transformations:
+    //// Filters:
     auto thened_stream = sub.then([](auto x) { return x; });
     EXPECT_EQ(thened_stream.impl()->context.lock().get(), &node_->icey());
-
+    
     auto timeouted_stream = sub.timeout(1s); 
     EXPECT_EQ(timeouted_stream.impl()->context.lock().get(), &node_->icey());
-    
+
     auto exceped_stream = timeouted_stream.except([](auto, auto, auto) { return double{}; });
     EXPECT_EQ(exceped_stream.impl()->context.lock().get(), &node_->icey());
-
-    //// Filters:
-    auto filtered_stream = sub.filter([](auto img) { return img->width > 0;});
-    EXPECT_EQ(filtered_stream.impl()->context.lock().get(), &node_->icey());
-
+    
     auto other_tf_sub = node_->icey().create_transform_subscription("map", "odom");
     auto any_value_stream = node_->icey().any(tf_sub, other_tf_sub);
     EXPECT_EQ(any_value_stream.impl()->context.lock().get(), &node_->icey());
@@ -107,6 +103,9 @@ TEST_F(NodeTest, StreamsHaveContext) {
     EXPECT_EQ(tf_stream2.impl()->context.lock().get(), &node_->icey());
     EXPECT_EQ(string_stream.impl()->context.lock().get(), &node_->icey());
 
+    auto filtered_stream = sub.filter([](auto img) { return img->width > 0;});
+    EXPECT_EQ(filtered_stream.impl()->context.lock().get(), &node_->icey());
+    
     auto unwrapped_stream = timeouted_stream.unwrap_or([](auto, auto, auto) {});
     EXPECT_EQ(unwrapped_stream.impl()->context.lock().get(), &node_->icey());
 

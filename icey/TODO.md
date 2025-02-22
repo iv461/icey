@@ -12,7 +12,7 @@ Sorted by decreasing priority.
 
 - [ ] Unit-test that service client-server example driven by timer
 - [ ] Unit-test the synchronizers, is the lookupTransform correct ?
-- [ ] Unit-Test context: does it create everything ? 
+
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
@@ -25,7 +25,6 @@ Sorted by decreasing priority.
 
 - [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep
 
-- [X] .buffer(N): Basis for `delay`-filter
 - [ ] `delay` with 
 
 - [ ] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function 
@@ -240,3 +239,6 @@ Sorted by decreasing priority.
 - [X] Consider using `tf2_ros::AsyncBufferInterface::waitForTransform` for an own filter. But it only notifies once for an requested stamp, i.e. it is only a [promise](https://github.com/ros2/geometry2/blob/humble/tf2_ros/src/buffer.cpp#L240), not a stream.
 
 - [X] `filter`: Pass through messages by binary predicate, document use-case of [validating messages](https://github.com/ros-navigation/navigation2/blob/main/nav2_util/include/nav2_util/validate_messages.hpp)
+
+- [X] .buffer(N): Basis for `delay`-filter
+- [X] Unit-Test context: does it create everything ? 

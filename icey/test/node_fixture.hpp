@@ -39,3 +39,26 @@ class NodeTest : public testing::Test {
 
   std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};  
 };
+
+class TwoNodesFixture : public testing::Test {
+    protected:
+    TwoNodesFixture() {
+        executor_.add_node(sender_);
+        executor_.add_node(receiver_);
+     }
+    
+     static void spin(rclcpp::executors::SingleThreadedExecutor &executor, icey::Duration timeout) {
+      auto start = icey::Clock::now();
+      while ((icey::Clock::now() - start) < timeout) {
+        executor.spin_once(10ms);
+      }
+     }
+
+     void spin(icey::Duration timeout) {
+        spin(executor_, timeout);
+     }
+
+     rclcpp::executors::SingleThreadedExecutor executor_;
+     std::shared_ptr<icey::Node> sender_{std::make_shared<icey::Node>("icey_test_sender_node")};
+     std::shared_ptr<icey::Node> receiver_{std::make_shared<icey::Node>("icey_test_sender_node")};
+};

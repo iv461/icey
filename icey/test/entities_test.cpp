@@ -2,14 +2,7 @@
 #include "node_fixture.hpp"
 
 using namespace std::chrono_literals;
-
-TEST_F(NodeTest, ContextCreatesEntities) {
-    /// Here are some assertions relevant for testing ROS nodes: 
-    //  auto endpoint_info_vec = pub_node_->get_publishers_info_by_topic("camera/image");
-    //EXPECT_EQ(endpoint_info_vec[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::Reliable);
-        
-    //EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("camera/image"), 0u);
-}
+#include "std_msgs/msg/float32.hpp"
 
 TEST_F(NodeTest, TimerTest) {
    size_t timer_ticked{0};
@@ -42,6 +35,37 @@ TEST_F(NodeTest, OneOffTimerTest) {
    spin(300ms);
    EXPECT_EQ(timer_ticked, 1);
 }
+
+TEST_F(TwoNodesFixture, PublisherTest) {
+   /// Test one-off timer 
+   auto timer = sender_->icey().create_timer(100ms);
+   
+   auto sub = receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal");
+
+   EXPECT_FALSE(sub.impl().has_value());
+
+   timer
+   .then([&](size_t ticks) -> std::optional<std_msgs::msg::Float32> {
+         published_cnt++;
+         std_msgs::msg::Float32 float_val;
+         float_val.data = published_cnt;
+         if(published_cnt == 10)
+         return {};
+      return float_val;
+   })
+   .publish("/icey_test/sine_signal");
+   
+   std::size_t received_cnt = 0;
+   sub.then([&](auto msg) {
+      received_cnt++;
+      EXPECT_EQ(received_cnt, std::size_t(ticks));
+   });
+
+   spin(1100ms);
+   EXPECT_EQ(received_cnt, 10);
+}
+
+
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
