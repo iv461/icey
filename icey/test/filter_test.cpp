@@ -14,21 +14,17 @@ TEST_F(NodeTest, FilterTest) {
    EXPECT_EQ(timer_ticked, 0);
 
    timer
-     .filter([&](size_t ticks) {
-        bool cond = (ticks % 3) == 0;
-        std::cout << "tikcs" << ticks << " condition is: " << cond << std::endl;
-        return cond;
-     })
+     .filter([&](size_t ticks) { return !(ticks % 3); })
      .then([&](size_t ticks) {
          if(ticks > 10) {
              timer.impl()->timer->cancel();
              return;
-         }
-        std::cout << "tiks" << ticks << " called  " << std::endl;
-
+        }
         ASSERT_FALSE(ticks % 3);
         timer_ticked++;
     });   
+
     spin(1100ms);
+    /// 0, 3, 6, 9, four times
     EXPECT_EQ(timer_ticked, 4);  
 }
