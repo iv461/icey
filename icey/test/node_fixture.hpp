@@ -17,14 +17,6 @@ enum class NodeType {
 
 class NodeTest : public testing::Test {
  protected:
-  
-  NodeTest() {
-     // You can do set-up work for each test here.
-  }
-
-  ~NodeTest() override {
-     // You can do clean-up work that doesn't throw exceptions here.
-  }
 
   // If the constructor and destructor are not enough for setting up
   // and cleaning up each test, you can define the following methods:
@@ -32,11 +24,13 @@ class NodeTest : public testing::Test {
   void SetUp() override {
      // Code here will be called immediately after the constructor (right
      // before each test).
+     node_ = std::make_shared<icey::Node>("icey_context_test_node");
   }
 
   void TearDown() override {
      // Code here will be called immediately after each test (right
      // before the destructor).
+     node_.reset();
   }
 
   void spin(icey::Duration timeout) {
@@ -46,7 +40,7 @@ class NodeTest : public testing::Test {
    }
   }
 
-  std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
+  std::shared_ptr<icey::Node> node_;
   //std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
 };
 

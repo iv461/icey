@@ -1402,7 +1402,7 @@ struct TF2MessageFilter
 
 /// The context owns the streams and is what is returned when calling `node->icey()`
 /// (NodeWithIceyContext::icey).
-class Context : public std::enable_shared_from_this<Context> {
+class Context : public std::enable_shared_from_this<Context>, private boost::noncopyable {
 public:
   /// Construct a context using the given Node interface, initializing the `node` field. The
   /// interface must always be present because the Context creates new Streams and Streams need a
