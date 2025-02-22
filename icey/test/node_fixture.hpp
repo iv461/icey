@@ -6,6 +6,15 @@
 
 using namespace std::chrono_literals;
 
+/// We want to test both node types but do not want to do a templated test because 
+/// then everything becomes
+///      this->icey()-> template declare_parameter<std::string>("param"); 
+// 
+enum class NodeType {
+    RegularNode,
+    LifecycleNode
+};
+
 class NodeTest : public testing::Test {
  protected:
   
@@ -37,12 +46,21 @@ class NodeTest : public testing::Test {
    }
   }
 
-  std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};  
+  std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
+  //std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
 };
 
 class TwoNodesFixture : public testing::Test {
     protected:
     TwoNodesFixture() {
+        if (sender_->icey().get_executor()) {
+            sender_->icey().get_executor()->remove_node(sender_);
+            sender_->icey().get_executor().reset();
+        }
+        if (receiver_->icey().get_executor()) {
+            receiver_->icey().get_executor()->remove_node(receiver_);
+            receiver_->icey().get_executor().reset();
+        }
         executor_.add_node(sender_);
         executor_.add_node(receiver_);
      }
@@ -60,5 +78,6 @@ class TwoNodesFixture : public testing::Test {
 
      rclcpp::executors::SingleThreadedExecutor executor_;
      std::shared_ptr<icey::Node> sender_{std::make_shared<icey::Node>("icey_test_sender_node")};
-     std::shared_ptr<icey::Node> receiver_{std::make_shared<icey::Node>("icey_test_sender_node")};
+     std::shared_ptr<icey::Node> receiver_{std::make_shared<icey::Node>("icey_test_receiver_node")};
 };
+

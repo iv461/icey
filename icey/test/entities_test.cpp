@@ -39,17 +39,15 @@ TEST_F(NodeTest, OneOffTimerTest) {
 TEST_F(TwoNodesFixture, PublisherTest) {
    /// Test one-off timer 
    auto timer = sender_->icey().create_timer(100ms);
-   
    auto sub = receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal");
 
-   EXPECT_FALSE(sub.impl().has_value());
+   EXPECT_FALSE(sub.impl()->has_value());
 
    timer
    .then([&](size_t ticks) -> std::optional<std_msgs::msg::Float32> {
-         published_cnt++;
          std_msgs::msg::Float32 float_val;
-         float_val.data = published_cnt;
-         if(published_cnt == 10)
+         float_val.data = ticks;
+         if(ticks == 10)
          return {};
       return float_val;
    })
@@ -57,8 +55,8 @@ TEST_F(TwoNodesFixture, PublisherTest) {
    
    std::size_t received_cnt = 0;
    sub.then([&](auto msg) {
+      EXPECT_EQ(received_cnt, std::size_t(msg->data));
       received_cnt++;
-      EXPECT_EQ(received_cnt, std::size_t(ticks));
    });
 
    spin(1100ms);
