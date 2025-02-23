@@ -75,21 +75,21 @@ TEST_F(NodeTest, CallbackLifetime) {
         std::cout << "Registered . " << std::endl;
     }
 
-    std::cout << "Left scope ... " << std::endl;
-
     int_stream.impl()->put_value(5);
     EXPECT_TRUE(cb_called);
 
-    /*
+    
     cb_called = false;
     {
         /// Pass an lvalue reference lambda function, should get copied
-        auto lvalue_lambda = [foo=Foo()](auto x) {
+        auto lvalue_lambda = [&cb_called, foo=Foo()](auto x) {
+            cb_called = true;
+            EXPECT_EQ(foo.times_copied, 1);
             EXPECT_FALSE(foo.dtor_called);
         };
         int_stream.then(lvalue_lambda);
     }
+
     int_stream.impl()->put_value(6);
     EXPECT_TRUE(cb_called);
-    */
 }

@@ -10,7 +10,6 @@ Sorted by decreasing priority.
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Up-to-date extention tutorial
 
-- [ ] Unit-test that service client-server example driven by timer
 - [ ] Unit-test the synchronizers, is the lookupTransform correct ?
 
 - [ ] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
@@ -19,7 +18,7 @@ Sorted by decreasing priority.
 
 - [ ] We still got a crash in service_client_async_await_example
 
-- [ ] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
+- [ ] Do not accept Streams with Errors in filters that need to throw a new error: This should be a compile-time error, forcing the user to first handle the error
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
@@ -31,7 +30,10 @@ Sorted by decreasing priority.
 
 - [ ] Do not use the TF2 filter but instead make the TF 2 subscriber more flexible. The only reason we need the TF2 message filter is that we might do not know the source frame and want to read it from the message header. But the TF2 message filter does excessive locking and is not equivalent to manually looking up
 
-- [ ] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise
+
+- [ ] Add static asserts for the any filter that all the streams have the same value
+- [ ] Add static asserts for the unpack transform that the stream holds a tuple
+- [ ] Improve compile error when passing wrong callback signature -> std::invocable does not yield good ones 
 
 ## Error-handling
 
@@ -242,3 +244,8 @@ Sorted by decreasing priority.
 
 - [X] .buffer(N): Basis for `delay`-filter
 - [X] Unit-Test context: does it create everything ? 
+
+- [X] Moving lambdas: Make sure we do not have the same bug: https://github.com/TheWisp/signals/issues/20, add tests 
+
+- [X] Unit-test that service client-server example driven by timer
+- [X] Add static asserts everywhere in the public API, detect if it is Stream and detect callback signature, compiler messages are hard to understand otherwise -> Fixed by using Stream concept
