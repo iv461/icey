@@ -24,13 +24,13 @@ class NodeTest : public testing::Test {
   void SetUp() override {
      // Code here will be called immediately after the constructor (right
      // before each test).
-     node_ = std::make_shared<icey::Node>("icey_context_test_node");
+     
   }
 
   void TearDown() override {
      // Code here will be called immediately after each test (right
      // before the destructor).
-     node_.reset();
+     
   }
 
   void spin(icey::Duration timeout) {
@@ -40,7 +40,7 @@ class NodeTest : public testing::Test {
    }
   }
 
-  std::shared_ptr<icey::Node> node_;
+  std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
   //std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
 };
 
