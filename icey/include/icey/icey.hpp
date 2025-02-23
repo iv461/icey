@@ -64,10 +64,13 @@ struct NodeInterfaces {
         node_services_(node->get_node_services_interface()),
         node_parameters_(node->get_node_parameters_interface()),
         node_time_source_(node->get_node_time_source_interface()) {
-    if constexpr (std::is_same_v<_Node, rclcpp_lifecycle::LifecycleNode>)
+    if constexpr (std::is_base_of_v<rclcpp_lifecycle::LifecycleNode, _Node>)
       maybe_lifecycle_node = node;
-    else
+    else if constexpr (std::is_base_of_v<rclcpp::Node, _Node>)
       maybe_regular_node = node;
+    else 
+        static_assert(std::is_array_v<int>, "NodeInterfaces must be constructed either from a rclcpp::Node or a rclcpp_lifecycle::LifecycleNode");
+          
   }
   /// This getter is needed for ParameterEventHandler. Other functions likely require this interface
   /// too.
@@ -1763,10 +1766,10 @@ static void spin(NodeType node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
   if (node->icey().get_executor()) {
-    node->icey().get_executor()->remove_node(node);
+    node->icey().get_executor()->remove_node(node->get_node_base_interface()) ;
     node->icey().get_executor().reset();
   }
-  executor.add_node(node);
+  executor.add_node(node->get_node_base_interface());
   executor.spin();
   rclcpp::shutdown();
 }
@@ -1778,10 +1781,10 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
   for (auto &node : nodes) {
     if (node->icey().get_executor()) {
-      node->icey().get_executor()->remove_node(node);
+      node->icey().get_executor()->remove_node(node->get_node_base_interface());
       node->icey().get_executor().reset();
     }
-    executor.add_node(node);
+    executor.add_node(node->get_node_base_interface());
   }
   executor.spin();
   rclcpp::shutdown();
