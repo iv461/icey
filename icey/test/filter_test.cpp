@@ -28,3 +28,68 @@ TEST_F(NodeTest, FilterTest) {
     /// 0, 3, 6, 9, four times
     EXPECT_EQ(timer_ticked, 4);  
 }
+
+TEST_F(NodeTest, CallbackLifetime) {
+    auto int_stream = node_->icey().create_stream<icey::Stream<int>>();
+    
+    struct Foo {
+        Foo() {
+            std::cout << "Foo was constructed" << std::endl;
+        }
+        Foo(const Foo &other): dtor_called(other.dtor_called) {
+            std::cout << "Foo was copied" << std::endl;
+            times_copied = other.times_copied + 1;
+        }
+        Foo(Foo &&other): dtor_called(other.dtor_called) {
+            std::cout << "Foo was was move-constructed" << std::endl;
+        }
+        Foo &operator=(const Foo &other) {
+            std::cout << "Foo was was copy-assigned" << std::endl;
+            this->dtor_called = other.dtor_called;
+            times_copied = other.times_copied + 1;
+            return *this;
+        }
+        Foo &operator=(Foo &&other) {
+            std::cout << "Foo was was move-assigned" << std::endl;
+            this->dtor_called = other.dtor_called;
+            return *this;
+        }
+
+        ~Foo() {
+            dtor_called = true;
+        }
+        std::size_t times_copied{0};
+        /// Note that the memory does not get overwritten, therefore we can actually check whether something was destructed by reading this out.
+        bool dtor_called{false};
+    };
+
+    bool cb_called{false};
+    {
+        std::cout << "registering then .. " << std::endl;
+        /// Pass an rvalue reference lambda function, should get copied
+        int_stream.then([&cb_called, foo=Foo()](auto x) {
+            cb_called = true;
+            EXPECT_EQ(foo.times_copied, 1);
+            EXPECT_FALSE(foo.dtor_called);
+        });
+        std::cout << "Registered . " << std::endl;
+    }
+
+    std::cout << "Left scope ... " << std::endl;
+
+    int_stream.impl()->put_value(5);
+    EXPECT_TRUE(cb_called);
+
+    /*
+    cb_called = false;
+    {
+        /// Pass an lvalue reference lambda function, should get copied
+        auto lvalue_lambda = [foo=Foo()](auto x) {
+            EXPECT_FALSE(foo.dtor_called);
+        };
+        int_stream.then(lvalue_lambda);
+    }
+    int_stream.impl()->put_value(6);
+    EXPECT_TRUE(cb_called);
+    */
+}

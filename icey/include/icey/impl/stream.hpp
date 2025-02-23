@@ -276,7 +276,7 @@ protected:
   /// or an error
   template <bool put_value, class Output, class F>
   void create_handler(Output output, F &&f) {
-    auto handler = [output, call_and_put_value = std::move(call_depending_on_signature(output, f))](
+    auto handler = [output, call_and_put_value = std::move(call_depending_on_signature(output, std::forward<F>(f)))](
                        const State &state) {
       if constexpr (put_value) {  /// If we handle values with .then()
         if (state.has_value()) {
