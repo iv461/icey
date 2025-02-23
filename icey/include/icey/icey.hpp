@@ -1426,7 +1426,7 @@ public:
   /// list of streams so that it does not go out of scope. It also sets the context.
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
-    S stream(args...);
+    S stream(std::forward<Args>(args)...);
     this->add_stream_impl(stream.impl());
     stream.impl()->context = this->shared_from_this();
     return stream;
@@ -1436,7 +1436,7 @@ public:
   /// Stream that need to register to ROS.
   template <AnyStream S, class... Args>
   S create_ros_stream(Args &&...args) {
-    return create_stream<S>(*this->node, args...);
+    return create_stream<S>(*this->node, std::forward<Args>(args)...);
   }
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
@@ -1595,7 +1595,7 @@ public:
     auto service_client = create_client<ServiceT>(service_name, timeout, qos);
     input.then([service_client](auto req) { service_client.call(req); });
     /// Pass the error since service calls are chainable
-    if constexpr (not std::is_same_v<ErrorOf<Input>, Nothing>) {
+    if constexpr (!std::is_same_v<ErrorOf<Input>, Nothing>) {
       input.except([service_client](auto err) { service_client.impl()->put_error(err); });
     }
     return service_client;

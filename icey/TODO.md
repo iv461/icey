@@ -6,9 +6,13 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
+- [ ] Docs: Explain lambda-ownership, that lambdas need to be copied inside since the lifetime of the Stream is till the program exists. And that lvalues are copied as well. Think about whether it's good idea to force the user to explicitly mode the lambda inside so that the a named lvalue-lambda cannot be called by any other means.
+
 - [ ] Docs: Explain synchronization 
 - [ ] Docs: Explain Result-type for error handling 
+- [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
 - [ ] Docs: Up-to-date extention tutorial
+- [ ] Docs: Coroutines: add note that coroutines might fail to deliver value if the spin-loop is interrupted by Ctrl
 
 - [ ] Unit-test the synchronizers, is the lookupTransform correct ?
 
