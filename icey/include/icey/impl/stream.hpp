@@ -121,17 +121,16 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
 }
 
 /// Calls the function with the given argument arg but unpacks it if it is a tuple.
-template <class Func, class Arg>
-inline auto unpack_if_tuple(Func &&func, Arg &&arg) {
+template <class F, class Arg>
+inline auto unpack_if_tuple(F &&f, Arg &&arg) {
   if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
     // Tuple detected, unpack and call the function
-    return std::apply(std::forward<Func>(func), std::forward<Arg>(arg));
+    return std::apply(std::forward<F>(f), std::forward<Arg>(arg));
   } else {
     // Not a tuple, just call the function directly
-    return func(std::forward<Arg>(arg));
+    return f(std::forward<Arg>(arg));
   }
 }
-
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
@@ -231,14 +230,14 @@ public:
     /// Note that it may only have errors
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, so you cannot register .then() on it.");
-    return this->done<true>(f);
+    return this->done<true>(std::forward<F>(f));
   }
 
   template <class F>
   auto except(F &&f) {
     static_assert(!std::is_same_v<ErrorValue, Nothing>,
                   "This stream cannot have errors, so you cannot register .except() on it.");
-    return this->done<false>(f);
+    return this->done<false>(std::forward<F>(f));
   }
 
 protected:

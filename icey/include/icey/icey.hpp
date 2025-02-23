@@ -600,7 +600,7 @@ public:
   auto then(F &&f) {
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream cannot have values, so you cannot register then() on it.");
-    return create_from_impl(impl()->then(f));
+    return create_from_impl(impl()->then(std::forward<F>(f)));
   }
 
   /// \returns A new Stream that changes it's value to y every time this
@@ -617,7 +617,7 @@ public:
   auto except(F &&f) {
     static_assert(!std::is_same_v<ErrorValue, Nothing>,
                   "This stream cannot have errors, so you cannot register except() on it.");
-    return create_from_impl(impl()->except(f));
+    return create_from_impl(impl()->except(std::forward<F>(f)));
   }
 
   /// Connect this Stream to the given output stream so that the output stream receives all the
@@ -642,7 +642,7 @@ public:
                   "This stream does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(args...);
+    auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(std::forward<Args>(args)...);
     this->connect_values(output);
   }
 
@@ -716,8 +716,8 @@ public:
   /// Returns a new Stream that cannot have Errors by handling the error
   /// \todo implement more cleanly
   template<class F>
-  Stream<Value, Nothing> unwrap_or(F f) {
-    this->except(f);
+  Stream<Value, Nothing> unwrap_or(F && f) {
+    this->except(std::forward<F>(f));
     auto new_stream = this->template transform_to<Value, Nothing>();
     this->connect_values(new_stream);
     return new_stream;
@@ -725,8 +725,8 @@ public:
 
   /// Outputs the Value only if the given predicate f returns true.
   template<class F>
-  Stream<Value, ErrorValue> filter(F f) {
-    return this->then([f](auto x) -> std::optional<Value> {
+  Stream<Value, ErrorValue> filter(F && f) {
+    return this->then([f=std::move(f)](auto x) -> std::optional<Value> {
       if (!f(x))
          return {};
       else
@@ -747,7 +747,7 @@ protected:
 
   /// Creates a new stream of type S using the Context. See Context::create_stream
   template <AnyStream S, class... Args>
-  S create_stream(Args &&...args) const { return this->impl()->context.lock()->template create_stream<S>(args...); }
+  S create_stream(Args &&...args) const { return this->impl()->context.lock()->template create_stream<S>(std::forward<Args>(args)...); }
 
   template <class NewValue, class NewError>
   Stream<NewValue, NewError> transform_to() const { return create_stream< Stream<NewValue, NewError> >(); }
