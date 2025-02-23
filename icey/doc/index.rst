@@ -28,6 +28,8 @@ Table of Contents
    :maxdepth: 2
    
    getting_started
+   lifecycle_nodes
+   parameters
    async_flow
    using_tf
    translating_an_autoware_node

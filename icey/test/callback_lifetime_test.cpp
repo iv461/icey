@@ -17,16 +17,15 @@ struct CopyTracker {
     }
     CopyTracker &operator=(const CopyTracker &other) {
         //std::cout << "CopyTracker was was copy-assigned" << std::endl;
-        this->dtor_called = other.dtor_called;
+        dtor_called = other.dtor_called;
         times_copied = other.times_copied + 1;
         return *this;
     }
     CopyTracker &operator=(CopyTracker &&other) {
         //std::cout << "CopyTracker was was move-assigned" << std::endl;
-        this->dtor_called = other.dtor_called;
+        dtor_called = other.dtor_called;
         return *this;
     }
-    
     ~CopyTracker() {
         dtor_called = true;
     }
@@ -37,9 +36,10 @@ struct CopyTracker {
 
 class CallbackLifetimeTest : public NodeTest {
 protected:
-icey::Stream<int, std::string> int_stream{node_->icey().create_stream<icey::Stream<int, std::string>>()};
-bool cb_called{false};
+    icey::Stream<int, std::string> int_stream{node_->icey().create_stream<icey::Stream<int, std::string>>()};
+    bool cb_called{false};
 };
+
 TEST_F(CallbackLifetimeTest, ThenRvalue) {
 
 /// Pass an rvalue reference lambda function, should get copied
