@@ -68,9 +68,10 @@ struct NodeInterfaces {
       maybe_lifecycle_node = node;
     else if constexpr (std::is_base_of_v<rclcpp::Node, _Node>)
       maybe_regular_node = node;
-    else 
-        static_assert(std::is_array_v<int>, "NodeInterfaces must be constructed either from a rclcpp::Node or a rclcpp_lifecycle::LifecycleNode");
-          
+    else
+      static_assert(std::is_array_v<int>,
+                    "NodeInterfaces must be constructed either from a rclcpp::Node or a "
+                    "rclcpp_lifecycle::LifecycleNode");
   }
   /// This getter is needed for ParameterEventHandler. Other functions likely require this interface
   /// too.
@@ -370,9 +371,9 @@ private:
       rcl_interfaces::msg::SetParametersResult result;
       result.successful = true;
       for (const auto &parameter : parameters) {
-        /// We want to skip validating parameters that we didn't declare, for example here have other parameters like qos_overrides./tf.publisher.durability.
-        if(!book_.parameter_validators_.contains(parameter.get_name()))
-          continue;
+        /// We want to skip validating parameters that we didn't declare, for example here have
+        /// other parameters like qos_overrides./tf.publisher.durability.
+        if (!book_.parameter_validators_.contains(parameter.get_name())) continue;
         const auto &validator = book_.parameter_validators_.at(parameter.get_name());
         auto maybe_error = validator(parameter);
         if (maybe_error) {
@@ -514,7 +515,8 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
 
   /// Spin the ROS executor until this Stream has something (a value or an error).
   void spin_executor() {
-    this->underlying().impl()->context.lock()->spin_executor_until_stream_has_some(this->underlying());
+    this->underlying().impl()->context.lock()->spin_executor_until_stream_has_some(
+        this->underlying());
   }
 
   /// Returns whether the stream has a value or an error.
@@ -617,7 +619,7 @@ public:
   }
 
   /// Connect this Stream to the given output stream so that the output stream receives all the
-  /// values. 
+  /// values.
   /// \todo remove this, use unwrap
   template <AnyStream Output>
   void connect_values(Output output) {
@@ -638,7 +640,8 @@ public:
                   "This stream does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(std::forward<Args>(args)...);
+    auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(
+        std::forward<Args>(args)...);
     this->connect_values(output);
   }
 
@@ -674,7 +677,8 @@ public:
     this->impl()->context.lock()->create_transform_publisher(*this);
   }
 
-  /// Calls a ROS service with the Value that this Stream holds. It returns a new ServiceClient stream, which gets called by this stream.
+  /// Calls a ROS service with the Value that this Stream holds. It returns a new ServiceClient
+  /// stream, which gets called by this stream.
   template <class ServiceT>
   ServiceClient<ServiceT> call_service(const std::string &service_name, const Duration &timeout,
                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
@@ -699,7 +703,7 @@ public:
     constexpr auto indices = hana::to<hana::tuple_tag>(hana::range_c<std::size_t, 0, tuple_sz>);
     auto hana_tuple_output = hana::transform(indices, [*this](auto I) mutable {
       return then([I](const auto &...args) {  /// Need to take variadic because then()
-                                                    /// automatically unpacks tuples
+                                              /// automatically unpacks tuples
         return std::get<I>(std::forward_as_tuple(
             args...));  /// So we need to pack this again in a tuple and get the index.
       });
@@ -711,8 +715,8 @@ public:
 
   /// Returns a new Stream that cannot have Errors by handling the error
   /// \todo implement more cleanly
-  template<class F>
-  Stream<Value, Nothing> unwrap_or(F && f) {
+  template <class F>
+  Stream<Value, Nothing> unwrap_or(F &&f) {
     this->except(std::forward<F>(f));
     auto new_stream = this->template transform_to<Value, Nothing>();
     this->connect_values(new_stream);
@@ -720,17 +724,17 @@ public:
   }
 
   /// Outputs the Value only if the given predicate f returns true.
-  template<class F>
-  Stream<Value, ErrorValue> filter(F && f) {
-    return this->then([f=std::move(f)](auto x) -> std::optional<Value> {
+  template <class F>
+  Stream<Value, ErrorValue> filter(F &&f) {
+    return this->then([f = std::move(f)](auto x) -> std::optional<Value> {
       if (!f(x))
-         return {};
+        return {};
       else
         return x;
     });
   }
 
-  /// Buffers N elements 
+  /// Buffers N elements
   Buffer<Value> buffer(std::size_t N) const {
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
@@ -743,10 +747,14 @@ protected:
 
   /// Creates a new stream of type S using the Context. See Context::create_stream
   template <AnyStream S, class... Args>
-  S create_stream(Args &&...args) const { return this->impl()->context.lock()->template create_stream<S>(std::forward<Args>(args)...); }
+  S create_stream(Args &&...args) const {
+    return this->impl()->context.lock()->template create_stream<S>(std::forward<Args>(args)...);
+  }
 
   template <class NewValue, class NewError>
-  Stream<NewValue, NewError> transform_to() const { return create_stream< Stream<NewValue, NewError> >(); }
+  Stream<NewValue, NewError> transform_to() const {
+    return create_stream<Stream<NewValue, NewError>>();
+  }
 
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
@@ -773,16 +781,17 @@ struct BufferImpl {
   std::shared_ptr<std::vector<Value>> buffer{std::make_shared<std::vector<Value>>()};
 };
 
-/// A Buffer is a Stream that holds an array of values. It accumulates a certain amount of values and only then it has itself a value. 
-/// It does not have errors since it does not make much sense to accumulate errors.
+/// A Buffer is a Stream that holds an array of values. It accumulates a certain amount of values
+/// and only then it has itself a value. It does not have errors since it does not make much sense
+/// to accumulate errors.
 template <class Value>
-struct Buffer : public Stream< std::shared_ptr< std::vector<Value> >, Nothing, BufferImpl<Value> > {
-  template<AnyStream Input>
+struct Buffer : public Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>> {
+  template <AnyStream Input>
   explicit Buffer(std::size_t N, Input input) {
     this->impl()->N = N;
-    input.impl()->register_handler([impl=this->impl()](auto x) {
-      if(impl->buffer->size() == impl->N) {
-        impl->put_value(impl->buffer); 
+    input.impl()->register_handler([impl = this->impl()](auto x) {
+      if (impl->buffer->size() == impl->N) {
+        impl->put_value(impl->buffer);
         impl->buffer->clear();
       } else {
         impl->buffer->push_back(x.value());
@@ -1149,7 +1158,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
-  template<AnyStream Input = Stream<_Value>>
+  template <AnyStream Input = Stream<_Value>>
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
                   Input *maybe_input = nullptr) {
@@ -1282,9 +1291,9 @@ struct TimeoutFilter
   /// \param create_extra_timer If set to false, the timeout will only be detected after at least
   /// one message was received. If set to true, an extra timer is created so that timeouts can be
   /// detected even if no message is received
-  template<AnyStream Input>
+  template <AnyStream Input>
   TimeoutFilter(NodeBookkeeping &node, Input input, const Duration &max_age,
-                         bool create_extra_timer = true) {
+                bool create_extra_timer = true) {
     auto node_clock = node.node_.get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
     auto check_state = [impl = this->impl(), node_clock, max_age_ros](const auto &new_state) {
@@ -1318,7 +1327,8 @@ struct TimeoutFilter
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 template <class _Message>
-struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr>, public message_filters::SimpleFilter<_Message> {
+struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr>,
+                             public message_filters::SimpleFilter<_Message> {
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so
   /// that `signalMessage` is called once a value is received. \todo Use mfl::simplefilter as
   /// derive-impl, then do not capture this, and do not allocate this adapter dynamically
@@ -1414,9 +1424,7 @@ public:
     executor_->add_node(node_interface.get_node_base_interface());
   }
   /// Adds a stream impl to the list so that it does not go out of scope.
-  void add_stream_impl(std::shared_ptr<StreamImplDefault> impl) {
-    stream_impls_.push_back(impl);
-  }
+  void add_stream_impl(std::shared_ptr<StreamImplDefault> impl) { stream_impls_.push_back(impl); }
 
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
   /// list of streams so that it does not go out of scope. It also sets the context.
@@ -1714,21 +1722,22 @@ public:
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
 
-  /// Spins the ROS executor until the Stream has something (value or error). This is also called a synchronous wait.
-  template<AnyStream Input>
-  void spin_executor_until_stream_has_some(Input stream, const std::optional<Duration> &timeout = {}) {
+  /// Spins the ROS executor until the Stream has something (value or error). This is also called a
+  /// synchronous wait.
+  template <AnyStream Input>
+  void spin_executor_until_stream_has_some(Input stream) {
     while (rclcpp::ok() && stream.impl()->has_none()) {
-      get_executor()->spin_once();  
+      get_executor()->spin_once();
     }
   }
 
-  /// Spins the ROS executor until the Stream has something (value or error) or the timeout occurs. This is also called a synchronous wait.
-  /// \param timeout The maximum duration to wait. If no timeout is desired, please use the other overload of this function.
-  template<AnyStream Input>
+  /// Spins the ROS executor until the Stream has something (value or error) or the timeout occurs.
+  /// This is also called a synchronous wait. \param timeout The maximum duration to wait. If no
+  /// timeout is desired, please use the other overload of this function.
+  template <AnyStream Input>
   void spin_executor_until_stream_has_some(Input stream, const Duration &timeout) {
     const auto start = Clock::now();
-    while (rclcpp::ok() && stream.impl()->has_none()
-        && (Clock::now() - start) < timeout) {
+    while (rclcpp::ok() && stream.impl()->has_none() && (Clock::now() - start) < timeout) {
       get_executor()->spin_once(timeout);
     }
   }
@@ -1781,7 +1790,7 @@ static void spin(NodeType node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
   if (node->icey().get_executor()) {
-    node->icey().get_executor()->remove_node(node->get_node_base_interface()) ;
+    node->icey().get_executor()->remove_node(node->get_node_base_interface());
     node->icey().get_executor().reset();
   }
   executor.add_node(node->get_node_base_interface());
