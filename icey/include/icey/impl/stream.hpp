@@ -3,12 +3,12 @@
 
 #include <boost/noncopyable.hpp>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <tuple>
 #include <type_traits>
 #include <variant>
-
 namespace icey {
 /// A special type that indicates that there is no value. (Using `void` for this would cause many
 /// problems, so defining an extra struct is easier.)
@@ -122,10 +122,10 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
 
 /// Calls the function with the given argument arg but unpacks it if it is a tuple.
 template <class F, class Arg>
-inline auto unpack_if_tuple(F &&f, Arg &&arg) {
+inline auto unpack_if_tuple(F &f, Arg &&arg) {
   if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
     // Tuple detected, unpack and call the function
-    return std::apply(std::forward<F>(f), std::forward<Arg>(arg));
+    return std::apply(f, std::forward<Arg>(arg));
   } else {
     // Not a tuple, just call the function directly
     return f(std::forward<Arg>(arg));
@@ -166,7 +166,7 @@ public:
 
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the
   /// new state as an argument.
-  void register_handler(Handler cb) { handlers_.emplace_back(std::move(cb)); }
+  void register_handler(Handler &&cb) { handlers_.emplace_back(std::move(cb)); }
 
   /// Sets the state to hold none, but does not notify about this state change.
   void set_none() { state_.set_none(); }
@@ -244,23 +244,22 @@ protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Stream (that is captured by value)
   template <class Output, class F>
-  auto call_depending_on_signature(Output output, F &&f) {
-    return [output, f = std::forward<F>(f)](const auto &x) {
-      using ReturnType = decltype(unpack_if_tuple(f, x));
-      if constexpr (std::is_void_v<ReturnType>) {
-        unpack_if_tuple(f, x);
-      } else if constexpr (is_result<ReturnType>) {
-        /// support callbacks that at runtime may return value or error
-        output->state_ = unpack_if_tuple(f, x);
-        output->notify();
-      } else if constexpr (is_optional_v<ReturnType>) {
-        auto ret = unpack_if_tuple(f, x);
-        if (ret) output->put_value(*ret);
-      } else {  /// Other return types are interpreted as values that are put into the stream.
-        ReturnType ret = unpack_if_tuple(f, x);
-        output->put_value(ret);
-      }
-    };
+  static void call_depending_on_signature(const auto &x, Output &output, F &f) {
+    std::cout << "impl::Stream call_depending_on_signature" << std::endl;
+    using ReturnType = decltype(unpack_if_tuple(f, x));
+    if constexpr (std::is_void_v<ReturnType>) {
+      unpack_if_tuple(f, x);
+    } else if constexpr (is_result<ReturnType>) {
+      /// support callbacks that at runtime may return value or error
+      output->state_ = unpack_if_tuple(f, x);
+      output->notify();
+    } else if constexpr (is_optional_v<ReturnType>) {
+      auto ret = unpack_if_tuple(f, x);
+      if (ret) output->put_value(*ret);
+    } else {  /// Other return types are interpreted as values that are put into the stream.
+      ReturnType ret = unpack_if_tuple(f, x);
+      output->put_value(ret);
+    }
   }
 
   /// @brief This function creates a handler for the Steam and returns it as a function object.
@@ -276,21 +275,21 @@ protected:
   /// or an error
   template <bool put_value, class Output, class F>
   void create_handler(Output output, F &&f) {
-    auto handler = [output, call_and_put_value = std::move(call_depending_on_signature(output, std::forward<F>(f)))](
-                       const State &state) {
+    std::cout << "impl::Stream creating handler .. " << std::endl;
+    this->register_handler([output, f](const State &state) {
       if constexpr (put_value) {  /// If we handle values with .then()
         if (state.has_value()) {
-          call_and_put_value(state.value());
+          call_depending_on_signature(state.value(), output, f);
         } else if (state.has_error()) {
           output->put_error(state.error());  /// Do not execute f, but propagate the error
         }
       } else {                    /// if we handle errors with .except()
         if (state.has_error()) {  /// Then only put_value with the error if there is one
-          call_and_put_value(state.error());
+          call_depending_on_signature(state.error(), output, f);
         }  /// Else do nothing
       }
-    };
-    this->register_handler(handler);
+    });
+    std::cout << "impl::Stream created handler." << std::endl;
   }
 
   /// Common function for both .then and .except. The template argument "put_value" says whether f
@@ -298,6 +297,7 @@ protected:
   /// this is for better code generation)
   template <bool put_value, class F>
   auto done(F &&f) {
+    std::cout << "impl::Stream done" << std::endl;
     /// Return type depending of if the it is called when the Promise put_values or put_errors
     using FunctionArgument = std::conditional_t<put_value, Value, ErrorValue>;
     /// Only if we put_value we pass over the error. except does not pass the error, only the

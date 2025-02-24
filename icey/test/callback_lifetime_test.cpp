@@ -10,11 +10,13 @@ struct CopyTracker {
       : times_copied(&ctx->times_callback_was_copied), dtor_called(&ctx->callback_was_destructed) {
     std::cout << "CopyTracker was constructed" << std::endl;
   }
-  CopyTracker(const CopyTracker &other) : times_copied(other.times_copied),dtor_called(other.dtor_called) {
-    std::cout << "CopyTracker was copied" << std::endl;    
+  CopyTracker(const CopyTracker &other)
+      : times_copied(other.times_copied), dtor_called(other.dtor_called) {
+    std::cout << "CopyTracker was copied" << std::endl;
     (*times_copied)++;
   }
-  CopyTracker(CopyTracker &&other) : times_copied(other.times_copied),dtor_called(other.dtor_called) {
+  CopyTracker(CopyTracker &&other)
+      : times_copied(other.times_copied), dtor_called(other.dtor_called) {
     std::cout << "CopyTracker was was move-constructed" << std::endl;
   }
   CopyTracker &operator=(const CopyTracker &other) {
@@ -32,7 +34,7 @@ struct CopyTracker {
   }
   ~CopyTracker() {
     std::cout << "Destructor was called" << std::endl;
-    *dtor_called = true; 
+    *dtor_called = true;
   }
   std::size_t *times_copied{0};
   /// A variable that we write true in case the destructor was called.
