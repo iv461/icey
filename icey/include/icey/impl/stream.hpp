@@ -244,8 +244,7 @@ protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Stream (that is captured by value)
   template <class Output, class F>
-  static void call_depending_on_signature(const auto &x, Output &output, F &f) {
-    std::cout << "impl::Stream call_depending_on_signature" << std::endl;
+  static void call_depending_on_signature(const auto &x, Output &output, F &f) {    
     using ReturnType = decltype(unpack_if_tuple(f, x));
     if constexpr (std::is_void_v<ReturnType>) {
       unpack_if_tuple(f, x);
@@ -275,7 +274,6 @@ protected:
   /// or an error
   template <bool put_value, class Output, class F>
   void create_handler(Output output, F &&f) {
-    std::cout << "impl::Stream creating handler .. " << std::endl;
     this->register_handler([output, f](const State &state) {
       if constexpr (put_value) {  /// If we handle values with .then()
         if (state.has_value()) {
@@ -289,7 +287,6 @@ protected:
         }  /// Else do nothing
       }
     });
-    std::cout << "impl::Stream created handler." << std::endl;
   }
 
   /// Common function for both .then and .except. The template argument "put_value" says whether f
@@ -297,7 +294,6 @@ protected:
   /// this is for better code generation)
   template <bool put_value, class F>
   auto done(F &&f) {
-    std::cout << "impl::Stream done" << std::endl;
     /// Return type depending of if the it is called when the Promise put_values or put_errors
     using FunctionArgument = std::conditional_t<put_value, Value, ErrorValue>;
     /// Only if we put_value we pass over the error. except does not pass the error, only the
