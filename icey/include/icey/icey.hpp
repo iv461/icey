@@ -514,11 +514,7 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
 
   /// Spin the ROS executor until this Stream has something (a value or an error).
   void spin_executor() {
-    while (this->underlying().impl()->has_none()) {
-      /// Note that spinning once might not be enough, for example if we synchronize three topics
-      /// and await the synchronizer output, we would need to spin at least three times.
-      this->underlying().impl()->context.lock()->get_executor()->spin_once();
-    }
+    this->underlying().impl()->context.lock()->spin_executor_until_stream_has_some(this->underlying());
   }
 
   /// Returns whether the stream has a value or an error.
@@ -1717,6 +1713,25 @@ public:
   }
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
+
+  /// Spins the ROS executor until the Stream has something (value or error). This is also called a synchronous wait.
+  template<AnyStream Input>
+  void spin_executor_until_stream_has_some(Input stream, const std::optional<Duration> &timeout = {}) {
+    while (rclcpp::ok() && stream.impl()->has_none()) {
+      get_executor()->spin_once();  
+    }
+  }
+
+  /// Spins the ROS executor until the Stream has something (value or error) or the timeout occurs. This is also called a synchronous wait.
+  /// \param timeout The maximum duration to wait. If no timeout is desired, please use the other overload of this function.
+  template<AnyStream Input>
+  void spin_executor_until_stream_has_some(Input stream, const Duration &timeout) {
+    const auto start = Clock::now();
+    while (rclcpp::ok() && stream.impl()->has_none()
+        && (Clock::now() - start) < timeout) {
+      get_executor()->spin_once(timeout);
+    }
+  }
 
 protected:
   /// The node bookeeping is needed in the Context because Streams need the ROS node so that they

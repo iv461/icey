@@ -1,4 +1,4 @@
-# Support for lifecycle nodes: 
+# Lifecycle nodes
 
 ICEY supports lifecylce nodes, for this you simply need to: 
 

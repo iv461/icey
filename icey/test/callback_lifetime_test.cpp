@@ -123,8 +123,8 @@ TEST_F(CallbackLifetimeTest, FilterLvalue) {
     int_stream.filter(lvalue_lambda);
 }
 
-int_stream.impl()->put_value(7);
-EXPECT_TRUE(cb_called);
+    int_stream.impl()->put_value(7);
+    EXPECT_TRUE(cb_called);
 }
 
 TEST_F(CallbackLifetimeTest, UnwrapOrRvalue) {
@@ -137,8 +137,8 @@ TEST_F(CallbackLifetimeTest, UnwrapOrRvalue) {
     });
 
 
-int_stream.impl()->put_error("error");
-EXPECT_TRUE(cb_called);
+    int_stream.impl()->put_error("error");
+    EXPECT_TRUE(cb_called);
 }
 
 TEST_F(CallbackLifetimeTest, UnwrapOrLvalue) {
