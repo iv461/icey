@@ -38,19 +38,15 @@ struct AsyncAwaitTwoNodeTest : TwoNodesFixture {};
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
 
     [this]() -> icey::Stream<int> {
-        auto timer = sender_->icey().create_timer(100ms);
-
-        timer
-            .then([&](size_t ticks) -> std::optional<std_msgs::msg::Float32> {
+        sender_->icey().create_timer(100ms)
+            .then([](size_t ticks) {
                     std_msgs::msg::Float32 float_val;
                     float_val.data = ticks;
                 return float_val;
             })
             .publish("/icey_test/sine_signal");
 
-        //auto pub = sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1);
         auto sub = receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal");
-
         std::size_t received_cnt{0};
 
         while(received_cnt < 10) {
@@ -64,4 +60,52 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
 
         co_return 0;
    }();
+}
+
+TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
+
+    [this]() -> icey::Stream<int> {
+
+        // The response we are going to receive from the service call:
+        using Response = ExampleService::Response::SharedPtr;
+        
+        auto service_cb = [&](auto request, auto response) { response->success = !request->data; };
+
+    
+        auto client1 = receiver_->icey().create_client<ExampleService>("set_bool_service1", 40ms);
+        auto client2 = receiver_->icey().create_client<ExampleService>("set_bool_service2", 40ms);
+        auto client3 = receiver_->icey().create_client<ExampleService>("set_bool_service3", 40ms);
+
+        auto timer = receiver_->icey().create_timer(50ms);
+
+        co_await timer;
+
+        auto request = std::make_shared<ExampleService::Request>();
+        request->data = true;
+        icey::Result<Response, std::string> result1 = co_await client1.call(request);
+
+        EXPECT_TRUE(result1.has_error());
+        EXPECT_EQ(result1.error(), "SERVICE_UNAVAILABLE");
+
+        /// Now create the services: 
+        sender_->icey().create_service<ExampleService>("set_bool_service1").then(service_cb);
+        sender_->icey().create_service<ExampleService>("set_bool_service2").then(service_cb);
+        sender_->icey().create_service<ExampleService>("set_bool_service3").then(service_cb);
+
+        result1 = co_await client1.call(request);
+
+        EXPECT_TRUE(result1.has_value());
+        EXPECT_FALSE(result1.value()->success);
+
+        /// Then call the second service after we got the response from the first one:
+        auto result2 = co_await client2.call(request);
+        EXPECT_TRUE(result2.has_value());
+        EXPECT_FALSE(result2.value()->success);
+
+        auto result3 = co_await client3.call(request);
+        EXPECT_TRUE(result3.has_value());
+        EXPECT_FALSE(result3.value()->success);
+
+        co_return 0;
+    }();
 }
