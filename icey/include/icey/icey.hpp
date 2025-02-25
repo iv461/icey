@@ -1729,6 +1729,14 @@ public:
     while (rclcpp::ok() && stream.impl()->has_none()) {
       get_executor()->spin_once();
     }
+    if(stream.impl()->has_none()) {
+      /// In case rclcpp::ok() returned false, Ctrl+C was pressed while waiting with co_await stream, just terminate the ROS, this is what we would do in a normal ROS node anyway. 
+      /// We handle this case here because the Stream does not have a value and we do not want to force the user to do unwrapping only to handle the 
+      /// 0.1% percent case that Ctrl+C.
+      std::cout << "Exiting Node after ok is false ..." << std::endl;
+      rclcpp::shutdown();
+      std::exit(0);
+    }
   }
 
   /// Spins the ROS executor until the Stream has something (value or error) or the timeout occurs.

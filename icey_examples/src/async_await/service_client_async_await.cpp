@@ -14,26 +14,25 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "service_client_async_await_example");
   auto &icey = node->icey();
   
-  /// When using async/await, we need to create all service clients/publishers/subscribers/timers etc. beforehand.
-  auto timer = icey.create_timer(1s);
+  /// Create the service clients beforehand: With 1s timeout.
   auto service1 = icey.create_client<ExampleService>("set_bool_service1", 1s);
-  auto service2 = icey.create_client<ExampleService>("set_bool_service2", 1s);
-  auto service3 = icey.create_client<ExampleService>("set_bool_service3", 1s);
+  auto service2 = icey.create_client<ExampleService>("set_bool_service2", 1s);  
 
-  // The response we are going to receive from the service call:
-  using Response = ExampleService::Response::SharedPtr;
+  auto timer = icey.create_timer(1s);
 
   /// Main spinning loop
-  while (rclcpp::ok()) {
+  while (true) {
     /// Now await the timer callback: This will happen every second
     co_await timer;
-
+    
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     RCLCPP_INFO_STREAM(node->get_logger(),
                        "Timer ticked, sending request: " << request->data);
 
     /// Call the service and await it's response
+    // The response we are going to receive from the service call:
+    using Response = ExampleService::Response::SharedPtr;
     icey::Result<Response, std::string> result1 = co_await service1.call(request);
 
     if (result1.has_error()) {

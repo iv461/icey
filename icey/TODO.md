@@ -6,6 +6,11 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
+- [] Async/await: In case the executor is stopped with Ctrl+C, the steam does not have a value but still we are trying to return it. This means, we would generally have to return a Result from await_resume. Problem is, this gives us an ugly syntax because C++ unlike Rust does not have pattern matching. In Rust, you would do `while let Some(val) = stream.wait`, but the best you could do in C++ is `while(auto val = co_await stream)` and then you would have to access the maybe-value with `*val`.  This issue is quite annoying because I don't think it's a good idea to force the user to unwrap the value even if in 99.9% of cases there is a value, only because on 0.1% of cases there might not be a value. Since the case there might not be any value happens only when pressing Ctrl+C while spinning, I think it would be better to just do what a ROS-node would do normally in this case: call rclcpp::shutdown and stop.
+
+- [] Async/await: We need a "Stream was closed" concept: Streams that are generally driven 
+by ROS entities will never yield something regardless of how long we spin the ROS executor if the underlying ROS entity driving them was stopped. For example if the ROS-timer was cancelled. Or the subscription destroyed. In such a case, calling co_await on such streams would hang forever. We need to return None in this case or an extra end-of-Stream identitier (like tokio).
+
 - [ ] Docs: Explain lambda-ownership, that lambdas need to be copied inside since the lifetime of the Stream is till the program exists. And that lvalues are copied as well. Think about whether it's good idea to force the user to explicitly mode the lambda inside so that the a named lvalue-lambda cannot be called by any other means.
 
 - [ ] Docs: Explain synchronization 
@@ -60,13 +65,14 @@ Sorted by decreasing priority.
 - [ ] Add static asserts that message has header stamp for better compiler error messages
 - [ ] Static_assert for the lambda signature 
 - [ ] Support better parameter API: icey::Interval(0, 5.5) (i.e. determine the common type between the int and double literal) and allow for icey::Set("normal", "pulse", "single"), i.e. determine the common type of fixed-size char arrays correctly as std::string. 
-- [ ] Allow std::array as parameter type with automatic validation for the size -> generally, add parameter type convertes.
+- [ ] Allow std::array as parameter type with automatic validation for the size -> generally, add parameter type converters.
 
-- [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Obs are equally large so that we achieve less cache misses.
+- [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Streams are equally large so that we achieve less cache misses.
 
 - [] [Stream] member-then with static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17) -> p2300 does pipe then
 
-- [ ] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1
+- [X] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1 -> no cascading, we instread require that th input is error-free 
+
 - [ ] Maybe support cascading the synchronizers -> not for 0.1
 
 - [ ] Auto-pipelining with TBB graph
