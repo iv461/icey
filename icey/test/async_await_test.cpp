@@ -62,6 +62,42 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
    }();
 }
 
+TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
+
+    [this]() -> icey::Stream<int> {
+        
+        std::size_t received_cnt{0};
+
+        receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal")
+            .then([&](auto msg) {
+                EXPECT_EQ(received_cnt, std::size_t(msg->data));
+                received_cnt++;
+            });
+            
+        auto timer = sender_->icey().create_timer(100ms);
+        auto pub = sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal");
+
+        auto coro = [timer]() -> icey::Stream<std_msgs::msg::Float32> {
+            size_t ticks = co_await timer;
+            std_msgs::msg::Float32 float_val;
+            float_val.data = ticks;
+            co_return float_val;
+        };
+
+        for(int i= 0; i < 10; i++) {
+            pub.publish(co_await coro());
+        }
+        
+        /// We do not await till the published message was received. We cannot do this currently in ROS 2 
+        /// since this callback is not exposed from DDS. So the message is only received by spinning the next time. 
+        /// But since there is no next time in the last publish, the last message is not received.
+        /// After the ACK callback from DDS is exposed in rclcpp, we could do co_await publish(msg).
+        EXPECT_EQ(received_cnt, 9);
+
+        co_return 0;
+   }();
+}
+
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
 
     [this]() -> icey::Stream<int> {
@@ -69,7 +105,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
         // The response we are going to receive from the service call:
         using Response = ExampleService::Response::SharedPtr;
         
-        auto service_cb = [&](auto request, auto response) { response->success = !request->data; };
+        auto service_cb = [](auto request, auto response) { response->success = !request->data; };
 
     
         auto client1 = receiver_->icey().create_client<ExampleService>("set_bool_service1", 40ms);

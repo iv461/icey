@@ -293,8 +293,9 @@ public:
   }
 
   template <class Msg>
-  auto add_publisher(const std::string &topic, const rclcpp::QoS &qos) {
-    auto publisher = rclcpp::create_publisher<Msg>(node_.node_topics_, topic, qos);
+  auto add_publisher(const std::string &topic, const rclcpp::QoS &qos,
+      const rclcpp::PublisherOptions publisher_options) {
+    auto publisher = rclcpp::create_publisher<Msg>(node_.node_topics_, topic, qos, publisher_options);
     book_.publishers_.emplace(topic, publisher);
     return publisher;
   }
@@ -1161,9 +1162,10 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   template <AnyStream Input = Stream<_Value>>
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
+                  const rclcpp::PublisherOptions publisher_options = {},
                   Input *maybe_input = nullptr) {
     this->impl()->name = topic_name;
-    this->impl()->publisher = node.add_publisher<Message>(topic_name, qos);
+    this->impl()->publisher = node.add_publisher<Message>(topic_name, qos, publisher_options);
     this->impl()->register_handler(
         [impl = this->impl()](const auto &new_state) { impl->publish(new_state.value()); });
     if (maybe_input) {
@@ -1553,7 +1555,8 @@ public:
 
   template <class Message>
   PublisherStream<Message> create_publisher(const std::string &topic_name,
-                                            const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
+                                            const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()
+                                            ) {
     return create_ros_stream<PublisherStream<Message>>(topic_name, qos);
   }
 
