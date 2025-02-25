@@ -33,38 +33,34 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
    }();
 }
 
+struct AsyncAwaitTwoNodeTest : TwoNodesFixture {};
 
-TEST_F(AsyncAwaitNodeTest, PubSubTest) {
+TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
 
     [this]() -> icey::Stream<int> {
         auto timer = sender_->icey().create_timer(100ms);
 
-        auto float_sender = [this]() -> icey::Stream<int> {
-            while(timer_ticked <= 10) {
-                size_t ticks = co_await timer;
-    
-                std_msgs::msg::Float32 float_val;
-                float_val.data = ticks;
+        timer
+            .then([&](size_t ticks) -> std::optional<std_msgs::msg::Float32> {
+                    std_msgs::msg::Float32 float_val;
+                    float_val.data = ticks;
                 return float_val;
-            }
-        };
+            })
+            .publish("/icey_test/sine_signal");
 
-        auto pub = sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1);
+        //auto pub = sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1);
         auto sub = receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal");
 
-        
-        while(timer_ticked <= 10) {
-            size_t ticks = co_await timer;
+        std::size_t received_cnt{0};
 
-            std_msgs::msg::Float32 float_val;
-            float_val.data = ticks;
-            
-            pub.publish(float_val);
+        while(received_cnt < 10) {
+            auto msg = co_await sub;
 
-            timer_ticked++;
+            EXPECT_EQ(received_cnt, std::size_t(msg->data));
+            received_cnt++;
         }
     
-        EXPECT_EQ(timer_ticked, 10);
+        EXPECT_EQ(received_cnt, 10);
 
         co_return 0;
    }();

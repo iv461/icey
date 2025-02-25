@@ -47,16 +47,14 @@ class NodeTest : public testing::Test {
 class TwoNodesFixture : public testing::Test {
     protected:
     TwoNodesFixture() {
+      /// Put both nodes in the same executor so that if it spins, both nodes get what they want
         if (sender_->icey().get_executor()) {
             sender_->icey().get_executor()->remove_node(sender_);
-            sender_->icey().get_executor().reset();
+            
+            receiver_->icey().get_executor()->add_node(sender_->get_node_base_interface());
+            /// Assing the context executor
+            sender_->icey().get_executor() = receiver_->icey().get_executor();
         }
-        if (receiver_->icey().get_executor()) {
-            receiver_->icey().get_executor()->remove_node(receiver_);
-            receiver_->icey().get_executor().reset();
-        }
-        executor_.add_node(sender_);
-        executor_.add_node(receiver_);
      }
     
      static void spin(rclcpp::executors::SingleThreadedExecutor &executor, icey::Duration timeout) {
@@ -67,10 +65,9 @@ class TwoNodesFixture : public testing::Test {
      }
 
      void spin(icey::Duration timeout) {
-        spin(executor_, timeout);
+        spin(*receiver_->icey().get_executor(), timeout);
      }
 
-     rclcpp::executors::SingleThreadedExecutor executor_;
      std::shared_ptr<icey::Node> sender_{std::make_shared<icey::Node>("icey_test_sender_node")};
      std::shared_ptr<icey::Node> receiver_{std::make_shared<icey::Node>("icey_test_receiver_node")};
 };
