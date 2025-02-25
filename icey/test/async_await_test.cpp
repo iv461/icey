@@ -85,7 +85,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
         icey::Result<Response, std::string> result1 = co_await client1.call(request);
 
         EXPECT_TRUE(result1.has_error());
-        EXPECT_EQ(result1.error(), "SERVICE_UNAVAILABLE");
+        EXPECT_EQ(result1.error(), "SERVICE_UNAVAILABLE ");
 
         /// Now create the services: 
         sender_->icey().create_service<ExampleService>("set_bool_service1").then(service_cb);
