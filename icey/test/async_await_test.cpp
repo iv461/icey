@@ -75,7 +75,14 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
             });
             
         auto timer = sender_->icey().create_timer(100ms);
-        auto pub = sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal");
+
+        rclcpp::PublisherOptions pub_options;
+        pub_options.event_callbacks.liveliness_callback = [](rmw_liveliness_lost_status_s&) {
+            std::cout << "Liveliness " << std::endl;
+        };
+        /*pub_options.event_callbacks.matched_callback = []() {
+        };*/
+        auto pub = sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1, pub_options);
 
         auto coro = [timer]() -> icey::Stream<std_msgs::msg::Float32> {
             size_t ticks = co_await timer;

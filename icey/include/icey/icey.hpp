@@ -1555,17 +1555,18 @@ public:
 
   template <class Message>
   PublisherStream<Message> create_publisher(const std::string &topic_name,
-                                            const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()
-                                            ) {
-    return create_ros_stream<PublisherStream<Message>>(topic_name, qos);
+                                            const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
+                                            const rclcpp::PublisherOptions publisher_options = {}) {
+    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
   }
 
   template <AnyStream Input>
   PublisherStream<ValueOf<Input>> create_publisher(
       Input input, const std::string &topic_name,
-      const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
+      const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
+      const rclcpp::PublisherOptions publisher_options = {}) {
     using Message = ValueOf<Input>;
-    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, &input);
+    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, publisher_options, &input);
   }
 
   template <AnyStream Input>
