@@ -412,15 +412,36 @@ public:
   std::string name;
 };
 
-struct StreamTag {};  /// A tag to be able to recognize the type "Stream" using traits
+/// A tag to be able to recognize the type "Stream", all types deriving from StreamTag satisfy the `AnyStream` concept. \sa AnyStream
+struct StreamTag {};
+
 template <class T>
 constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
 
+template <typename T, typename Base>
+concept ConvertibleTo = std::convertible_to<T, Base>;
+
+/// A stream type with any error or value type. \sa StreamTag
 template <class T>
 concept AnyStream = std::is_base_of_v<StreamTag, T>;
 
+/// A stream type is error-free, meaning its Error is Nothing.
 template <class T>
 concept ErrorFreeStream = AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing>;
+
+template<class T>
+constexpr auto is_error_free = std::is_same_v<ErrorOf<T>, Nothing>;
+
+/// Any Stream that holds a value V
+template <class T, class V, class E=Nothing>
+concept StreamOf = AnyStream<T> && std::is_same_v<ValueOf<T>, Nothing>;
+
+/// A stream type is error-free, meaning its Error is Nothing.
+//concept DurationLike = Duration || double;
+
+/// A type that is either
+template <class T, typename Base>
+concept Like = std::convertible_to<T, Base>;// || (AnyStream<T> && std::is_same_v<ValueOf<T>, Base>);
 
 template <class T>
 constexpr void assert_stream_holds_tuple() {
@@ -847,7 +868,9 @@ constexpr bool is_std_array = t_is_std_array<T>::value;
 template <class Value>
 struct Interval {
   static_assert(std::is_arithmetic_v<Value>, "The value type must be a number");
-  Interval(Value minimum, Value maximum) : minimum(minimum), maximum(maximum) {}
+
+  //Interval(Like<Value> auto _minimum, Like<Value> auto _maximum): minimum(_minimum), maximum(_maximum) {}
+  Interval(Value _minimum, Value _maximum): minimum(_minimum), maximum(_maximum) {}
   Value minimum;
   Value maximum;
 };

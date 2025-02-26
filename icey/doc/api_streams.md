@@ -7,6 +7,8 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```{doxygenstruct} icey::Nothing
 ```
 
+```{doxygenclass} icey::StreamTag
+```
 ```{doxygenclass} icey::Stream
 ```
 

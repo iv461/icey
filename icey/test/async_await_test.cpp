@@ -10,6 +10,25 @@ using ExampleService = std_srvs::srv::SetBool;
 
 struct AsyncAwaitNodeTest : NodeTest {};
 
+TEST_F(AsyncAwaitNodeTest, ParameterTest) {
+
+    [this]() -> icey::Stream<int> {
+        auto string_param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");
+
+        EXPECT_TRUE(node_->has_parameter("icey_test_my_param"));
+        EXPECT_EQ(node_->get_parameter("icey_test_my_param").get_value<std::string>(), "hello");
+        EXPECT_EQ(string_param.value(), "hello");
+
+        string_param
+        .then([](std::string new_val) {
+            EXPECT_EQ(new_val, "hello2");
+        });
+        node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
+
+        co_return 0;
+   }();
+}
+
 TEST_F(AsyncAwaitNodeTest, TimerTest) {
 
     [this]() -> icey::Stream<int> {

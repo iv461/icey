@@ -28,3 +28,7 @@ TEST_F(NodeTest, FilterTest) {
     /// 0, 3, 6, 9, four times
     EXPECT_EQ(timer_ticked, 4);  
 }
+
+TEST_F(TwoNodesFixture, SyncTest) {
+    
+}

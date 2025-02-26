@@ -12,29 +12,31 @@ TEST_F(NodeTest, ParameterTest) {
    auto string_param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");
 
    EXPECT_TRUE(node_->has_parameter("icey_test_my_param"));
+   EXPECT_EQ(node_->get_parameter("icey_test_my_param").get_value<std::string>(), "hello");
    EXPECT_EQ(string_param.value(), "hello");
 
    auto int64_param = node_->icey().declare_parameter<int64_t>("icey_test_my_param_int64", 7);
    EXPECT_TRUE(node_->has_parameter("icey_test_my_param_int64"));
+   EXPECT_EQ(node_->get_parameter("icey_test_my_param_int64").get_value<int64_t>(), 7);
    EXPECT_EQ(int64_param.value(), 7);
 
    auto bool_param = node_->icey().declare_parameter<bool>("icey_test_my_param_bool", true);
    EXPECT_TRUE(node_->has_parameter("icey_test_my_param_bool"));
+   EXPECT_EQ(node_->get_parameter("icey_test_my_param_bool").get_value<bool>(), true);
    EXPECT_EQ(bool_param.value(), true);
 
    auto array_param = node_->icey().declare_parameter<std::vector<double> >("icey_test_my_param_double_array", std::vector<double>{4., 7., 11., -1.1});
    EXPECT_TRUE(node_->has_parameter("icey_test_my_param_double_array"));
    std::vector<double> target_val{4., 7., 11., -1.1};
+   EXPECT_EQ(node_->get_parameter("icey_test_my_param_double_array").get_value<std::vector<double>>(), target_val);
    EXPECT_EQ(array_param.value(), target_val);
 
    string_param
-     .then([](auto new_val) {
+     .then([](std::string new_val) {
          EXPECT_EQ(new_val, "hello2");
-     });   
-
+     });
    node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
 }
-
 
 TEST_F(NodeTest, TimerTest) {
    size_t timer_ticked{0};
@@ -128,9 +130,9 @@ TEST_F(TwoNodesFixture, ServiceTest) {
             /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
             /// we got interrupted while waiting for the service to become available) or
             /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
-//            RCLCPP_INFO_STREAM(node->get_logger(), "Service got error: " << error_code);
             last_error = error_code;
          });
+
    /// Spin a bit to wait for the service timeout
    spin(150ms);
 
