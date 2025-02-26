@@ -113,11 +113,12 @@ struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
   using OnTransform = std::function<void(const TransformMsg &)>;
   using OnError = std::function<void(const tf2::TransformException &)>;
+  using GetFrame = std::function<std::string()>;
 
   explicit TFListener(NodeInterfaces node) : node_(std::move(node)) { init(); }
 
   /// Add notification for a single transform.
-  void add_subscription(const std::string &target_frame, const std::string &source_frame,
+  void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
     subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
   }
@@ -132,14 +133,14 @@ private:
   using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
 
   struct TFSubscriptionInfo {
-    TFSubscriptionInfo(const std::string &target_frame, const std::string &source_frame,
+    TFSubscriptionInfo(const GetFrame &target_frame, const GetFrame &source_frame,
                        OnTransform on_transform, OnError on_error)
         : target_frame(target_frame),
           source_frame(source_frame),
           on_transform(on_transform),
           on_error(on_error) {}
-    std::string target_frame;
-    std::string source_frame;
+    GetFrame target_frame;
+    GetFrame source_frame;
     std::optional<TransformMsg> last_received_transform;
     OnTransform on_transform;
     OnError on_error;
@@ -197,7 +198,7 @@ private:
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg =
-          buffer_->lookupTransform(info.target_frame, info.source_frame, tf2::TimePointZero);
+          buffer_->lookupTransform(info.target_frame(), info.source_frame(), tf2::TimePointZero);
       if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
         info.last_received_transform = tf_msg;
         info.on_transform(tf_msg);
@@ -232,6 +233,9 @@ public:
   /// The parameter validation function that allows the parameter update if no error message is
   /// returned and put_errors the parameter update with the error message otherwise.
   using FValidate = std::function<MaybeError(const rclcpp::Parameter &)>;
+  template<class V>
+  using GetValue = std::function<V()>;
+
   /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
   struct IceyBook {
     std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
@@ -333,7 +337,7 @@ public:
 
   /// Subscribe to a transform on tf between two frames
   template <class OnTransform, class OnError>
-  auto add_tf_subscription(std::string target_frame, std::string source_frame,
+  auto add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
                            OnTransform &&on_transform, OnError &&on_error) {
     add_tf_listener_if_needed();
     book_.tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
@@ -604,7 +608,8 @@ public:
   using Self = Stream<_Value, _ErrorValue, ImplBase>;
   /// The actual implementation of the Stream.
   using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
-
+  static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default-ctored");
+  
   /// Returns the underlying pointer to the implementation.
   const std::shared_ptr<Impl> &impl() const { return impl_; }
   std::shared_ptr<Impl> &impl() { return impl_; }
@@ -1052,6 +1057,25 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   }
 };
 
+/// A class that abstracts a plain value and a ParameterStream so that both are supported. 
+/// This is needed for example for timeouts and coordinate system names. 
+template<class Value>
+struct ValueOrParameter {
+  ValueOrParameter() = default;
+  /// Convert from something that is like the Value and not a stream, for example "hello" is a const char[5] literal that is like a std::string.
+  template<class T>
+    requires std::convertible_to<T, Value> && (!AnyStream<T>)
+  ValueOrParameter(const T &v) // NOLINT
+    : get([value=v]() { return value; }) {}
+
+  ValueOrParameter(const Value &value) // NOLINT
+    : get([value]() { return value; }) {}
+  ValueOrParameter(const ParameterStream<Value> &param) // NOLINT
+    : get([param_impl = param.impl()]() { return param_impl.lock()->get_value(); }) {}
+  /// We use a std::function for the type erasure.
+  std::function<Value()> get;
+};
+
 /// A stream that represents a regular ROS subscriber. It stores as its value always a shared
 /// pointer to the message.
 template <class _Message>
@@ -1092,8 +1116,8 @@ constexpr auto hana_is_interpolatable(T) {
 
 struct TransformSubscriptionStreamImpl {
   using Message = geometry_msgs::msg::TransformStamped;
-  std::string target_frame;
-  std::string source_frame;
+  ValueOrParameter<std::string> source_frame;
+  ValueOrParameter<std::string> target_frame;
   /// We allocate a single message that we share with the other streams when notifying them.
   /// Note that we cannot use the base value since it is needed for notifying, i.e. it is cleared
   std::shared_ptr<Message> shared_value{std::make_shared<Message>()};
@@ -1109,13 +1133,15 @@ struct TransformSubscriptionStream
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
 
-  TransformSubscriptionStream(NodeBookkeeping &node, const std::string &target_frame,
-                              const std::string &source_frame) {
+  TransformSubscriptionStream(NodeBookkeeping &node, 
+                          ValueOrParameter<std::string> target_frame,
+                          ValueOrParameter<std::string> source_frame) {
     this->impl()->target_frame = target_frame;
     this->impl()->source_frame = source_frame;
-    this->impl()->name = "source_frame: " + source_frame + ", target_frame: " + target_frame;
     this->impl()->tf2_listener = node.add_tf_subscription(
-        this->impl()->target_frame, this->impl()->source_frame,
+      /// This obscurity is needed because target_frame can either be a std::string or a ParameterStream<std::string> that is implicitly convertible to std::string
+        target_frame.get,
+        source_frame.get,
         [impl = this->impl()](const geometry_msgs::msg::TransformStamped &new_value) {
           *impl->shared_value = new_value;
           impl->put_value(impl->shared_value);
@@ -1130,7 +1156,7 @@ struct TransformSubscriptionStream
     try {
       // Note that this call does not wait, the transform must already have arrived.
       *this->impl()->shared_value = this->impl()->tf2_listener.lock()->buffer_->lookupTransform(
-          this->impl()->target_frame, this->impl()->source_frame, time);
+          this->impl()->target_frame.get(), this->impl()->source_frame.get(), time);
       return this->impl()->shared_value;
     } catch (const tf2::TransformException &e) {
       this->impl()->put_error(e.what());
@@ -1573,8 +1599,8 @@ public:
   }
 
   /// Create a subscriber that subscribes to a single transform between two frames.
-  TransformSubscriptionStream create_transform_subscription(const std::string &target_frame,
-                                                            const std::string &source_frame) {
+  TransformSubscriptionStream create_transform_subscription(ValueOrParameter<std::string> target_frame,
+                                                            ValueOrParameter<std::string> source_frame) {
     return create_ros_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
