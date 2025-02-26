@@ -1,6 +1,6 @@
 #pragma once
-
 #include <any>
+#include <boost/noncopyable.hpp>
 #include <boost/hana.hpp>
 #include <boost/hana/ext/std/tuple.hpp>  /// Needed so that we do not need the custom hana tuples everywhere: https://stackoverflow.com/a/34318002
 #include <boost/type_index.hpp>
@@ -868,7 +868,6 @@ constexpr bool is_std_array = t_is_std_array<T>::value;
 template <class Value>
 struct Interval {
   static_assert(std::is_arithmetic_v<Value>, "The value type must be a number");
-
   //Interval(Like<Value> auto _minimum, Like<Value> auto _maximum): minimum(_minimum), maximum(_maximum) {}
   Interval(Value _minimum, Value _maximum): minimum(_minimum), maximum(_maximum) {}
   Value minimum;

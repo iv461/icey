@@ -1,7 +1,6 @@
 
 #pragma once
 
-#include <boost/noncopyable.hpp>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -144,7 +143,7 @@ inline auto unpack_if_tuple(F &f, Arg &&arg) {
 /// `then` or `except`.
 ///
 template <class _Value, class _ErrorValue, class Derived, class DefaultDerived>
-class Stream : private boost::noncopyable, public Derived {
+class Stream : public Derived {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
@@ -156,6 +155,18 @@ public:
   using MaybeResult = std::conditional_t<std::is_same_v<ErrorValue, Nothing>, Value, State>;
   using Handler = std::function<void(const State &)>;
 
+  Stream() = default;
+  /// A Stream is non-copyable since it has members that reference it and therefore it should change it's adress.
+  Stream(const Self &) = delete;
+  /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
+  Stream(Self &&) = delete;
+  /// A Stream is non-copyable since it has members that reference it and therefore it should change it's adress.
+  Stream &operator=(const Self &) = delete;
+  /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
+  Stream &operator=(Self &&) = delete;
+  
+  ~Stream() = default;
+
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }
   bool has_error() const { return state_.has_error(); }
@@ -163,6 +174,7 @@ public:
   const ErrorValue &error() const { return state_.error(); }
   State &get_state() { return state_; }
   const State &get_state() const { return state_; }
+
 
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the
   /// new state as an argument.
