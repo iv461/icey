@@ -22,13 +22,7 @@ icey::Stream<int> create_and_spin_node() {
         });
         
     auto timer = sender->icey().create_timer(100ms);
-        
-    rclcpp::PublisherOptions pub_options;
-    pub_options.event_callbacks.liveliness_callback = [](rmw_liveliness_lost_status_s&) {
-        std::cout << "Liveliness " << std::endl;
-    };
-    
-    auto pub = sender->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1, pub_options);
+    auto pub = sender->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1);
     
     
     auto coro = [timer]() -> icey::Stream<std_msgs::msg::Float32> {

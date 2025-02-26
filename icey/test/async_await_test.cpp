@@ -95,10 +95,8 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
             pub.publish(co_await coro());
         }
         
-        /// We do not await till the published message was received. We cannot do this currently in ROS 2 
-        /// since this callback is not exposed from DDS. So the message is only received by spinning the next time. 
-        /// But since there is no next time in the last publish, the last message is not received.
-        /// After the ACK callback from DDS is exposed in rclcpp, we could do co_await publish(msg).
+        /// We do not await till the published message was received. 
+        /// Since the ACK from DDS is exposed in rclcpp via PublisherBase::wait_for_all_acked, we could implement a co_await publish(msg).
         EXPECT_EQ(received_cnt, 9);
 
         co_return 0;
