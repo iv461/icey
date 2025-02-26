@@ -7,6 +7,35 @@ using namespace std::chrono_literals;
 
 using ExampleService = std_srvs::srv::SetBool;
 
+TEST_F(NodeTest, ParameterTest) {
+   
+   auto string_param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");
+
+   EXPECT_TRUE(node_->has_parameter("icey_test_my_param"));
+   EXPECT_EQ(string_param.value(), "hello");
+
+   auto int64_param = node_->icey().declare_parameter<int64_t>("icey_test_my_param_int64", 7);
+   EXPECT_TRUE(node_->has_parameter("icey_test_my_param_int64"));
+   EXPECT_EQ(int64_param.value(), 7);
+
+   auto bool_param = node_->icey().declare_parameter<bool>("icey_test_my_param_bool", true);
+   EXPECT_TRUE(node_->has_parameter("icey_test_my_param_bool"));
+   EXPECT_EQ(bool_param.value(), true);
+
+   auto array_param = node_->icey().declare_parameter<std::vector<double> >("icey_test_my_param_double_array", std::vector<double>{4., 7., 11., -1.1});
+   EXPECT_TRUE(node_->has_parameter("icey_test_my_param_double_array"));
+   std::vector<double> target_val{4., 7., 11., -1.1};
+   EXPECT_EQ(array_param.value(), target_val);
+
+   string_param
+     .then([](auto new_val) {
+         EXPECT_EQ(new_val, "hello2");
+     });   
+
+   node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
+}
+
+
 TEST_F(NodeTest, TimerTest) {
    size_t timer_ticked{0};
    auto timer = node_->icey().create_timer(100ms);
@@ -78,19 +107,19 @@ TEST_F(TwoNodesFixture, ServiceTest) {
             return request;
           })
           .call_service<ExampleService>("set_bool_service1", 50ms)
-          .then([&](ExampleService::Response::SharedPtr response) {
+          .then([&](ExampleService::Response::SharedPtr) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = false;
             return request;
           })
           .call_service<ExampleService>("set_bool_service2", 50ms)
-          .then([&](ExampleService::Response::SharedPtr response) {
+          .then([&](ExampleService::Response::SharedPtr) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = true;
             return request;
           })
           .call_service<ExampleService>("set_bool_service3", 50ms)
-          .then([&](ExampleService::Response::SharedPtr response) {
+          .then([&](ExampleService::Response::SharedPtr) {
             got_last = true;
             last_error = "";
           })

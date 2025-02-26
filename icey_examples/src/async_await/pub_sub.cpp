@@ -17,7 +17,7 @@ icey::Stream<int> create_and_spin_node() {
     std::size_t received_cnt{0};
     
     receiver->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal")
-        .then([&](auto msg) {
+        .then([&](auto) {
             received_cnt++;
         });
         
