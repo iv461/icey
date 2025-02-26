@@ -174,8 +174,8 @@ Filtering is also useful for conditional publishing.
 
 ## Error-handling 
 
-Some streams in ICEY can have errors: A service call might fail, or a transform might not be available.
-If no error occurs a *value* is returned, otherwise an error. We handle errors by 
+Streams in ICEY can have errors: A service call might fail, or a transform might not be available.
+If no error occurs a *value* is returned, otherwise an error. We handle errors by creatin
 
 
 TODO explain promises here 
@@ -206,6 +206,19 @@ node->icey().synchronize(cam_sub_with_timeout_handled, ...);
 ```
 
 
+Compiler error: If you try to compile a function where an `ErrorFreeStream` is expected, you will get an "contraints not satisfied" error that looks something like this, so keep an eye on it:
+
+```sh
+/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:1601:27: note:   template argument deduction/substitution failed:
+/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:1601:27: note: constraints not satisfied
+/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp: In substitution of ‘template<class ServiceT, class Input>  requires  ErrorFreeStream<Input> icey::ServiceClient<ServiceT> icey::Context::create_client(Input, const string&, const Duration&, const rclcpp::QoS&) [with ServiceT = std_srvs::srv::SetBool; Input = icey::Stream<std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >, std::__cxx11::basic_string<char>, icey::Nothing>]’:
+/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:693:74:   required from ‘icey::ServiceClient<ServiceT> icey::Stream<_Value, _ErrorValue, ImplBase>::call_service(const string&, const Duration&, const rclcpp::QoS&) [with ServiceT = std_srvs::srv::SetBool; _Value = std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >; _ErrorValue = std::__cxx11::basic_string<char>; ImplBase = icey::Nothing; std::string = std::__cxx11::basic_string<char>; icey::Duration = std::chrono::duration<long int, std::ratio<1, 1000000000> >]’
+/home/ivo/autoware/src/icey/icey/test/entities_test.cpp:86:40:   required from here
+/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:423:9:   required for the satisfaction of ‘ErrorFreeStream<Input>’ [with Input = icey::Stream<std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, icey::Nothing>]
+/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:423:48: note: the expression ‘is_same_v<typename icey::remove_shared_ptr<T>::remove_shared_ptr_t<T>::ErrorValue, icey::Nothing> [with T = icey::Stream<std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, icey::Nothing>]’ evaluated to ‘false’
+  423 | concept ErrorFreeStream = AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing>;
+      |                                           ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
 
 
 

@@ -420,6 +420,9 @@ template <class T>
 concept AnyStream = std::is_base_of_v<StreamTag, T>;
 
 template <class T>
+concept ErrorFreeStream = AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing>;
+
+template <class T>
 constexpr void assert_stream_holds_tuple() {
   static_assert(is_tuple_v<MessageOf<T>>, "The Stream must hold a tuple as a value for unpacking.");
 }
@@ -1613,7 +1616,7 @@ public:
     Synchronizer that given a reference signal at its first argument, ouputs all the other topics
     \warning Errors are currently not passed through
   */
-  template <AnyStream Reference, AnyStream... Interpolatables>
+  template <ErrorFreeStream Reference, AnyStream... Interpolatables>
   static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
     using namespace message_filters::message_traits;
     using RefMsg = MessageOf<Reference>;
@@ -1639,7 +1642,7 @@ public:
   /// \param inputs the input streams, not necessarily all of the same type
   /// \note The queue size is 100, it cannot be changed currently
   /// \warning Errors are currently not passed through
-  template <AnyStream... Inputs>
+  template <ErrorFreeStream... Inputs>
   SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(Inputs... inputs) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     using namespace hana::literals;
@@ -1716,7 +1719,7 @@ public:
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the
   /// transform between it's header frame and the target_frame becomes available. It uses for this
   /// the `tf2_ros::MessageFilter`
-  template <AnyStream Input>
+  template <ErrorFreeStream Input>
   TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input,
                                                                 const std::string &target_frame) {
     auto output = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
