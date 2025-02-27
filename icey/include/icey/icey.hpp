@@ -1393,9 +1393,9 @@ struct TimeoutFilter
     };
     if (create_extra_timer) {
       auto timer = input.impl()->context.lock()->create_timer(max_age);
-      timer.then([timer, input_impl = input.impl(), check_state](size_t) {
+      timer.then([timer_impl=timer.impl(), input_impl = input.impl(), check_state](size_t) {
         bool timeout_occured = check_state(input_impl->get_state());
-        if (!timeout_occured) timer.impl()->timer->reset();
+        if (!timeout_occured) timer_impl->timer->reset();
       });
     } else {
       input.impl()->register_handler(check_state);
