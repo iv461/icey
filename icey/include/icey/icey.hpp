@@ -262,7 +262,7 @@ public:
   template<class StreamImpl>
   Weak<StreamImpl> create_stream_impl() { 
     auto impl = impl::create_stream<StreamImpl>();
-    stream_impls_.emplace_back(impl);
+    stream_impls_.push_back(impl);
     return impl;
   }
   
@@ -490,7 +490,7 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
     std::stringstream ss;
     auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
     ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ "
-       << size_t(this->underlying().impl().get()) << ")] ";
+       << (this->underlying().impl().p_.lock() ? std::to_string(size_t(this->underlying().impl().get())) : "nullptr") << ")] ";
     return ss.str();
   }
 
@@ -625,7 +625,7 @@ public:
   }
 #else 
   /// Leaves stream in invalid state. Needed for some delayed stuff like ParameterStream \todo rem
-  Stream() = default;
+  Stream() {}
 #endif  
 
   /// Create s new stream using the context. 
@@ -1169,7 +1169,6 @@ struct TransformSubscriptionStream
     this->impl()->target_frame = target_frame;
     this->impl()->source_frame = source_frame;
     this->impl()->tf2_listener = node.add_tf_subscription(
-      /// This obscurity is needed because target_frame can either be a std::string or a ParameterStream<std::string> that is implicitly convertible to std::string
         target_frame.get,
         source_frame.get,
         [impl = this->impl()](const geometry_msgs::msg::TransformStamped &new_value) {
@@ -1260,8 +1259,9 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 
 // A Stream representing a transform broadcaster that publishes transforms on TF.
 struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
+  using Base = Stream<geometry_msgs::msg::TransformStamped>;
   using Value = geometry_msgs::msg::TransformStamped;
-  TransformPublisherStream(NodeBookkeeping &node) {
+  TransformPublisherStream(NodeBookkeeping &node): Base(node) {
     this->impl()->name = "tf_pub";
     auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
     this->impl()->register_handler([tf_broadcaster](const auto &new_state) {
