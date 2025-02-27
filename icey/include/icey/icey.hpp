@@ -250,19 +250,13 @@ public:
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
 
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
-    std::unordered_map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
-    
-    std::unordered_map<std::string, rclcpp::ClientBase::SharedPtr> services_clients_;
-    std::vector<rclcpp::TimerBase::SharedPtr> timers_;
-    std::vector<rclcpp::CallbackGroup::SharedPtr> callback_groups_;
 
     /// TF Support
     std::shared_ptr<TFListener> tf2_listener_;
     /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
     /// hood of tf2_ros::TransformBroadcaster
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-    /// Some extra baggage we can have as an extention point
-    std::unordered_map<std::string, std::any> extra_baggage_;
+
   };
 
   explicit NodeBookkeeping(NodeInterfaces node) : node_(std::move(node)) {}
@@ -299,20 +293,15 @@ public:
   template <class Msg>
   auto add_publisher(const std::string &topic, const rclcpp::QoS &qos,
       const rclcpp::PublisherOptions publisher_options) {
-    auto publisher = rclcpp::create_publisher<Msg>(node_.node_topics_, topic, qos, publisher_options);
-    book_.publishers_.emplace(topic, publisher);
-    return publisher;
+    return rclcpp::create_publisher<Msg>(node_.node_topics_, topic, qos, publisher_options);
   }
 
   template <class CallbackT>
   auto add_timer(const Duration &time_interval, CallbackT &&callback,
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// We have not no normal timer in Humble, this is why only wall_timer is supported
-    rclcpp::TimerBase::SharedPtr timer =
-        rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group,
+    return rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group,
                                   node_.node_base_.get(), node_.node_timers_.get());
-    book_.timers_.push_back(timer);
-    return timer;
   }
 
   template <class ServiceT, class CallbackT>
@@ -327,11 +316,9 @@ public:
   template <class Service>
   auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    auto client =
+    return
         rclcpp::create_client<Service>(node_.node_base_, node_.node_graph_, node_.node_services_,
                                        service_name, qos.get_rmw_qos_profile(), group);
-    book_.services_clients_.emplace(service_name, client);
-    return client;
   }
 
   /// Subscribe to a transform on tf between two frames

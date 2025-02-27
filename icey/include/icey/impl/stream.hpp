@@ -164,7 +164,7 @@ public:
   Stream &operator=(const Self &) = delete;
   /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
   Stream &operator=(Self &&) = delete;
-  
+
   ~Stream() = default;
 
   bool has_none() const { return state_.has_none(); }
@@ -256,20 +256,20 @@ protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Stream (that is captured by value)
   template <class Output, class F>
-  static void call_depending_on_signature(const auto &x, Output &output, F &f) {    
+  static void call_depending_on_signature(const auto &x, Output output, F &f) {    
     using ReturnType = decltype(unpack_if_tuple(f, x));
     if constexpr (std::is_void_v<ReturnType>) {
       unpack_if_tuple(f, x);
     } else if constexpr (is_result<ReturnType>) {
       /// support callbacks that at runtime may return value or error
-      output->state_ = unpack_if_tuple(f, x);
-      output->notify();
+      output.lock()->state_ = unpack_if_tuple(f, x);
+      output.lock()->notify();
     } else if constexpr (is_optional_v<ReturnType>) {
       auto ret = unpack_if_tuple(f, x);
-      if (ret) output->put_value(*ret);
+      if (ret) output.lock()->put_value(*ret);
     } else {  /// Other return types are interpreted as values that are put into the stream.
       ReturnType ret = unpack_if_tuple(f, x);
-      output->put_value(ret);
+      output.lock()->put_value(ret);
     }
   }
 
@@ -286,12 +286,13 @@ protected:
   /// or an error
   template <bool put_value, class Output, class F>
   void create_handler(Output output, F &&f) {
-    this->register_handler([output, f](const State &state) {
+    using weak_ = typename Output::weak_type;
+    this->register_handler([output=weak_(output), f](const State &state) {
       if constexpr (put_value) {  /// If we handle values with .then()
         if (state.has_value()) {
           call_depending_on_signature(state.value(), output, f);
         } else if (state.has_error()) {
-          output->put_error(state.error());  /// Do not execute f, but propagate the error
+          output.lock()->put_error(state.error());  /// Do not execute f, but propagate the error
         }
       } else {                    /// if we handle errors with .except()
         if (state.has_error()) {  /// Then only put_value with the error if there is one
