@@ -1,5 +1,8 @@
 #pragma once 
 
+#define ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS  /// We also test whether all impl Streams get destroyed in every unit-test, for this we enable the allocation tracking
+//#define ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS /// optionally enable to see the allocations
+
 #include <icey/icey.hpp>
 #include <iostream>
 #include <gtest/gtest.h>
@@ -11,9 +14,10 @@
 using namespace std::chrono_literals;
 
 /// We want to test both node types but do not want to do a templated test because 
-/// then everything becomes
+/// then everything would become:
 ///      this->icey()-> template declare_parameter<std::string>("param"); 
-// 
+/// instead of just:
+///      this->icey()->declare_parameter<std::string>("param");
 enum class NodeType {
     RegularNode,
     LifecycleNode
@@ -22,17 +26,14 @@ enum class NodeType {
 class NodeTest : public testing::Test {
  protected:
 
-  // If the constructor and destructor are not enough for setting up
-  // and cleaning up each test, you can define the following methods:
-
   void SetUp() override {
      // Code here will be called immediately after the constructor (right
      // before each test).
      if(!icey::impl::g_impls.empty()) {
-      fmt::print("Exptected no impls, but we have:\n");
+      fmt::print("Stream impls are still allocated:\n");
       for(auto k : icey::impl::g_impls) std::cout << "0x" << std::hex << size_t(k) << "\n";
      }
-     EXPECT_TRUE(icey::impl::g_impls.empty());
+     EXPECT_TRUE(icey::impl::g_impls.empty()) << "Some stream impls are still allocated after the last node was destroyed and a new one was just created, you likely have a circular reference. Do not capture Streams in lambdas by value, but capture only the impl, i.e. stream->impl()";
   }
 
   void TearDown() override {
@@ -59,8 +60,8 @@ class TwoNodesFixture : public testing::Test {
       // Code here will be called immediately after the constructor (right
       // before each test).
       ASSERT_TRUE(icey::impl::g_impls.empty());
-      
     }
+    
     TwoNodesFixture() {
       /// Put both nodes in the same executor so that if it spins, both nodes get what they want
         if (sender_->icey().get_executor()) {

@@ -115,15 +115,21 @@ using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 
 namespace impl {
 struct StreamImplTag {};
+#ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
 static std::unordered_set<StreamImplTag *> g_impls;
+#endif
 
 /// Creates a new stream of type O by passing the args to the constructor. Streams are
 /// always reference counted, currently implemented with std::shared_ptr.
 template <class O, class... Args>
 static std::shared_ptr<O> create_stream(Args &&...args) {
   auto stream = std::make_shared<O>(std::forward<Args>(args)...);
+#ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
   g_impls.emplace(stream.get());
+#ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
   std::cout << "Added impl 0x" << size_t(stream.get()) << " to g_impls" << std::endl;
+#endif  
+#endif
   return stream;
 }
 
@@ -173,14 +179,22 @@ public:
   /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
   Stream &operator=(Self &&) = delete;
 
+#ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
   ~Stream()  {
     if(g_impls.contains(this)) {
-      std::cout << "Erased 0x" << std::hex << size_t(this) << " from g_impls" << std::endl;
+#ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
+      std::cout << "Destructed and erased 0x" << std::hex << size_t(this) << " from g_impls" << std::endl;
+#endif
       g_impls.erase(this);
     } else {
-      std::cout << "g_impls does not contain 0x" << std::hex << size_t(this) << std::endl;
+#ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
+      std::cout << "Destructed 0x" << std::hex << size_t(this) << " but did not find it in g_impls, destructing from wrong TU!" << std::endl;
+#endif
     }
   }
+#else 
+  ~Stream() = default;
+#endif 
 
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }

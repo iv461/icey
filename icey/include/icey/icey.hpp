@@ -607,12 +607,14 @@ public:
   using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default-ctored");
 
+#ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
   Stream() {
     std::cout << "Created new Stream: " << this->get_type_info() << std::endl;
   }
   ~Stream() {
     std::cout << "Destroying Stream: " << this->get_type_info() << std::endl;
   }
+#endif
 
   /// Returns the underlying pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
