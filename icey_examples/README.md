@@ -74,3 +74,50 @@ And now the the service client prints:
 [INFO 1739536198.338268818] [signal_generator_async_await_example]: Got response1: 0
 ...
 ```
+
+# Run parameter struct example 
+
+The parameter struct example shows how you can declare a lot of parameters without boilerplate code.
+
+Runt the node:
+
+```sh 
+ros2 run icey_examples parameters_struct_example
+```
+
+Then inspect the parameters of the node from another terminal:
+
+```sh 
+ros2 param dump /parameters_struct_example
+
+/parameters_struct_example:
+  ros__parameters:
+    amplitude: 3.0
+    frequency: 10.0
+    mode: single
+    others:
+      cov: []
+      max_amp: 6.0
+    qos_overrides:
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    use_sim_time: false
+
+```
+
+You see all the parameter declared as well as the nested parameter (`others`)
+
+If you change one parameter now: 
+```sh 
+ros2 param set /parameters_struct_example amplitude 4.0
+```
+
+You see you get the notification: 
+
+```sh 
+[INFO 1740685079.892726882] [parameters_struct_example]: Parameter amplitude changed
+```

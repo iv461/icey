@@ -407,7 +407,7 @@ private:
 
   /// TF Support
   std::shared_ptr<TFListener> tf2_listener_;
-  /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
+  /// This is a simple wrapper around a publisher that publishes on /tf. There is really nothing intereseting under the
   /// hood of tf2_ros::TransformBroadcaster
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };

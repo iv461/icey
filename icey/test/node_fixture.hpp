@@ -50,6 +50,13 @@ class NodeTest : public testing::Test {
      node_->icey().get_executor()->spin_once(10ms);
    }
   }
+  void spin_all(icey::Duration timeout) {
+    node_->icey().get_executor()->spin_all(timeout);
+  }
+  
+  void spin_some() {
+    node_->icey().get_executor()->spin_some();
+  }
 
   std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
   //std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
@@ -68,9 +75,8 @@ class TwoNodesFixture : public testing::Test {
       /// Put both nodes in the same executor so that if it spins, both nodes get what they want
         if (sender_->icey().get_executor()) {
             sender_->icey().get_executor()->remove_node(sender_);
-            
             receiver_->icey().get_executor()->add_node(sender_->get_node_base_interface());
-            /// Assing the context executor
+            /// Assing the context executor so that both nodes use the same executor in async/await mode
             sender_->icey().get_executor() = receiver_->icey().get_executor();
         }
      }

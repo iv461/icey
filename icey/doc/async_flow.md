@@ -48,6 +48,44 @@ This method will synchronize both topics by approximately matching their header 
 
 TODO sync_with_reference 
 
+
+## Promise vs. async/await API
+
+ICEY offers two different ways of writing ROS nodes: 
+- (1) using promises: create callbacks and use `.then` and `.except`
+- (2) async/await: Use `co_await` to write asynchronous code that looks like it's synchronous
+
+Both are valid ways of doing the same thing. We do not make a clear recommendation which of the two you should use.  You should choose instead one of the two, but feel free to experiment with both ways at he beginning.
+
+Arguments for Promises: 
+
+    - Pro: 
+        - A bit shorter code because ROS entities do not need to be created in advance
+        - Error-handling
+        - Likely more future-proof specifically for C++: the syntax is similar to a proposal for standartization (P2300) in regards to using lambda-continuations 
+        - 
+
+    - Con:
+        - Inherently asynchronous, passing functions as continuatinos which looks a bit like callbacks
+
+Arguments for Async/await aka. coroutines: 
+
+    - Pro: 
+        - Looks like synchronous code and more easy to reason about
+        - 
+    - Con: 
+        - 
+
+Both methods are 
+
+```{warning}
+You should not use asynchronous functions (coroutines) as callbacks: do not use `co_await`/`co_return`/`co_yield` from inside a callback since this will lead to a deadlock.
+Apart from this rule, it is fine to mix callbacks with coroutines.
+```
+
+
+Both ways are however not compatible
+
 ## Control flow: Multiple inputs and multiple outputs
 
 

@@ -38,9 +38,10 @@ TEST_F(NodeTest, ParameterTest) {
          EXPECT_EQ(new_val, "hello2");
      });
 
-     auto set_res = node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
-     std::cout << "set_res: successful: " << set_res.successful  << ", reason: " << set_res.reason << std::endl;
-     EXPECT_TRUE(then_reacted);
+   auto set_res = node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
+   spin(100ms); /// Need to spin so that the parameter gets updated
+   std::cout << "set_res: successful: " << set_res.successful  << ", reason: " << set_res.reason << std::endl;
+   EXPECT_TRUE(then_reacted);
 }
 
 /// Here you declare in a single struct all parameters of the node:
@@ -64,7 +65,7 @@ TEST_F(NodeTest, ParameterStructTest) {
     
    NodeParameters params;
 
-   /// Test no parameters were declared
+   /// Test that no parameters were declared initially
    EXPECT_FALSE(node_->has_parameter("frequency"));
    EXPECT_FALSE(node_->has_parameter("amplitude"));
    EXPECT_FALSE(node_->has_parameter("mode"));
@@ -79,7 +80,8 @@ TEST_F(NodeTest, ParameterStructTest) {
    });
    
    /*
-   I don't think it makes sense to specify exactly how the callback get's called initially, it suffices to say it's called so that every parameter is initialized
+   I don't think it makes sense to specify exactly how the callback get's called initially, 
+   it suffices to say it's called so that every parameter is initialized.
    std::unordered_set<std::string> target_updated1{"frequency", "mode"};
    EXPECT_EQ(fields_that_were_updated, target_updated1); /// At first, all the contrained parameters update
    */
@@ -118,25 +120,28 @@ TEST_F(NodeTest, ParameterStructTest) {
      
    /// Test parameter setting:
    node_->set_parameter(rclcpp::Parameter("frequency", 2.5));
+   spin(100ms); /// Need to spin so that the parameter gets updated
    EXPECT_TRUE(then_reacted);
    EXPECT_TRUE(fields_that_were_updated.contains("frequency"));
      
    then_reacted = false;
    fields_that_were_updated.clear();
 
-   /*
+   
    /// Test parameter update rejection: 
    node_->set_parameter(rclcpp::Parameter("frequency", 100.));
+   spin(100ms); /// Need to spin so that the parameter gets updated
    EXPECT_FALSE(then_reacted);
-   EXPECT_EQ(last_field_that_updated, "");
+   EXPECT_TRUE(fields_that_were_updated.empty());
    /// The parameter should have stayed the same:
    EXPECT_EQ(node_->get_parameter("frequency").get_value<double>(), 2.5);
 
    /// Test updating nested fields:
    node_->set_parameter(rclcpp::Parameter("others.max_amp", 120.));
-   EXPECT_EQ(last_field_that_updated, "others.max_amp");
+   spin(100ms); /// Need to spin so that the parameter gets updated
+   EXPECT_TRUE(fields_that_were_updated.contains("others.max_amp"));
    EXPECT_EQ(double(params.others.max_amp), 120.); 
-   */
+   
 }  
 
 
