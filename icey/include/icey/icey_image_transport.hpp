@@ -32,7 +32,7 @@ struct ImageTransportSubscriberImpl {
 struct ImageTransportSubscriber
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                     image_transport::TransportLoadException, ImageTransportSubscriberImpl> { 
-  using Base = public Stream<sensor_msgs::msg::Image::ConstSharedPtr, image_transport::TransportLoadException, ImageTransportSubscriberImpl>;                  
+  using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr, image_transport::TransportLoadException, ImageTransportSubscriberImpl>;                  
   ImageTransportSubscriber(NodeBookkeeping &node, const std::string &base_topic_name,
                            const std::string &transport, const rclcpp::QoS qos,
                            const rclcpp::SubscriptionOptions &options): Base(node) {

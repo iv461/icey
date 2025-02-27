@@ -113,6 +113,7 @@ struct Weak {
     if(!p_.lock()) throw std::bad_weak_ptr();
       return p_.lock().get(); 
   }
+
   std::weak_ptr<T> p_;
 };
 
@@ -837,8 +838,9 @@ struct BufferImpl {
 /// to accumulate errors.
 template <class Value>
 struct Buffer : public Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>> {
+  using Base = Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>>;
   template <AnyStream Input>
-  explicit Buffer(std::size_t N, Input input) {
+  explicit Buffer(NodeBookkeeping &node, std::size_t N, Input input): Base(node) {
     this->impl()->N = N;
     input.impl()->register_handler([impl = this->impl()](auto x) {
       if (impl->buffer->size() == impl->N) {
@@ -1021,7 +1023,7 @@ struct ParameterStream : public Stream<_Value, Nothing> {
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
     /// TODO HACK
-    if(!this->impl_.lock())
+    if(!this->impl_.p_.lock())
       this->impl_ = node.create_stream_impl<typename Base::Impl>();
 
     const auto on_change_cb = [impl = this->impl()](const rclcpp::Parameter &new_param) {
@@ -1044,7 +1046,7 @@ struct ParameterStream : public Stream<_Value, Nothing> {
                               this->validator.validate, this->ignore_override);
     /// Set default value if there is one
     if (this->default_value) {
-      this->impl()->put_value(*this->impl()->default_value);
+      this->impl()->put_value(*this->default_value);
     }
   }
 
@@ -1052,7 +1054,7 @@ struct ParameterStream : public Stream<_Value, Nothing> {
   /// value.
   const Value &value() const {
     if (!this->impl()->has_value()) {
-      throw std::runtime_error("Parameter '" + this->name + "' does not have a value");
+      throw std::runtime_error("Parameter '" + this->parameter_name + "' does not have a value");
     }
     return this->impl()->value();
   }
@@ -1063,6 +1065,7 @@ struct ParameterStream : public Stream<_Value, Nothing> {
   {
     return this->value();
   }
+  std::string parameter_name;
 protected:
   auto create_descriptor() {
     auto desc = validator.descriptor;
@@ -1072,7 +1075,6 @@ protected:
     return desc;
   }
 
-  std::string parameter_name;
   std::optional<Value> default_value;
   Validator<Value> validator;
   std::string description;
@@ -1607,7 +1609,7 @@ public:
       std::string field_name_r(field_name);
       if constexpr (is_stream<Field>) {
         field_value.impl()->context = this->shared_from_this(); /// First, give it the missing context
-        field_value.impl()->parameter_name = field_name_r;
+        field_value.parameter_name = field_name_r;
         if (notify_callback) {
           field_value.impl()->register_handler(
               [field_name_r, notify_callback](const auto &new_state) {
