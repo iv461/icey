@@ -599,13 +599,14 @@ struct Buffer;
 template <class _Value, class _ErrorValue = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag,
                public StreamCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>> {
+  static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
+  friend Context;
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
   using Self = Stream<_Value, _ErrorValue, ImplBase>;
   /// The actual implementation of the Stream.
   using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
-  static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default-ctored");
 
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
   Stream() {
@@ -616,7 +617,7 @@ public:
   }
 #endif
 
-  /// Returns the underlying pointer to the implementation.
+  /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
   /// \returns A new Stream that changes it's value to y every time this
@@ -774,10 +775,9 @@ public:
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
 
-   void set_impl(std::shared_ptr<Impl> impl) {
-      this->impl_ = impl;
-   }
-   const std::shared_ptr<Impl> &get_impl() const { return impl_; }
+  void set_impl(std::shared_ptr<Impl> impl) {
+     this->impl_ = impl;
+  }
 protected:
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
@@ -1515,7 +1515,8 @@ public:
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
     S stream(std::forward<Args>(args)...);
-    this->add_stream_impl(stream.get_impl());
+    /// Track (i.e. reference) the Stream impl so that it does not go out of scope.
+    this->add_stream_impl(stream.impl_);
     stream.impl()->context = this->shared_from_this();
     return stream;
   }

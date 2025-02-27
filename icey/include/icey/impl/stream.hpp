@@ -114,9 +114,9 @@ template <class T>
 using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 
 namespace impl {
-struct StreamImplTag {};
+
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
-static std::unordered_set<StreamImplTag *> g_impls;
+extern std::unordered_set<void*> g_impls;
 #endif
 
 /// Creates a new stream of type O by passing the args to the constructor. Streams are
@@ -127,7 +127,7 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
   g_impls.emplace(stream.get());
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
-  std::cout << "Added impl 0x" << size_t(stream.get()) << " to g_impls" << std::endl;
+  std::cout << "Added impl 0x" << std::size_t(stream.get()) << " to g_impls" << std::endl;
 #endif  
 #endif
   return stream;
@@ -151,17 +151,17 @@ inline auto unpack_if_tuple(F &f, Arg &&arg) {
 /// final.
 /// \tparam _Value the type of the value
 /// \tparam _ErrorValue the type of the error. It can also be an exception.
-/// \tparam Derived a class from which this class derives, used as an extention point.
-/// \tparam DefaultDerived When new `Stream`s get created using `then` and `except`, this is used as
-/// a template parameter for `Derived` so that a default extention does not get lost when we call
+/// \tparam Base a class from which this class derives, used as an extention point.
+/// \tparam DefaultBase When new `Stream`s get created using `then` and `except`, this is used as
+/// a template parameter for `Base` so that a default extention does not get lost when we call
 /// `then` or `except`.
 ///
-template <class _Value, class _ErrorValue, class Derived, class DefaultDerived>
-class Stream : public StreamImplTag, public Derived {
+template <class _Value, class _ErrorValue, class Base, class DefaultBase>
+class Stream : public Base {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
-  using Self = Stream<Value, ErrorValue, Derived, DefaultDerived>;
+  using Self = Stream<Value, ErrorValue, Base, DefaultBase>;
   using State = Result<Value, ErrorValue>;
 
   /// If no error is possible (ErrorValue is Nothing), this it just the Value instead of the State
@@ -183,12 +183,12 @@ public:
   ~Stream()  {
     if(g_impls.contains(this)) {
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
-      std::cout << "Destructed and erased 0x" << std::hex << size_t(this) << " from g_impls" << std::endl;
+      std::cout << "Destructed and erased 0x" << std::hex << std::size_t(this) << " from g_impls" << std::endl;
 #endif
       g_impls.erase(this);
     } else {
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
-      std::cout << "Destructed 0x" << std::hex << size_t(this) << " but did not find it in g_impls, destructing from wrong TU!" << std::endl;
+      std::cout << "Destructed 0x" << std::hex << std::size_t(this) << " but did not find it in g_impls, destructing from wrong TU!" << std::endl;
 #endif
     }
   }
@@ -344,21 +344,21 @@ protected:
     /// Now we want to call put_value only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
     if constexpr (std::is_void_v<ReturnType>) {
-      auto output = create_stream<Stream<Nothing, NewError, DefaultDerived, DefaultDerived>>();
+      auto output = create_stream<Stream<Nothing, NewError, DefaultBase, DefaultBase>>();
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto output =
           create_stream<Stream<typename ReturnType::Value, typename ReturnType::ErrorValue,
-                               DefaultDerived, DefaultDerived>>();  // Must pass over error
+                               DefaultBase, DefaultBase>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
       auto output =
-          create_stream<Stream<ReturnTypeSome, NewError, DefaultDerived, DefaultDerived>>();
+          create_stream<Stream<ReturnTypeSome, NewError, DefaultBase, DefaultBase>>();
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     }
