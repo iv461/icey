@@ -186,8 +186,6 @@ public:
       std::cout << "Destructed and erased 0x" << std::hex << std::size_t(this) << " from g_impls" << std::endl;
 #endif
       g_impls.erase(this);
-    } else {
-      throw std::logic_error("g_impls does not contain a previously allocated object");
     }
   }
 #else 

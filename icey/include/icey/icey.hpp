@@ -115,7 +115,7 @@ struct TFListener {
   using OnError = std::function<void(const tf2::TransformException &)>;
   using GetFrame = std::function<std::string()>;
 
-  explicit TFListener(NodeInterfaces node) : node_(std::move(node)) { init(); }
+  explicit TFListener(const NodeInterfaces &node) : node_(node) { init(); }
 
   /// Add notification for a single transform.
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
@@ -123,7 +123,7 @@ struct TFListener {
     subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
   }
 
-  NodeInterfaces node_;
+  const NodeInterfaces &node_; /// Hold weak reference to bevause the Node owns the NodeInterfaces as well, so we avoid circular reference
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
   /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
   /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
@@ -227,7 +227,7 @@ private:
 /// A node interface that does the same as a rclcpp::Node (of lifecycle node), but additionally
 /// implements holding the shared pointers to subscribers/timers/publishers etc., i.e. provides
 /// bookkeeping, so that you do not have to do it.
-class NodeBookkeeping {
+class NodeBookkeeping : public NodeInterfaces {
 public:
   using MaybeError = std::optional<std::string>;
   /// The parameter validation function that allows the parameter update if no error message is
@@ -236,30 +236,8 @@ public:
   template<class V>
   using GetValue = std::function<V()>;
 
-  /// Do not force the user to do the bookkeeping themselves: Do it instead automatically
-  struct IceyBook {
-    std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
-                                              std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
-        parameters_;
-    std::unordered_map<std::string, FValidate> parameter_validators_;
+  explicit NodeBookkeeping(const NodeInterfaces &node_interfaces) : NodeInterfaces(node_interfaces) {}
 
-    /// Callback for validating a list of parameter updates.
-    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
-
-    std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
-
-    /// TF Support
-    std::shared_ptr<TFListener> tf2_listener_;
-    /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
-    /// hood of tf2_ros::TransformBroadcaster
-    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-
-  };
-
-  explicit NodeBookkeeping(NodeInterfaces node) : node_(std::move(node)) {}
-
-  NodeInterfaces node_;
-  IceyBook book_;
 
   /// Declares a parameter and registers a validator callback and a callback that will get called
   /// when the parameters updates.
@@ -270,27 +248,27 @@ public:
                      FValidate f_validate = {}, bool ignore_override = false) {
     rclcpp::ParameterValue v =
         default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
-    book_.parameter_validators_.emplace(name, f_validate);
+    parameter_validators_.emplace(name, f_validate);
     add_parameter_validator_if_needed();
     auto param =
-        node_.node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
-    auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(node_);
+        node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
+    auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(*this);
     auto cb_handle =
         param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
-    book_.parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
+    parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
     return param;
   }
   template <class Msg, class F>
   void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                         const rclcpp::SubscriptionOptions &options) {
-    book_.subscribers_[topic] =
-        rclcpp::create_subscription<Msg>(node_.node_topics_, topic, qos, cb, options);
+    subscribers_[topic] =
+        rclcpp::create_subscription<Msg>(node_topics_, topic, qos, cb, options);
   }
 
   template <class Msg>
   auto add_publisher(const std::string &topic, const rclcpp::QoS &qos,
       const rclcpp::PublisherOptions publisher_options) {
-    return rclcpp::create_publisher<Msg>(node_.node_topics_, topic, qos, publisher_options);
+    return rclcpp::create_publisher<Msg>(node_topics_, topic, qos, publisher_options);
   }
 
   template <class CallbackT>
@@ -298,14 +276,14 @@ public:
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// We have not no normal timer in Humble, this is why only wall_timer is supported
     return rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group,
-                                  node_.node_base_.get(), node_.node_timers_.get());
+                                  node_base_.get(), node_timers_.get());
   }
 
   template <class ServiceT, class CallbackT>
   auto add_service(const std::string &service_name, CallbackT &&callback,
                    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    return rclcpp::create_service<ServiceT>(node_.node_base_, node_.node_services_,
+    return rclcpp::create_service<ServiceT>(node_base_, node_services_,
                                                     service_name, std::forward<CallbackT>(callback),
                                                     qos.get_rmw_qos_profile(), group);
   }
@@ -314,7 +292,7 @@ public:
   auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return
-        rclcpp::create_client<Service>(node_.node_base_, node_.node_graph_, node_.node_services_,
+        rclcpp::create_client<Service>(node_base_, node_graph_, node_services_,
                                        service_name, qos.get_rmw_qos_profile(), group);
   }
 
@@ -323,19 +301,19 @@ public:
   auto add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
                            OnTransform &&on_transform, OnError &&on_error) {
     add_tf_listener_if_needed();
-    book_.tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
-    return book_.tf2_listener_;
+    tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
+    return tf2_listener_;
   }
 
   auto get_tf_buffer() {
     add_tf_listener_if_needed();
-    return book_.tf2_listener_->buffer_;
+    return tf2_listener_->buffer_;
   }
 
   auto add_tf_broadcaster_if_needed() {
-    if (!book_.tf_broadcaster_)
-      book_.tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
-    return book_.tf_broadcaster_;
+    if (!tf_broadcaster_)
+      tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
+    return tf_broadcaster_;
   }
 
 private:
@@ -354,15 +332,15 @@ private:
 
   /// Installs the validator callback
   void add_parameter_validator_if_needed() {
-    if (book_.validate_param_cb_) return;
+    if (validate_param_cb_) return;
     auto const set_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters) {
       rcl_interfaces::msg::SetParametersResult result;
       result.successful = true;
       for (const auto &parameter : parameters) {
         /// We want to skip validating parameters that we didn't declare, for example here have
         /// other parameters like qos_overrides./tf.publisher.durability.
-        if (!book_.parameter_validators_.contains(parameter.get_name())) continue;
-        const auto &validator = book_.parameter_validators_.at(parameter.get_name());
+        if (!parameter_validators_.contains(parameter.get_name())) continue;
+        const auto &validator = parameter_validators_.at(parameter.get_name());
         auto maybe_error = validator(parameter);
         if (maybe_error) {
           result.successful = false;
@@ -372,16 +350,32 @@ private:
       }
       return result;
     };
-    this->book_.validate_param_cb_ =
-        node_.node_parameters_->add_on_set_parameters_callback(set_param_cb);
+    this->validate_param_cb_ =
+        node_parameters_->add_on_set_parameters_callback(set_param_cb);
   }
 
   void add_tf_listener_if_needed() {
-    if (book_.tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
+    if (tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
                               /// transforms on which we listen to
       return;
-    book_.tf2_listener_ = std::make_shared<TFListener>(node_);
+    tf2_listener_ = std::make_shared<TFListener>(*this);
   }
+
+  std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
+                                            std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
+      parameters_;
+  std::unordered_map<std::string, FValidate> parameter_validators_;
+
+  /// Callback for validating a list of parameter updates.
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
+
+  std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
+
+  /// TF Support
+  std::shared_ptr<TFListener> tf2_listener_;
+  /// This is a simple wrapper around a publisher, there is really nothing intereseting under the
+  /// hood of tf2_ros::TransformBroadcaster
+  std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };
 
 class Context;
@@ -1378,7 +1372,7 @@ struct TimeoutFilter
   template <AnyStream Input>
   TimeoutFilter(NodeBookkeeping &node, Input input, const Duration &max_age,
                 bool create_extra_timer = true) {
-    auto node_clock = node.node_.get_node_clock_interface();
+    auto node_clock = node.get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
     auto check_state = [impl = this->impl(), node_clock, max_age_ros](const auto &new_state) {
       if (!new_state.has_value()) return true;
@@ -1489,7 +1483,7 @@ struct TF2MessageFilter
     this->impl()->name = "tf_filter";
     this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
         this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
-        node.node_.get_node_logging_interface(), node.node_.get_node_clock_interface());
+        node.get_node_logging_interface(), node.get_node_clock_interface());
     this->impl()->filter->registerCallback(&Self::on_message, this);
   }
   void on_message(const typename _Message::SharedPtr &msg) { this->impl()->put_value(msg); }
