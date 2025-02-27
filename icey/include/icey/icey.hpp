@@ -452,6 +452,20 @@ struct crtp {
   T const &underlying() const { return static_cast<T const &>(*this); }
 };
 
+template<class T>
+struct Weak {
+  Weak(std::shared_ptr<T> p) : p_(p) {}
+  T * operator->() const { 
+    if(!p_.lock()) throw std::bad_weak_ptr();
+      return p_.lock().get(); 
+  }
+  T * get() const { 
+    if(!p_.lock()) throw std::bad_weak_ptr();
+      return p_.lock().get(); 
+  }
+  std::weak_ptr<T> p_;
+};
+
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
 template <class DerivedStream>
@@ -597,8 +611,7 @@ public:
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default-ctored");
 
   /// Returns the underlying pointer to the implementation.
-  const std::shared_ptr<Impl> &impl() const { return impl_; }
-  std::shared_ptr<Impl> &impl() { return impl_; }
+  Weak<Impl> impl() const { return impl_; }
 
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives a value x, where y = f(x).
@@ -755,6 +768,10 @@ public:
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
 
+   void set_impl(std::shared_ptr<Impl> impl) {
+      this->impl_ = impl;
+   }
+   const std::shared_ptr<Impl> &get_impl() const { return impl_; }
 protected:
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
@@ -781,7 +798,7 @@ protected:
       const std::shared_ptr<
           impl::Stream<NewVal, NewErr, WithDefaults<Nothing>, WithDefaults<Nothing>>> &impl) const {
     Stream<NewVal, NewErr> new_stream;
-    new_stream.impl() = impl;
+    new_stream.set_impl(impl);
     this->impl()->context.lock()->add_stream_impl(impl);
     new_stream.impl()->context = this->impl()->context;
     return new_stream;
@@ -1488,7 +1505,7 @@ public:
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
     S stream(std::forward<Args>(args)...);
-    this->add_stream_impl(stream.impl());
+    this->add_stream_impl(stream.get_impl());
     stream.impl()->context = this->shared_from_this();
     return stream;
   }
