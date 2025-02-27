@@ -793,13 +793,13 @@ protected:
   /// based on the passed implementation pointer.
   /// (this is only needed for impl::Stream::done, which creates a new stream that always has
   /// Derived stripped off, i.e. set to Nothing.)
+  /// We do NOT add the impl to the context since it is already captured by the handler.
   template <class NewVal, class NewErr>
   Stream<NewVal, NewErr> create_from_impl(
       const std::shared_ptr<
           impl::Stream<NewVal, NewErr, WithDefaults<Nothing>, WithDefaults<Nothing>>> &impl) const {
     Stream<NewVal, NewErr> new_stream;
     new_stream.set_impl(impl);
-    this->impl()->context.lock()->add_stream_impl(impl);
     new_stream.impl()->context = this->impl()->context;
     return new_stream;
   }
