@@ -31,11 +31,16 @@ TEST_F(NodeTest, ParameterTest) {
    EXPECT_EQ(node_->get_parameter("icey_test_my_param_double_array").get_value<std::vector<double>>(), target_val);
    EXPECT_EQ(array_param.value(), target_val);
 
+   bool then_reacted = false;
    string_param
-     .then([](std::string new_val) {
+     .then([&](std::string new_val) {
+         then_reacted = true;
          EXPECT_EQ(new_val, "hello2");
      });
-   node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
+
+     auto set_res = node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
+     std::cout << "set_res: successful: " << set_res.successful  << ", reason: " << set_res.reason << std::endl;
+     EXPECT_TRUE(then_reacted);
 }
 
 /// Here you declare in a single struct all parameters of the node:
@@ -104,22 +109,22 @@ TEST_F(NodeTest, ParameterStructTest) {
 
    EXPECT_TRUE(fields_that_were_updated.empty()); 
 
-   /*
    bool then_reacted = false;
    params.frequency
    .then([&](double new_val) {
       then_reacted = true;
       EXPECT_EQ(new_val, 2.5);
      });
-
+     
    /// Test parameter setting:
    node_->set_parameter(rclcpp::Parameter("frequency", 2.5));
    EXPECT_TRUE(then_reacted);
-   EXPECT_EQ(last_field_that_updated, "frequency");
-   
+   EXPECT_TRUE(fields_that_were_updated.contains("frequency"));
+     
    then_reacted = false;
-   last_field_that_updated = "";
+   fields_that_were_updated.clear();
 
+   /*
    /// Test parameter update rejection: 
    node_->set_parameter(rclcpp::Parameter("frequency", 100.));
    EXPECT_FALSE(then_reacted);

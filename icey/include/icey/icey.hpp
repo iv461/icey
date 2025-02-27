@@ -255,6 +255,11 @@ public:
 
   explicit NodeBookkeeping(const NodeInterfaces &node_interfaces) : NodeInterfaces(node_interfaces) {}
 
+  NodeBookkeeping(const NodeBookkeeping &) = delete;
+  NodeBookkeeping &operator=(const NodeBookkeeping &) = delete;
+  NodeBookkeeping(NodeBookkeeping &&) = delete;
+  NodeBookkeeping &operator=(NodeBookkeeping && ) = delete;
+  
   /// All the streams that were created are owned by the Context.
   std::vector<std::shared_ptr<impl::StreamImplBase>> stream_impls_;
 
@@ -279,7 +284,7 @@ public:
     add_parameter_validator_if_needed();
     auto param =
         node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
-    auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(*this);
+    auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(static_cast<NodeInterfaces&>(*this));
     auto cb_handle =
         param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
     parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
@@ -339,7 +344,7 @@ public:
 
   auto add_tf_broadcaster_if_needed() {
     if (!tf_broadcaster_)
-      tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
+      tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(static_cast<NodeInterfaces&>(*this));
     return tf_broadcaster_;
   }
 
@@ -366,10 +371,12 @@ private:
       for (const auto &parameter : parameters) {
         /// We want to skip validating parameters that we didn't declare, for example here have
         /// other parameters like qos_overrides./tf.publisher.durability.
+        std::cout << "Validating: " << parameter.get_name() << std::endl;
         if (!parameter_validators_.contains(parameter.get_name())) continue;
         const auto &validator = parameter_validators_.at(parameter.get_name());
         auto maybe_error = validator(parameter);
         if (maybe_error) {
+          std::cout << "You got rejected: " << parameter.get_name() << std::endl;
           result.successful = false;
           result.reason = *maybe_error;
           break;
@@ -385,7 +392,7 @@ private:
     if (tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
                               /// transforms on which we listen to
       return;
-    tf2_listener_ = std::make_shared<TFListener>(*this);
+    tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeInterfaces&>(*this));
   }
 
   std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
@@ -976,7 +983,7 @@ struct Validator {
 
 /// An stream for ROS parameters.
 template <class _Value>
-struct ParameterStream : public Stream<_Value, Nothing> {
+struct ParameterStream : public Stream<_Value> {
   using Base = Stream<_Value, Nothing>;
   using Value = _Value;
   static_assert(is_valid_ros_param_type<_Value>::value,
@@ -1024,23 +1031,24 @@ struct ParameterStream : public Stream<_Value, Nothing> {
   /// Register this paremeter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
-    const auto on_change_cb = [impl = this->impl()](const rclcpp::Parameter &new_param) {
-      if constexpr (is_std_array<Value>) {
-        using Scalar = typename Value::value_type;
-        auto new_value = new_param.get_value<std::vector<Scalar>>();
-        if (std::declval<Value>().max_size() != new_value.size()) {
-          throw std::invalid_argument("Wrong size of array parameter");
-        }
-        Value new_val_arr{};
-        std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
-        impl->put_value(new_val_arr);
-      } else {
-        Value new_value = new_param.get_value<_Value>();
-        impl->put_value(new_value);
-      }
-    };
+
     node.add_parameter<Value>(this->parameter_name, this->default_value,
-                              on_change_cb, this->create_descriptor(),
+      [impl = this->impl()](const rclcpp::Parameter &new_param) {
+        std::cout << "Param changed " << std::endl;
+        if constexpr (is_std_array<Value>) {
+          using Scalar = typename Value::value_type;
+          auto new_value = new_param.get_value<std::vector<Scalar>>();
+          if (std::declval<Value>().max_size() != new_value.size()) {
+            throw std::invalid_argument("Wrong size of array parameter");
+          }
+          Value new_val_arr{};
+          std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
+          impl->put_value(new_val_arr);
+        } else {
+          Value new_value = new_param.get_value<_Value>();
+          impl->put_value(new_value);
+        }
+      }, this->create_descriptor(),
                               this->validator.validate, this->ignore_override);
     /// Set default value if there is one
     if (this->default_value) {
@@ -1604,7 +1612,7 @@ public:
     field_reflection::for_each_field(params, [this, notify_callback, name_prefix](
                                                  std::string_view field_name, auto &field_value) {
       using Field = std::remove_reference_t<decltype(field_value)>;
-      std::string field_name_r(field_name);
+      std::string field_name_r = name_prefix + std::string(field_name);
       if constexpr (is_stream<Field>) {
         /// TODO HACK, needed due to delayed creation
         if(!field_value.impl_.p_.lock()) {
@@ -1632,7 +1640,7 @@ public:
                 });
       } else if constexpr (std::is_aggregate_v<Field>) {
         /// Else recurse for supporting grouped params
-        declare_parameter_struct(field_value, notify_callback, name_prefix + field_name_r + ".");
+        declare_parameter_struct(field_value, notify_callback, field_name_r + ".");
       } else {
         /// static_assert(false) would always trigger, that is why we use this workaround, see
         /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
