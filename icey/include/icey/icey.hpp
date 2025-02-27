@@ -251,7 +251,7 @@ public:
 
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
     std::unordered_map<std::string, rclcpp::PublisherBase::SharedPtr> publishers_;
-    std::unordered_map<std::string, rclcpp::ServiceBase::SharedPtr> services_;
+    
     std::unordered_map<std::string, rclcpp::ClientBase::SharedPtr> services_clients_;
     std::vector<rclcpp::TimerBase::SharedPtr> timers_;
     std::vector<rclcpp::CallbackGroup::SharedPtr> callback_groups_;
@@ -316,13 +316,12 @@ public:
   }
 
   template <class ServiceT, class CallbackT>
-  void add_service(const std::string &service_name, CallbackT &&callback,
+  auto add_service(const std::string &service_name, CallbackT &&callback,
                    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    auto service = rclcpp::create_service<ServiceT>(node_.node_base_, node_.node_services_,
+    return rclcpp::create_service<ServiceT>(node_.node_base_, node_.node_services_,
                                                     service_name, std::forward<CallbackT>(callback),
                                                     qos.get_rmw_qos_profile(), group);
-    book_.services_.emplace(service_name, service);
   }
 
   template <class Service>
@@ -1238,19 +1237,37 @@ struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformSta
   }
 };
 
-/// A Stream representing a ROS-service. It stores both the request and the response as it's value.
+template <class ServiceT>
+struct ServiceStreamImpl {
+  std::shared_ptr<rclcpp::Service<ServiceT>> service;
+};
+
+/// A Stream representing a ROS service (server). It stores the request as it's value and supports synchronous as well as asynchronous responding.
+/// See as a reference:
+/// - https://github.com/ros2/rclcpp/pull/1709
 template <class _ServiceT>
-struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _ServiceT::Request>,
-                                               std::shared_ptr<typename _ServiceT::Response>>> {
+struct ServiceStream : public Stream<std::shared_ptr<typename _ServiceT::Request>, 
+  Nothing, ServiceStreamImpl<_ServiceT> > {
   using Request = std::shared_ptr<typename _ServiceT::Request>;
+  using Value = Request;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
-  using Value = std::pair<Request, Response>;
+  using RequestID = std::shared_ptr<rmw_request_id_t>;
+  /// The type of the user callback that can response synchronously (i.e. immediately): It receives the request and returns the response.
+  using SyncCallback = std::function<Response(Request)>;
+
+  using AsyncCallback = std::function<Stream<Response>(Request)>;
+
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
+                         SyncCallback sync_callback = {},
                          const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    node.add_service<_ServiceT>(
+    this->impl()->service = node.add_service<_ServiceT>(
         service_name,
-        [impl = this->impl()](Request request, Response response) {
-          impl->put_value(std::make_pair(request, response));
+        [impl = this->impl(), sync_callback](RequestID header, Request request) {
+          impl->put_value(request);
+          if(sync_callback) {
+            auto response = sync_callback(request);
+            impl->service->send_response(*header, *response);
+          }
         },
         qos);
   }
@@ -1633,8 +1650,9 @@ public:
 
   template <class ServiceT>
   ServiceStream<ServiceT> create_service(const std::string &service_name,
+                                         ServiceStream<ServiceT>::SyncCallback sync_callback = {},
                                          const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_ros_stream<ServiceStream<ServiceT>>(service_name, qos);
+    return create_ros_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
   }
 
   /// Add a service client

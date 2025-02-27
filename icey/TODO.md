@@ -12,6 +12,11 @@ Sorted by decreasing priority.
 
 - [ ] Support async service server: return tx/rx channels 
 
+- [ ] Test calling service in service server (like Tokio intro)
+- [ ] Test parameter as value for TF sub
+
+- [ ] Publisers do not get destroyed because the streams hold them and the streams have circular references. Do not capture strongly the impl::Streams. return weak_ptr from impl() and do not capture in done-handler
+
 - [X] Async/await: In case the executor is stopped with Ctrl+C, the steam does not have a value but still we are trying to return it. This means, we would generally have to return a Result from await_resume. Problem is, this gives us an ugly syntax because C++ unlike Rust does not have pattern matching. In Rust, you would do `while let Some(val) = stream.wait`, but the best you could do in C++ is `while(auto val = co_await stream)` and then you would have to access the maybe-value with `*val`.  This issue is quite annoying because I don't think it's a good idea to force the user to unwrap the value even if in 99.9% of cases there is a value, only because on 0.1% of cases there might not be a value. Since the case there might not be any value happens only when pressing Ctrl+C while spinning, I think it would be better to just do what a ROS-node would do normally in this case: call rclcpp::shutdown and stop.
 
 - [] Async/await: We need a "Stream was closed" concept: Streams that are generally driven 

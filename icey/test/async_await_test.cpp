@@ -129,9 +129,6 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
         // The response we are going to receive from the service call:
         using Response = ExampleService::Response::SharedPtr;
         
-        auto service_cb = [](auto request, auto response) { response->success = !request->data; };
-
-    
         auto client1 = receiver_->icey().create_client<ExampleService>("set_bool_service1", 40ms);
         auto client2 = receiver_->icey().create_client<ExampleService>("set_bool_service2", 40ms);
         auto client3 = receiver_->icey().create_client<ExampleService>("set_bool_service3", 40ms);
@@ -143,14 +140,19 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
         icey::Result<Response, std::string> result1 = co_await client1.call(request);
-
+        
         EXPECT_TRUE(result1.has_error());
         EXPECT_EQ(result1.error(), "SERVICE_UNAVAILABLE");
-
-        /// Now create the services: 
-        sender_->icey().create_service<ExampleService>("set_bool_service1").then(service_cb);
-        sender_->icey().create_service<ExampleService>("set_bool_service2").then(service_cb);
-        sender_->icey().create_service<ExampleService>("set_bool_service3").then(service_cb);
+        
+        /// Now create the service servers: 
+        auto service_cb = [](auto request) { 
+            auto response = std::make_shared<ExampleService::Response>(); 
+            response->success = !request->data; 
+            return response;
+        };
+        sender_->icey().create_service<ExampleService>("set_bool_service1", service_cb);
+        sender_->icey().create_service<ExampleService>("set_bool_service2", service_cb);
+        sender_->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 
         result1 = co_await client1.call(request);
 

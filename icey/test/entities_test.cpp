@@ -101,6 +101,16 @@ TEST_F(TwoNodesFixture, PubSubTest) {
 TEST_F(TwoNodesFixture, ServiceTest) {
    std::string last_error;
    bool got_last = false;
+   bool called_following = false;
+
+   /// Here we catch timeout errors as well as unavailability of the service:
+   auto handle_error = [&](const std::string& error_code) {
+      /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
+      /// we got interrupted while waiting for the service to become available) or
+      /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
+      last_error = error_code;
+   };
+
    auto sub = receiver_->icey().create_timer(50ms)
           /// Build a request when the timer ticks
           .then([&](size_t) {
@@ -109,40 +119,43 @@ TEST_F(TwoNodesFixture, ServiceTest) {
             return request;
           })
           .call_service<ExampleService>("set_bool_service1", 50ms)
+          .unwrap_or(handle_error)
           .then([&](ExampleService::Response::SharedPtr) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = false;
+            called_following = true;
             return request;
           })
           .call_service<ExampleService>("set_bool_service2", 50ms)
+          .unwrap_or(handle_error)
           .then([&](ExampleService::Response::SharedPtr) {
             auto request = std::make_shared<ExampleService::Request>();
             request->data = true;
+            called_following = true;
             return request;
           })
           .call_service<ExampleService>("set_bool_service3", 50ms)
+          .unwrap_or(handle_error)
           .then([&](ExampleService::Response::SharedPtr) {
             got_last = true;
+            called_following = true;
             last_error = "";
-          })
-          /// Here we catch timeout errors as well as unavailability of the service:
-          .except([&](const std::string& error_code) {
-            /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
-            /// we got interrupted while waiting for the service to become available) or
-            /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
-            last_error = error_code;
-         });
+          });
 
    /// Spin a bit to wait for the service timeout
    spin(150ms);
 
+   ASSERT_FALSE(called_following);
    ASSERT_EQ(last_error, "SERVICE_UNAVAILABLE");
 
-   auto &sender_ctx = sender_->icey();
-   auto service_cb = [&](auto request, auto response) { response->success = !request->data; };
-   sender_ctx.create_service<ExampleService>("set_bool_service1").then(service_cb);
-   sender_ctx.create_service<ExampleService>("set_bool_service2").then(service_cb);
-   sender_ctx.create_service<ExampleService>("set_bool_service3").then(service_cb);
+   auto service_cb = [](auto request) { 
+      auto response = std::make_shared<ExampleService::Response>(); 
+      response->success = !request->data; 
+      return response;
+   };
+   sender_->icey().create_service<ExampleService>("set_bool_service1", service_cb);
+   sender_->icey().create_service<ExampleService>("set_bool_service2", service_cb);
+   sender_->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 
    spin(250ms);
 
