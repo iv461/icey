@@ -23,23 +23,25 @@ enum class NodeType {
     LifecycleNode
 };
 
+/// Note what when you use this fixture, you are not allowed to hold Streams in it. 
+/// This is because when this fixture is tore down, it destroys the node and checks if there are still some stream-impls allocated, i.e. it checks for memory leaks.
 class NodeTest : public testing::Test {
  protected:
 
   void SetUp() override {
      // Code here will be called immediately after the constructor (right
      // before each test).
-     if(!icey::impl::g_impls.empty()) {
-      fmt::print("Stream impls are still allocated:\n");
-      for(auto k : icey::impl::g_impls) std::cout << "0x" << std::hex << size_t(k) << "\n";
-     }
-     EXPECT_TRUE(icey::impl::g_impls.empty()) << "Some stream impls are still allocated after the last node was destroyed and a new one was just created, you likely have a circular reference. Do not capture Streams in lambdas by value, but capture only the impl, i.e. stream->impl()";
-  }
-
-  void TearDown() override {
-     // Code here will be called immediately after each test (right
-     // before the destructor).
-     
+    }
+    
+    void TearDown() override {
+      // Code here will be called immediately after each test (right
+      // before the destructor).
+      node_.reset();
+      if(!icey::impl::g_impls.empty()) {
+       fmt::print("Stream impls are still allocated:\n");
+       for(auto k : icey::impl::g_impls) std::cout << "0x" << std::hex << size_t(k) << "\n";
+      }
+      EXPECT_TRUE(icey::impl::g_impls.empty()) << "Some stream impls are still allocated after the node was destroyed, you likely have a circular reference. Do not capture Streams in lambdas by value, but capture only the impl, i.e. stream->impl()";
   }
 
   void spin(icey::Duration timeout) {

@@ -187,9 +187,7 @@ public:
 #endif
       g_impls.erase(this);
     } else {
-#ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
-      std::cout << "Destructed 0x" << std::hex << std::size_t(this) << " but did not find it in g_impls, destructing from wrong TU!" << std::endl;
-#endif
+      throw std::logic_error("g_impls does not contain a previously allocated object");
     }
   }
 #else 

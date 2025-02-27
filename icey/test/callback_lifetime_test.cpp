@@ -13,14 +13,12 @@ struct CopyTracker {
 
 class CallbackLifetimeTest : public NodeTest {
 public:
-  icey::Stream<int, std::string> int_stream{
-      node_->icey().create_stream<icey::Stream<int, std::string>>()};
-
   std::shared_ptr<int> copy_tracker_value{std::make_shared<int>(0)};
   bool callback_was_called{false};
 };
 
 TEST_F(CallbackLifetimeTest, ThenRvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   /// We track the copies of the clojure object (aka lambda-function) by capturing the "CopyTracker"
   /// object by value. This way, each time the clojure is copied, the "CopyTracker" is copied as
   /// well, tracking these copies. First, we test the rvalue case, where the clojure gets created
@@ -36,6 +34,7 @@ TEST_F(CallbackLifetimeTest, ThenRvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, ThenLvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   {
     /// Pass an lvalue reference lambda function, should get copied
     auto lvalue_lambda = [this, copy_tracker = CopyTracker(this)](auto) {
@@ -50,6 +49,7 @@ TEST_F(CallbackLifetimeTest, ThenLvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, ExceptRvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   /// Pass an rvalue reference lambda function, should get copied
   int_stream.except([this, copy_tracker = CopyTracker(this)](auto) {
     callback_was_called = true;
@@ -61,6 +61,7 @@ TEST_F(CallbackLifetimeTest, ExceptRvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, ExceptLvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   {
     /// Pass an lvalue reference lambda function, should get copied
     auto lvalue_lambda = [this, copy_tracker = CopyTracker(this)](auto) {
@@ -75,6 +76,7 @@ TEST_F(CallbackLifetimeTest, ExceptLvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, FilterRvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   /// Pass an rvalue reference lambda function, should get copied
   int_stream.filter([this, copy_tracker = CopyTracker(this)](auto) {
     callback_was_called = true;
@@ -88,6 +90,7 @@ TEST_F(CallbackLifetimeTest, FilterRvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, FilterLvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   {
     /// Pass an lvalue reference lambda function, should get copied
     auto lvalue_lambda = [this, copy_tracker = CopyTracker(this)](auto) {
@@ -103,6 +106,7 @@ TEST_F(CallbackLifetimeTest, FilterLvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, UnwrapOrRvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   /// Pass an rvalue reference lambda function, should get copied
   int_stream.unwrap_or([this, copy_tracker = CopyTracker(this)](auto) {
     callback_was_called = true;
@@ -114,6 +118,7 @@ TEST_F(CallbackLifetimeTest, UnwrapOrRvalue) {
 }
 
 TEST_F(CallbackLifetimeTest, UnwrapOrLvalue) {
+  auto int_stream = node_->icey().create_stream<icey::Stream<int, std::string>>();
   {
     /// Pass an lvalue reference lambda function, should get copied
     auto lvalue_lambda = [this, copy_tracker = CopyTracker(this)](auto) {
