@@ -15,6 +15,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=return-stack-address) 
 endif()
 
+find_package(fmt)
+
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
@@ -39,6 +41,7 @@ if(BUILD_TESTING)
     test/callback_lifetime_test.cpp
     test/context_test.cpp
   )
+  target_link_libraries(test_main fmt::fmt)
     
 endif()
 

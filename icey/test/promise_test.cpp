@@ -12,7 +12,7 @@ protected:
   enum MarkerBehavior { Some, None, Err };
   template <MarkerBehavior behavior>
   auto marker(size_t i) {
-    return [this, i](auto v) {
+    return [this, i](auto) {
       using Result = icey::Result<std::string, std::string>;
       events.push_back(i);
       //std::cout << "Marker " << i << " called with val " << v << std::endl;

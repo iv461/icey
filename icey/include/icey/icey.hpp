@@ -243,10 +243,7 @@ public:
         parameters_;
     std::unordered_map<std::string, FValidate> parameter_validators_;
 
-    /// Callback handles for parameter pre-, during-validation and after validation (after Humble).
-    /// Reference:
-    /// https://github.com/ros2/rclcpp/blob/rolling/rclcpp/doc/proposed_node_parameter_callbacks.md
-    /// See also: https://github.com/ros2/rclcpp/pull/1947
+    /// Callback for validating a list of parameter updates.
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
 
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
@@ -609,6 +606,13 @@ public:
   /// The actual implementation of the Stream.
   using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default-ctored");
+
+  Stream() {
+    std::cout << "Created new Stream: " << this->get_type_info() << std::endl;
+  }
+  ~Stream() {
+    std::cout << "Destroying Stream: " << this->get_type_info() << std::endl;
+  }
 
   /// Returns the underlying pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
@@ -1247,8 +1251,12 @@ struct ServiceStreamImpl {
 };
 
 /// A Stream representing a ROS service (server). It stores the request as it's value and supports synchronous as well as asynchronous responding.
+/// 
 /// See as a reference:
 /// - https://github.com/ros2/rclcpp/pull/1709
+/// - https://github.com/ros2/rclcpp/issues/1707
+/// - https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1
+/// - https://github.com/ijnek/nested_services_rclcpp_demo
 template <class _ServiceT>
 struct ServiceStream : public Stream<std::shared_ptr<typename _ServiceT::Request>, 
   Nothing, ServiceStreamImpl<_ServiceT> > {

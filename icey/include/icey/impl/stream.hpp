@@ -8,6 +8,9 @@
 #include <tuple>
 #include <type_traits>
 #include <variant>
+
+#include <unordered_set> 
+
 namespace icey {
 /// A special type that indicates that there is no value. (Using `void` for this would cause many
 /// problems, so defining an extra struct is easier.)
@@ -111,11 +114,16 @@ template <class T>
 using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 
 namespace impl {
+struct StreamImplTag {};
+static std::unordered_set<StreamImplTag *> g_impls;
+
 /// Creates a new stream of type O by passing the args to the constructor. Streams are
 /// always reference counted, currently implemented with std::shared_ptr.
 template <class O, class... Args>
 static std::shared_ptr<O> create_stream(Args &&...args) {
   auto stream = std::make_shared<O>(std::forward<Args>(args)...);
+  g_impls.emplace(stream.get());
+  std::cout << "Added impl 0x" << size_t(stream.get()) << " to g_impls" << std::endl;
   return stream;
 }
 
@@ -143,7 +151,7 @@ inline auto unpack_if_tuple(F &f, Arg &&arg) {
 /// `then` or `except`.
 ///
 template <class _Value, class _ErrorValue, class Derived, class DefaultDerived>
-class Stream : public Derived {
+class Stream : public StreamImplTag, public Derived {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
@@ -165,7 +173,14 @@ public:
   /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
   Stream &operator=(Self &&) = delete;
 
-  ~Stream() = default;
+  ~Stream()  {
+    if(g_impls.contains(this)) {
+      std::cout << "Erased 0x" << std::hex << size_t(this) << " from g_impls" << std::endl;
+      g_impls.erase(this);
+    } else {
+      std::cout << "g_impls does not contain 0x" << std::hex << size_t(this) << std::endl;
+    }
+  }
 
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }

@@ -4,6 +4,10 @@
 #include <iostream>
 #include <gtest/gtest.h>
 
+#include <fmt/core.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
+
 using namespace std::chrono_literals;
 
 /// We want to test both node types but do not want to do a templated test because 
@@ -24,7 +28,12 @@ class NodeTest : public testing::Test {
   void SetUp() override {
      // Code here will be called immediately after the constructor (right
      // before each test).
-     
+     if(!icey::impl::g_impls.empty()) {
+      std::vector<size_t> adresses;
+      for(auto k : icey::impl::g_impls) adresses.push_back(size_t(k));
+      fmt::print("Exptected no impls, but we have:\n{}\n", adresses);
+     }
+     EXPECT_TRUE(icey::impl::g_impls.empty());
   }
 
   void TearDown() override {
@@ -46,6 +55,13 @@ class NodeTest : public testing::Test {
 
 class TwoNodesFixture : public testing::Test {
     protected:
+
+    void SetUp() override {
+      // Code here will be called immediately after the constructor (right
+      // before each test).
+      ASSERT_TRUE(icey::impl::g_impls.empty());
+      
+    }
     TwoNodesFixture() {
       /// Put both nodes in the same executor so that if it spins, both nodes get what they want
         if (sender_->icey().get_executor()) {
