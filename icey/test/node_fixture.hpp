@@ -29,9 +29,8 @@ class NodeTest : public testing::Test {
      // Code here will be called immediately after the constructor (right
      // before each test).
      if(!icey::impl::g_impls.empty()) {
-      std::vector<size_t> adresses;
-      for(auto k : icey::impl::g_impls) adresses.push_back(size_t(k));
-      fmt::print("Exptected no impls, but we have:\n{}\n", adresses);
+      fmt::print("Exptected no impls, but we have:\n");
+      for(auto k : icey::impl::g_impls) std::cout << "0x" << std::hex << size_t(k) << "\n";
      }
      EXPECT_TRUE(icey::impl::g_impls.empty());
   }
