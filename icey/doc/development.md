@@ -9,7 +9,7 @@ cd <colcon-ws root>
 ./build/icey/test_main
 ```
 
-## Debug build 
+## Debug example node 
 
 Useful: Install mixins: https://github.com/colcon/colcon-mixin-repository
 
@@ -37,6 +37,18 @@ If you want to look at an exception that gets catched:
 - `catch throw`
 If your node crashes at Ctrl+C:
 - `handle SIGINT noprint nostop pass`
+
+## Debug unit test: 
+
+Since gtest catches the exceptions, we need to catch them earlier. 
+
+So type in gdb: `catch throw`.
+
+Then, do not use FastDDS since it uses exceptions as part of it's regular control-flow (that's why it's called *exception* you know, because it occurs regularly smh). CylconeDDS worked for me instead. Therefore, the overall command is: 
+
+```sh 
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp gdb ./build/icey/test_main
+```
 
 ## Run clang-tidy: 
 

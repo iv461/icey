@@ -38,6 +38,103 @@ TEST_F(NodeTest, ParameterTest) {
    node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
 }
 
+/// Here you declare in a single struct all parameters of the node:
+struct NodeParameters {
+   /// We can have regular fields :
+   double amplitude{3};
+ 
+   /// And as well parameters with constraints and a description:
+   icey::ParameterStream<double> frequency{10., icey::Interval(0., 25.),
+                                        std::string("The frequency of the sine")};
+   
+   icey::ParameterStream<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
+   /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+   struct OtherParams {
+     double max_amp = 6.;
+     std::vector<double> cov{0.444, 0., 0., 0.01};
+   } others;
+};
+
+TEST_F(NodeTest, ParameterStructTest) {
+    
+   NodeParameters params;
+
+   /// Test no parameters were declared
+   EXPECT_FALSE(node_->has_parameter("frequency"));
+   EXPECT_FALSE(node_->has_parameter("amplitude"));
+   EXPECT_FALSE(node_->has_parameter("mode"));
+   
+   EXPECT_FALSE(node_->has_parameter("others.max_amp"));
+   EXPECT_FALSE(node_->has_parameter("others.cov"));
+
+   std::unordered_set<std::string> fields_that_were_updated;
+   /// Now declare the parameter struct and a callback that is called when any field updates: 
+   node_->icey().declare_parameter_struct(params, [&](const std::string &changed_parameter) {
+      fields_that_were_updated.emplace(changed_parameter);
+   });
+   
+   /*
+   I don't think it makes sense to specify exactly how the callback get's called initially, it suffices to say it's called so that every parameter is initialized
+   std::unordered_set<std::string> target_updated1{"frequency", "mode"};
+   EXPECT_EQ(fields_that_were_updated, target_updated1); /// At first, all the contrained parameters update
+   */
+   fields_that_were_updated.clear();
+
+   EXPECT_TRUE(node_->has_parameter("amplitude"));
+   EXPECT_EQ(node_->get_parameter("amplitude").get_value<double>(), 3.);
+   
+   EXPECT_TRUE(node_->has_parameter("frequency"));
+   EXPECT_EQ(node_->get_parameter("frequency").get_value<double>(), 10.);
+   EXPECT_EQ(double(params.frequency), 10.); /// Test implicit conversion access (the EXPECT_EQ macro doesn't do common_type tho)
+   
+   EXPECT_TRUE(node_->has_parameter("mode"));
+   EXPECT_EQ(node_->get_parameter("mode").get_value<std::string>(), "single");
+   EXPECT_EQ(std::string(params.mode), std::string("single")); /// Test implicit conversion access (the EXPECT_EQ macro doesn't do common_type tho)
+
+   EXPECT_TRUE(node_->has_parameter("others.max_amp"));
+   EXPECT_EQ(node_->get_parameter("others.max_amp").get_value<double>(), 6.);
+   EXPECT_EQ(double(params.others.max_amp), 6.); /// Test implicit conversion access (the EXPECT_EQ macro doesn't do common_type tho)
+
+   EXPECT_TRUE(node_->has_parameter("others.max_amp"));
+   EXPECT_EQ(node_->get_parameter("others.max_amp").get_value<double>(), 6.);
+
+   std::vector<double> target_cov{0.444, 0., 0., 0.01};
+   EXPECT_TRUE(node_->has_parameter("others.cov"));
+   EXPECT_EQ(node_->get_parameter("others.cov").get_value<std::vector<double>>(), target_cov);
+
+   EXPECT_TRUE(fields_that_were_updated.empty()); 
+
+   /*
+   bool then_reacted = false;
+   params.frequency
+   .then([&](double new_val) {
+      then_reacted = true;
+      EXPECT_EQ(new_val, 2.5);
+     });
+
+   /// Test parameter setting:
+   node_->set_parameter(rclcpp::Parameter("frequency", 2.5));
+   EXPECT_TRUE(then_reacted);
+   EXPECT_EQ(last_field_that_updated, "frequency");
+   
+   then_reacted = false;
+   last_field_that_updated = "";
+
+   /// Test parameter update rejection: 
+   node_->set_parameter(rclcpp::Parameter("frequency", 100.));
+   EXPECT_FALSE(then_reacted);
+   EXPECT_EQ(last_field_that_updated, "");
+   /// The parameter should have stayed the same:
+   EXPECT_EQ(node_->get_parameter("frequency").get_value<double>(), 2.5);
+
+   /// Test updating nested fields:
+   node_->set_parameter(rclcpp::Parameter("others.max_amp", 120.));
+   EXPECT_EQ(last_field_that_updated, "others.max_amp");
+   EXPECT_EQ(double(params.others.max_amp), 120.); 
+   */
+}  
+
+
 TEST_F(NodeTest, TimerTest) {
    size_t timer_ticked{0};
    auto timer = node_->icey().create_timer(100ms);

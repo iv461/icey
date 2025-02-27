@@ -1,7 +1,7 @@
 #pragma once 
 
 #define ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS  /// We also test whether all impl Streams get destroyed in every unit-test, for this we enable the allocation tracking
-#define ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS /// optionally enable to see the allocations
+//#define ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS /// optionally enable to see the allocations
 
 #include <icey/icey.hpp>
 #include <iostream>

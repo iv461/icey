@@ -1013,8 +1013,10 @@ struct ParameterStream : public Stream<_Value, Nothing> {
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name,
                   const std::optional<Value> &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
-                  bool ignore_override = false) 
+                  bool ignore_override = false)
       : ParameterStream(default_value, validator, description, read_only, ignore_override) {
+    /// If this would be Java, we could chain delegate constructors, Java was great, I miss Java.
+    this->impl_ = node.create_stream_impl<typename Base::Impl>();
     this->parameter_name = parameter_name;
     this->register_with_ros(node);
   }
@@ -1022,10 +1024,6 @@ struct ParameterStream : public Stream<_Value, Nothing> {
   /// Register this paremeter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
-    /// TODO HACK
-    if(!this->impl_.p_.lock())
-      this->impl_ = node.create_stream_impl<typename Base::Impl>();
-
     const auto on_change_cb = [impl = this->impl()](const rclcpp::Parameter &new_param) {
       if constexpr (is_std_array<Value>) {
         using Scalar = typename Value::value_type;
@@ -1608,11 +1606,16 @@ public:
       using Field = std::remove_reference_t<decltype(field_value)>;
       std::string field_name_r(field_name);
       if constexpr (is_stream<Field>) {
-        field_value.impl()->context = this->shared_from_this(); /// First, give it the missing context
+        /// TODO HACK, needed due to delayed creation
+        if(!field_value.impl_.p_.lock()) {
+          field_value.impl_ = this->template create_stream_impl<typename Field::Impl>();
+          field_value.impl()->context = this->shared_from_this(); /// First, give it the missing context
+        }
+
         field_value.parameter_name = field_name_r;
         if (notify_callback) {
           field_value.impl()->register_handler(
-              [field_name_r, notify_callback](const auto &new_state) {
+              [field_name_r, notify_callback](const auto &) {
                 notify_callback(field_name_r);
               });
         }
