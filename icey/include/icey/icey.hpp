@@ -609,7 +609,7 @@ public:
   /// The actual implementation of the Stream.
   using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default-ctored");
-  
+
   /// Returns the underlying pointer to the implementation.
   const std::shared_ptr<Impl> &impl() const { return impl_; }
   std::shared_ptr<Impl> &impl() { return impl_; }
@@ -1066,7 +1066,7 @@ struct ValueOrParameter {
   template<class T>
     requires std::convertible_to<T, Value> && (!AnyStream<T>)
   ValueOrParameter(const T &v) // NOLINT
-    : get([value=v]() { return value; }) {}
+    : get([value=Value(v)]() { return value; }) {}
 
   ValueOrParameter(const Value &value) // NOLINT
     : get([value]() { return value; }) {}
@@ -1245,7 +1245,7 @@ struct ServiceStream : public Stream<std::pair<std::shared_ptr<typename _Service
   using Request = std::shared_ptr<typename _ServiceT::Request>;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
   using Value = std::pair<Request, Response>;
-  explicit ServiceStream(NodeBookkeeping &node, const std::string &service_name,
+  ServiceStream(NodeBookkeeping &node, const std::string &service_name,
                          const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     node.add_service<_ServiceT>(
         service_name,
