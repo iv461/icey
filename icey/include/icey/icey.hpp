@@ -594,6 +594,7 @@ template <class V>
 struct ServiceClient;
 template <class V>
 struct Buffer;
+
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
 /// It is conceptually very similar to a promise in JavaScript except that state transitions are not
@@ -637,7 +638,6 @@ public:
   //Stream(std::weak_ptr<Context> _context) context(_context), impl_(context->create_stream_impl<Impl>()) { }
   explicit Stream(NodeBookkeeping &book): impl_(book.create_stream_impl<Impl>()) { }
   explicit Stream(Weak<Impl> impl): impl_(impl) {}
-
 
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
@@ -1277,24 +1277,24 @@ struct ServiceStreamImpl {
   std::shared_ptr<rclcpp::Service<ServiceT>> service;
 };
 
-/// A Stream representing a ROS service (server). It stores the request as it's value and supports synchronous as well as asynchronous responding.
-/// 
+using RequestID = std::shared_ptr<rmw_request_id_t>;
+/// A Stream representing a ROS service (server). It stores as its value the RequestID and the the Request itself. It supports synchronous as well as asynchronous responding.
+///
 /// See as a reference:
 /// - https://github.com/ros2/rclcpp/pull/1709
 /// - https://github.com/ros2/rclcpp/issues/1707
 /// - https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1
 /// - https://github.com/ijnek/nested_services_rclcpp_demo
 template <class _ServiceT>
-struct ServiceStream : public Stream<std::shared_ptr<typename _ServiceT::Request>, 
+struct ServiceStream : public Stream< std::tuple<RequestID, std::shared_ptr<typename _ServiceT::Request>>, 
   Nothing, ServiceStreamImpl<_ServiceT> > {
-  using Base = Stream<std::shared_ptr<typename _ServiceT::Request>, Nothing, ServiceStreamImpl<_ServiceT> >;
+  using Base = Stream< std::tuple<RequestID, std::shared_ptr<typename _ServiceT::Request>>, Nothing, ServiceStreamImpl<_ServiceT> >;
   using Request = std::shared_ptr<typename _ServiceT::Request>;
   using Value = Request;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
-  using RequestID = std::shared_ptr<rmw_request_id_t>;
+  
   /// The type of the user callback that can response synchronously (i.e. immediately): It receives the request and returns the response.
   using SyncCallback = std::function<Response(Request)>;
-
   using AsyncCallback = std::function<Stream<Response>(Request)>;
 
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
@@ -1302,14 +1302,23 @@ struct ServiceStream : public Stream<std::shared_ptr<typename _ServiceT::Request
                          const rclcpp::QoS &qos = rclcpp::ServicesQoS()): Base(node) {
     this->impl()->service = node.add_service<_ServiceT>(
         service_name,
-        [impl = this->impl(), sync_callback](RequestID header, Request request) {
-          impl->put_value(request);
+        [impl = this->impl(), sync_callback](RequestID request_id, Request request) {
+          impl->put_value(std::make_tuple(request_id, request));
           if(sync_callback) {
             auto response = sync_callback(request);
-            impl->service->send_response(*header, *response);
+            impl->service->send_response(*request_id, *response);
           }
         },
         qos);
+  }
+  /// Send the service response to the request identified by the request_id.
+  ///  It is RMW implementation defined whether this happens synchronously or asynchronously.
+  /// \throws any exception from `rclcpp::exceptions::throw_from_rcl_error()`
+  /// See for a detailed documentation:
+  /// - The C-API that rclcpp uses more or less directly: [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
+  /// - One leayer below: [rmw_send_response](https://docs.ros.org/en/humble/p/rmw/generated/function_rmw_8h_1abb55ba2b2a957cefb0a77b77ddc5afda.html)
+  void respond(RequestID request_id, Response response) {
+    this->impl()->service->send_response(*request_id, *response);
   }
 };
 
@@ -1435,17 +1444,14 @@ struct TimeoutFilter
 
 /// Adapts the `message_filters::SimpleFilter` to our
 /// `Stream` (which is a similar concept).
-/// \note This is the same as what
+/// \note This is essentially the same as what
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 template <class _Message>
 struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr, Nothing, message_filters::SimpleFilter<_Message> > {
   using Base = Stream<typename _Message::SharedPtr, Nothing, message_filters::SimpleFilter<_Message> >;
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so
-  /// that `signalMessage` is called once a value is received. \todo Use mfl::simplefilter as
-  /// derive-impl, then do not capture this, and do not allocate this adapter dynamically
-  ///  but statically, and pass impl() (which will be then message_filters::SimpleFilter<_Message> )
-  ///  to the synchroniuzer as input.
+  /// that `signalMessage` is called once a value is received.
   SimpleFilterAdapter(NodeBookkeeping &node): Base(node) {
     this->impl()->register_handler([impl=this->impl()](const auto &new_state) {
       using Event = message_filters::MessageEvent<const _Message>;

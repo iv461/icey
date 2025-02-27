@@ -140,10 +140,62 @@ TEST_F(NodeTest, ParameterStructTest) {
    node_->set_parameter(rclcpp::Parameter("others.max_amp", 120.));
    spin(100ms); /// Need to spin so that the parameter gets updated
    EXPECT_TRUE(fields_that_were_updated.contains("others.max_amp"));
-   EXPECT_EQ(double(params.others.max_amp), 120.); 
-   
-}  
+   EXPECT_EQ(double(params.others.max_amp), 120.);   
+}
 
+TEST_F(TwoNodesFixture, PubSubTest) {
+   /// Test one-off timer 
+   auto timer = sender_->icey().create_timer(100ms);
+   auto sub = receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal");
+
+   EXPECT_FALSE(sub.impl()->has_value());
+
+   timer
+   .then([&](size_t ticks) -> std::optional<std_msgs::msg::Float32> {
+         std_msgs::msg::Float32 float_val;
+         float_val.data = ticks;
+         if(ticks == 10)
+         return {};
+      return float_val;
+   })
+   .publish("/icey_test/sine_signal");
+   
+   std::size_t received_cnt = 0;
+   sub.then([&](auto msg) {
+      EXPECT_EQ(received_cnt, std::size_t(msg->data));
+      received_cnt++;
+   });
+
+   spin(1100ms);
+   EXPECT_EQ(received_cnt, 10);
+}
+
+TEST_F(TwoNodesFixture, TransformPubSubTest) {
+   
+   auto sub = receiver_->icey().create_transform_subscription("icey_test_frame1", "icey_test_frame3");
+   
+   EXPECT_FALSE(sub.impl()->has_value());
+   
+   sender_->icey().create_timer(100ms)
+      .then([&](size_t ticks) {
+         geometry_msgs::msg::TransformStamped tf1;
+         tf1.header.stamp = sender_->get_clock()->now();
+         tf1.header.frame_id = "icey_test_frame1";
+         tf1.child_frame_id = "icey_test_frame2";
+         tf1.transform.translation.x = 0.1;
+         return tf1;
+      })
+      .publish_transform();
+   
+   std::size_t received_cnt = 0;
+   sub.then([&](auto msg) {
+      //EXPECT_EQ(received_cnt, std::size_t(msg->data));
+      received_cnt++;
+   });
+
+   spin(1100ms);
+   EXPECT_EQ(received_cnt, 10);
+}
 
 TEST_F(NodeTest, TimerTest) {
    size_t timer_ticked{0};
@@ -175,33 +227,6 @@ TEST_F(NodeTest, OneOffTimerTest) {
      });
    spin(300ms);
    EXPECT_EQ(timer_ticked, 1);
-}
-
-TEST_F(TwoNodesFixture, PubSubTest) {
-   /// Test one-off timer 
-   auto timer = sender_->icey().create_timer(100ms);
-   auto sub = receiver_->icey().create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal");
-
-   EXPECT_FALSE(sub.impl()->has_value());
-
-   timer
-   .then([&](size_t ticks) -> std::optional<std_msgs::msg::Float32> {
-         std_msgs::msg::Float32 float_val;
-         float_val.data = ticks;
-         if(ticks == 10)
-         return {};
-      return float_val;
-   })
-   .publish("/icey_test/sine_signal");
-   
-   std::size_t received_cnt = 0;
-   sub.then([&](auto msg) {
-      EXPECT_EQ(received_cnt, std::size_t(msg->data));
-      received_cnt++;
-   });
-
-   spin(1100ms);
-   EXPECT_EQ(received_cnt, 10);
 }
 
 

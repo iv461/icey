@@ -88,7 +88,6 @@ Both ways are however not compatible
 
 ## Control flow: Multiple inputs and multiple outputs
 
-
 ### Single input, multiple output
 You may wonder how you can express the control flow of publishing multiple times inside a callback:
 ```cpp 

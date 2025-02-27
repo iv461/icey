@@ -84,14 +84,47 @@ void on_image(sensor_msgs::Camera::SharedPtr image) {
     } catch(...) {
         return; // Return if the transform is not available yet.
     }
-
 }
 ```
 
-You may have noticed one limitation: We cannot use the frame name that is inside the header of the image message, i.e. `header.frame_id`. This limitation is required however to identify a clear data-flow, a core concept of ICEY: If we would have to look up different frames depending on the `frame_id` inside the message, this would mean that 
-we need to synchronize different sources (the different nodes that usually publish on the topic /tf) depending on the message **content**. This means, the data-flow would have to change dynamically, depending on the mssage-content. Generally, the data-flow graph is static in ICEY, so this is not possible. But it may be possible in the future if we realize this flexibility is really necessary.
+You may have noticed one limitation: We cannot use the frame name that is inside the header of the image message, i.e. `header.frame_id`. 
+We can use for this another function `synchronize_with_transform(<target-frame>)` that will use the `header.frame_id` as the source frame: 
 
-Also, in practice the names of rigid coordinate systems (like sensor mounts) are fixed and known in priori, and do not change. The map coordinate system is named by convention [1] always `map`. 
+```cpp
+auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera_front");
+const std::string target_frame = "map";
+/// This will use the header.frame_id of the Image as the source frame:
+
+camera_image.synchronize_with_transform(target_frame)
+    .then([](sensor_msgs::Camera::SharedPtr image, geometry_msgs::TransfromStamped::SharedPtr camera_to_map) {
+
+    });
+```
+
+You can even use parameters as a target frame:
+
+```cpp
+auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera_front");
+auto target_frame = node->icey().create_parameter<std::string>("target_frame");
+
+/// This will use the header.frame_id of the Image as the source frame and the current parameter value as the target_frame (automatically receiving updates)
+camera_image.synchronize_with_transform(target_frame)
+    .then([](sensor_msgs::Camera::SharedPtr image, geometry_msgs::TransfromStamped::SharedPtr camera_to_map) {
+
+    });
+```
+
+```cpp
+auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera_front");
+auto cam_to_map_transform = node->icey().create_transform_subscription("camera_frame", "map");
+
+node->icey().synchronize(camera_image, cam_to_map_transform)
+    .then([](sensor_msgs::Camera::SharedPtr image, geometry_msgs::TransfromStamped::SharedPtr camera_to_map) {
+
+    });
+```
+
+In practice the names of rigid coordinate systems (like sensor mounts) are fixed and known in priori, and do not change. The map coordinate system is named by convention [1] always `map`. 
 
 Therefore, this limitation of having to know the frame names on subscription is not concerning in practice.
 
