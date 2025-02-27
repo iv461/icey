@@ -371,12 +371,10 @@ private:
       for (const auto &parameter : parameters) {
         /// We want to skip validating parameters that we didn't declare, for example here have
         /// other parameters like qos_overrides./tf.publisher.durability.
-        std::cout << "Validating: " << parameter.get_name() << std::endl;
         if (!parameter_validators_.contains(parameter.get_name())) continue;
         const auto &validator = parameter_validators_.at(parameter.get_name());
         auto maybe_error = validator(parameter);
         if (maybe_error) {
-          std::cout << "You got rejected: " << parameter.get_name() << std::endl;
           result.successful = false;
           result.reason = *maybe_error;
           break;
@@ -1031,10 +1029,8 @@ struct ParameterStream : public Stream<_Value> {
   /// Register this paremeter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
-
     node.add_parameter<Value>(this->parameter_name, this->default_value,
       [impl = this->impl()](const rclcpp::Parameter &new_param) {
-        std::cout << "Param changed " << std::endl;
         if constexpr (is_std_array<Value>) {
           using Scalar = typename Value::value_type;
           auto new_value = new_param.get_value<std::vector<Scalar>>();
