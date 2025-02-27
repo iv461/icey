@@ -145,6 +145,7 @@ inline auto unpack_if_tuple(F &f, Arg &&arg) {
   }
 }
 
+struct StreamImplBase {};
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
 ///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
@@ -157,7 +158,7 @@ inline auto unpack_if_tuple(F &f, Arg &&arg) {
 /// `then` or `except`.
 ///
 template <class _Value, class _ErrorValue, class Base, class DefaultBase>
-class Stream : public Base {
+class Stream : public StreamImplBase, public Base {
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;

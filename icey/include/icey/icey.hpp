@@ -100,6 +100,22 @@ struct NodeInterfaces {
   rclcpp_lifecycle::LifecycleNode *maybe_lifecycle_node{nullptr};
 };
 
+/// A weak pointer that supports operator->.
+template<class T>
+struct Weak {
+  Weak() = default;
+  Weak(std::shared_ptr<T> p) : p_(p) {}
+  T * operator->() const { 
+    if(!p_.lock()) throw std::bad_weak_ptr();
+      return p_.lock().get(); 
+  }
+  T * get() const { 
+    if(!p_.lock()) throw std::bad_weak_ptr();
+      return p_.lock().get(); 
+  }
+  std::weak_ptr<T> p_;
+};
+
 /// A transform listener that allows to subscribe on a single transform between two coordinate
 /// systems. It is implemented similarly to the tf2_ros::TransformListener.
 /// Every time a new message is receved on /tf, it checks whether a relevant transforms (i.e. ones
@@ -238,7 +254,17 @@ public:
 
   explicit NodeBookkeeping(const NodeInterfaces &node_interfaces) : NodeInterfaces(node_interfaces) {}
 
+  /// All the streams that were created are owned by the Context.
+  std::vector<std::shared_ptr<impl::StreamImplBase>> stream_impls_;
 
+  /// Adds a stream impl to the list so that it does not go out of scope.
+  template<class StreamImpl>
+  Weak<StreamImpl> create_stream_impl() { 
+    auto impl = impl::create_stream<StreamImpl>();
+    stream_impls_.emplace_back(impl);
+    return impl;
+  }
+  
   /// Declares a parameter and registers a validator callback and a callback that will get called
   /// when the parameters updates.
   template <class ParameterT, class CallbackT>
@@ -443,19 +469,6 @@ struct crtp {
   T const &underlying() const { return static_cast<T const &>(*this); }
 };
 
-template<class T>
-struct Weak {
-  Weak(std::shared_ptr<T> p) : p_(p) {}
-  T * operator->() const { 
-    if(!p_.lock()) throw std::bad_weak_ptr();
-      return p_.lock().get(); 
-  }
-  T * get() const { 
-    if(!p_.lock()) throw std::bad_weak_ptr();
-      return p_.lock().get(); 
-  }
-  std::weak_ptr<T> p_;
-};
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
@@ -609,7 +622,16 @@ public:
   ~Stream() {
     std::cout << "Destroying Stream: " << this->get_type_info() << std::endl;
   }
-#endif
+#else 
+  /// Leaves stream in invalid state. Needed for some delayed stuff like ParameterStream \todo rem
+  Stream() = default;
+#endif  
+
+  /// Create s new stream using the context. 
+  //Stream(std::weak_ptr<Context> _context) context(_context), impl_(context->create_stream_impl<Impl>()) { }
+  explicit Stream(NodeBookkeeping &book): impl_(book.create_stream_impl<Impl>()) { }
+  explicit Stream(Weak<Impl> impl): impl_(impl) {}
+
 
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
@@ -670,7 +692,7 @@ public:
                   "This stream does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto output = this->impl()->context.lock()->template create_ros_stream<PublisherType>(
+    auto output = this->impl()->context.lock()->template create_stream<PublisherType>(
         std::forward<Args>(args)...);
     this->connect_values(output);
   }
@@ -682,7 +704,7 @@ public:
   TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
-    return this->impl()->context.lock()->template create_ros_stream<TimeoutFilter<_Value>>(
+    return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
         *this, max_age, create_extra_timer);
   }
 
@@ -769,9 +791,6 @@ public:
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
 
-  void set_impl(std::shared_ptr<Impl> impl) {
-     this->impl_ = impl;
-  }
 protected:
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
@@ -797,15 +816,14 @@ protected:
   template <class NewVal, class NewErr>
   Stream<NewVal, NewErr> create_from_impl(
       const std::shared_ptr<
-          impl::Stream<NewVal, NewErr, WithDefaults<Nothing>, WithDefaults<Nothing>>> &impl) const {
-    Stream<NewVal, NewErr> new_stream;
-    new_stream.set_impl(impl);
+        impl::Stream<NewVal, NewErr, WithDefaults<Nothing>, WithDefaults<Nothing>>> &impl) const {
+    Stream<NewVal, NewErr> new_stream(impl);
     new_stream.impl()->context = this->impl()->context;
     return new_stream;
   }
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
-  std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
+  Weak<Impl> impl_;
 };
 
 template <class Value>
@@ -954,27 +972,10 @@ struct Validator {
   Validate validate;
 };
 
-template <class Value>
-struct ParameterStreamImpl {
-  auto create_descriptor() {
-    auto desc = validator.descriptor;
-    desc.name = parameter_name;
-    desc.description = description;
-    desc.read_only = read_only;
-    return desc;
-  }
-
-  std::string parameter_name;
-  std::optional<Value> default_value;
-  Validator<Value> validator;
-  std::string description;
-  bool read_only = false;
-  bool ignore_override = false;
-};
-
 /// An stream for ROS parameters.
 template <class _Value>
-struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Value>> {
+struct ParameterStream : public Stream<_Value, Nothing> {
+  using Base = Stream<_Value, Nothing>;
   using Value = _Value;
   static_assert(is_valid_ros_param_type<_Value>::value,
                 "Type is not an allowed ROS parameter type");
@@ -991,11 +992,11 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   ParameterStream(const std::optional<Value> &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false) {
-    this->impl()->default_value = default_value;
-    this->impl()->validator = validator;
-    this->impl()->description = description;
-    this->impl()->read_only = read_only;
-    this->impl()->ignore_override = ignore_override;
+    this->default_value = default_value;
+    this->validator = validator;
+    this->description = description;
+    this->read_only = read_only;
+    this->ignore_override = ignore_override;
   }
 
   /// @brief The standard constructor used when declaring parameters with
@@ -1010,15 +1011,19 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name,
                   const std::optional<Value> &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
-                  bool ignore_override = false)
+                  bool ignore_override = false) 
       : ParameterStream(default_value, validator, description, read_only, ignore_override) {
-    this->impl()->parameter_name = parameter_name;
+    this->parameter_name = parameter_name;
     this->register_with_ros(node);
   }
 
   /// Register this paremeter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
+    /// TODO HACK
+    if(!this->impl_.lock())
+      this->impl_ = node.create_stream_impl<typename Base::Impl>();
+
     const auto on_change_cb = [impl = this->impl()](const rclcpp::Parameter &new_param) {
       if constexpr (is_std_array<Value>) {
         using Scalar = typename Value::value_type;
@@ -1034,11 +1039,11 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
         impl->put_value(new_value);
       }
     };
-    node.add_parameter<Value>(this->impl()->parameter_name, this->impl()->default_value,
-                              on_change_cb, this->impl()->create_descriptor(),
-                              this->impl()->validator.validate, this->impl()->ignore_override);
+    node.add_parameter<Value>(this->parameter_name, this->default_value,
+                              on_change_cb, this->create_descriptor(),
+                              this->validator.validate, this->ignore_override);
     /// Set default value if there is one
-    if (this->impl()->default_value) {
+    if (this->default_value) {
       this->impl()->put_value(*this->impl()->default_value);
     }
   }
@@ -1047,7 +1052,7 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   /// value.
   const Value &value() const {
     if (!this->impl()->has_value()) {
-      throw std::runtime_error("Parameter '" + this->impl()->name + "' does not have a value");
+      throw std::runtime_error("Parameter '" + this->name + "' does not have a value");
     }
     return this->impl()->value();
   }
@@ -1058,6 +1063,21 @@ struct ParameterStream : public Stream<_Value, Nothing, ParameterStreamImpl<_Val
   {
     return this->value();
   }
+protected:
+  auto create_descriptor() {
+    auto desc = validator.descriptor;
+    desc.name = parameter_name;
+    desc.description = description;
+    desc.read_only = read_only;
+    return desc;
+  }
+
+  std::string parameter_name;
+  std::optional<Value> default_value;
+  Validator<Value> validator;
+  std::string description;
+  bool read_only = false;
+  bool ignore_override = false;
 };
 
 /// A class that abstracts a plain value and a ParameterStream so that both are supported. 
@@ -1083,9 +1103,10 @@ struct ValueOrParameter {
 /// pointer to the message.
 template <class _Message>
 struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
+  using Base = Stream<typename _Message::SharedPtr>;
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
-                     const rclcpp::SubscriptionOptions &options) {
+                     const rclcpp::SubscriptionOptions &options): Base(node) {
     this->impl()->name = topic_name;
     node.add_subscription<_Message>(
         topic_name,
@@ -1101,6 +1122,9 @@ template <class _Message, class DerivedImpl>
 struct InterpolateableStream
     : public InterpolateableStreamTag,
       public Stream<typename _Message::SharedPtr, std::string, DerivedImpl> {
+  using Base = Stream<typename _Message::SharedPtr, std::string, DerivedImpl>;
+  using Base::Base;
+  
   using MaybeValue = std::optional<typename _Message::SharedPtr>;
   /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
@@ -1133,12 +1157,13 @@ struct TransformSubscriptionStreamImpl {
 struct TransformSubscriptionStream
     : public InterpolateableStream<geometry_msgs::msg::TransformStamped,
                                    TransformSubscriptionStreamImpl> {
+  using Base = InterpolateableStream<geometry_msgs::msg::TransformStamped, TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
 
   TransformSubscriptionStream(NodeBookkeeping &node, 
                           ValueOrParameter<std::string> target_frame,
-                          ValueOrParameter<std::string> source_frame) {
+                          ValueOrParameter<std::string> source_frame): Base(node) {
     this->impl()->target_frame = target_frame;
     this->impl()->source_frame = source_frame;
     this->impl()->tf2_listener = node.add_tf_subscription(
@@ -1175,7 +1200,8 @@ struct TimerImpl {
 
 /// A Stream representing a ROS-Timer. It saves the number of ticks as it's value.
 struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
-  TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer) {
+  using Base = Stream<size_t, Nothing, TimerImpl>;
+  TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer): Base(node) {
     this->impl()->name = "timer";
     this->impl()->timer = node.add_timer(interval, [impl = this->impl(), is_one_off_timer]() {
       impl->put_value(impl->ticks_counter);
@@ -1210,6 +1236,7 @@ struct PublisherImpl {
 /// A Stream representing a ROS-publisher. Value can be either a Message or shared_ptr<Message>
 template <class _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
+  using Base = Stream<_Value, Nothing, PublisherImpl<_Value>>;
   using Message = remove_shared_ptr_t<_Value>;
   static_assert(rclcpp::is_ros_compatible_type<Message>::value,
                 "A publisher must use a publishable ROS message (no primitive types are possible)");
@@ -1217,7 +1244,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
                   const rclcpp::PublisherOptions publisher_options = {},
-                  Input *maybe_input = nullptr) {
+                  Input *maybe_input = nullptr) : Base(node){
     this->impl()->name = topic_name;
     this->impl()->publisher = node.add_publisher<Message>(topic_name, qos, publisher_options);
     this->impl()->register_handler(
@@ -1256,6 +1283,7 @@ struct ServiceStreamImpl {
 template <class _ServiceT>
 struct ServiceStream : public Stream<std::shared_ptr<typename _ServiceT::Request>, 
   Nothing, ServiceStreamImpl<_ServiceT> > {
+  using Base = Stream<std::shared_ptr<typename _ServiceT::Request>, Nothing, ServiceStreamImpl<_ServiceT> >;
   using Request = std::shared_ptr<typename _ServiceT::Request>;
   using Value = Request;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
@@ -1267,7 +1295,7 @@ struct ServiceStream : public Stream<std::shared_ptr<typename _ServiceT::Request
 
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
                          SyncCallback sync_callback = {},
-                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()): Base(node) {
     this->impl()->service = node.add_service<_ServiceT>(
         service_name,
         [impl = this->impl(), sync_callback](RequestID header, Request request) {
@@ -1293,13 +1321,14 @@ struct ServiceClientImpl {
 template <class _ServiceT>
 struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
                                      ServiceClientImpl<_ServiceT>> {
+  using Base = Stream<typename _ServiceT::Response::SharedPtr, std::string, ServiceClientImpl<_ServiceT>>;
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
 
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS()): Base(node) {
     this->impl()->name = service_name;
     this->impl()->timeout = timeout;
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
@@ -1361,6 +1390,7 @@ protected:
 template <class Value>
 struct TimeoutFilter
     : public Stream<Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>> {
+  using Base = Stream<Value, std::tuple<rclcpp::Time, rclcpp::Time, rclcpp::Duration>>;
   /// Construct the filter an connect it to the input.
   /// \tparam Input another Stream that holds as a value a ROS message with a header stamp
   /// \param node the node is needed to know the current time
@@ -1371,7 +1401,7 @@ struct TimeoutFilter
   /// detected even if no message is received
   template <AnyStream Input>
   TimeoutFilter(NodeBookkeeping &node, Input input, const Duration &max_age,
-                bool create_extra_timer = true) {
+                bool create_extra_timer = true) : Base(node) {
     auto node_clock = node.get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
     auto check_state = [impl = this->impl(), node_clock, max_age_ros](const auto &new_state) {
@@ -1405,17 +1435,17 @@ struct TimeoutFilter
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 template <class _Message>
-struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr>,
-                             public message_filters::SimpleFilter<_Message> {
+struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr, Nothing, message_filters::SimpleFilter<_Message> > {
+  using Base = Stream<typename _Message::SharedPtr, Nothing, message_filters::SimpleFilter<_Message> >;
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so
   /// that `signalMessage` is called once a value is received. \todo Use mfl::simplefilter as
   /// derive-impl, then do not capture this, and do not allocate this adapter dynamically
   ///  but statically, and pass impl() (which will be then message_filters::SimpleFilter<_Message> )
   ///  to the synchroniuzer as input.
-  SimpleFilterAdapter() {
-    this->impl()->register_handler([this](const auto &new_state) {
+  SimpleFilterAdapter(NodeBookkeeping &node): Base(node) {
+    this->impl()->register_handler([impl=this->impl()](const auto &new_state) {
       using Event = message_filters::MessageEvent<const _Message>;
-      this->signalMessage(Event(new_state.value()));
+      impl->signalMessage(Event(new_state.value()));
     });
   }
 };
@@ -1427,14 +1457,14 @@ struct SynchronizerStreamImpl {
   using Inputs = std::tuple<std::shared_ptr<SimpleFilterAdapter<Messages>>...>;
   const auto &inputs() const { return inputs_; }
 
-  void create_mfl_synchronizer(uint32_t queue_size) {
+  void create_mfl_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {
     queue_size_ = queue_size;
-    inputs_ = std::make_tuple(std::make_shared<SimpleFilterAdapter<Messages>>()...);
+    inputs_ = std::make_tuple(SimpleFilterAdapter<Messages>(node)...);
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
     /// Connect with the input streams
     std::apply(
-        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters...); },
+        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters->impl()...); },
         inputs_);
     /// This parameter setting is from the examples
     synchronizer_->setAgePenalty(0.50);
@@ -1450,10 +1480,11 @@ struct SynchronizerStreamImpl {
 template <class... Messages>
 class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
                                          SynchronizerStreamImpl<Messages...>> {
-public:
+public: 
+  using Base = Stream<std::tuple<typename Messages::SharedPtr...>, std::string, SynchronizerStreamImpl<Messages...>>;
   using Self = SynchronizerStream<Messages...>;
-  explicit SynchronizerStream(uint32_t queue_size) {
-    this->impl()->create_mfl_synchronizer(queue_size);
+  SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size): Base(node) {
+    this->impl()->create_mfl_synchronizer(node, queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
     /// because we only access impl in on_messages. Therefore, the referenced impl is always the
     /// same and (since it is ref-counted) always valid.
@@ -1476,10 +1507,11 @@ struct TF2MessageFilterImpl {
 template <class _Message>
 struct TF2MessageFilter
     : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
+  using Base = Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>>;
   using Self = TF2MessageFilter<_Message>;
   using Message = _Message;
 
-  TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame) {
+  TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame): Base(node) {
     this->impl()->name = "tf_filter";
     this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
         this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
@@ -1491,35 +1523,25 @@ struct TF2MessageFilter
 
 /// The context owns the streams and is what is returned when calling `node->icey()`
 /// (NodeWithIceyContext::icey).
-class Context : public std::enable_shared_from_this<Context>, private boost::noncopyable {
+class Context : public NodeBookkeeping, public std::enable_shared_from_this<Context>, private boost::noncopyable {
 public:
   /// Construct a context using the given Node interface, initializing the `node` field. The
   /// interface must always be present because the Context creates new Streams and Streams need a
   /// the node for construction.
   explicit Context(const NodeInterfaces &node_interface)
-      : node(std::make_shared<NodeBookkeeping>(node_interface)),
-        executor_(std::make_shared<rclcpp::executors::SingleThreadedExecutor>()) {
+      : NodeBookkeeping(node_interface) {
+    executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
     executor_->add_node(node_interface.get_node_base_interface());
   }
-  /// Adds a stream impl to the list so that it does not go out of scope.
-  void add_stream_impl(std::shared_ptr<StreamImplDefault> impl) { stream_impls_.push_back(impl); }
 
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
   /// list of streams so that it does not go out of scope. It also sets the context.
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
-    S stream(std::forward<Args>(args)...);
+    S stream(static_cast<NodeBookkeeping&>(*this), std::forward<Args>(args)...);
     /// Track (i.e. reference) the Stream impl so that it does not go out of scope.
-    this->add_stream_impl(stream.impl_);
     stream.impl()->context = this->shared_from_this();
     return stream;
-  }
-
-  /// Like Context::create_stream but additionally passes the node as the first argument. Needed for
-  /// Stream that need to register to ROS.
-  template <AnyStream S, class... Args>
-  S create_ros_stream(Args &&...args) {
-    return create_stream<S>(*this->node, std::forward<Args>(args)...);
   }
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
@@ -1529,7 +1551,7 @@ public:
       const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = {},
       const Validator<ParameterT> &validator = {}, std::string description = "",
       bool read_only = false, bool ignore_override = false) {
-    return create_ros_stream<ParameterStream<ParameterT>>(
+    return create_stream<ParameterStream<ParameterT>>(
         parameter_name, maybe_default_value, validator, description, read_only, ignore_override);
   }
 
@@ -1584,6 +1606,7 @@ public:
       using Field = std::remove_reference_t<decltype(field_value)>;
       std::string field_name_r(field_name);
       if constexpr (is_stream<Field>) {
+        field_value.impl()->context = this->shared_from_this(); /// First, give it the missing context
         field_value.impl()->parameter_name = field_name_r;
         if (notify_callback) {
           field_value.impl()->register_handler(
@@ -1591,7 +1614,7 @@ public:
                 notify_callback(field_name_r);
               });
         }
-        field_value.register_with_ros(*this->node);
+        field_value.register_with_ros(*this);
       } else if constexpr (is_valid_ros_param_type<Field>::value) {
         this->declare_parameter<Field>(field_name_r, field_value)
             .impl()
@@ -1621,20 +1644,20 @@ public:
   SubscriptionStream<MessageT> create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-    return create_ros_stream<SubscriptionStream<MessageT>>(name, qos, options);
+    return create_stream<SubscriptionStream<MessageT>>(name, qos, options);
   }
 
   /// Create a subscriber that subscribes to a single transform between two frames.
   TransformSubscriptionStream create_transform_subscription(ValueOrParameter<std::string> target_frame,
                                                             ValueOrParameter<std::string> source_frame) {
-    return create_ros_stream<TransformSubscriptionStream>(target_frame, source_frame);
+    return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
   template <class Message>
   PublisherStream<Message> create_publisher(const std::string &topic_name,
                                             const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
                                             const rclcpp::PublisherOptions publisher_options = {}) {
-    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
+    return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
   }
 
   template <AnyStream Input>
@@ -1643,32 +1666,32 @@ public:
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::PublisherOptions publisher_options = {}) {
     using Message = ValueOf<Input>;
-    return create_ros_stream<PublisherStream<Message>>(topic_name, qos, publisher_options, &input);
+    return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options, &input);
   }
 
   template <AnyStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
-    auto output = create_ros_stream<TransformPublisherStream>();
+    auto output = create_stream<TransformPublisherStream>();
     input.connect_values(output);
     return output;
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
-    return create_ros_stream<TimerStream>(interval, is_one_off_timer);
+    return create_stream<TimerStream>(interval, is_one_off_timer);
   }
 
   template <class ServiceT>
   ServiceStream<ServiceT> create_service(const std::string &service_name,
                                          ServiceStream<ServiceT>::SyncCallback sync_callback = {},
                                          const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_ros_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
+    return create_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
   }
 
   /// Add a service client
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_ros_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
+    return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
   /// Add a service client and connect it to the input
@@ -1833,14 +1856,10 @@ public:
   }
 
 protected:
-  /// The node bookeeping is needed in the Context because Streams need the ROS node so that they
-  /// can register themselves to ROS.
-  std::shared_ptr<NodeBookkeeping> node;
   /// The executor is needed for async/await because the Streams need to be able to await
   /// themselves. For this, they acces the ROS executor through the Context.
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
-  /// All the streams that were created are owned by the Context.
-  std::vector<std::shared_ptr<StreamImplDefault>> stream_impls_;
+  
 };
 
 /// The ROS node, additionally owning the context that holds the Streams.
