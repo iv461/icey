@@ -7,6 +7,8 @@ using ExampleService = std_srvs::srv::SetBool;
 int main(int argc, char **argv) {  
   auto node = icey::create_node(argc, argv, "service_server");
   
+  auto service_name = node->icey().declare_parameter<std::string>("service_name", "set_bool_service1");
+
   auto service_cb = [&](std::shared_ptr<ExampleService::Request> request) {
     auto response = std::make_shared<ExampleService::Response>();
     response->success = !request->data;
@@ -15,8 +17,7 @@ int main(int argc, char **argv) {
     return response;
   };
 
-
-  node->icey().create_service<ExampleService>("set_bool_service1", service_cb);
+  node->icey().create_service<ExampleService>(service_name, service_cb);
   node->icey().create_service<ExampleService>("set_bool_service2", service_cb);
   node->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 

@@ -62,7 +62,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct
 - [ ] rclcpp also has a TimerInfo (previously called TimerEvent) with the time, use it as the state. 
 
-- [ ] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
 - [ ] Remove use of RTTI in interpolateble stream 
 - [ ] Pass error through synchronizers -> for this return Result from Interpolatables
 - [ ] Allow chaining approx-time synchronizer with e.g. reference synchronizer by implementing averaging of all the header stampls of the tuple
@@ -272,3 +271,5 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Async/await: In case the executor is stopped with Ctrl+C, the steam does not have a value but still we are trying to return it. This means, we would generally have to return a Result from await_resume. Problem is, this gives us an ugly syntax because C++ unlike Rust does not have pattern matching. In Rust, you would do `while let Some(val) = stream.wait`, but the best you could do in C++ is `while(auto val = co_await stream)` and then you would have to access the maybe-value with `*val`.  This issue is quite annoying because I don't think it's a good idea to force the user to unwrap the value even if in 99.9% of cases there is a value, only because on 0.1% of cases there might not be a value. Since the case there might not be any value happens only when pressing Ctrl+C while spinning, I think it would be better to just do what a ROS-node would do normally in this case: call rclcpp::shutdown and stop.
 - [X] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
+
+- [X] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 

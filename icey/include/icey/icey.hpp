@@ -274,16 +274,14 @@ public:
   /// Declares a parameter and registers a validator callback and a callback that will get called
   /// when the parameters updates.
   template <class ParameterT, class CallbackT>
-  auto add_parameter(const std::string &name, const std::optional<ParameterT> &default_value,
+  auto add_parameter(const std::string &name, const ParameterT &default_value,
                      CallbackT &&update_callback,
                      const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = {},
                      FValidate f_validate = {}, bool ignore_override = false) {
-    rclcpp::ParameterValue v =
-        default_value ? rclcpp::ParameterValue(*default_value) : rclcpp::ParameterValue();
     parameter_validators_.emplace(name, f_validate);
     add_parameter_validator_if_needed();
     auto param =
-        node_parameters_->declare_parameter(name, v, parameter_descriptor, ignore_override);
+        node_parameters_->declare_parameter(name, rclcpp::ParameterValue(default_value), parameter_descriptor, ignore_override);
     auto param_subscriber = std::make_shared<rclcpp::ParameterEventHandler>(static_cast<NodeInterfaces&>(*this));
     auto cb_handle =
         param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
@@ -996,7 +994,7 @@ struct ParameterStream : public Stream<_Value> {
   /// @param description the description written in the ParameterDescriptor
   /// @param read_only if yes, the parameter cannot be modified
   /// @param ignore_override
-  ParameterStream(const std::optional<Value> &default_value, const Validator<Value> &validator = {},
+  ParameterStream(const Value &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false) {
     this->default_value = default_value;
@@ -1016,7 +1014,7 @@ struct ParameterStream : public Stream<_Value> {
   /// @param read_only if yes, the parameter cannot be modified
   /// @param ignore_override
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name,
-                  const std::optional<Value> &default_value, const Validator<Value> &validator = {},
+                  const Value &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false)
       : ParameterStream(default_value, validator, description, read_only, ignore_override) {
@@ -1046,10 +1044,8 @@ struct ParameterStream : public Stream<_Value> {
         }
       }, this->create_descriptor(),
                               this->validator.validate, this->ignore_override);
-    /// Set default value if there is one
-    if (this->default_value) {
-      this->impl()->put_value(*this->default_value);
-    }
+    /// Set the default value 
+    this->impl()->put_value(this->default_value);
   }
 
   /// Get the value. Parameters are initialized always at the beginning, so they always have a
@@ -1077,7 +1073,7 @@ protected:
     return desc;
   }
 
-  std::optional<Value> default_value;
+  Value default_value;
   Validator<Value> validator;
   std::string description;
   bool read_only = false;
@@ -1558,7 +1554,7 @@ public:
   /// created automatically matching the given Validator.
   template <class ParameterT>
   ParameterStream<ParameterT> declare_parameter(
-      const std::string &parameter_name, const std::optional<ParameterT> &maybe_default_value = {},
+      const std::string &parameter_name, const ParameterT &maybe_default_value = {},
       const Validator<ParameterT> &validator = {}, std::string description = "",
       bool read_only = false, bool ignore_override = false) {
     return create_stream<ParameterStream<ParameterT>>(
