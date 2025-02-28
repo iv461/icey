@@ -633,9 +633,10 @@ public:
 #endif  
 
   /// Create s new stream using the context. 
-  //Stream(std::weak_ptr<Context> _context) context(_context), impl_(context->create_stream_impl<Impl>()) { }
-  explicit Stream(NodeBookkeeping &book): impl_(book.create_stream_impl<Impl>()) { }
-  explicit Stream(Weak<Impl> impl): impl_(impl) {}
+  explicit Stream(NodeBookkeeping &book) { 
+    book.stream_impls_.push_back(impl_);
+  }
+  explicit Stream(std::shared_ptr<Impl> impl): impl_(impl) {}
 
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
@@ -827,7 +828,7 @@ protected:
   }
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
-  Weak<Impl> impl_;
+  std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
 };
 
 template <class Value>
@@ -1018,8 +1019,7 @@ struct ParameterStream : public Stream<_Value> {
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false)
       : ParameterStream(default_value, validator, description, read_only, ignore_override) {
-    /// If this would be Java, we could chain delegate constructors, Java was great, I miss Java.
-    this->impl_ = node.create_stream_impl<typename Base::Impl>();
+    
     this->parameter_name = parameter_name;
     this->register_with_ros(node);
   }
@@ -1613,11 +1613,9 @@ public:
       using Field = std::remove_reference_t<decltype(field_value)>;
       std::string field_name_r = name_prefix + std::string(field_name);
       if constexpr (is_stream<Field>) {
-        /// TODO HACK, needed due to delayed creation
-        if(!field_value.impl_.p_.lock()) {
-          field_value.impl_ = this->template create_stream_impl<typename Field::Impl>();
-          field_value.impl()->context = this->shared_from_this(); /// First, give it the missing context
-        }
+
+        static_cast<NodeBookkeeping&>(*this).stream_impls_.push_back(field_value.impl_);
+        field_value.impl()->context = this->shared_from_this(); /// First, give it the missing context
 
         field_value.parameter_name = field_name_r;
         if (notify_callback) {
