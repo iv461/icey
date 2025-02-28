@@ -1855,8 +1855,8 @@ public:
 
   /// Spins the ROS executor until the Stream has something (value or error). This is also called a
   /// synchronous wait.
-  template <AnyStream Input>
-  void spin_executor_until_stream_has_some(Input stream) {
+  template <AnyStream S>
+  void spin_executor_until_stream_has_some(S stream) {
     while (rclcpp::ok() && stream.impl()->has_none()) {
       get_executor()->spin_once();
     }
@@ -1873,8 +1873,8 @@ public:
   /// Spins the ROS executor until the Stream has something (value or error) or the timeout occurs.
   /// This is also called a synchronous wait. \param timeout The maximum duration to wait. If no
   /// timeout is desired, please use the other overload of this function.
-  template <AnyStream Input>
-  void spin_executor_until_stream_has_some(Input stream, const Duration &timeout) {
+  template <AnyStream S>
+  void spin_executor_until_stream_has_some(S stream, const Duration &timeout) {
     const auto start = Clock::now();
     while (rclcpp::ok() && stream.impl()->has_none() && (Clock::now() - start) < timeout) {
       get_executor()->spin_once(timeout);

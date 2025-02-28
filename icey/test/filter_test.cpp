@@ -69,17 +69,17 @@ TEST_F(NodeTest, UnpackTest) {
     size_t string_stream_num_called = 0;
 
     double_stream
-        .then([&](double msg) { 
+        .then([&](double) { 
             double_stream_num_called++;
          });
     
     tf_stream2
-        .then([&](geometry_msgs::msg::TransformStamped msg) { 
+        .then([&](geometry_msgs::msg::TransformStamped) { 
             tf_stream2_num_called++;
         });
     
     string_stream
-        .then([&](std::string msg) {             
+        .then([&](std::string) {             
             string_stream_num_called++;
         });
 

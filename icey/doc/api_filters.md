@@ -2,7 +2,10 @@
 
 The following filters handle synchronization, serialization  timeout and other operations on streams. 
 
-```{doxygenstruct} icey::SimpleFilterAdapter
+```{doxygenfunction} icey::any
+```
+
+```{doxygenclass} icey::Buffer
 ```
 
 ```{doxygenclass} icey::SynchronizerStream
@@ -18,6 +21,9 @@ The following filters handle synchronization, serialization  timeout and other o
 ```
 
 ```{doxygenstruct} icey::TimeoutFilter
+```
+
+```{doxygenstruct} icey::SimpleFilterAdapter
 ```
 
 
