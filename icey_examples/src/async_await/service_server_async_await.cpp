@@ -8,7 +8,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Stream<int> service_call(int argc, char **argv) {
+icey::Stream<int> serve_downstream_service(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "service_service_async_await_example");
 
   /// Create the service server, without giving it a (synchronous) callback.
@@ -17,10 +17,11 @@ icey::Stream<int> service_call(int argc, char **argv) {
   /// Create a service client for an upstream service that is actually capable of anwsering the request. (1 second timeout)
   auto upstream_service_client = node->icey().create_client<ExampleService>("set_bool_service_upstream", 1s);  
 
-  RCLCPP_INFO_STREAM(node->get_logger(), "Created, starting wait... ");
+  RCLCPP_INFO_STREAM(node->get_logger(), "Created service server, waiting for requests ... ");
 
   /// Wait until a request comes in
   auto [request_id, request] = co_await service_server;
+  
   RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
 
   icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request);
@@ -40,5 +41,5 @@ icey::Stream<int> service_call(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-  service_call(argc, argv);
+  serve_downstream_service(argc, argv);
 }

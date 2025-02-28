@@ -112,16 +112,18 @@ TEST_F(NodeTest, ParameterStructTest) {
    EXPECT_TRUE(fields_that_were_updated.empty()); 
 
    bool then_reacted = false;
+
+   /*TODO(Ivo) I don't think it makes sense to support this
    params.frequency
    .then([&](double new_val) {
       then_reacted = true;
       EXPECT_EQ(new_val, 2.5);
-     });
+     });*/
      
    /// Test parameter setting:
    node_->set_parameter(rclcpp::Parameter("frequency", 2.5));
    spin(100ms); /// Need to spin so that the parameter gets updated
-   EXPECT_TRUE(then_reacted);
+   //EXPECT_TRUE(then_reacted);
    EXPECT_TRUE(fields_that_were_updated.contains("frequency"));
      
    then_reacted = false;

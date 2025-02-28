@@ -997,6 +997,7 @@ struct ParameterStream : public Stream<_Value> {
   ParameterStream(const Value &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false) {
+                    std::cout << "Param stream init has impl: " << bool(this->impl().p_.lock()) << std::endl;
     this->default_value = default_value;
     this->validator = validator;
     this->description = description;
@@ -1025,23 +1026,11 @@ struct ParameterStream : public Stream<_Value> {
   /// Register this paremeter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
+    std::cout << "Param stream init has impl: " << bool(this->impl().p_.lock()) << std::endl;
     node.add_parameter<Value>(this->parameter_name, this->default_value,
       [impl = this->impl()](const rclcpp::Parameter &new_param) {
-        if constexpr (is_std_array<Value>) {
-          using Scalar = typename Value::value_type;
-          auto new_value = new_param.get_value<std::vector<Scalar>>();
-          if (std::declval<Value>().max_size() != new_value.size()) {
-            throw std::invalid_argument("Wrong size of array parameter");
-          }
-          Value new_val_arr{};
-          std::copy(new_value.begin(), new_value.end(), new_val_arr.begin());
-          impl->put_value(new_val_arr);
-        } else {
-          Value new_value = new_param.get_value<_Value>();
-          impl->put_value(new_value);
-        }
-      }, this->create_descriptor(),
-                              this->validator.validate, this->ignore_override);
+          impl->put_value(new_param.get_value<_Value>());
+      }, this->create_descriptor(), this->validator.validate, this->ignore_override);
     /// Set the default value 
     this->impl()->put_value(this->default_value);
   }

@@ -99,6 +99,7 @@ node->icey().declare_parameter_struct(params, [&](const std::string &changed_par
 - C++20 
 - ROS 2 Humble or Jazzy
 - Boost (Hana)
+- FMT
 
 Note that ROS 2 Humble supports building with C++20 (`-std=c++20`) only recently (around mid-2024): Many fixes have been merged and then backported to Humble. The information you will find online that ROS 2 does not support C++20 is outdated. 
 
@@ -108,7 +109,7 @@ Just clone this repository to your workspace, install dependencies and compile:
 
 ```sh
 git clone https://github.com/DriverlessMobility/icey.git
-sudo apt install libboost-dev
+sudo apt install libboost-dev libfmt-dev
 MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
