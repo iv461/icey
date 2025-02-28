@@ -8,7 +8,11 @@ using namespace std::chrono_literals;
 
 using ExampleService = std_srvs::srv::SetBool;
 
-struct AsyncAwaitNodeTest : NodeTest {};
+struct AsyncAwaitNodeTest : NodeTest {
+    /// A check that the coroutine actually ran. Compilers (I have GCC 11.4) currently do not do exception handling in the coroutine code, so if it crashes, 
+    /// the unit-test would just pass otherwise without us noticing it didn't acutally run.
+    bool async_completed{false};
+};
 
 TEST_F(AsyncAwaitNodeTest, ParameterTest) {
 
@@ -25,8 +29,10 @@ TEST_F(AsyncAwaitNodeTest, ParameterTest) {
         });
         node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
 
+        async_completed = true;
         co_return 0;
    }();
+   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitNodeTest, TimerTest) {
@@ -47,12 +53,17 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
         }
     
         EXPECT_EQ(timer_ticked, 10);
-
+        async_completed = true;
         co_return 0;
    }();
+   ASSERT_TRUE(async_completed);
 }
 
-struct AsyncAwaitTwoNodeTest : TwoNodesFixture {};
+struct AsyncAwaitTwoNodeTest : TwoNodesFixture {
+    /// A check that the coroutine actually ran. Compilers (I have GCC 11.4) currently do not do exception handling in the coroutine code, so if it crashes, 
+    /// the unit-test would just pass otherwise without us noticing it didn't acutally run.
+    bool async_completed{false};
+};
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
 
@@ -76,9 +87,10 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
         }
     
         EXPECT_EQ(received_cnt, 10);
-
+        async_completed = true;
         co_return 0;
    }();
+   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
@@ -117,9 +129,10 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
         /// We do not await till the published message was received. 
         /// Since the ACK from DDS is exposed in rclcpp via PublisherBase::wait_for_all_acked, we could implement a co_await publish(msg).
         EXPECT_EQ(received_cnt, 9);
-
+        async_completed = true;
         co_return 0;
    }();
+   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
@@ -167,7 +180,8 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
         auto result3 = co_await client3.call(request);
         EXPECT_TRUE(result3.has_value());
         EXPECT_FALSE(result3.value()->success);
-
+        async_completed = true;
         co_return 0;
     }();
+    ASSERT_TRUE(async_completed);
 }

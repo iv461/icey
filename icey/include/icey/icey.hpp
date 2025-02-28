@@ -628,8 +628,7 @@ public:
     std::cout << "Destroying Stream: " << this->get_type_info() << std::endl;
   }
 #else 
-  /// Leaves stream in invalid state. Needed for some delayed stuff like ParameterStream \todo rem
-  Stream() {}
+  Stream() = default;
 #endif  
 
   /// Create s new stream using the context. 
@@ -1019,7 +1018,6 @@ struct ParameterStream : public Stream<_Value> {
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false)
       : ParameterStream(default_value, validator, description, read_only, ignore_override) {
-    
     this->parameter_name = parameter_name;
     this->register_with_ros(node);
   }
