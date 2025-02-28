@@ -492,8 +492,12 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   std::string get_type_info() const {
     std::stringstream ss;
     auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
-    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ "
-       << (this->underlying().impl().p_.lock() ? std::to_string(size_t(this->underlying().impl().get())) : "nullptr") << ")] ";
+    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ ";
+    if(this->underlying().impl().p_.lock())
+       ss << size_t(this->underlying().impl().get());
+    else 
+      ss << "nullptr";
+    ss << ")] ";
     return ss.str();
   }
 
@@ -980,7 +984,7 @@ struct Validator {
 /// An stream for ROS parameters.
 template <class _Value>
 struct ParameterStream : public Stream<_Value> {
-  using Base = Stream<_Value, Nothing>;
+  using Base = Stream<_Value>;
   using Value = _Value;
   static_assert(is_valid_ros_param_type<_Value>::value,
                 "Type is not an allowed ROS parameter type");
@@ -1017,20 +1021,24 @@ struct ParameterStream : public Stream<_Value> {
   ParameterStream(NodeBookkeeping &node, const std::string &parameter_name,
                   const Value &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
-                  bool ignore_override = false)
-      : ParameterStream(default_value, validator, description, read_only, ignore_override) {
+                  bool ignore_override = false): Base(node) {
     this->parameter_name = parameter_name;
+    this->default_value = default_value;
+    this->validator = validator;
+    this->description = description;
+    this->read_only = read_only;
+    this->ignore_override = ignore_override;
     this->register_with_ros(node);
   }
 
   /// Register this paremeter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(NodeBookkeeping &node) {
-    std::cout << "Param stream init has impl: " << bool(this->impl().p_.lock()) << std::endl;
     node.add_parameter<Value>(this->parameter_name, this->default_value,
       [impl = this->impl()](const rclcpp::Parameter &new_param) {
-          impl->put_value(new_param.get_value<_Value>());
-      }, this->create_descriptor(), this->validator.validate, this->ignore_override);
+        std::cout << "In CB impl is valid: " << bool(impl.p_.lock()) << std::endl;
+        impl->put_value(new_param.get_value<_Value>());
+      };, this->create_descriptor(), this->validator.validate, this->ignore_override);
     /// Set the default value 
     this->impl()->put_value(this->default_value);
   }
@@ -1569,10 +1577,10 @@ public:
       double amplitude{3};
 
       /// And as well parameters with constraints and a description:
-      icey::ParameterStream<double> frequency{10., icey::Interval(0., 25.),
+      icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
                                           std::string("The frequency of the sine")};
 
-      icey::ParameterStream<std::string> mode{"single", icey::Set<std::string>({"single", "double",
+      icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double",
   "pulse"})};
 
       /// We can also have nested structs with more parameters, they will be named others.max_amp,
@@ -1611,7 +1619,7 @@ public:
                 notify_callback(field_name_r);
               });
         }
-        field_value.register_with_ros(*this);
+        field_value.register_with_ros(static_cast<NodeBookkeeping&>(*this));
       } else if constexpr (is_valid_ros_param_type<Field>::value) {
         this->declare_parameter<Field>(field_name_r, field_value)
             .impl()
@@ -1630,7 +1638,7 @@ public:
         /// https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
         static_assert(
             std::is_array_v<int>,
-            "Every field of the parameters struct must be of type T or icey::ParameterStream<T> or "
+            "Every field of the parameters struct must be of type T or icey::Parameter<T> or "
             "a "
             "struct of such, where T is a valid ROS param type (see rcl_interfaces/ParameterType)");
       }
@@ -1888,6 +1896,11 @@ using Node = NodeWithIceyContext<rclcpp::Node>;
 /// the `rclcpp_lifecycle::LifecycleNode`, so that you can do everything that you can also with an
 /// `rclcpp_lifecycle::LifecycleNode`. See `NodeWithIceyContext` for details.
 using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
+
+
+/// Parameter is a type to use only in parameter structs. Currently it is a Stream but this is likely to change in the future 
+template<class Value>
+using Parameter = ParameterStream<Value>;
 
 /// Start spinning either a Node or a LifeCycleNode. Calls `rclcpp::shutdown()` at the end so you do
 /// not have to do it.
