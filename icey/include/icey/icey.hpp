@@ -48,6 +48,14 @@ using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
 
+static rclcpp::Time rclcpp_from_chrono(const Time &time_point) {
+  return rclcpp::Time(std::chrono::time_point_cast<std::chrono::nanoseconds>(time_point).time_since_epoch().count());
+}
+
+static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
+  return Time(std::chrono::nanoseconds(time_point.nanoseconds()));
+}
+
 /// A helper to abstract regular rclrpp::Nodes and LifecycleNodes.
 /// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
 /// which doesn't look like it's going to come for Humble:
@@ -1038,7 +1046,7 @@ struct ParameterStream : public Stream<_Value> {
       [impl = this->impl()](const rclcpp::Parameter &new_param) {
         std::cout << "In CB impl is valid: " << bool(impl.p_.lock()) << std::endl;
         impl->put_value(new_param.get_value<_Value>());
-      };, this->create_descriptor(), this->validator.validate, this->ignore_override);
+      }, this->create_descriptor(), this->validator.validate, this->ignore_override);
     /// Set the default value 
     this->impl()->put_value(this->default_value);
   }
@@ -1123,7 +1131,7 @@ struct InterpolateableStream
   using MaybeValue = std::optional<typename _Message::SharedPtr>;
   /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
   /// an extrapolation would be required.
-  virtual MaybeValue get_at_time(const rclcpp::Time &time) const = 0;
+  virtual MaybeValue get_at_time(const Time &time) const = 0;
 };
 
 /// An interpolatable stream is one that buffers the incoming messages using a circular buffer
@@ -1170,15 +1178,27 @@ struct TransformSubscriptionStream
         },
         [impl = this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
   }
-  /// @brief Look up the transform at the given time point, does not wait but instead only return
-  /// something if the transform is already in the buffer.
+  /// @brief Looks up and returns the transform at the given time between the frames previously given. It does not wait but instead only return
+  /// something if the transform is already in the buffer. If any TF error occurs, it puts it in the stream.
   /// @param time
   /// @return The transform or nothing if it has not arrived yet.
-  MaybeValue get_at_time(const rclcpp::Time &time) const override {
+  MaybeValue get_at_time(const Time &time) const override {
+    return get_at_time(this->impl()->target_frame.get(), this->impl()->source_frame.get(), time);
+  }
+
+  /// @brief Looks up and returns the transform at the given time between the given frames. It does not wait but instead only return
+  /// something if the transform is already in the buffer. If any TF error occurs, it puts it in the stream.
+  ///
+  /// @param target_frame
+  /// @param source_frame
+  /// @param time
+  /// @return The transform or nothing if it has not arrived yet.
+  MaybeValue get_at_time(std::string target_frame, std::string source_frame, const Time &time) const {
     try {
-      // Note that this call does not wait, the transform must already have arrived.
+      // Note that this call does not wait, the transform must already have arrived. 
+      const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
       *this->impl()->shared_value = this->impl()->tf2_listener.lock()->buffer_->lookupTransform(
-          this->impl()->target_frame.get(), this->impl()->source_frame.get(), time);
+        target_frame, source_frame, legacy_timepoint);
       return this->impl()->shared_value;
     } catch (const tf2::TransformException &e) {
       this->impl()->put_error(e.what());
@@ -1658,6 +1678,7 @@ public:
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
+  /// Create a publisher stream. 
   template <class Message>
   PublisherStream<Message> create_publisher(const std::string &topic_name,
                                             const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
@@ -1665,6 +1686,7 @@ public:
     return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
   }
 
+  /// Create a publisher stream and connect it to the given input.
   template <AnyStream Input>
   PublisherStream<ValueOf<Input>> create_publisher(
       Input input, const std::string &topic_name,
@@ -1692,14 +1714,14 @@ public:
     return create_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
   }
 
-  /// Add a service client
+  /// Create a service client stream
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
-  /// Add a service client and connect it to the input
+  /// Createa a service client stream and connect it to the given input
   template <class ServiceT, AnyStream Input>
   ServiceClient<ServiceT> create_client(Input input, const std::string &service_name,
                                         const Duration &timeout,

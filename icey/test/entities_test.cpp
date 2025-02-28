@@ -7,6 +7,24 @@ using namespace std::chrono_literals;
 
 using ExampleService = std_srvs::srv::SetBool;
 
+TEST_F(NodeTest, rclcppTimeToChronoConversion) {
+
+   // Define a fixed point in time (e.g., Unix timestamp: 1700000000 seconds + 123456789 nanoseconds)
+   std::chrono::time_point<std::chrono::system_clock> fixed_time = 
+      std::chrono::time_point<std::chrono::system_clock>(std::chrono::seconds(1700000000)) +
+      std::chrono::nanoseconds(123456789);
+
+   // Perform conversions
+   rclcpp::Time ros_time = rclcpp_from_chrono(fixed_time);
+   auto Time converted_time = rclcpp_to_chrono(ros_time);
+
+   // Calculate the difference in nanoseconds
+   auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(converted_time - fixed_time).count();
+
+   // Check that the difference is exactly zero
+   EXPECT_EQ(diff, 0) << "Time conversion mismatch! Difference: " << diff << " ns";
+}
+
 TEST_F(NodeTest, ParameterTest) {
    
    auto string_param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");

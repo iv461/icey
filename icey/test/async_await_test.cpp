@@ -175,6 +175,6 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
         EXPECT_FALSE(result3.value()->success);
         async_completed = true;
         co_return 0;
-    }();
+    }(); 
     ASSERT_TRUE(async_completed);
 }
