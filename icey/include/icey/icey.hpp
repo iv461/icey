@@ -1552,13 +1552,14 @@ public:
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
+  /// \sa For more detailed documentation: [rclcpp::Node::declare_parameter](https://docs.ros.org/en/jazzy/p/rclcpp/generated/classrclcpp_1_1Node.html#_CPPv4I0EN6rclcpp4Node17declare_parameterEDaRKNSt6stringERK10ParameterTRKN14rcl_interfaces3msg19ParameterDescriptorEb)
   template <class ParameterT>
   ParameterStream<ParameterT> declare_parameter(
-      const std::string &parameter_name, const ParameterT &maybe_default_value = {},
+      const std::string &parameter_name, const ParameterT &default_value = {},
       const Validator<ParameterT> &validator = {}, std::string description = "",
       bool read_only = false, bool ignore_override = false) {
     return create_stream<ParameterStream<ParameterT>>(
-        parameter_name, maybe_default_value, validator, description, read_only, ignore_override);
+        parameter_name, default_value, validator, description, read_only, ignore_override);
   }
 
   /*!

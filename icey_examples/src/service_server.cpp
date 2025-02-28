@@ -21,5 +21,6 @@ int main(int argc, char **argv) {
   node->icey().create_service<ExampleService>("set_bool_service2", service_cb);
   node->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 
+  RCLCPP_INFO_STREAM(node->get_logger(), "Started services");
   icey::spin(node);  
 }
