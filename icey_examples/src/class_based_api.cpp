@@ -1,5 +1,6 @@
-/// This example demonstrates how to use the class-based API of ICEY:
-/// It is a thin wrapper around the rclrpp::Node
+/// This example demonstrates how to use the class-based API of ICEY
+/// It essentially works the same as the plain ROS API, but we use an icey::Node instead of a rclcpp::Node.
+/// It also shows that we do not need to store the ROS entities in the class
 #include <icey/icey.hpp>
 
 #include "std_msgs/msg/float32.hpp"
