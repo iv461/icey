@@ -15,14 +15,14 @@ TEST_F(NodeTest, rclcppTimeToChronoConversion) {
       std::chrono::nanoseconds(123456789);
 
    // Perform conversions
-   rclcpp::Time ros_time = rclcpp_from_chrono(fixed_time);
-   auto Time converted_time = rclcpp_to_chrono(ros_time);
+   rclcpp::Time ros_time = icey::rclcpp_from_chrono(fixed_time);
+   icey::Time converted_time = icey::rclcpp_to_chrono(ros_time);
 
    // Calculate the difference in nanoseconds
    auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(converted_time - fixed_time).count();
 
    // Check that the difference is exactly zero
-   EXPECT_EQ(diff, 0) << "Time conversion mismatch! Difference: " << diff << " ns";
+   EXPECT_EQ(diff, 0) << "Timestamps converted wrongly";
 }
 
 TEST_F(NodeTest, ParameterTest) {

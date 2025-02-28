@@ -1044,7 +1044,6 @@ struct ParameterStream : public Stream<_Value> {
   void register_with_ros(NodeBookkeeping &node) {
     node.add_parameter<Value>(this->parameter_name, this->default_value,
       [impl = this->impl()](const rclcpp::Parameter &new_param) {
-        std::cout << "In CB impl is valid: " << bool(impl.p_.lock()) << std::endl;
         impl->put_value(new_param.get_value<_Value>());
       }, this->create_descriptor(), this->validator.validate, this->ignore_override);
     /// Set the default value 
@@ -1431,8 +1430,8 @@ struct TimeoutFilter
     auto check_state = [impl = this->impl(), node_clock, max_age_ros](const auto &new_state) {
       if (!new_state.has_value()) return true;
       const auto &message = new_state.value();
-      rclcpp::Time time_now = node_clock->get_clock()->now();
-      rclcpp::Time time_message = rclcpp::Time(message->header.stamp);
+      rclcpp::Time time_now{node_clock->get_clock()->now()};
+      rclcpp::Time time_message{message->header.stamp};
       if ((time_now - time_message) <= max_age_ros) {
         impl->put_value(message);
         return false;
@@ -1754,7 +1753,7 @@ public:
     // interpolatable when using the sync_with_reference");
     return reference.then([interpolatables_tuple](const auto &new_value) {
       auto input_maybe_values = hana::transform(interpolatables_tuple, [&](auto input) {
-        return input.get_at_time(rclcpp::Time(new_value->header.stamp));
+        return input.get_at_time(rclcpp_to_chrono(rclcpp::Time(new_value->header.stamp)));
       });
       return hana::prepend(input_maybe_values, new_value);
     });
