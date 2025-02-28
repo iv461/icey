@@ -1,6 +1,7 @@
 /// This example shows how to create an asynchronously responding service server.
 /// After it receives a request, it calls asynchronously another upstream service 
 /// that is actually capable of anwsering the request. Once it receives the result, it responds.
+
 #include <icey/icey.hpp>
 #include "std_srvs/srv/set_bool.hpp"
 
@@ -8,37 +9,50 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Stream<int> service_call(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "service_service_async_await_example");
-
+icey::Stream<int> service_call(std::shared_ptr<icey::Node> node) {
   /// Create the service server, without giving it a (synchronous) callback.
   auto service_server = node->icey().create_service<ExampleService>("set_bool_service");
-
+  auto timer = node->icey().create_timer(500ms);
   /// Create a service client for an upstream service that is actually capable of anwsering the request. (1 second timeout)
   auto upstream_service_client = node->icey().create_client<ExampleService>("set_bool_service_upstream", 1s);  
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Created, starting wait... ");
 
-  /// Wait until a request comes in
-  auto [request_id, request] = co_await service_server;
-  RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
+  while(true) {
+    auto ticks = co_await timer;
+    auto request = std::make_shared<ExampleService::Request>();
+    RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
 
-  icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request);
+    /// Wait until a request comes in
+    //auto [request_id, request] = co_await service_server;
+    //RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
 
-  if (upstream_result.has_error()) {
-    RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());
-    co_return 0;
+
+    icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request);
+
+    if (upstream_result.has_error()) {
+      RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());
+      co_return 0;
+    }
+
+    Response upstream_response = upstream_result.value();
+    RCLCPP_INFO_STREAM(node->get_logger(), "Got response from upstream service: " << upstream_result.value()->success << ", responding ...");
+
+    /// Now send back the response synchronously: 
+    //service_server.respond(request_id, upstream_response);
+
+    RCLCPP_INFO_STREAM(node->get_logger(), "Done. ");
   }
+  co_return 0;
+}
 
-  Response upstream_response = upstream_result.value();
-  RCLCPP_INFO_STREAM(node->get_logger(), "Got response from upstream service: " << upstream_result.value()->success << ", responding ...");
-
-  /// Now send back the response synchronously: 
-  service_server.respond(request_id, upstream_response);
-
+icey::Stream<int> wait_until_finished(auto node) {
+  co_await service_call(node);
   co_return 0;
 }
 
 int main(int argc, char **argv) {
-  service_call(argc, argv);
+  icey::icey_coro_debug_print = true;
+  auto node = icey::create_node(argc, argv, "service_service_async_await_example");
+  wait_until_finished(node);
 }
