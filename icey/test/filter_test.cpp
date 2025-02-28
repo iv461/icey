@@ -20,49 +20,70 @@ TEST_F(NodeTest, SynchronizeWithTransformTest) {
 }
 
 TEST_F(NodeTest, AnyTest) {
+     auto s1 = node_->icey().create_timer(43ms).
+        then([](size_t ticks) {
+            return "s1_" + std::to_string(ticks);
+        });
+    auto s2 = node_->icey().create_timer(53ms)
+        .then([](size_t ticks) {
+            return "s2_" + std::to_string(ticks);
+        });
+    auto s3 = node_->icey().create_timer(67ms)
+        .then([](size_t ticks) {
+            return "s3_" + std::to_string(ticks);
+        });
     
+    std::vector<std::string> received_values;
+    icey::any(s1, s2, s3).
+        then([&](std::string val) {
+            received_values.push_back(val);
+        });
+
+    std::vector<std::string> target_values{"s1_1", "s1_2", "s1_3", "s2_1", "s2_2", "s2_3", 
+                "s3_1", "s3_2", "s3_3"};
+
+    EXPECT_EQ(received_values, target_values);
 }
 
 TEST_F(NodeTest, UnpackTest) {
    auto timer = node_->icey().create_timer(50ms);
-   size_t timer_ticked{0};
-   EXPECT_EQ(timer_ticked, 0);
 
    auto [double_stream, tf_stream2, string_stream] = 
         timer
         .then([&](size_t ticks) {
-            if(ticks > 3) {
+            auto val = std::make_tuple(double(ticks), geometry_msgs::msg::TransformStamped{}, std::string{});
+            if(ticks >= 3) {
                 timer.impl()->timer->cancel();
+                return std::optional<decltype(val)>{};
             }
-            ASSERT_FALSE(ticks % 3);
-            timer_ticked++;
-            return std::make_tuple(double{}, geometry_msgs::msg::TransformStamped{}, std::string{});
+            return std::optional(val);
         }).unpack();
-
+    
     size_t double_stream_num_called = 0;
     size_t tf_stream2_num_called = 0;
     size_t string_stream_num_called = 0;
 
-    auto double_stream
-        .then([&](auto msg) { 
+    double_stream
+        .then([&](double msg) { 
             double_stream_num_called++;
          });
     
-    auto tf_stream2
-        .then([&](auto msg) { 
+    tf_stream2
+        .then([&](geometry_msgs::msg::TransformStamped msg) { 
             tf_stream2_num_called++;
         });
     
-    auto string_stream
-        .then([&](auto msg) { 
+    string_stream
+        .then([&](std::string msg) {             
             string_stream_num_called++;
         });
 
-    spin(1100ms);
+    spin(250ms);
 
     EXPECT_EQ(double_stream_num_called, 3);
     EXPECT_EQ(tf_stream2_num_called, 3);
     EXPECT_EQ(string_stream_num_called, 3);
+    
 }
 
 TEST_F(NodeTest, FilterTest) {

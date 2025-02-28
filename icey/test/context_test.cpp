@@ -90,7 +90,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
     EXPECT_EQ(exceped_stream.impl()->context.lock().get(), &node_->icey());
     
     auto other_tf_sub = node_->icey().create_transform_subscription("map", "odom");
-    auto any_value_stream = node_->icey().any(tf_sub, other_tf_sub);
+    auto any_value_stream = icey::any(tf_sub, other_tf_sub);
     EXPECT_EQ(any_value_stream.impl()->context.lock().get(), &node_->icey());
 
     auto tuple_stream = timer.then([](auto) { return std::make_tuple(double{}, geometry_msgs::msg::TransformStamped{}, std::string{}); });

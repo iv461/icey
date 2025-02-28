@@ -807,17 +807,17 @@ public:
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
 
+  /// Creates a new stream of type S using the Context. See Context::create_stream
+  template <AnyStream S, class... Args>
+  S create_stream(Args &&...args) const {
+    return this->impl()->context.lock()->template create_stream<S>(std::forward<Args>(args)...);
+  }
 protected:
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
       throw std::runtime_error("This stream does not have context");
   }
 
-  /// Creates a new stream of type S using the Context. See Context::create_stream
-  template <AnyStream S, class... Args>
-  S create_stream(Args &&...args) const {
-    return this->impl()->context.lock()->template create_stream<S>(std::forward<Args>(args)...);
-  }
 
   template <class NewValue, class NewError>
   Stream<NewValue, NewError> transform_to() const {
@@ -1541,6 +1541,25 @@ struct TF2MessageFilter
   void on_message(const typename _Message::SharedPtr &msg) { this->impl()->put_value(msg); }
 };
 
+/*!
+  Outputs the value or error of any of the inputs. All the inputs must have the same Value and
+  ErrorValue type.
+*/
+template <AnyStream... Inputs>
+static auto any(Inputs... inputs) {
+  // assert_all_stream_values_are_same<Inputs...>();
+  auto first_input = std::get<0>(std::forward_as_tuple(inputs...));
+  using Input = decltype(first_input);
+  using InputValue = typename std::remove_reference_t<Input>::Value;
+  using InputError = typename std::remove_reference_t<Input>::ErrorValue;
+  /// First, create a new stream
+  auto output = first_input.template create_stream<Stream<InputValue, InputError>>();
+  /// Now connect each input with the output
+  hana::for_each(std::forward_as_tuple(inputs...),
+                  [output](auto &input) { input.connect_values(output); });
+  return output;
+}
+
 /// The context owns the streams and is what is returned when calling `node->icey()`
 /// (NodeWithIceyContext::icey).
 class Context : public NodeBookkeeping, public std::enable_shared_from_this<Context>, private boost::noncopyable {
@@ -1822,23 +1841,6 @@ public:
     }
   }
 
-  /*!
-    Outputs the value or error of any of the inputs. All the inputs must have the same Value and
-    ErrorValue type.
-  */
-  template <AnyStream... Inputs>
-  auto any(Inputs... inputs) {
-    // assert_all_stream_values_are_same<Inputs...>();
-    using Input = decltype(std::get<0>(std::forward_as_tuple(inputs...)));
-    using InputValue = typename std::remove_reference_t<Input>::Value;
-    using InputError = typename std::remove_reference_t<Input>::ErrorValue;
-    /// First, create a new stream
-    auto output = create_stream<Stream<InputValue, InputError>>();
-    /// Now connect each input with the output
-    hana::for_each(std::forward_as_tuple(inputs...),
-                   [output](auto &input) { input.connect_values(output); });
-    return output;
-  }
 
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the
   /// transform between it's header frame and the target_frame becomes available. It uses for this
