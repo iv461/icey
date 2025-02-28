@@ -3,6 +3,7 @@
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_msgs/msg/float32.hpp"
 
+#include <unordered_set>
 using namespace std::chrono_literals;
 
 using ExampleService = std_srvs::srv::SetBool;
@@ -21,25 +22,29 @@ TEST_F(NodeTest, SynchronizeWithTransformTest) {
 
 TEST_F(NodeTest, AnyTest) {
      auto s1 = node_->icey().create_timer(43ms).
-        then([](size_t ticks) {
-            return "s1_" + std::to_string(ticks);
+        then([](size_t ticks) -> std::optional<std::string> {
+            if(ticks >= 3) return {};
+            return "s1_" + std::to_string(ticks+1);
         });
     auto s2 = node_->icey().create_timer(53ms)
-        .then([](size_t ticks) {
-            return "s2_" + std::to_string(ticks);
+        .then([](size_t ticks) -> std::optional<std::string> {
+            if(ticks >= 3) return {};
+            return "s2_" + std::to_string(ticks+1);
         });
     auto s3 = node_->icey().create_timer(67ms)
-        .then([](size_t ticks) {
-            return "s3_" + std::to_string(ticks);
+        .then([](size_t ticks) -> std::optional<std::string> {
+            if(ticks >= 3) return {};
+            return "s3_" + std::to_string(ticks+1);
         });
     
-    std::vector<std::string> received_values;
+    std::unordered_multiset<std::string> received_values;
     icey::any(s1, s2, s3).
         then([&](std::string val) {
-            received_values.push_back(val);
+            received_values.emplace(val);
         });
-
-    std::vector<std::string> target_values{"s1_1", "s1_2", "s1_3", "s2_1", "s2_2", "s2_3", 
+    
+    spin(250ms);
+    std::unordered_multiset<std::string> target_values{"s1_1", "s1_2", "s1_3", "s2_1", "s2_2", "s2_3", 
                 "s3_1", "s3_2", "s3_3"};
 
     EXPECT_EQ(received_values, target_values);
@@ -89,9 +94,7 @@ TEST_F(NodeTest, UnpackTest) {
 TEST_F(NodeTest, FilterTest) {
    auto timer = node_->icey().create_timer(50ms);
     
-   size_t timer_ticked{0};
-   EXPECT_EQ(timer_ticked, 0);
-
+   size_t num_values_received = 0;
    timer
      .filter([&](size_t ticks) { return !(ticks % 3); })
      .then([&](size_t ticks) {
@@ -100,14 +103,41 @@ TEST_F(NodeTest, FilterTest) {
              return;
         }
         ASSERT_FALSE(ticks % 3);
-        timer_ticked++;
+        num_values_received++;
     });
 
     spin(1100ms);
     /// 0, 3, 6, 9, four times
-    EXPECT_EQ(timer_ticked, 4);
+    EXPECT_EQ(num_values_received, 4);
 }
 
-TEST_F(TwoNodesFixture, BufferTest) {
+TEST_F(NodeTest, BufferTest) {
+    auto timer = node_->icey().create_timer(50ms);
+    
+    std::vector<std::vector<size_t>> received_values;
+     timer
+     .then([&](size_t ticks) -> std::optional<size_t> {
+        if(ticks >= 15) {
+            timer.impl()->timer->cancel();
+            return {};
+       }
+       return ticks;
+    })
+     .buffer(5)
+     .then([&](std::shared_ptr<std::vector<size_t>> value) {
+        received_values.push_back(*value);
+    });
+
+    std::vector<std::vector<size_t>> target_values;
+    for(auto i :{0, 1, 2}) {
+        target_values.emplace_back();
+        for(auto j = 0; j < 5; j++) {
+            target_values.back().push_back(i * 5 + j);
+        }
+    }
+
+    spin(1100ms);
+
+    EXPECT_EQ(received_values, target_values);
     
 }

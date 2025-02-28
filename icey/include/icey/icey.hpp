@@ -858,11 +858,10 @@ struct Buffer : public Stream<std::shared_ptr<std::vector<Value>>, Nothing, Buff
   explicit Buffer(NodeBookkeeping &node, std::size_t N, Input input): Base(node) {
     this->impl()->N = N;
     input.impl()->register_handler([impl = this->impl()](auto x) {
+      impl->buffer->push_back(x.value());
       if (impl->buffer->size() == impl->N) {
         impl->put_value(impl->buffer);
         impl->buffer->clear();
-      } else {
-        impl->buffer->push_back(x.value());
       }
     });
   }
@@ -1009,7 +1008,6 @@ struct ParameterStream : public Stream<_Value> {
   ParameterStream(const Value &default_value, const Validator<Value> &validator = {},
                   std::string description = "", bool read_only = false,
                   bool ignore_override = false) {
-                    std::cout << "Param stream init has impl: " << bool(this->impl().p_.lock()) << std::endl;
     this->default_value = default_value;
     this->validator = validator;
     this->description = description;

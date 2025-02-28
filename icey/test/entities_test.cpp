@@ -58,7 +58,6 @@ TEST_F(NodeTest, ParameterTest) {
 
    auto set_res = node_->set_parameter(rclcpp::Parameter("icey_test_my_param", std::string("hello2")));
    spin(100ms); /// Need to spin so that the parameter gets updated
-   std::cout << "set_res: successful: " << set_res.successful  << ", reason: " << set_res.reason << std::endl;
    EXPECT_TRUE(then_reacted);
 }
 
