@@ -258,21 +258,21 @@ private:
 /// bookkeeping, so that you do not have to do it.
 class NodeBookkeeping : public NodeInterfaces {
 public:
-  using MaybeError = std::optional<std::string>;
-  /// The parameter validation function that allows the parameter update if no error message is
-  /// returned and put_errors the parameter update with the error message otherwise.
-  using FValidate = std::function<MaybeError(const rclcpp::Parameter &)>;
+  /// The parameter validation function that allows the parameter update if the returned string is empty (i.e. "")
+  /// and otherwise rejects with the error message.
+  using FValidate = std::function<std::string(const rclcpp::Parameter &)>;
+  /// 
   template<class V>
   using GetValue = std::function<V()>;
 
+  /// Constructs the bookkeeping from NodeInterfaces so that both a rclcpp::Node as well as a lifecycle node are supported.
   explicit NodeBookkeeping(const NodeInterfaces &node_interfaces) : NodeInterfaces(node_interfaces) {}
 
+  /// No copiying is allowed:
   NodeBookkeeping(const NodeBookkeeping &) = delete;
   NodeBookkeeping &operator=(const NodeBookkeeping &) = delete;
-  NodeBookkeeping(NodeBookkeeping &&) = delete;
-  NodeBookkeeping &operator=(NodeBookkeeping && ) = delete;
   
-  /// All the streams that were created are owned by the Context.
+  /// All the streams that were created, they correspond mostly to one ROS entity like sub/pub/timer etc.
   std::vector<std::shared_ptr<impl::StreamImplBase>> stream_impls_;
 
   /// Adds a stream impl to the list so that it does not go out of scope.
@@ -301,10 +301,9 @@ public:
     return param;
   }
   template <class Msg, class F>
-  void add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
+  auto add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                         const rclcpp::SubscriptionOptions &options) {
-    subscribers_[topic] =
-        rclcpp::create_subscription<Msg>(node_topics_, topic, qos, cb, options);
+    return rclcpp::create_subscription<Msg>(node_topics_, topic, qos, cb, options);
   }
 
   template <class Msg>
@@ -379,14 +378,16 @@ private:
       rcl_interfaces::msg::SetParametersResult result;
       result.successful = true;
       for (const auto &parameter : parameters) {
-        /// We want to skip validating parameters that we didn't declare, for example here have
-        /// other parameters like qos_overrides./tf.publisher.durability.
-        if (!parameter_validators_.contains(parameter.get_name())) continue;
+        /// We want to skip validating parameters that we didn't declare, for example here we are getting called for 
+        /// parameters like "qos_overrides./tf.publisher.durability" 
+        if (!parameter_validators_.contains(parameter.get_name())){
+          continue;
+        }
         const auto &validator = parameter_validators_.at(parameter.get_name());
         auto maybe_error = validator(parameter);
-        if (maybe_error) {
+        if (!maybe_error.empty()) {
           result.successful = false;
-          result.reason = *maybe_error;
+          result.reason = maybe_error;
           break;
         }
       }
@@ -403,16 +404,15 @@ private:
     tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeInterfaces&>(*this));
   }
 
+  /// A map that stores for each parameter name some ROS entites that we need to hold to be able to recive parameter updates.
   std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
                                             std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
       parameters_;
+  /// Parameter validators for each parameter name, contraining the values of a parameter.
   std::unordered_map<std::string, FValidate> parameter_validators_;
 
-  /// Callback for validating a list of parameter updates.
+  /// Callback for validating a list of parameter.
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
-
-  std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> subscribers_;
-
   /// TF Support
   std::shared_ptr<TFListener> tf2_listener_;
   /// This is a simple wrapper around a publisher that publishes on /tf. There is really nothing intereseting under the
@@ -949,8 +949,10 @@ struct Set {
 template <class Value>
 struct Validator {
   using ROSValue = std::conditional_t<std::is_unsigned_v<Value>, int, Value>;
-  /// The type of the predicate
-  using Validate = std::function<std::optional<std::string>(const rclcpp::Parameter &)>;
+  /// The type of the validator predicate, meaning the function that returns an error if the parameter update is rejected and an empty string otherwise.
+  /// Why we don't return a std::optional<std::string> ?
+  ///  Because this way we can ensure through the type system that if a parameter update is rejected, it is always rejected for a reason.
+  using Validate = std::function<std::string(const rclcpp::Parameter &)>;
 
   /// Allow default-constructed validator, by default allowing all values.
   Validator() {
@@ -988,15 +990,14 @@ struct Validator {
   {
     validate = [set](const rclcpp::Parameter &new_param) {
       auto new_value = new_param.get_value<ROSValue>();
-      std::optional<std::string> result;
       if (!set.set_of_values.count(new_value))
-        result = "The given value is not in the set of allowed values";
-      return result;
+        return "The given value is not in the set of allowed values";
+      return "";
     };
   }
 
   Validate get_default_validator() const {
-    return [](const rclcpp::Parameter &) { return std::optional<std::string>{}; };
+    return [](const rclcpp::Parameter &) { return ""; };
   }
 
   rcl_interfaces::msg::ParameterDescriptor descriptor;
@@ -1116,16 +1117,20 @@ struct ValueOrParameter {
   std::function<Value()> get;
 };
 
+template <class _Message>
+struct SubscriptionStreamImpl {
+  std::shared_ptr<rclcpp::Subscription<_Message>> subscriber;
+};
 /// A stream that represents a regular ROS subscriber. It stores as its value always a shared
 /// pointer to the message.
 template <class _Message>
-struct SubscriptionStream : public Stream<typename _Message::SharedPtr> {
-  using Base = Stream<typename _Message::SharedPtr>;
+struct SubscriptionStream : public Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>> {
+  using Base = Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>>;
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options): Base(node) {
     this->impl()->name = topic_name;
-    node.add_subscription<_Message>(
+    this->impl()->subscriber = node.add_subscription<_Message>(
         topic_name,
         [impl = this->impl()](typename _Message::SharedPtr new_value) {
           impl->put_value(new_value);
@@ -1242,15 +1247,16 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
 
 template <class _Value>
 struct PublisherImpl {
-  typename rclcpp::Publisher<remove_shared_ptr_t<_Value>>::SharedPtr publisher;
+  std::shared_ptr<rclcpp::Publisher<remove_shared_ptr_t<_Value>>> publisher;
   void publish(const _Value &message) {
-    // We cannot pass over the pointer since publish expects a unique ptr and we got a
-    // shared ptr. We cannot just create a unique_ptr from the shared ptr because we cannot ensure
-    // the shared_ptr is not referenced somewhere else.
+    /// TODO(Ivo) We always copy the message for publishing because we do not support so-called loaned messages: https://design.ros2.org/articles/zero_copy.html
+    /// The following comment explains the reasoning with technical API issues, but conceptually we simply do not support loaned messages.
+    // Comment: We cannot pass over the pointer since publish expects a unique ptr and we got a
+    // shared ptr. We cannot just promote the unique ptr to a shared ptr because we cannot ensure
+    // the shared ptr is not referenced somewhere else.
     /// We could check whether use_count is one but this is not a reliable indicator whether the
     /// object not referenced anywhere else.
-    // This is because the use_count
-    /// can change in a multithreaded program immediatelly after it was retrieved, see:
+    // This is because the use_count can change in a multithreaded program immediatelly after it was retrieved (i.e. a race occurs), see:
     /// https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count (Same holds for
     /// shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
     /// Therefore, we have to copy the message for publishing.
@@ -1261,7 +1267,8 @@ struct PublisherImpl {
   }
 };
 
-/// A Stream representing a ROS-publisher. Value can be either a Message or shared_ptr<Message>
+/// A Stream representing a ROS-publisher.
+/// \tparam _Value Can be either a `Message` or `std::shared_ptr<Message>` where Message is a valid ROS-message type.
 template <class _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Base = Stream<_Value, Nothing, PublisherImpl<_Value>>;
@@ -1469,6 +1476,7 @@ struct TimeoutFilter
   }
 };
 
+/// This impl is needed because it makes the signalMessage method public, it is otherwise protected.
 template<class Message>
 struct SimpleFilterAdapterImpl : message_filters::SimpleFilter<Message> {
   SimpleFilterAdapterImpl()  {}
@@ -1492,6 +1500,7 @@ struct SimpleFilterAdapter : public Stream<typename Message::SharedPtr, Nothing,
   }
 };
 
+/// Holds a message_filters::Synchronizer and operates on it.
 template <class... Messages>
 struct SynchronizerStreamImpl {
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;

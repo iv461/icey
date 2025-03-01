@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <functional>
@@ -115,6 +114,7 @@ using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 
 namespace impl {
 
+/// The unit tests enable tracking the allocation of Streams and then assert in each unit-test that all Streams are freed if the ROS node is freed, i.e. no memory leak occured.
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
 extern std::unordered_set<void*> g_impls;
 #endif
