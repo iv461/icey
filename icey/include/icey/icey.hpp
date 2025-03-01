@@ -117,6 +117,10 @@ struct Weak {
     if(!p_.lock()) throw std::bad_weak_ptr();
       return p_.lock().get(); 
   }
+  T &operator*() const { 
+    if(!p_.lock()) throw std::bad_weak_ptr();
+      return *p_.lock().get(); 
+  }
   T * get() const { 
     if(!p_.lock()) throw std::bad_weak_ptr();
       return p_.lock().get(); 
@@ -631,7 +635,8 @@ struct Buffer;
 template <class _Value, class _ErrorValue = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag,
                public StreamCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>> {
-  static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
+                //// TODO this rejects the SimpleFilter that is non-copyable for some reason
+  //static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
   friend Context;
 public:
   using Value = _Value;
@@ -1464,19 +1469,24 @@ struct TimeoutFilter
   }
 };
 
+template<class Message>
+struct SimpleFilterAdapterImpl : message_filters::SimpleFilter<Message> {
+  SimpleFilterAdapterImpl()  {}
+  void signalMessage(auto event) { this->signalMessage(event);}
+};
 /// Adapts the `message_filters::SimpleFilter` to our
 /// `Stream` (which is a similar concept).
 /// \note This is essentially the same as what
 /// `message_filters::Subscriber` does:
 /// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
-template <class _Message>
-struct SimpleFilterAdapter : public Stream<typename _Message::SharedPtr, Nothing, message_filters::SimpleFilter<_Message> > {
-  using Base = Stream<typename _Message::SharedPtr, Nothing, message_filters::SimpleFilter<_Message> >;
+template <class Message>
+struct SimpleFilterAdapter : public Stream<typename Message::SharedPtr, Nothing, SimpleFilterAdapterImpl<Message> > {
+  using Base = Stream<typename Message::SharedPtr, Nothing, SimpleFilterAdapterImpl<Message> >;
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so
   /// that `signalMessage` is called once a value is received.
   SimpleFilterAdapter(NodeBookkeeping &node): Base(node) {
     this->impl()->register_handler([impl=this->impl()](const auto &new_state) {
-      using Event = message_filters::MessageEvent<const _Message>;
+      using Event = message_filters::MessageEvent<const Message>;
       impl->signalMessage(Event(new_state.value()));
     });
   }
@@ -1487,23 +1497,23 @@ struct SynchronizerStreamImpl {
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Sync = message_filters::Synchronizer<Policy>;
   using Inputs = std::tuple<SimpleFilterAdapter<Messages>...>;
-  const auto &inputs() const { return inputs_; }
+  const Inputs &inputs() const { return *inputs_; }
 
   void create_mfl_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {
     queue_size_ = queue_size;
-    inputs_ = std::make_tuple(SimpleFilterAdapter<Messages>(node)...);
+    inputs_ = std::make_shared<Inputs>(std::make_tuple(SimpleFilterAdapter<Messages>(node)...));
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
     synchronizer_ = synchronizer;
     /// Connect with the input streams
     std::apply(
-        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters->impl()...); },
-        inputs_);
+        [synchronizer](auto &...input_filters) { synchronizer->connectInput(*input_filters.impl()...); },
+        *inputs_);
     /// This parameter setting is from the examples
     synchronizer_->setAgePenalty(0.50);
   }
-  uint32_t queue_size_{100};
 
-  Inputs inputs_;
+  uint32_t queue_size_{100};
+  std::shared_ptr<Inputs> inputs_;
   std::shared_ptr<Sync> synchronizer_;
 };
 
