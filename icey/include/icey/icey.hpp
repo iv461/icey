@@ -691,6 +691,7 @@ public:
   ///  - Value otherwise
   template <class F>
   auto except(F &&f) {
+    check_callback<F, ErrorValue>{};
     static_assert(!std::is_same_v<ErrorValue, Nothing>,
                   "This stream cannot have errors, so you cannot register except() on it.");
     return create_from_impl(impl()->except(std::forward<F>(f)));
@@ -804,6 +805,7 @@ public:
   /// Outputs the Value only if the given predicate f returns true.
   template <class F>
   Stream<Value, ErrorValue> filter(F &&f) {
+    check_callback<F, Value>{};
     return this->then([f = std::move(f)](auto x) -> std::optional<Value> {
       if (!f(x))
         return {};
@@ -1318,16 +1320,18 @@ struct ServiceStream : public Stream< std::tuple<RequestID, std::shared_ptr<type
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
                          SyncCallback sync_callback = {},
                          const rclcpp::QoS &qos = rclcpp::ServicesQoS()): Base(node) {
+    if(sync_callback) {
+      this->impl()->register_handler([impl=this->impl(), sync_callback](auto new_state) {
+          const auto [request_id, request] = new_state.value();
+          auto response = sync_callback(request);
+          impl->service->send_response(*request_id, *response);
+      });
+    }
     this->impl()->service = node.add_service<_ServiceT>(
         service_name,
-        [impl = this->impl(), sync_callback](RequestID request_id, Request request) {
+        [impl = this->impl()](RequestID request_id, Request request) {
           impl->put_value(std::make_tuple(request_id, request));
-          if(sync_callback) {
-            auto response = sync_callback(request);
-            impl->service->send_response(*request_id, *response);
-          }
-        },
-        qos);
+        }, qos);
   }
   /// Send the service response to the request identified by the request_id.
   ///  It is RMW implementation defined whether this happens synchronously or asynchronously.
@@ -1482,7 +1486,7 @@ template <class... Messages>
 struct SynchronizerStreamImpl {
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Sync = message_filters::Synchronizer<Policy>;
-  using Inputs = std::tuple<std::shared_ptr<SimpleFilterAdapter<Messages>>...>;
+  using Inputs = std::tuple<SimpleFilterAdapter<Messages>...>;
   const auto &inputs() const { return inputs_; }
 
   void create_mfl_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {

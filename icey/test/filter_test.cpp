@@ -20,15 +20,15 @@ TEST_F(NodeTest, SyncApproxTimeTest) {
     
     size_t num_message_sets_received = 0;
     auto synched = node_->icey().synchronize_approx_time(images, point_clouds);
-        synched.then([&](sensor_msgs::msg::Image::SharedPtr img, sensor_msgs::msg::PointCloud2 point_cloud) {
+        synched.then([&](sensor_msgs::msg::Image::SharedPtr img, sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
             num_message_sets_received++;
         });
     
     auto img = std::make_shared<sensor_msgs::msg::Image>();
-    img->header.stamp = rclcpp_from_chrono(10000s);
+    img->header.stamp = icey::rclcpp_from_chrono(icey::Time(10000s));
 
     auto point_cloud = std::make_shared<sensor_msgs::msg::PointCloud2>();
-    point_cloud->header.stamp = rclcpp_from_chrono(10001s);
+    point_cloud->header.stamp = icey::rclcpp_from_chrono(icey::Time(10001s));
     
     //spin(1s);
 }
