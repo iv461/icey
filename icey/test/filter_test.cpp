@@ -2,10 +2,11 @@
 
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 
 #include <unordered_set>
 using namespace std::chrono_literals;
-
 using ExampleService = std_srvs::srv::SetBool;
 
 TEST_F(NodeTest, SyncWithReferenceTest) {
@@ -13,7 +14,23 @@ TEST_F(NodeTest, SyncWithReferenceTest) {
 }
 
 TEST_F(NodeTest, SyncApproxTimeTest) {
+
+    auto images = node_->icey().create_stream<icey::Stream< sensor_msgs::msg::Image::SharedPtr >>();
+    auto point_clouds = node_->icey().create_stream<icey::Stream< sensor_msgs::msg::PointCloud2::SharedPtr >>();
     
+    size_t num_message_sets_received = 0;
+    auto synched = node_->icey().synchronize_approx_time(images, point_clouds);
+        synched.then([&](sensor_msgs::msg::Image::SharedPtr img, sensor_msgs::msg::PointCloud2 point_cloud) {
+            num_message_sets_received++;
+        });
+    
+    auto img = std::make_shared<sensor_msgs::msg::Image>();
+    img->header.stamp = rclcpp_from_chrono(10000s);
+
+    auto point_cloud = std::make_shared<sensor_msgs::msg::PointCloud2>();
+    point_cloud->header.stamp = rclcpp_from_chrono(10001s);
+    
+    //spin(1s);
 }
 
 TEST_F(NodeTest, SynchronizeWithTransformTest) {
@@ -21,16 +38,18 @@ TEST_F(NodeTest, SynchronizeWithTransformTest) {
 }
 
 TEST_F(NodeTest, AnyTest) {
-     auto s1 = node_->icey().create_timer(43ms).
+    auto s1 = node_->icey().create_timer(43ms).
         then([](size_t ticks) -> std::optional<std::string> {
             if(ticks >= 3) return {};
             return "s1_" + std::to_string(ticks+1);
         });
+
     auto s2 = node_->icey().create_timer(53ms)
         .then([](size_t ticks) -> std::optional<std::string> {
             if(ticks >= 3) return {};
             return "s2_" + std::to_string(ticks+1);
         });
+
     auto s3 = node_->icey().create_timer(67ms)
         .then([](size_t ticks) -> std::optional<std::string> {
             if(ticks >= 3) return {};

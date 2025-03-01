@@ -481,6 +481,14 @@ struct crtp {
   T const &underlying() const { return static_cast<T const &>(*this); }
 };
 
+template<class F, class Arg>
+struct check_callback { 
+        static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature"); };
+
+template<class F, class... Args>
+struct check_callback<F, std::tuple<Args...>> {
+    static_assert(std::is_invocable_v<F, Args...>, "The callback has the wrong signature, it has to take the types of the tuple");
+};
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
@@ -652,6 +660,7 @@ public:
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
+
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives a value x, where y = f(x).
   /// The type of the returned stream is:
@@ -664,6 +673,7 @@ public:
   ///  - Value otherwise
   template <class F>
   auto then(F &&f) {
+    check_callback<F, Value>{};
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream cannot have values, so you cannot register then() on it.");
     return create_from_impl(impl()->then(std::forward<F>(f)));

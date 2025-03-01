@@ -135,13 +135,13 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
 
 /// Calls the function with the given argument arg but unpacks it if it is a tuple.
 template <class F, class Arg>
-inline auto unpack_if_tuple(F &f, Arg &&arg) {
+inline auto unpack_if_tuple(F &&f, Arg &&arg) {
   if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
     // Tuple detected, unpack and call the function
-    return std::apply(f, std::forward<Arg>(arg));
+    return std::apply(std::forward<F>(f), std::forward<Arg>(arg));
   } else {
     // Not a tuple, just call the function directly
-    return f(std::forward<Arg>(arg));
+    return std::forward<F>(f)(std::forward<Arg>(arg));
   }
 }
 
