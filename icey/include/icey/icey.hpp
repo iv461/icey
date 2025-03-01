@@ -152,6 +152,14 @@ struct TFListener {
     subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
   }
 
+  /// Add notification for a single transform that gets removed when it has arrived.
+  /// Ie. register a promise instead of a stream.
+  void add_temporary_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
+    const OnTransform &on_transform, const OnError &on_error) {
+    temporary_subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
+}
+
+
   const NodeInterfaces &node_; /// Hold weak reference to bevause the Node owns the NodeInterfaces as well, so we avoid circular reference
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
   /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
@@ -221,8 +229,8 @@ private:
 
   /// This simply looks up the transform in the buffer at the latest stamp and checks if it
   /// changed with respect to the previously received one. If the transform has changed, we know
-  /// we have to notify.
-  void maybe_notify(TFSubscriptionInfo &info) {
+  /// we have to notify. Returns whether it got it notified about a transform (on_transform)
+  bool maybe_notify(TFSubscriptionInfo &info) {
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
@@ -231,16 +239,19 @@ private:
       if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
         info.last_received_transform = tf_msg;
         info.on_transform(tf_msg);
+        return true;
       }
     } catch (const tf2::TransformException &e) {
       info.on_error(e);
     }
+    return false;
   }
 
   void notify_if_any_relevant_transform_was_received() {
     for (auto &tf_info : subscribed_transforms_) {
       maybe_notify(tf_info);
     }
+    std::erase_if(temporary_subscribed_transforms_, [this](auto tf_info) { return maybe_notify(tf_info); });
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
@@ -251,6 +262,7 @@ private:
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
   std::vector<TFSubscriptionInfo> subscribed_transforms_;
+  std::vector<TFSubscriptionInfo> temporary_subscribed_transforms_;
 };
 
 /// A node interface that does the same as a rclcpp::Node (of lifecycle node), but additionally
@@ -1182,6 +1194,7 @@ struct TransformSubscriptionStream
   using Base = InterpolateableStream<geometry_msgs::msg::TransformStamped, TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
+  using Self = TransformSubscriptionStream;
 
   TransformSubscriptionStream(NodeBookkeeping &node, 
                           ValueOrParameter<std::string> target_frame,
@@ -1224,7 +1237,25 @@ struct TransformSubscriptionStream
       return {};
     }
   }
-};
+
+  /// @brief Looks up and returns the current stream. TODO implement
+  ///
+  /// @param target_frame
+  /// @param source_frame
+  /// @param time
+  /// @return A promise that resolves when the transofrm has arrived
+  /*
+  Promise<Message, std::string> lookup(std::string target_frame, std::string source_frame, const Time &time) {
+    Promise<Message, std::string> output;
+    this->impl()->tf2_listener.add_temporary_subscription(
+        target_frame, source_frame, 
+        [](auto tf) { output.resolve(tf); }
+        [](auto err) { output.reject(err); }
+      );
+      return output;
+    }
+    */
+  };
 
 struct TimerImpl {
   size_t ticks_counter{0};
@@ -1535,7 +1566,7 @@ public:
   using Base = Stream<std::tuple<typename Messages::SharedPtr...>, std::string, SynchronizerStreamImpl<Messages...>>;
   using Self = SynchronizerStream<Messages...>;
 
-  /// Constructs the synchronizer and connects it to the inputs so that it is ready to receive values.
+  /// Constructs the synchronizer and connects it to the input streams so that it is ready to receive values.
   template <ErrorFreeStream... Inputs>
   SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs): Base(node) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
@@ -1543,6 +1574,7 @@ public:
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
     /// because we only access impl in on_messages. Therefore, the referenced impl is always the
     /// same and (since it is ref-counted) always valid.
+    /// TODO(Ivo) but this is invalid when this object is freed !
     this->impl()->synchronizer_->registerCallback(&Self::on_messages, this);
     this->connect_inputs(inputs...);
   }
