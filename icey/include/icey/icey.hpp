@@ -787,7 +787,7 @@ public:
   }
 
   /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
-  /// Given that `Value` is of type `std::tuple<Value1, Value2, ..., ValueN>`, this returns
+  /// Given that `Value` is of type `std::tuple<Value1, Value2, ..., ValueN>`, it returns
   /// `std::tuple< Stream<Value1>, Stream<Value2>, ..., Stream<ValueN>>`
   auto unpack() {
     static_assert(!std::is_same_v<Value, Nothing>,
@@ -809,9 +809,9 @@ public:
                         [](const auto &...args) { return std::make_tuple(args...); });
   }
 
-  /// Returns a new Stream that cannot have Errors by handling the error
-  /// \todo implement more cleanly
-  template <class F>
+  /// Handles the errors of this stream with the given function f and returns an ErrorFreeStream that receives only the values of this stream.
+  /// \tparam F Function receiving the Error of this Stream (it is unpacked if it's a tuple) and returning void.
+  template<class F>
   Stream<Value, Nothing> unwrap_or(F &&f) {
     this->except(std::forward<F>(f));
     auto new_stream = this->template transform_to<Value, Nothing>();
@@ -820,9 +820,9 @@ public:
   }
 
   /// Outputs the Value only if the given predicate f returns true.
-  template <class F>
-  Stream<Value, ErrorValue> filter(F &&f) {
-    check_callback<F, Value>{};
+  /// \tparam F Function receiving the Value of this Stream (it is unpacked if it's a tuple) and returning bool
+  template<class F>
+  Stream<Value, ErrorValue> filter(F f) {
     return this->then([f = std::move(f)](auto x) -> std::optional<Value> {
       if (!f(x))
         return {};
@@ -831,7 +831,7 @@ public:
     });
   }
 
-  /// Buffers N elements
+  /// Buffers N elements. Each time N elements were accumulated, this Stream will yield a value of type std::vector<Value> with exactly N elements.
   Buffer<Value> buffer(std::size_t N) const {
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
@@ -1400,27 +1400,39 @@ template <class _ServiceT>
 struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
                                      ServiceClientImpl<_ServiceT>> {
   using Base = Stream<typename _ServiceT::Response::SharedPtr, std::string, ServiceClientImpl<_ServiceT>>;
+  using Self = ServiceClient<_ServiceT>;
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
-  using Client = rclcpp::Client<_ServiceT>;
-  using Future = typename Client::SharedFutureWithRequest;
-
+  
+  /// Create a new Stream and register a new ROS service client with ROS. The given timeout is for the discovery
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS()): Base(node) {
     this->impl()->name = service_name;
     this->impl()->timeout = timeout;
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
   }
-
-  auto &call(Request request) const {
+  
+  /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
+  \param request the request 
+    \returns *this stream
+    Example usage:
+    \verbatim
+    auto client = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
+    auto request = std::make_shared<ExampleService::Request>();
+    icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await client.call(request);
+    \endverbatim
+  */
+  const Self &call(Request request) const {
     if (!wait_for_service(this->impl())) return *this;
     this->impl()->maybe_pending_request = this->impl()->client->async_send_request(
         request,
         [impl = this->impl()](Future response_futur) { on_response(impl, response_futur); });
     return *this;
   }
-
+  
 protected:
+  using Client = rclcpp::Client<_ServiceT>;
+  using Future = typename Client::SharedFutureWithRequest;
   static bool wait_for_service(auto impl) {
     if (!impl->client->wait_for_service(impl->timeout)) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
@@ -1439,8 +1451,7 @@ protected:
       impl->maybe_pending_request = {};
       impl->put_value(response_futur.get().second);
     } else {
-      // Reference:
-      // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+      // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
         impl->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
       } else {
@@ -1542,6 +1553,7 @@ struct SynchronizerStreamImpl {
 
   /// TODO Hack we know that his class is derived from Derived, we will need to downcast 
   /// to put the value in the Stream impl. 
+  /// A non-hack would be to change every impl to derive from impl::Stream
   /// We have to do this because we cannot capture this in the actual Stream but due to the 
   /// very old (pre C++11) callback registering code in the message_filters package 
   /// we cannot regsiter a lambda where we could capture the impl. And at Humble, the variadic fix was not backportet yet, as the variadic fix came only 2024.
@@ -1564,7 +1576,6 @@ struct SynchronizerStreamImpl {
     /// This parameter setting is from the examples
     synchronizer_->setAgePenalty(0.50);
     synchronizer_->registerCallback(&Self::on_messages, this);
-  
   }
 
   void on_messages(typename Messages::SharedPtr... msgs) {
