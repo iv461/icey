@@ -1534,15 +1534,32 @@ class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr
 public: 
   using Base = Stream<std::tuple<typename Messages::SharedPtr...>, std::string, SynchronizerStreamImpl<Messages...>>;
   using Self = SynchronizerStream<Messages...>;
-  SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size): Base(node) {
+
+  /// Constructs the synchronizer and connects it to the inputs so that it is ready to receive values.
+  template <ErrorFreeStream... Inputs>
+  SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs): Base(node) {
+    static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     this->impl()->create_mfl_synchronizer(node, queue_size);
     /// Note that even if this object is copied, this capture of the this-pointer is still valid
     /// because we only access impl in on_messages. Therefore, the referenced impl is always the
     /// same and (since it is ref-counted) always valid.
     this->impl()->synchronizer_->registerCallback(&Self::on_messages, this);
+    this->connect_inputs(inputs...);
   }
 
-private:
+protected:
+  /// Connects the given streams with the synchronizer inputs.
+  template <ErrorFreeStream... Inputs>
+  void connect_inputs(Inputs... inputs) {
+    using namespace hana::literals;
+    auto zipped = hana::zip(std::forward_as_tuple(inputs...), this->impl()->inputs());
+    hana::for_each(zipped, [](auto &input_output_tuple) {
+      auto &input_stream = input_output_tuple[0_c];
+      auto &synchronizer_input = input_output_tuple[1_c];
+      input_stream.connect_values(synchronizer_input);
+    });
+  }
+
   void on_messages(typename Messages::SharedPtr... msgs) {
     this->impl()->put_value(std::forward_as_tuple(msgs...));
   }
@@ -1809,26 +1826,17 @@ public:
     });
   }
 
-  /// Synchronizer that synchronizes streams by approximately matching the header time-stamps (using
-  /// the synchronizer from the `message_filters` package)
+  /// Synchronize at least two streams by approximately matching the header time-stamps (using
+  /// the `message_filters::Synchronizer`).
   ///
   /// \tparam Inputs the input stream types, not necessarily all the same
+  /// \param queue_size the queue size to use, 100 is a good value. 
   /// \param inputs the input streams, not necessarily all of the same type
   /// \note The queue size is 100, it cannot be changed currently
   /// \warning Errors are currently not passed through
   template <ErrorFreeStream... Inputs>
-  SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(Inputs... inputs) {
-    static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
-    using namespace hana::literals;
-    const uint32_t queue_size = 100;
-    auto synchronizer = create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size);
-    auto zipped = hana::zip(std::forward_as_tuple(inputs...), synchronizer.impl()->inputs());
-    hana::for_each(zipped, [](auto &input_output_tuple) {
-      auto &input = input_output_tuple[0_c];
-      auto &synchronizer_input = input_output_tuple[1_c];
-      input.connect_values(synchronizer_input);
-    });
-    return synchronizer;
+  SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size, Inputs... inputs) {
+    return create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size, inputs...);
   }
 
   /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer (i.e. calls
@@ -1856,7 +1864,7 @@ public:
     if constexpr (num_non_interpolatables > 1) {
       /// We need the ApproxTime
       auto approx_time_output = hana::unpack(
-          non_interpolatables, [](auto... inputs) { return synchronize_approx_time(inputs...); });
+          non_interpolatables, [](auto... inputs) { return synchronize_approx_time(100, inputs...); });
       if constexpr (num_interpolatables > 1) {
         /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
         return hana::unpack(

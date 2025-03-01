@@ -19,7 +19,7 @@ TEST_F(NodeTest, SyncApproxTimeTest) {
     auto point_clouds = node_->icey().create_stream<icey::Stream< sensor_msgs::msg::PointCloud2::SharedPtr >>();
     
     size_t num_message_sets_received = 0;
-    auto synched = node_->icey().synchronize_approx_time(images, point_clouds);
+    auto synched = node_->icey().synchronize_approx_time(100, images, point_clouds);
         synched.then([&](sensor_msgs::msg::Image::SharedPtr img, sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
             num_message_sets_received++;
         });
