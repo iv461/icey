@@ -647,8 +647,8 @@ struct Buffer;
 template <class _Value, class _ErrorValue = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag,
                public StreamCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>> {
-                //// TODO this rejects the SimpleFilter that is non-copyable for some reason
-  //static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
+                
+  static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
   friend Context;
 public:
   using Value = _Value;
@@ -1537,7 +1537,20 @@ struct SynchronizerStreamImpl {
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Sync = message_filters::Synchronizer<Policy>;
   using Inputs = std::tuple<SimpleFilterAdapter<Messages>...>;
+  using Self = SynchronizerStreamImpl<Messages...>;
   const Inputs &inputs() const { return *inputs_; }
+
+  /// TODO Hack we know that his class is derived from Derived, we will need to downcast 
+  /// to put the value in the Stream impl. 
+  /// We have to do this because we cannot capture this in the actual Stream but due to the 
+  /// very old (pre C++11) callback registering code in the message_filters package 
+  /// we cannot regsiter a lambda where we could capture the impl. And at Humble, the variadic fix was not backportet yet, as the variadic fix came only 2024.
+  ///
+  /// Note that this is like CRTP but but not done explicitly. 
+  /// So this is equally UB as CRTP is UB, not more, not less.
+  /// See Stream::Impl 
+  using Derived =  impl::Stream<std::tuple<typename Messages::SharedPtr...>, std::string, 
+    WithDefaults<Self>, WithDefaults<Nothing>>;
 
   void create_mfl_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {
     queue_size_ = queue_size;
@@ -1550,6 +1563,12 @@ struct SynchronizerStreamImpl {
         *inputs_);
     /// This parameter setting is from the examples
     synchronizer_->setAgePenalty(0.50);
+    synchronizer_->registerCallback(&Self::on_messages, this);
+  
+  }
+
+  void on_messages(typename Messages::SharedPtr... msgs) {
+    static_cast<Derived*>(this)->put_value(std::forward_as_tuple(msgs...));
   }
 
   uint32_t queue_size_{100};
@@ -1571,11 +1590,6 @@ public:
   SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs): Base(node) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     this->impl()->create_mfl_synchronizer(node, queue_size);
-    /// Note that even if this object is copied, this capture of the this-pointer is still valid
-    /// because we only access impl in on_messages. Therefore, the referenced impl is always the
-    /// same and (since it is ref-counted) always valid.
-    /// TODO(Ivo) but this is invalid when this object is freed !
-    this->impl()->synchronizer_->registerCallback(&Self::on_messages, this);
     this->connect_inputs(inputs...);
   }
 
@@ -1590,10 +1604,6 @@ protected:
       auto &synchronizer_input = input_output_tuple[1_c];
       input_stream.connect_values(synchronizer_input);
     });
-  }
-
-  void on_messages(typename Messages::SharedPtr... msgs) {
-    this->impl()->put_value(std::forward_as_tuple(msgs...));
   }
 };
 
