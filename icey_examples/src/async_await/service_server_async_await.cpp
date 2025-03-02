@@ -42,4 +42,5 @@ icey::Stream<int> serve_downstream_service(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   serve_downstream_service(argc, argv);
+  rclcpp::shutdown();
 }

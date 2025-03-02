@@ -460,9 +460,10 @@ concept ConvertibleTo = std::convertible_to<T, Base>;
 template <class T>
 concept AnyStream = std::is_base_of_v<StreamTag, T>;
 
-/// A stream type is error-free, meaning its Error is Nothing.
+/// A stream type is error-free, meaning its Error is Nothing. It's value shold not be Nothig because this does not make any sense.
 template <class T>
-concept ErrorFreeStream = AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing>;
+concept ErrorFreeStream = AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing> 
+  && !std::is_same_v<ValueOf<T>, Nothing>;
 
 template<class T>
 constexpr auto is_error_free = std::is_same_v<ErrorOf<T>, Nothing>;
