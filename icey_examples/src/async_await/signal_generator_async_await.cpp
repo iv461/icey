@@ -1,3 +1,4 @@
+/// A more complex async/await examples thtat shows how to wait on a timer a
 #include <icey/icey.hpp>
 
 #include "std_msgs/msg/float32.hpp"
@@ -7,8 +8,6 @@ using namespace std::chrono_literals;
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   std::cout << "Starting node .. " << std::endl;
 
-  
-  
   auto node = icey::create_node(argc, argv, "signal_generator");
   auto frequency = node->icey().declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2.);
@@ -21,7 +20,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   std::cout << "Starting loop .. " << std::endl;
   /// Main spinning loop
-  while (rclcpp::ok()) {
+  while (true) {
     /// Receive timer updates
     size_t ticks = co_await timer;
 
@@ -42,7 +41,6 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     float_val.data = y;
     RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
     sine_pub.publish(float_val);
-  
   }
   co_return 0;
 }

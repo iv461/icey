@@ -1523,7 +1523,7 @@ struct TimeoutFilter
 template<class Message>
 struct SimpleFilterAdapterImpl : message_filters::SimpleFilter<Message> {
   SimpleFilterAdapterImpl()  {}
-  void signalMessage(auto event) { this->signalMessage(event);}
+  void signalMessage(auto event) { message_filters::SimpleFilter<Message>::signalMessage(event);}
 };
 /// Adapts the `message_filters::SimpleFilter` to our
 /// `Stream` (which is a similar concept).
