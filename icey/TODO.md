@@ -198,7 +198,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Maybe support extention point, pass the Stream template arg with a default (i.e. for printing a warning that a parameter could not be retrieved) -> we already have with 
 
-- [X] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb
+- [X] Fix segfault on termination -> cannot reproduce with gdb, seems like a bug in rclcpp. Our destruction order remains correct despite global var, so currently no idea about the root cause. -> Looks ugly and, so kind of important -> pass `handle SIGINT noprint nostop pass` to gdb (fixed, root-cause was that the rclcpp context global var gets destroyed before our global context gets destroyed)
 
 - [X] Dynamic reconfigure without code-gen using boost hana (it can serialize structs) 
 - [X] `unpack` tuple of obs to multiple obs, this is easy 
@@ -273,3 +273,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Unit-test that the use-count of the all the shared-ptrs to the streams is 1 after destructing the context (mem-leak test)
 
 - [X] Clarify behavior of parameters regarding default value. Undeclared/no default etc. 
+
+- [X] Fix (potential) use-after-free bug in ApproxTimeSync -> we still shall never capture this !
+
+- 

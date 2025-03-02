@@ -41,7 +41,7 @@ ament_auto_add_executable(using_image_transport_example src/using_image_transpor
 ament_auto_add_executable(listener_example src/listener.cpp)
 ament_auto_add_executable(multi_node_example src/multi_node.cpp)
 ament_auto_add_executable(message_filters_interoperability_example src/message_filters_interoperability.cpp)
-ament_auto_add_executable(automatic_synchronization_example src/automatic_synchronization.cpp)
+ament_auto_add_executable(synchronization_example src/synchronization.cpp)
 
 ament_auto_add_executable(lifecycle_node_example src/lifecycle_nodes.cpp)
 

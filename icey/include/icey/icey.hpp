@@ -1232,7 +1232,25 @@ struct TransformSubscriptionStream
       return output;
     }
     */
-  };
+};
+
+template <class _Message>
+struct TransformSynchronizer
+    : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
+  using Base = Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>>;
+  using Self = TF2MessageFilter<_Message>;
+  using Message = _Message;
+
+  TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame): Base(node) {
+    this->impl()->name = "tf_filter";
+    this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
+        this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
+        node.get_node_logging_interface(), node.get_node_clock_interface());
+    this->impl()->filter->registerCallback(&Self::on_message, this);
+  }
+  void on_message(const typename _Message::SharedPtr &msg) { this->impl()->put_value(msg); }
+};
+rclcpp_to_chrono(rclcpp::Time(new_value->header.stamp))
 
 struct TimerImpl {
   size_t ticks_counter{0};
@@ -1601,7 +1619,7 @@ struct TF2MessageFilterImpl {
   std::shared_ptr<tf2_ros::MessageFilter<Message>> filter;
 };
 
-/// Wrapper for the tf2_ros::MessageFilter.
+/// Wrapper for the tf2_ros::MessageFilter. Currently unused.
 template <class _Message>
 struct TF2MessageFilter
     : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {

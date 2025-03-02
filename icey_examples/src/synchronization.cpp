@@ -1,8 +1,6 @@
-/// This example shows how ICEY synchronizes topics automatically based the subscribed inputs.
-/// There is a single "icey::synchronize" function that is used both for approximate time
-/// synchronization, as well as obtaining the transform from TF (via lookupTransform) for a given
-/// topic, which is another form of synchronization. The synchronizer is chosen and wired at
-/// compile-time, so that no runtime-overhead occurs.
+/// This example shows how to synchronize topics. Both for synchronizing two topics approximatelly
+/// as well as obtaining the transform from TF (via lookupTransform) for a given
+/// topic, which is another form of synchronization.
 
 #include <icey/icey.hpp>
 
@@ -35,15 +33,5 @@ int main(int argc, char **argv) {
       });*/
 
   /// this has type Stream<std::tuple<int, float>>
-
-  auto float1 = icey.create_subscription<std_msgs::msg::Float32>("float1");
-  auto float2 = icey.create_subscription<std_msgs::msg::Float32>("float2");
-  auto float3 = icey.create_subscription<std_msgs::msg::Float32>("float3");
-
-  icey::any(float1, float2, float3).publish("float_serialized");
-
-  /// And directly publish this signal:
-  map_base_link_tf.publish("map_to_base_link_transform");
-
   icey::spin(node);  
 }
