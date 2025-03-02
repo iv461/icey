@@ -645,6 +645,8 @@ template <class V>
 struct ServiceClient;
 template <class V>
 struct Buffer;
+template <class V>
+struct TransformSynchronizer;
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
@@ -777,6 +779,13 @@ public:
                   "This stream does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
+  }
+
+  TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame) {
+    assert_we_have_context();
+    static_assert(!std::is_same_v<Value, Nothing>, ""); 
+    /// TODO assert has header 
+    this->impl()->context.lock()->synchronize_with_transform(*this, target_frame);
   }
 
   /// Publish a transform using the `TFBroadcaster` in case this Stream holds a Value of type

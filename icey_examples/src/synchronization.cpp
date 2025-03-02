@@ -10,17 +10,19 @@
 #include "std_msgs/msg/int32.hpp"
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "signal_generator");
-  auto &icey = node->icey();
+  auto node = icey::create_node(argc, argv, "synchronization_example");  
 
-  auto map_base_link_tf = icey.create_transform_subscription("map", "base_link");
 
-  auto float_sig = icey.create_subscription<std_msgs::msg::Float32>("my_float");
   auto camera_image = icey.create_subscription<sensor_msgs::msg::Image>("camera");
   auto point_cloud = icey.create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 
-  /// This will do synchronize_with_reference(camera_image, map_base_link_tf)
-  auto cam_sync = icey.synchronize(camera_image, map_base_link_tf);
+  /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
+  /// and the given target_frame ("map") at the time of the header stamp.
+  camera_image.synchronize_with_transform("map")
+    .then([](sensor_msgs::msg::Image::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
+
+    });
+
 
   /// Synchronize, uses approx time TODO does not work, no stamp
   //
