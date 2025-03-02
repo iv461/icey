@@ -27,7 +27,7 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
   static Self None() { return Result<_Value, _ErrorValue>{}; }
   static Self Ok(const _Value &x) {
     Self ret;
-    ret.template emplace<1>(*x);
+    ret.template emplace<1>(x);
     return ret;
   }
   static Self Err(const _ErrorValue &x) {

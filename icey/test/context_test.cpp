@@ -108,11 +108,8 @@ TEST_F(NodeTest, StreamsHaveContext) {
     auto buffered_stream = sub.buffer(100);
     EXPECT_EQ(buffered_stream.impl()->context.lock().get(), &node_->icey());
 
-    auto ref_synched = node_->icey().sync_with_reference(sub, tf_sub);
-    EXPECT_EQ(ref_synched.impl()->context.lock().get(), &node_->icey());
-
-    /*auto approx_time_synched = node_->icey().synchronize_approx_time(sub, tf_sub.unwrap_or([](auto) {}) );
-    EXPECT_EQ(approx_time_synched.impl()->context.lock().get(), &node_->icey());*/
+    auto approx_time_synched = node_->icey().synchronize_approx_time(10, sub, tf_sub.unwrap_or([](auto) {}) );
+    EXPECT_EQ(approx_time_synched.impl()->context.lock().get(), &node_->icey());
     
 }
 

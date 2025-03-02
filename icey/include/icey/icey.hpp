@@ -157,15 +157,32 @@ struct TFListener {
   void add_temporary_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
     const OnTransform &on_transform, const OnError &on_error) {
     temporary_subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
-}
+  }
 
+  /// @brief Looks up and returns the transform at the given time between the given frames. It does not wait but instead only returns
+  /// something if the transform is already in the buffer.
+  ///
+  /// @param target_frame
+  /// @param source_frame
+  /// @param time
+  /// @return The transform or the TF error if the transform is not in the buffer.
+  Result<geometry_msgs::msg::TransformStamped, std::string> lookup_in_buffer(std::string target_frame, std::string source_frame, const Time &time) const {
+    try {
+      // Note that this call does not wait, the transform must already have arrived. 
+      const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
+      auto tf = buffer_->lookupTransform(target_frame, source_frame, legacy_timepoint);
+      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(tf);
+    } catch (const tf2::TransformException &e) {
+      return Result<geometry_msgs::msg::TransformStamped, std::string>::Err(e.what());
+    }
+  }
 
   const NodeInterfaces &node_; /// Hold weak reference to bevause the Node owns the NodeInterfaces as well, so we avoid circular reference
+  
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
   /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
   /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
   std::shared_ptr<tf2_ros::Buffer> buffer_;
-
 private:
   using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
 
@@ -369,6 +386,12 @@ public:
     return tf_broadcaster_;
   }
 
+  std::shared_ptr<TFListener> add_tf_listener_if_needed() {
+    if (!tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple transforms on which we listen to
+      tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeInterfaces&>(*this));
+    return tf2_listener_;
+  }
+
 private:
   /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
   /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
@@ -407,13 +430,6 @@ private:
     };
     this->validate_param_cb_ =
         node_parameters_->add_on_set_parameters_callback(set_param_cb);
-  }
-
-  void add_tf_listener_if_needed() {
-    if (tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
-                              /// transforms on which we listen to
-      return;
-    tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeInterfaces&>(*this));
   }
 
   /// A map that stores for each parameter name some ROS entites that we need to hold to be able to recive parameter updates.
@@ -1166,9 +1182,9 @@ struct TransformSubscriptionStreamImpl {
 /// A Stream that represents a subscription between two coordinate systems. (See TFListener)
 /// Values can also be pulled with get_at_time.
 struct TransformSubscriptionStream
-    : public Stream<geometry_msgs::msg::TransformStamped,
+    : public Stream<std::shared_ptr<geometry_msgs::msg::TransformStamped>,
                                    std::string, TransformSubscriptionStreamImpl> {
-  using Base = Stream<geometry_msgs::msg::TransformStamped, std::string, TransformSubscriptionStreamImpl>;
+  using Base = Stream<std::shared_ptr<geometry_msgs::msg::TransformStamped>, std::string, TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using MaybeValue = std::optional<Message>;
   using Self = TransformSubscriptionStream;
@@ -1186,33 +1202,6 @@ struct TransformSubscriptionStream
           impl->put_value(impl->shared_value);
         },
         [impl = this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
-  }
-  /// @brief Looks up and returns the transform at the given time between the frames previously given. It does not wait but instead only return
-  /// something if the transform is already in the buffer. If any TF error occurs, it puts it in the stream.
-  /// @param time
-  /// @return The transform or nothing if it has not arrived yet.
-  MaybeValue get_at_time(const Time &time) const override {
-    return get_at_time(this->impl()->target_frame.get(), this->impl()->source_frame.get(), time);
-  }
-
-  /// @brief Looks up and returns the transform at the given time between the given frames. It does not wait but instead only return
-  /// something if the transform is already in the buffer. If any TF error occurs, it puts it in the stream.
-  ///
-  /// @param target_frame
-  /// @param source_frame
-  /// @param time
-  /// @return The transform or nothing if it has not arrived yet.
-  MaybeValue get_at_time(std::string target_frame, std::string source_frame, const Time &time) const {
-    try {
-      // Note that this call does not wait, the transform must already have arrived. 
-      const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
-      *this->impl()->shared_value = this->impl()->tf2_listener.lock()->buffer_->lookupTransform(
-        target_frame, source_frame, legacy_timepoint);
-      return this->impl()->shared_value;
-    } catch (const tf2::TransformException &e) {
-      this->impl()->put_error(e.what());
-      return {};
-    }
   }
 
   /// @brief Looks up and returns the current stream. TODO implement
@@ -1234,23 +1223,34 @@ struct TransformSubscriptionStream
     */
 };
 
-template <class _Message>
-struct TransformSynchronizer
-    : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
-  using Base = Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>>;
-  using Self = TF2MessageFilter<_Message>;
-  using Message = _Message;
-
-  TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame): Base(node) {
-    this->impl()->name = "tf_filter";
-    this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
-        this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
-        node.get_node_logging_interface(), node.get_node_clock_interface());
-    this->impl()->filter->registerCallback(&Self::on_message, this);
-  }
-  void on_message(const typename _Message::SharedPtr &msg) { this->impl()->put_value(msg); }
+struct TransformSynchronizerImpl {
+    /// The book owns it.
+    std::weak_ptr<TFListener> tf_listener;
 };
-rclcpp_to_chrono(rclcpp::Time(new_value->header.stamp))
+
+/// Synchronizes a topic with a transform
+template <class Value>
+struct TransformSynchronizer
+    : public Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string> {
+      
+  using Base = Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string>;
+
+  template <ErrorFreeStream Input>
+  TransformSynchronizer(NodeBookkeeping &node, const std::string &target_frame, Input input): Base(node) {
+    this->impl()->tf_listener = node.add_tf_listener_if_needed();
+
+    input.impl()->register_handler([impl=this->impl()](const auto &new_state) {
+      const auto &message = new_state.value();
+      const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
+      auto result = impl->tf_listener.lookup_in_buffer(impl->target_frame, message->header.child_frame_id, timestamp);
+      if(result.has_value())
+        impl->put_value(std::make_tuple(message, result.value()));
+      else
+        impl->put_error(result.error());
+    });
+  }
+};
+
 
 struct TimerImpl {
   size_t ticks_counter{0};
@@ -1865,14 +1865,10 @@ public:
   }
 
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the
-  /// transform between it's header frame and the target_frame becomes available. It uses for this
-  /// the `tf2_ros::MessageFilter`
+  /// transform between it's header frame and the target_frame becomes available.
   template <ErrorFreeStream Input>
-  TF2MessageFilter<MessageOf<Input>> synchronize_with_transform(Input input,
-                                                                const std::string &target_frame) {
-    auto output = create_stream<TF2MessageFilter<MessageOf<Input>>>(target_frame);
-    input.connect_values(output);
-    return output;
+  TransformSynchronizer<ValueOf<Input>> synchronize_with_transform(Input input, const std::string &target_frame) {
+    return create_stream<TransformSynchronizer<ValueOf<Input>>>(target_frame, input);
   }
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
@@ -1909,7 +1905,6 @@ protected:
   /// The executor is needed for async/await because the Streams need to be able to await
   /// themselves. For this, they acces the ROS executor through the Context.
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
-  
 };
 
 /// The ROS node, additionally owning the context that holds the Streams.
