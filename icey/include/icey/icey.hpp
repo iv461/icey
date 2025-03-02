@@ -1234,24 +1234,25 @@ struct TransformSubscriptionStream
 
 struct TransformSynchronizerImpl {
     /// The book owns it.
-    std::weak_ptr<TFListener> tf_listener;
+    Weak<TFListener> tf_listener;
+    ValueOrParameter<std::string> target_frame;
 };
 
 /// Synchronizes a topic with a transform
 template <class Value>
 struct TransformSynchronizer
-    : public Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string> {
+    : public Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string, TransformSynchronizerImpl> {
       
-  using Base = Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string>;
+  using Base = Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string, TransformSynchronizerImpl>;
 
   template <ErrorFreeStream Input>
-  TransformSynchronizer(NodeBookkeeping &node, const std::string &target_frame, Input input): Base(node) {
+  TransformSynchronizer(NodeBookkeeping &node, const ValueOrParameter<std::string> &target_frame, Input input): Base(node) {
     this->impl()->tf_listener = node.add_tf_listener_if_needed();
-
+    this->impl()->target_frame = target_frame;
     input.impl()->register_handler([impl=this->impl()](const auto &new_state) {
       const auto &message = new_state.value();
       const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
-      auto result = impl->tf_listener.lookup_in_buffer(impl->target_frame, message->header.child_frame_id, timestamp);
+      auto result = impl->tf_listener->lookup_in_buffer(impl->target_frame.get(), message->header.frame_id, timestamp);
       if(result.has_value())
         impl->put_value(std::make_tuple(message, result.value()));
       else
