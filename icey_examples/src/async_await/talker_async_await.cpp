@@ -9,7 +9,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     auto talker = icey::create_node(argc, argv, "talker_node");
     
     auto timer = talker->icey().create_timer(100ms);
-    auto pub = talker->icey().create_publisher<std_msgs::msg::String>("/messages");
+    auto pub = talker->icey().create_publisher<std_msgs::msg::String>("/strings");
     
     
     /// We can use coroutines:
@@ -22,7 +22,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     
     while(true) {
         std_msgs::msg::String message = co_await async_create_message();
-
+        RCLCPP_INFO_STREAM(talker->get_logger(), "Publishing: " << message.data);
         pub.publish(message);
     }
     co_return 0;
