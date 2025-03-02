@@ -1152,30 +1152,6 @@ struct SubscriptionStream : public Stream<typename _Message::SharedPtr, Nothing,
   }
 };
 
-struct InterpolateableStreamTag {};
-template <class _Message, class DerivedImpl>
-struct InterpolateableStream
-    : public InterpolateableStreamTag,
-      public Stream<typename _Message::SharedPtr, std::string, DerivedImpl> {
-  using Base = Stream<typename _Message::SharedPtr, std::string, DerivedImpl>;
-  using Base::Base;
-  
-  using MaybeValue = std::optional<typename _Message::SharedPtr>;
-  /// Get the measurement at a given time point. Returns nothing if the buffer is empty or
-  /// an extrapolation would be required.
-  virtual MaybeValue get_at_time(const Time &time) const = 0;
-};
-
-/// An interpolatable stream is one that buffers the incoming messages using a circular buffer
-/// and allows to query the message at a given point, using interpolation.
-template <class T>
-constexpr auto hana_is_interpolatable(T) {
-  if constexpr (std::is_base_of_v<InterpolateableStreamTag, T>)
-    return hana::bool_c<true>;
-  else
-    return hana::bool_c<false>;
-}
-
 struct TransformSubscriptionStreamImpl {
   using Message = geometry_msgs::msg::TransformStamped;
   ValueOrParameter<std::string> source_frame;
@@ -1190,11 +1166,11 @@ struct TransformSubscriptionStreamImpl {
 /// A Stream that represents a subscription between two coordinate systems. (See TFListener)
 /// Values can also be pulled with get_at_time.
 struct TransformSubscriptionStream
-    : public InterpolateableStream<geometry_msgs::msg::TransformStamped,
-                                   TransformSubscriptionStreamImpl> {
-  using Base = InterpolateableStream<geometry_msgs::msg::TransformStamped, TransformSubscriptionStreamImpl>;
+    : public Stream<geometry_msgs::msg::TransformStamped,
+                                   std::string, TransformSubscriptionStreamImpl> {
+  using Base = Stream<geometry_msgs::msg::TransformStamped, std::string, TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
-  using MaybeValue = InterpolateableStream<Message, TransformSubscriptionStreamImpl>::MaybeValue;
+  using MaybeValue = std::optional<Message>;
   using Self = TransformSubscriptionStream;
 
   TransformSubscriptionStream(NodeBookkeeping &node, 
@@ -1857,29 +1833,6 @@ public:
     return service_client;
   }
 
-  /*!
-    Synchronizer that given a reference signal at its first argument, ouputs all the other topics
-    \warning Errors are currently not passed through
-  */
-  template <ErrorFreeStream Reference, AnyStream... Interpolatables>
-  static auto sync_with_reference(Reference reference, Interpolatables... interpolatables) {
-    using namespace message_filters::message_traits;
-    using RefMsg = MessageOf<Reference>;
-    static_assert(HasHeader<RefMsg>::value,
-                  "The ROS message type must have a header with the timestamp to be synchronized");
-    auto interpolatables_tuple = std::make_tuple(interpolatables...);
-    /// TOOD somehow does not work
-    // auto all_are_interpolatables = hana::all_of(inputs_tuple,  [](auto t) { return
-    // hana_is_interpolatable(t); }); static_assert(all_are_interpolatables, "All inputs must be
-    // interpolatable when using the sync_with_reference");
-    return reference.then([interpolatables_tuple](const auto &new_value) {
-      auto input_maybe_values = hana::transform(interpolatables_tuple, [&](auto input) {
-        return input.get_at_time(rclcpp_to_chrono(rclcpp::Time(new_value->header.stamp)));
-      });
-      return hana::prepend(input_maybe_values, new_value);
-    });
-  }
-
   /// Synchronize at least two streams by approximately matching the header time-stamps (using
   /// the `message_filters::Synchronizer`).
   ///
@@ -1892,48 +1845,6 @@ public:
   SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size, Inputs... inputs) {
     return create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size, inputs...);
   }
-
-  /// Synchronize a variable amount of Streams. Uses a Approx-Time synchronizer (i.e. calls
-  /// synchronize_approx_time) if the inputs are not interpolatable or an interpolation-based
-  /// synchronizer based on a given (non-interpolatable) reference. Or, a combination of both, this
-  /// is decided at compile-time.
-  template <AnyStream... Inputs>
-  auto synchronize(Inputs... inputs) {
-    static_assert(sizeof...(Inputs) >= 2,
-                  "You need to have at least two inputs for synchronization.");
-    auto inputs_tuple = std::make_tuple(inputs...);
-    auto interpolatables =
-        hana::remove_if(inputs_tuple, [](auto t) { return not hana_is_interpolatable(t); });
-    auto non_interpolatables =
-        hana::remove_if(inputs_tuple, [](auto t) { return hana_is_interpolatable(t); });
-    constexpr int num_interpolatables = hana::length(interpolatables);
-    constexpr int num_non_interpolatables = hana::length(non_interpolatables);
-    static_assert(num_interpolatables <= 0 || num_non_interpolatables != 0,
-                  "You are trying to synchronize only interpolatable signals. This does not work, "
-                  "you need to "
-                  "have at least one non-interpolatable signal that is the common time for all the "
-                  "interpolatable signals.");
-    // This can only either be one or more than one. Precondition is that we synchronize at least
-    // two entities. Given the condition above, the statement follows.
-    if constexpr (num_non_interpolatables > 1) {
-      /// We need the ApproxTime
-      auto approx_time_output = hana::unpack(
-          non_interpolatables, [](auto... inputs) { return synchronize_approx_time(100, inputs...); });
-      if constexpr (num_interpolatables > 1) {
-        /// We have interpolatables and non-interpolatables, so we need to use both synchronizers
-        return hana::unpack(
-            hana::prepend(interpolatables, approx_time_output),
-            [](auto ref, auto... ints) { return sync_with_reference(ref, ints...); });
-      } else {
-        return approx_time_output;
-      }
-    } else {
-      // Otherwise, we only need a sync with reference
-      return hana::unpack(hana::prepend(interpolatables, std::get<0>(non_interpolatables)),
-                          [](auto ref, auto... ints) { return sync_with_reference(ref, ints...); });
-    }
-  }
-
 
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the
   /// transform between it's header frame and the target_frame becomes available. It uses for this
