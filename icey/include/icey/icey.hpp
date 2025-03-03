@@ -1447,12 +1447,10 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
 
-  /// Create a new Stream and register a new ROS service client with ROS. The given timeout is for
-  /// the discovery
+  /// Create a new Stream and register a new ROS service client with ROS.
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : Base(node) {
-    this->impl()->name = service_name;
     this->impl()->timeout = timeout;
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
   }
@@ -1491,30 +1489,35 @@ protected:
     return true;
   }
 
+  /// Consumes the future and sets the value if there is one, otherwise it calls on_timeout
   static void on_response(auto impl, Future response_future) {
     if (response_future.valid()) {
       impl->maybe_pending_request = {};
       impl->put_value(response_future.get().second);
     } else {
-      // Reference:
-      // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
-      if (!rclcpp::ok()) {
-        impl->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
-      } else {
-        impl->put_error("rclcpp::FutureReturnCode::TIMEOUT");
-      }
-      /// Now do the weird cleanup thing that the API-user definitely neither does need to care
-      /// nor know about:
+      on_timeout(impl);
+    }
+  }
+
+  /// Removes the pending request and sets an error
+  static void on_timeout(auto impl) {
+    /// Now do the weird cleanup thing that the API-user definitely neither does need to care
+    /// nor know about:
+    if(impl->maybe_pending_request) {
       impl->client->remove_pending_request(impl->maybe_pending_request.value());
-      /// I'm not sure this will still not leak memory smh:
-      /// https://github.com/ros2/rclcpp/issues/1697. There is a ROS example that launches a timer
-      /// which polls for dead requests and cleans them up. That's why I'll put this assertion here:
-      if (size_t num_requests_pruned = impl->client->prune_pending_requests() != 0) {
-        throw std::runtime_error(
-            "Pruned some more requests even after calling remove_pending_request(), you should buy "
-            "a new RPC library.");
-      }
       impl->maybe_pending_request = {};
+    }
+    /// Let's put his assertion here, I'm not sure this will still not leak memory: https://github.com/ros2/rclcpp/issues/1697. 
+    if (size_t num_requests_pruned = impl->client->prune_pending_requests() != 0) {
+      throw std::runtime_error(
+          "Pruned some more requests even after calling remove_pending_request(), you should buy "
+          "a new RPC library.");
+    }
+    // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+    if (!rclcpp::ok()) {
+      impl->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
+    } else {
+      impl->put_error("rclcpp::FutureReturnCode::TIMEOUT");
     }
   }
 };
