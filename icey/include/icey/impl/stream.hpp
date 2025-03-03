@@ -114,7 +114,7 @@ using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 namespace impl {
 
 /// The unit tests enable tracking the allocation of Streams and then assert in each unit-test that
-/// all Streams are freed if the ROS node is freed, i.e. no memory leak occured.
+/// all Streams are freed if the ROS node is freed, i.e. no memory leak occurred.
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
 extern std::unordered_set<void *> g_impls;
 #endif
@@ -172,16 +172,16 @@ public:
 
   Stream() = default;
   /// A Stream is non-copyable since it has members that reference it and therefore it should change
-  /// it's adress.
+  /// it's address.
   Stream(const Self &) = delete;
   /// A Stream is non-movable since it has members that reference it and therefore it should change
-  /// it's adress.
+  /// it's address.
   Stream(Self &&) = delete;
   /// A Stream is non-copyable since it has members that reference it and therefore it should change
-  /// it's adress.
+  /// it's address.
   Stream &operator=(const Self &) = delete;
   /// A Stream is non-movable since it has members that reference it and therefore it should change
-  /// it's adress.
+  /// it's address.
   Stream &operator=(Self &&) = delete;
 
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
@@ -304,9 +304,9 @@ protected:
   }
 
   /// @brief This function creates a handler for the Steam and returns it as a function object.
-  /// It' behvarior closely matches promises in JavaScript.
+  /// It' behavior closely matches promises in JavaScript.
   /// It is basis for implementing the .then() function but it does two things differently:
-  /// First, it does not create the new Strean, it receives an already created "output"-Stream.
+  /// First, it does not create the new Stream, it receives an already created "output"-Stream.
   /// Second, we can only register a "onResolve"- or an "onReject"-handler, not both. But
   /// "onResolve" is already implemented such that implicitly the "onReject"-handler passes over the
   /// error, meaning the onReject-handler is (_, Err) -> (_, Err): x, the identity function.

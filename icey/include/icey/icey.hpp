@@ -58,7 +58,7 @@ static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
   return Time(std::chrono::nanoseconds(time_point.nanoseconds()));
 }
 
-/// A helper to abstract regular rclrpp::Nodes and LifecycleNodes.
+/// A helper to abstract regular rclcpp::Nodes and LifecycleNodes.
 /// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
 /// which doesn't look like it's going to come for Humble:
 /// https://github.com/ros2/rclcpp/issues/2309
@@ -133,12 +133,12 @@ struct Weak {
 
 /// A transform listener that allows to subscribe on a single transform between two coordinate
 /// systems. It is implemented similarly to the tf2_ros::TransformListener.
-/// Every time a new message is receved on /tf, it checks whether a relevant transforms (i.e. ones
+/// Every time a new message is received on /tf, it checks whether a relevant transforms (i.e. ones
 /// we subscribed) was received. It is therefore an asynchronous interface to TF, similar to the
-/// tf2_ros::AsynchBuffer. But the key difference is that tf2_ros::AsynchBuffer can only deliver the
+/// tf2_ros::AsyncBuffer. But the key difference is that tf2_ros::AsyncBuffer can only deliver the
 /// transform once, it is therefore a
 /// [promise](https://github.com/ros2/geometry2/blob/rolling/tf2_ros/src/buffer.cpp#L179), not a
-/// stream. We want however to receive a continous stream of transforms, like a subscriber. This
+/// stream. We want however to receive a continuous stream of transforms, like a subscriber. This
 /// class is used to implement the TransformSubscriptionStream.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
@@ -181,7 +181,7 @@ struct TFListener {
     }
   }
 
-  const NodeInterfaces &node_;  /// Hold weak reference to bevause the Node owns the NodeInterfaces
+  const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
                                 /// as well, so we avoid circular reference
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
@@ -224,7 +224,7 @@ private:
     /// ([official](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Listener-Cpp.html))
     /// . I'm following this example instead:
     /// https://github.com/ros-perception/imu_pipeline/blob/ros2/imu_transformer/src/imu_transformer.cpp#L16
-    /// See also the follwing discussions:
+    /// See also the following discussions:
     /// https://answers.ros.org/question/372608/?sort=votes
     /// https://github.com/ros-navigation/navigation2/issues/1182
     /// https://github.com/ros2/geometry2/issues/446
@@ -306,7 +306,7 @@ public:
   explicit NodeBookkeeping(const NodeInterfaces &node_interfaces)
       : NodeInterfaces(node_interfaces) {}
 
-  /// No copiying is allowed:
+  /// No copying is allowed:
   NodeBookkeeping(const NodeBookkeeping &) = delete;
   NodeBookkeeping &operator=(const NodeBookkeeping &) = delete;
 
@@ -443,12 +443,12 @@ private:
     this->validate_param_cb_ = node_parameters_->add_on_set_parameters_callback(set_param_cb);
   }
 
-  /// A map that stores for each parameter name some ROS entites that we need to hold to be able to
-  /// recive parameter updates.
+  /// A map that stores for each parameter name some ROS entities that we need to hold to be able to
+  /// receive parameter updates.
   std::unordered_map<std::string, std::pair<std::shared_ptr<rclcpp::ParameterEventHandler>,
                                             std::shared_ptr<rclcpp::ParameterCallbackHandle>>>
       parameters_;
-  /// Parameter validators for each parameter name, contraining the values of a parameter.
+  /// Parameter validators for each parameter name, containing the values of a parameter.
   std::unordered_map<std::string, FValidate> parameter_validators_;
 
   /// Callback for validating a list of parameter.
@@ -456,7 +456,7 @@ private:
   /// TF Support
   std::shared_ptr<TFListener> tf2_listener_;
   /// This is a simple wrapper around a publisher that publishes on /tf. There is really nothing
-  /// intereseting under the hood of tf2_ros::TransformBroadcaster
+  /// interesting under the hood of tf2_ros::TransformBroadcaster
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };
 
@@ -489,7 +489,7 @@ concept ConvertibleTo = std::convertible_to<T, Base>;
 template <class T>
 concept AnyStream = std::is_base_of_v<StreamTag, T>;
 
-/// A stream type is error-free, meaning its Error is Nothing. It's value shold not be Nothig
+/// A stream type is error-free, meaning its Error is Nothing. It's value should not be Nothing
 /// because this does not make any sense.
 template <class T>
 concept ErrorFreeStream =
@@ -602,7 +602,7 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   /// Make a Value to a stream (promisify it) if needed, meaning if it is not already a Stream.
   /// We also need to get the context from the given Stream and set it to our stream,
   /// since the compiler creates new Streams by just calling operator new. This creates Streams with
-  /// no context, somethign we do not want. But luckily, we always got a Stream that already has a
+  /// no context, something we do not want. But luckily, we always got a Stream that already has a
   /// context so we obtain it from there.
   template <class ReturnType>
   auto await_transform(ReturnType x) {
@@ -1240,7 +1240,7 @@ struct TransformSubscriptionStream
   /// @param target_frame
   /// @param source_frame
   /// @param time
-  /// @return A promise that resolves when the transofrm has arrived
+  /// @return A promise that resolves when the transform has arrived
   /*
   Promise<Message, std::string> lookup(std::string target_frame, std::string source_frame, const
   Time &time) { Promise<Message, std::string> output;
@@ -1319,7 +1319,7 @@ struct PublisherImpl {
     // the shared ptr is not referenced somewhere else.
     /// We could check whether use_count is one but this is not a reliable indicator whether the
     /// object not referenced anywhere else.
-    // This is because the use_count can change in a multithreaded program immediatelly after it was
+    // This is because the use_count can change in a multithreaded program immediately after it was
     // retrieved (i.e. a race occurs), see:
     /// https://en.cppreference.com/w/cpp/memory/shared_ptr/use_count (Same holds for
     /// shared_ptr::unique, which is defined simply as shared_ptr::unique -> bool: use_count() == 1)
@@ -1422,7 +1422,7 @@ struct ServiceStream
   /// See for a detailed documentation:
   /// - The C-API that rclcpp uses more or less directly:
   /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
-  /// - One leayer below:
+  /// - One layer below:
   /// [rmw_send_response](https://docs.ros.org/en/humble/p/rmw/generated/function_rmw_8h_1abb55ba2b2a957cefb0a77b77ddc5afda.html)
   void respond(RequestID request_id, Response response) {
     this->impl()->service->send_response(*request_id, *response);
@@ -1471,7 +1471,7 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
     if (!wait_for_service(this->impl())) return *this;
     this->impl()->maybe_pending_request = this->impl()->client->async_send_request(
         request,
-        [impl = this->impl()](Future response_futur) { on_response(impl, response_futur); });
+        [impl = this->impl()](Future response_future) { on_response(impl, response_future); });
     return *this;
   }
 
@@ -1491,10 +1491,10 @@ protected:
     return true;
   }
 
-  static void on_response(auto impl, Future response_futur) {
-    if (response_futur.valid()) {
+  static void on_response(auto impl, Future response_future) {
+    if (response_future.valid()) {
       impl->maybe_pending_request = {};
-      impl->put_value(response_futur.get().second);
+      impl->put_value(response_future.get().second);
     } else {
       // Reference:
       // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
@@ -1520,7 +1520,7 @@ protected:
 };
 
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window.
-/// It simply passes over the value if no timeout occured, and errors otherwise.
+/// It simply passes over the value if no timeout occurred, and errors otherwise.
 /// \tparam _Value the value must be a message that has a header stamp
 template <class Value>
 struct TimeoutFilter
@@ -1556,8 +1556,8 @@ struct TimeoutFilter
     if (create_extra_timer) {
       auto timer = input.impl()->context.lock()->create_timer(max_age);
       timer.then([timer_impl = timer.impl(), input_impl = input.impl(), check_state](size_t) {
-        bool timeout_occured = check_state(input_impl->get_state());
-        if (!timeout_occured) timer_impl->timer->reset();
+        bool timeout_occurred = check_state(input_impl->get_state());
+        if (!timeout_occurred) timer_impl->timer->reset();
       });
     } else {
       input.impl()->register_handler(check_state);
@@ -1604,8 +1604,8 @@ struct SynchronizerStreamImpl {
   /// A non-hack would be to change every impl to derive from impl::Stream
   /// We have to do this because we cannot capture this in the actual Stream but due to the
   /// very old (pre C++11) callback registering code in the message_filters package
-  /// we cannot regsiter a lambda where we could capture the impl. And at Humble, the variadic fix
-  /// was not backportet yet, as the variadic fix came only 2024.
+  /// we cannot register a lambda where we could capture the impl. And at Humble, the variadic fix
+  /// was not backported yet, as the variadic fix came only 2024.
   ///
   /// Note that this is like CRTP but but not done explicitly.
   /// So this is equally UB as CRTP is UB, not more, not less.
@@ -1639,7 +1639,7 @@ struct SynchronizerStreamImpl {
 };
 
 /// A Stream representing an approximate time synchronizer.
-/// \warning All inputs must have the same QoS accorcding to the documentation of message_filters
+/// \warning All inputs must have the same QoS according to the documentation of message_filters
 template <class... Messages>
 class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
                                          SynchronizerStreamImpl<Messages...>> {
@@ -1895,7 +1895,7 @@ public:
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
-  /// Createa a service client stream and connect it to the given input
+  /// Create a a service client stream and connect it to the given input
   template <class ServiceT, AnyStream Input>
   ServiceClient<ServiceT> create_client(Input input, const std::string &service_name,
                                         const Duration &timeout,

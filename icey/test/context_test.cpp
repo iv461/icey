@@ -28,7 +28,7 @@ TEST_F(NodeTest, ContextCreatesEntities) {
     timer.then([](auto) { return geometry_msgs::msg::TransformStamped{}; }).publish_transform();
     EXPECT_GT(node_->get_node_graph_interface()->count_publishers("/tf"), num_pubs_before);
 
-    /* Does not work on Humble since the functions are not available (they are internally implemented via rcl, so we cannot just copy some rclcpp code from Jazzy unfortunatelly.)
+    /* Does not work on Humble since the functions are not available (they are internally implemented via rcl, so we cannot just copy some rclcpp code from Jazzy unfortunately.)
     EXPECT_EQ(node_->get_node_graph_interface()->count_clients("set_bool_service_icey_test"), 0);
     node_->icey().call_service<ExampleService>("set_bool_service_icey_test", 1s);
     EXPECT_EQ(node_->get_node_graph_interface()->count_clients("set_bool_service_icey_test"), 1);
