@@ -49,7 +49,7 @@ public:
           .except([this](const std::string& error_code) {
             /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
             /// we got interrupted while waiting for the service to become available) or
-            /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
+            /// "INTERRUPTED" or "TIMEOUT"
             RCLCPP_INFO_STREAM(this->get_logger(), "Service got error: " << error_code);
           });
     }

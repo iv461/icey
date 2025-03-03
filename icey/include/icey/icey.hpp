@@ -468,11 +468,8 @@ public:
   /// A weak reference to the Context, it is needed so that Streams can create more streams that
   /// need access to the ROS node, i.e. `.publish`.
   std::weak_ptr<Context> context;
-  /// The class name, i.e. the name of the type, for example "SubscriberStream<std::string>"
-  std::string class_name;
-  /// A name to identify this node among multiple ones with the same type, usually the topic
-  /// or service name
-  std::string name;
+  /// Timeout is useful when using co_await since we can implement Stream timeouts without an extra timer.
+  std::optional<Duration> timeout{};
 };
 
 /// A tag to be able to recognize the type "Stream", all types deriving from StreamTag satisfy the
@@ -1189,7 +1186,7 @@ struct SubscriptionStream
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
       : Base(node) {
-    this->impl()->name = topic_name;
+    
     this->impl()->subscriber = node.add_subscription<_Message>(
         topic_name,
         [impl = this->impl()](typename _Message::SharedPtr new_value) {
@@ -1296,7 +1293,6 @@ struct TimerImpl {
 struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   using Base = Stream<size_t, Nothing, TimerImpl>;
   TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer) : Base(node) {
-    this->impl()->name = "timer";
     this->impl()->timer = node.add_timer(interval, [impl = this->impl(), is_one_off_timer]() {
       impl->put_value(impl->ticks_counter);
       /// Needed as separate state as it might be resetted in async/await mode
@@ -1345,8 +1341,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
                   const rclcpp::PublisherOptions publisher_options = {},
                   Input *maybe_input = nullptr)
-      : Base(node) {
-    this->impl()->name = topic_name;
+      : Base(node) {    
     this->impl()->publisher = node.add_publisher<Message>(topic_name, qos, publisher_options);
     this->impl()->register_handler(
         [impl = this->impl()](const auto &new_state) { impl->publish(new_state.value()); });
@@ -1361,8 +1356,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
   using Base = Stream<geometry_msgs::msg::TransformStamped>;
   using Value = geometry_msgs::msg::TransformStamped;
-  TransformPublisherStream(NodeBookkeeping &node) : Base(node) {
-    this->impl()->name = "tf_pub";
+  TransformPublisherStream(NodeBookkeeping &node) : Base(node) {  
     auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
     this->impl()->register_handler([tf_broadcaster](const auto &new_state) {
       tf_broadcaster->sendTransform(new_state.value());
@@ -1429,12 +1423,12 @@ struct ServiceStream
   }
 };
 
-template <class _ServiceT>
+template <class ServiceT>
 struct ServiceClientImpl {
-  using Client = rclcpp::Client<_ServiceT>;
-  typename Client::SharedPtr client;
-  Duration timeout{};
-  std::optional<typename Client::SharedFutureWithRequestAndRequestId> maybe_pending_request;
+  std::shared_ptr<rclcpp::Client<ServiceT>> client;
+  /// A timer to detect timeouts in promise-mode. 
+  rclcpp::TimerBase::SharedPtr timer;
+  std::optional<typename rclcpp::Client<ServiceT>::SharedFutureWithRequestAndRequestId> maybe_pending_request;
 };
 
 /// A Stream representing a service client. It stores the response as it's value.
@@ -1452,6 +1446,9 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : Base(node) {
     this->impl()->timeout = timeout;
+    this->impl()->timer = node.add_timer(timeout, [impl = this->impl()]() {
+        on_timeout(impl);
+    });
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
   }
 
@@ -1477,7 +1474,7 @@ protected:
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
   static bool wait_for_service(auto impl) {
-    if (!impl->client->wait_for_service(impl->timeout)) {
+    if (!impl->client->wait_for_service(impl->timeout.value())) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
         impl->put_error("INTERRUPTED");
@@ -1515,9 +1512,9 @@ protected:
     }
     // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
     if (!rclcpp::ok()) {
-      impl->put_error("rclcpp::FutureReturnCode::INTERRUPTED");
+      impl->put_error("INTERRUPTED");
     } else {
-      impl->put_error("rclcpp::FutureReturnCode::TIMEOUT");
+      impl->put_error("TIMEOUT");
     }
   }
 };
@@ -1689,7 +1686,7 @@ struct TF2MessageFilter
   using Message = _Message;
 
   TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame) : Base(node) {
-    this->impl()->name = "tf_filter";
+    
     this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
         this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
         node.get_node_logging_interface(), node.get_node_clock_interface());

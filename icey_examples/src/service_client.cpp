@@ -48,9 +48,8 @@ int main(int argc, char **argv) {
           /// Here we catch timeout errors as well as unavailability of the service:
           .except([&](const std::string& error_code) {
             std::cout << "cb5 This threadId: " << std::this_thread::get_id() << std::endl;
-            /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
-            /// we got interrupted while waiting for the service to become available) or
-            /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
+            /// Possible values for error_code are "TIMEOUT", "SERVICE_UNAVAILABLE", or "INTERRUPTED", in case
+            /// Ctrl+C was pressed
             RCLCPP_INFO_STREAM(node->get_logger(), "Service got error: " << error_code);
           });
 

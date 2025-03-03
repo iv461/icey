@@ -282,7 +282,7 @@ TEST_F(TwoNodesFixture, ServiceTest) {
   auto handle_error = [&](const std::string& error_code) {
     /// Possible values for error_code are "SERVICE_UNAVAILABLE", or "INTERRUPTED" (in case
     /// we got interrupted while waiting for the service to become available) or
-    /// "rclcpp::FutureReturnCode::INTERRUPTED" or "rclcpp::FutureReturnCode::TIMEOUT"
+    /// "INTERRUPTED" or "TIMEOUT"
     last_error = error_code;
   };
 
