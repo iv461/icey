@@ -6,9 +6,8 @@
 #include <optional>
 #include <tuple>
 #include <type_traits>
+#include <unordered_set>
 #include <variant>
-
-#include <unordered_set> 
 
 namespace icey {
 /// A special type that indicates that there is no value. (Using `void` for this would cause many
@@ -114,9 +113,10 @@ using MessageOf = remove_shared_ptr_t<ValueOf<T>>;
 
 namespace impl {
 
-/// The unit tests enable tracking the allocation of Streams and then assert in each unit-test that all Streams are freed if the ROS node is freed, i.e. no memory leak occured.
+/// The unit tests enable tracking the allocation of Streams and then assert in each unit-test that
+/// all Streams are freed if the ROS node is freed, i.e. no memory leak occured.
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
-extern std::unordered_set<void*> g_impls;
+extern std::unordered_set<void *> g_impls;
 #endif
 
 /// Creates a new stream of type O by passing the args to the constructor. Streams are
@@ -128,7 +128,7 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   g_impls.emplace(stream.get());
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
   std::cout << "Added impl 0x" << std::size_t(stream.get()) << " to g_impls" << std::endl;
-#endif  
+#endif
 #endif
   return stream;
 }
@@ -171,27 +171,32 @@ public:
   using Handler = std::function<void(const State &)>;
 
   Stream() = default;
-  /// A Stream is non-copyable since it has members that reference it and therefore it should change it's adress.
+  /// A Stream is non-copyable since it has members that reference it and therefore it should change
+  /// it's adress.
   Stream(const Self &) = delete;
-  /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
+  /// A Stream is non-movable since it has members that reference it and therefore it should change
+  /// it's adress.
   Stream(Self &&) = delete;
-  /// A Stream is non-copyable since it has members that reference it and therefore it should change it's adress.
+  /// A Stream is non-copyable since it has members that reference it and therefore it should change
+  /// it's adress.
   Stream &operator=(const Self &) = delete;
-  /// A Stream is non-movable since it has members that reference it and therefore it should change it's adress.
+  /// A Stream is non-movable since it has members that reference it and therefore it should change
+  /// it's adress.
   Stream &operator=(Self &&) = delete;
 
 #ifdef ICEY_DEBUG_TRACK_STREAM_ALLOCATIONS
-  ~Stream()  {
-    if(g_impls.contains(this)) {
+  ~Stream() {
+    if (g_impls.contains(this)) {
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
-      std::cout << "Destructed and erased 0x" << std::hex << std::size_t(this) << " from g_impls" << std::endl;
+      std::cout << "Destructed and erased 0x" << std::hex << std::size_t(this) << " from g_impls"
+                << std::endl;
 #endif
       g_impls.erase(this);
     }
   }
-#else 
+#else
   ~Stream() = default;
-#endif 
+#endif
 
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }
@@ -200,7 +205,6 @@ public:
   const ErrorValue &error() const { return state_.error(); }
   State &get_state() { return state_; }
   const State &get_state() const { return state_; }
-
 
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the
   /// new state as an argument.
@@ -282,7 +286,7 @@ protected:
   /// Returns a function that calls the passed user callback and then writes the result in the
   /// passed output Stream (that is captured by value)
   template <class Output, class F>
-  static void call_depending_on_signature(const auto &x, Output output, F &f) {    
+  static void call_depending_on_signature(const auto &x, Output output, F &f) {
     using ReturnType = decltype(unpack_if_tuple(f, x));
     if constexpr (std::is_void_v<ReturnType>) {
       unpack_if_tuple(f, x);
@@ -354,8 +358,7 @@ protected:
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
       /// The resulting stream always has the same ErrorValue so that it can pass through the
       /// error
-      auto output =
-          create_stream<Stream<ReturnTypeSome, NewError, DefaultBase, DefaultBase>>();
+      auto output = create_stream<Stream<ReturnTypeSome, NewError, DefaultBase, DefaultBase>>();
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     }
