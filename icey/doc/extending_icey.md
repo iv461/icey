@@ -9,9 +9,9 @@ An `Stream` is a value with a list of callbacks that get called when this value 
 We can set the value of the Stream, this triggers that all the callbacks get called. 
 We can also listen on changes to this value by registering a callback ourselves.
 
-## Extending with custom subscribers and publishers: ìmage_transport
+## Extending with custom subscribers and publishers: image_transport
 
-In the following, we will extend ICEY to support the subscribers from the `ìmage_transport` package that allows subscribing to compressed camera images.
+In the following, we will extend ICEY to support the subscribers from the `image_transport` package that allows subscribing to compressed camera images.
 
 We already know how to create new subscribers: When we subscribe to a topic in ROS, we pass it a subscriber-callback that gets called every time a new message is received. We will create therefore an Stream that holds as value the ROS-message. We will set the value of the Stream to the new ROS-message each time the subscriber-callback gets called. 
 
@@ -44,13 +44,13 @@ public:
     ImageTransportSubscriber(std::string topic_name, std::string transport, rclcpp::QoS qos) {
 
     }
-    iamge_transport::Subscriber subscriber_;
+    image_transport::Subscriber subscriber_;
 };
 ```
 we also created the field `subscriber_` to store the subscriber we will create.
 
 ### Attaching to the ROS-Node
-Now comes the important part: The *attaching* to the ROS-Node. In ICEY, attaching means actually creating the subscriber/publishers/timers etc in the ROS-node. We do not do this immediatelly after constructing the Streams, instead we defer this process. It happens when the  method `attach` is called. 
+Now comes the important part: The *attaching* to the ROS-Node. In ICEY, attaching means actually creating the subscriber/publishers/timers etc in the ROS-node. We do not do this immediately after constructing the Streams, instead we defer this process. It happens when the  method `attach` is called. 
 
 We implement the method attach with a lambda-function, capturing by value (copying inside the lambda) all the parameters required for the subscriber: 
 
@@ -79,7 +79,7 @@ class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPt
 public:
     ImageTransportSubscriber(const std::string &topic_name, std::string &transport,  rclcpp::QoS qos) {  
         auto stream_impl = this->impl(); /// Get the stream implementation
-        /// Now implement the callabck to put_value with the message:
+        /// Now implement the callback to put_value with the message:
         auto subscriber_callback = [stream_impl](sensor_msgs::Image::ConstSharedPtr message) {
             stream_impl->put_value(message);
         };
@@ -89,7 +89,7 @@ public:
                     subscriber_callback);
         };
     }
-    iamge_transport::Subscriber subscriber_;
+    image_transport::Subscriber subscriber_;
 };
 ```
 

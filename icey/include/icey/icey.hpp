@@ -1567,10 +1567,10 @@ struct TimeoutFilter
 
 /// This impl is needed because it makes the signalMessage method public, it is otherwise protected.
 template <class Message>
-struct SimpleFilterAdapterImpl : message_filters::SimpleFilter<Message> {
-  SimpleFilterAdapterImpl() {}
+struct SimpleFilterAdapterImpl : public message_filters::SimpleFilter<Message> {  
   void signalMessage(auto event) { message_filters::SimpleFilter<Message>::signalMessage(event); }
 };
+
 /// Adapts the `message_filters::SimpleFilter` to our
 /// `Stream` (which is a similar concept).
 /// \note This is essentially the same as what
@@ -1613,7 +1613,7 @@ struct SynchronizerStreamImpl {
   using Derived = impl::Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
                                WithDefaults<Self>, WithDefaults<Nothing>>;
 
-  void create_mfl_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {
+  void create_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {
     queue_size_ = queue_size;
     inputs_ = std::make_shared<Inputs>(std::make_tuple(SimpleFilterAdapter<Messages>(node)...));
     auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
@@ -1653,7 +1653,7 @@ public:
   template <ErrorFreeStream... Inputs>
   SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs) : Base(node) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
-    this->impl()->create_mfl_synchronizer(node, queue_size);
+    this->impl()->create_synchronizer(node, queue_size);
     this->connect_inputs(inputs...);
   }
 
@@ -1866,8 +1866,7 @@ public:
       Input input, const std::string &topic_name,
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::PublisherOptions publisher_options = {}) {
-    using Message = ValueOf<Input>;
-    return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options, &input);
+    return create_stream<PublisherStream<ValueOf<Input>>>(topic_name, qos, publisher_options, &input);
   }
 
   template <AnyStream Input>
@@ -1945,8 +1944,9 @@ public:
     if (stream.impl()->has_none()) {
       /// In case rclcpp::ok() returned false, Ctrl+C was pressed while waiting with co_await
       /// stream, just terminate the ROS, this is what we would do in a normal ROS node anyway. We
-      /// handle this case here because the Stream does not have a value and we do not want to force
-      /// the user to do unwrapping only to handle the 0.1% percent case that Ctrl+C.
+      /// handle this case here because if we break because of ok() == false, the Stream 
+      // does not have a value. But we do not want to force
+      /// the user to do unwrapping in 100 % of the time only to handle the 0.1% percent case that Ctrl+C was pressed.
       std::cout << "Exiting Node after ok is false ..." << std::endl;
       rclcpp::shutdown();
       std::exit(0);

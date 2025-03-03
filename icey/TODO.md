@@ -6,7 +6,10 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
-- [ ] Fix synchronize with transform and make it the main thing. 
+- [X] Fix synchronize with transform and make it the main thing. 
+
+- [ ] Service Client pending request is not cleaned up, it is only cleaned up
+- [ ] Service call has no timeout, only on discovery it has a timeout
 
 - [ ] Service is not a Stream: we cannot await streams, this only works by coincidence because the callback calls all the user-callbacks currenty. Co-await would access the result object after it has been transmitted to the receiver.
 
@@ -16,7 +19,7 @@ Sorted by decreasing priority.
 - [ ] Test parameter as value for TF sub
 
 
-- [] Async/await: We need a "Stream was closed" concept: Streams that are generally driven 
+- [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
 by ROS entities will never yield something regardless of how long we spin the ROS executor if the underlying ROS entity driving them was stopped. For example if the ROS-timer was cancelled. Or the subscription destroyed. In such a case, calling co_await on such streams would hang forever. We need to return None in this case or an extra end-of-Stream identitier (like tokio).
 
 - [ ] Docs: Explain lambda-ownership, that lambdas need to be copied inside since the lifetime of the Stream is till the program exists. And that lvalues are copied as well. Think about whether it's good idea to force the user to explicitly mode the lambda inside so that the a named lvalue-lambda cannot be called by any other means.
@@ -26,9 +29,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
 - [ ] Docs: Up-to-date extention tutorial
 - [ ] Docs: Coroutines: add note that coroutines might fail to deliver value if the spin-loop is interrupted by Ctrl
-
-- [ ] Unit-test the synchronizers, is the lookupTransform correct ?
-
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
@@ -276,4 +276,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Fix (potential) use-after-free bug in ApproxTimeSync -> we still shall never capture this !
 
-- 
+- [X] Unit-test the synchronizers, is the lookupTransform correct ?
+- [X] Unit-test all entities
+- [X] Unit-test all filters
+- [X] Unit-test parameter stream

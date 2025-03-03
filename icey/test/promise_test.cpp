@@ -1,7 +1,8 @@
 /// This test tests whether the Streams behave like promises in JavaScript, especially
 /// regarding catch-handlers executed correctly (fall-through behavior).
 /// Note that for our use-case, we need only resolving with values, not with other promises.
-/// In the following, "put_value" corresponds to "resolve" and "put_error" corresponds to "reject" of a stream.
+/// In the following, "put_value" corresponds to "resolve" and "put_error" corresponds to "reject"
+/// of a stream.
 #include <gtest/gtest.h>
 
 #include <icey/impl/stream.hpp>
@@ -15,7 +16,7 @@ protected:
     return [this, i](auto) {
       using Result = icey::Result<std::string, std::string>;
       events.push_back(i);
-      //std::cout << "Marker " << i << " called with val " << v << std::endl;
+      // std::cout << "Marker " << i << " called with val " << v << std::endl;
       if constexpr (behavior == MarkerBehavior::Some)
         return std::string("marker_from_" + std::to_string(i));
       else if constexpr (behavior == MarkerBehavior::None)
@@ -122,7 +123,7 @@ TEST_F(PromiseTest, TakeTest) {
   EXPECT_FALSE(stream->has_error());
   EXPECT_FALSE(stream->has_none());
 
-  EXPECT_EQ(stream->value(), value);  
+  EXPECT_EQ(stream->value(), value);
 
   icey::Result<std::string, std::string> current_state = stream->take();
 
