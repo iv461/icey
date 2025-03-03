@@ -1966,7 +1966,7 @@ public:
 
 protected:
   /// The executor is needed for async/await because the Streams need to be able to await
-  /// themselves. For this, they acces the ROS executor through the Context.
+  /// themselves. For this, they access the ROS executor through the Context.
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
