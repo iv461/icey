@@ -21,7 +21,7 @@ ament_auto_find_build_dependencies()
 ## Add examples 
 ament_auto_add_executable(signal_generator_example src/signal_generator.cpp)
 ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
-ament_auto_add_executable(tf_approx_filter_example src/tf_approx_filter.cpp)
+ament_auto_add_executable(tf_subscription_example src/tf_subscription.cpp)
 ament_auto_add_executable(tf_broadcaster_example src/tf_broadcaster.cpp)
 ament_auto_add_executable(class_based_api_example src/class_based_api.cpp)
 ament_auto_add_executable(service_client_example src/service_client.cpp)

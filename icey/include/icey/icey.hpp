@@ -374,11 +374,6 @@ public:
     return tf2_listener_;
   }
 
-  auto get_tf_buffer() {
-    add_tf_listener_if_needed();
-    return tf2_listener_->buffer_;
-  }
-
   auto add_tf_broadcaster_if_needed() {
     if (!tf_broadcaster_)
       tf_broadcaster_ =
@@ -833,15 +828,32 @@ public:
   TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
     assert_we_have_context();
     /// We create this through the context to register it for the ROS node
-    return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
-        *this, max_age, create_extra_timer);
+    return this->template create_stream<TimeoutFilter<Value>>(*this, max_age, create_extra_timer);
   }
 
-  TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame) {
+  /*!
+    Synchronizes a topic with a transform using the `tf2_ros::MessageFilter`.
+    \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message.
+    \param lookup_timeout The maximum time to wait until the transform gets available for a message
+
+    Example:
+    \verbatim
+      /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
+      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform.
+      node->icey().create_subscription<sensor_msgs::msg::Image>("camera")
+        .synchronize_with_transform("map", 200ms)
+        .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error: %s", error);})
+        .then([](sensor_msgs::msg::Image::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
+              
+        });
+    \endverbatim
+  */
+  TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame,
+    const Duration &lookup_timeout) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>, "");
     /// TODO assert has header
-    this->impl()->context.lock()->synchronize_with_transform(*this, target_frame);
+    return this->template create_stream<TransformSynchronizer<Value>>(target_frame, lookup_timeout, this);
   }
 
   /// Creates a new stream of type S using the Context. See Context::create_stream
@@ -1221,39 +1233,6 @@ struct TransformSubscriptionStream
     */
 };
 
-struct TransformSynchronizerImpl {
-  /// The book owns it.
-  Weak<TFListener> tf_listener;
-  ValueOrParameter<std::string> target_frame;
-};
-
-/// Synchronizes a topic with a transform
-template <class Value>
-struct TransformSynchronizer
-    : public Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
-                    TransformSynchronizerImpl> {
-  using Base = Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
-                      TransformSynchronizerImpl>;
-
-  template <ErrorFreeStream Input>
-  TransformSynchronizer(NodeBookkeeping &node, const ValueOrParameter<std::string> &target_frame,
-                        Input input)
-      : Base(node) {
-    this->impl()->tf_listener = node.add_tf_listener_if_needed();
-    this->impl()->target_frame = target_frame;
-    input.impl()->register_handler([impl = this->impl()](const auto &new_state) {
-      const auto &message = new_state.value();
-      const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
-      auto result = impl->tf_listener->lookup_in_buffer(impl->target_frame.get(),
-                                                        message->header.frame_id, timestamp);
-      if (result.has_value())
-        impl->put_value(std::make_tuple(message, result.value()));
-      else
-        impl->put_error(result.error());
-    });
-  }
-};
-
 struct TimerImpl {
   size_t ticks_counter{0};
   rclcpp::TimerBase::SharedPtr timer;
@@ -1428,13 +1407,14 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
         ->cancel();  /// Stop the timer, we will start it when we do a call. On humble
                      /// autostart=false is not available,
                      // therefore we need to cancel manually. (autostart=false just initializes a
-                     // timer with canceled == true, see rcl implementation of rcl_timer_init2)
+                     // timer with cancelled == true, see rcl implementation of rcl_timer_init2)
     if (input) {
       connect_input(*input);
     }
   }
 
   /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
+  If there is already a pending request, this pending request will be removed.
   \param request the request
   \returns *this stream
     Example usage:
@@ -1455,7 +1435,7 @@ protected:
 
   static void async_call(auto impl, Request request) {
     if (!wait_for_service(impl)) return;
-    impl->timeout_timer->reset();  /// reset activates a previously cancelled timer.
+    impl->timeout_timer->reset();  /// reset turns on a previously cancelled, i.e. turned off timer (according to the rcl documentation).
     if (impl->maybe_pending_request)
       impl->client->remove_pending_request(impl->maybe_pending_request.value());
     impl->maybe_pending_request = impl->client->async_send_request(
@@ -1680,27 +1660,67 @@ protected:
   }
 };
 
+/// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
+/// TODO we could implement this much simpler using coroutines anf get rid of the messy tf2_ros::MessageFilter code.
 template <class Message>
-struct TF2MessageFilterImpl {
-  SimpleFilterAdapter<Message> input_adapter;
-  std::shared_ptr<tf2_ros::MessageFilter<Message>> filter;
+struct TransformSynchronizerImpl {
+  using Self = TransformSynchronizerImpl<Message>;
+  /// The book owns it.
+  Weak<TFListener> tf_listener;
+  std::string target_frame;
+  std::shared_ptr<SimpleFilterAdapter<Message>> input_filter;
+  std::shared_ptr<tf2_ros::MessageFilter<Message>> synchronizer;
+
+  using Derived = impl::Stream< std::tuple<typename Value::SharedPtr, geometry_msgs::msg::TransformStamped>, std::string,
+                               WithDefaults<Self>, WithDefaults<Nothing>>;
+
+  void create_synchronizer(NodeBookkeeping &node, const std::string &_target_frame, 
+    const Duration &lookup_timeout) {
+
+    tf_listener = node.add_tf_listener_if_needed();
+    target_frame = _target_frame;
+    input_filter = std::make_shared<SimpleFilterAdapter<Message>>(node);
+    /// The argument "0" means here infinite message queue size. We set it so
+    /// because we must buffer every message for as long as we are waiting for a transform.
+    synchronizer = std::make_shared<tf2_ros::MessageFilter<Message>>(
+        input_filter, tf_listener->buffer_, target_frame, 0,
+        node.get_node_logging_interface(), node.get_node_clock_interface(),
+        lookup_timeout);
+
+    synchronizer->registerCallback(&Self::on_message, this);
+  }
+
+  void on_message(typename _Message::SharedPtr message) {
+    const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
+    auto result = tf_listener->lookup_in_buffer(impl->target_frame.get(),
+          message->header.frame_id, timestamp);
+    if (result.has_value())
+      static_cast<Derived *>(this)->put_value(std::make_tuple(message, result.value()));
+    else 
+      throw std::logic_error("tf2_ros::MessageFilter broke the promise that the transform is available");
+  }
 };
 
-/// Wrapper for the tf2_ros::MessageFilter. Currently unused.
-template <class _Message>
-struct TF2MessageFilter
-    : public Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>> {
-  using Base = Stream<typename _Message::SharedPtr, std::string, TF2MessageFilterImpl<_Message>>;
-  using Self = TF2MessageFilter<_Message>;
-  using Message = _Message;
-
-  TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame) : Base(node) {
-    this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
-        this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
-        node.get_node_logging_interface(), node.get_node_clock_interface());
-    this->impl()->filter->registerCallback(&Self::on_message, this);
+/// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
+template <class Value>
+struct TransformSynchronizer
+    : public Stream< std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
+                    TransformSynchronizerImpl<remove_shared_ptr_t<Value>> > {
+  using Base = Stream< std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
+        TransformSynchronizerImpl<remove_shared_ptr_t<Value>> >;
+  /*!
+      Construct the TransformSynchronizer and connect it to the input. 
+      \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message
+      \param lookup_timeout The maximum time to wait until the transform gets available for a message
+  */
+ template<ErrorFreeStream Input = Stream<int>>
+ TransformSynchronizer(NodeBookkeeping &node, const std::string &target_frame, 
+      const Duration &lookup_timeout, Input *input = nullptr) : Base(node) {
+    this->impl()->create_synchronizer(node, target_frame, lookup_timeout);
+    if(input) {
+      input->connect_values(this->impl()->input_filter);
+    }
   }
-  void on_message(const typename _Message::SharedPtr &msg) { this->impl()->put_value(msg); }
 };
 
 /*!
@@ -1927,14 +1947,6 @@ public:
     static_assert(std::is_same_v<ValueOf<Input>, typename ServiceT::Request::SharedPtr>,
                   "The input triggering the service must hold a value of type Request::SharedPtr");
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos, &input);
-  }
-
-  /// Synchronizes a input stream with a transform: The Streams outputs the input value when the
-  /// transform between it's header frame and the target_frame becomes available.
-  template <ErrorFreeStream Input>
-  TransformSynchronizer<ValueOf<Input>> synchronize_with_transform(
-      Input input, const std::string &target_frame) {
-    return create_stream<TransformSynchronizer<ValueOf<Input>>>(target_frame, input);
   }
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }

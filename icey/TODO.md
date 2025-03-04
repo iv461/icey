@@ -62,6 +62,8 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct
 - [ ] rclcpp also has a TimerInfo (previously called TimerEvent) with the time, use it as the state. 
 
+- [ ] C++20 Modules support 
+
 - [ ] Remove use of RTTI in interpolateble stream 
 - [ ] Pass error through synchronizers -> for this return Result from Interpolatables
 - [ ] Allow chaining approx-time synchronizer with e.g. reference synchronizer by implementing averaging of all the header stampls of the tuple
