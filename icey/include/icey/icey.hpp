@@ -662,11 +662,14 @@ struct WithDefaults : public Base, public StreamImplDefault {};
 template <class V>
 struct TimeoutFilter;
 template <class V>
+struct PublisherStream;
+template <class V>
 struct ServiceClient;
 template <class V>
 struct Buffer;
 template <class V>
 struct TransformSynchronizer;
+struct TransformPublisherStream;
 
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
@@ -761,12 +764,13 @@ public:
 
   /// Publish the value of this Stream.
   void publish(const std::string &topic_name,
-               const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
+               const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
+               const rclcpp::PublisherOptions publisher_options = {}) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
-    this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
+    this->template create_stream<PublisherStream<Value>>(topic_name, qos, publisher_options, this);
   }
 
   template <AnyStream PublisherType, class... Args>
@@ -776,8 +780,7 @@ public:
                   "This stream does not have a value, there is nothing to publish, so you cannot "
                   "call publish() on it.");
     /// We create this through the context to register it for attachment to the ROS node
-    auto output = this->impl()->context.lock()->template create_stream<PublisherType>(
-        std::forward<Args>(args)...);
+    auto output = this->template create_stream<PublisherType>(std::forward<Args>(args)...);
     this->connect_values(output);
   }
 
@@ -789,7 +792,7 @@ public:
                   "The stream must hold a Value of type "
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
-    this->impl()->context.lock()->create_transform_publisher(*this);
+    this->template create_stream<TransformPublisherStream>(this);
   }
 
   /// Calls a ROS service with the Value that this Stream holds. It returns a new ServiceClient
@@ -801,8 +804,7 @@ public:
     static_assert(!std::is_same_v<Value, Nothing>,
                   "This stream does not have a value, there is nothing to publish, you cannot "
                   "call publish() on it.");
-    return this->impl()->context.lock()->template create_client<ServiceT>(*this, service_name,
-                                                                          timeout, qos);
+    return this->template create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos, this);
   }
 
   /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
@@ -1968,21 +1970,6 @@ public:
     return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
   }
 
-  /// Create a publisher stream and connect it to the given input.
-  template <AnyStream Input>
-  PublisherStream<ValueOf<Input>> create_publisher(
-      Input input, const std::string &topic_name,
-      const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
-      const rclcpp::PublisherOptions publisher_options = {}) {
-    return create_stream<PublisherStream<ValueOf<Input>>>(topic_name, qos, publisher_options,
-                                                          &input);
-  }
-
-  template <AnyStream Input>
-  TransformPublisherStream create_transform_publisher(Input input) {
-    return create_stream<TransformPublisherStream>(&input);
-  }
-
   TransformPublisherStream create_transform_publisher() {
     return create_stream<TransformPublisherStream>();
   }
@@ -2003,16 +1990,6 @@ public:
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
-  }
-
-  /// Create a a service client stream and connect it to the given input
-  template <class ServiceT, AnyStream Input>
-  ServiceClient<ServiceT> create_client(Input input, const std::string &service_name,
-                                        const Duration &timeout,
-                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    static_assert(std::is_same_v<ValueOf<Input>, typename ServiceT::Request::SharedPtr>,
-                  "The input triggering the service must hold a value of type Request::SharedPtr");
-    return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos, &input);
   }
 
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }

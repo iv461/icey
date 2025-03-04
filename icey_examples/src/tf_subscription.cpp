@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     
     /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
     /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform.
-    node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/velodyne_points")
+    node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
         .synchronize_with_transform("map", 200ms)
         .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error %s", error); })
         .then([](sensor_msgs::msg::PointCloud2::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
@@ -22,13 +22,15 @@ int main(int argc, char **argv) {
         });
     
     /// Or subscribe directly:
+    /*
     node->icey().create_transform_subscription("map", "base_link")
-        .unwrap_or([&](std::string error) {
-            RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << error);
+    .unwrap_or([&](std::string error) {
+        RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << error);
         })
         .then([&](geometry_msgs::msg::TransformStamped::SharedPtr new_transform) {
             RCLCPP_INFO_STREAM(node->get_logger(), "Received a new transform: ");
         });
+    */
 
     icey::spin(node);
 }

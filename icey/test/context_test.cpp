@@ -77,7 +77,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
 
   auto tf_stream = node_->icey().create_timer(90ms).then(
       [](auto) { return geometry_msgs::msg::TransformStamped{}; });
-  auto tf_pub = node_->icey().create_transform_publisher(tf_stream);
+  auto tf_pub = node_->icey().create_transform_publisher();
   EXPECT_EQ(tf_pub.impl()->context.lock().get(), &node_->icey());
 
   auto tf_sub = node_->icey().create_transform_subscription("map", "base_link");
