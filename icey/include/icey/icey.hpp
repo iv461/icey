@@ -1448,6 +1448,7 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
                 Input *input=nullptr)
       : Base(node) {
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
+    this->impl()->timeout = timeout;
     this->impl()->timeout_timer = node.add_timer(timeout, [impl = this->impl()]() {
         on_timeout(impl);
       });
@@ -1481,6 +1482,8 @@ protected:
     if (!wait_for_service(impl))
       return;
     impl->timeout_timer->reset(); /// reset activates a previously cancelled timer.
+    if(impl->maybe_pending_request) 
+      impl->client->remove_pending_request(impl->maybe_pending_request.value());
     impl->maybe_pending_request = impl->client->async_send_request(
         request, [impl](Future response_future) { on_response(impl, response_future); });
   }
