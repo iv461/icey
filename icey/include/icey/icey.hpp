@@ -1427,7 +1427,7 @@ template <class ServiceT>
 struct ServiceClientImpl {
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
   /// A timer to detect timeouts in promise-mode. 
-  rclcpp::TimerBase::SharedPtr timer;
+  rclcpp::TimerBase::SharedPtr timeout_timer;
   std::optional<typename rclcpp::Client<ServiceT>::SharedFutureWithRequestAndRequestId> maybe_pending_request;
 };
 
@@ -1442,37 +1442,49 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   using Response = typename _ServiceT::Response::SharedPtr;
 
   /// Create a new Stream and register a new ROS service client with ROS.
+  template<AnyStream Input = Stream<Request>>
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS(), 
+                Input *input=nullptr)
       : Base(node) {
-    this->impl()->timeout = timeout;
-    this->impl()->timer = node.add_timer(timeout, [impl = this->impl()]() {
-        on_timeout(impl);
-    });
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
+    this->impl()->timeout_timer = node.add_timer(timeout, [impl = this->impl()]() {
+        on_timeout(impl);
+      });
+    this->impl()->timeout_timer->cancel(); /// Stop the timer, we will start it when we do a call. On humble autostart=false is not available, 
+      // therefore we need to cancel manually. (autostart=false just initializes a timer with canceled == true, see rcl implementation of rcl_timer_init2)
+    if(input) {
+      connect_input(*input);
+    }
   }
 
   /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
   \param request the request
-    \returns *this stream
+  \returns *this stream
     Example usage:
     \verbatim
     auto client = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
     auto request = std::make_shared<ExampleService::Request>();
     icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await
-  client.call(request); \endverbatim
-  */
-  const Self &call(Request request) const {
-    if (!wait_for_service(this->impl())) return *this;
-    this->impl()->maybe_pending_request = this->impl()->client->async_send_request(
-        request,
-        [impl = this->impl()](Future response_future) { on_response(impl, response_future); });
-    return *this;
-  }
+    client.call(request); \endverbatim
+    */
+    const Self &call(Request request) const {
+      async_call(this->impl(), request);
+      return *this;
+    }
 
 protected:
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
+
+  static void async_call(auto impl, Request request) {
+    if (!wait_for_service(impl))
+      return;
+    impl->timeout_timer->reset(); /// reset activates a previously cancelled timer.
+    impl->maybe_pending_request = impl->client->async_send_request(
+        request, [impl](Future response_future) { on_response(impl, response_future); });
+  }
+
   static bool wait_for_service(auto impl) {
     if (!impl->client->wait_for_service(impl->timeout.value())) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
@@ -1488,6 +1500,7 @@ protected:
 
   /// Consumes the future and sets the value if there is one, otherwise it calls on_timeout
   static void on_response(auto impl, Future response_future) {
+    impl->timeout_timer->cancel(); /// Cancel the timeout timer since we got the response
     if (response_future.valid()) {
       impl->maybe_pending_request = {};
       impl->put_value(response_future.get().second);
@@ -1500,10 +1513,12 @@ protected:
   static void on_timeout(auto impl) {
     /// Now do the weird cleanup thing that the API-user definitely neither does need to care
     /// nor know about:
-    if(impl->maybe_pending_request) {
-      impl->client->remove_pending_request(impl->maybe_pending_request.value());
-      impl->maybe_pending_request = {};
+    if(!impl->maybe_pending_request) {
+      return;
     }
+    impl->client->remove_pending_request(impl->maybe_pending_request.value());
+    std::cout <<"Cleaned up request" << impl->maybe_pending_request.value().request_id << std::endl;
+    impl->maybe_pending_request = {};
     /// Let's put his assertion here, I'm not sure this will still not leak memory: https://github.com/ros2/rclcpp/issues/1697. 
     if (size_t num_requests_pruned = impl->client->prune_pending_requests() != 0) {
       throw std::runtime_error(
@@ -1516,6 +1531,20 @@ protected:
     } else {
       impl->put_error("TIMEOUT");
     }
+  }
+
+  template<AnyStream Input>
+  void connect_input(Input &input) {
+    input.impl()->register_handler([impl=this->impl()](const auto &new_state) {
+      if(new_state.has_value()) {
+        async_call(impl, new_state.value());
+      } else if(new_state.has_error()) {
+        if constexpr(!std::is_same_v<ErrorOf<Input>, Nothing>) {
+          /// Pass the error since service calls are chainable
+          impl->put_error(new_state.error());
+        }
+      }
+    });
   }
 };
 
@@ -1901,13 +1930,7 @@ public:
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     static_assert(std::is_same_v<ValueOf<Input>, typename ServiceT::Request::SharedPtr>,
                   "The input triggering the service must hold a value of type Request::SharedPtr");
-    auto service_client = create_client<ServiceT>(service_name, timeout, qos);
-    input.then([service_client](auto req) { service_client.call(req); });
-    /// Pass the error since service calls are chainable
-    if constexpr (!std::is_same_v<ErrorOf<Input>, Nothing>) {
-      input.except([service_client](auto err) { service_client.impl()->put_error(err); });
-    }
-    return service_client;
+    return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos, &input);
   }
 
   /// Synchronize at least two streams by approximately matching the header time-stamps (using
