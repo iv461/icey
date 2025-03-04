@@ -1356,11 +1356,14 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
   using Base = Stream<geometry_msgs::msg::TransformStamped>;
   using Value = geometry_msgs::msg::TransformStamped;
-  TransformPublisherStream(NodeBookkeeping &node) : Base(node) {  
+  template<AnyStream Input = Stream<geometry_msgs::msg::TransformStamped>>
+  TransformPublisherStream(NodeBookkeeping &node, Input *input=nullptr) : Base(node) {  
     auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
     this->impl()->register_handler([tf_broadcaster](const auto &new_state) {
       tf_broadcaster->sendTransform(new_state.value());
     });
+    if(input)
+      input->connect_values(*this);
   }
 };
 
@@ -1903,9 +1906,7 @@ public:
 
   template <AnyStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
-    auto output = create_stream<TransformPublisherStream>();
-    input.connect_values(output);
-    return output;
+    return create_stream<TransformPublisherStream>();
   }
 
   TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
