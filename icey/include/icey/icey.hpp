@@ -471,9 +471,6 @@ struct StreamTag {};
 template <class T>
 constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
 
-template <typename T, typename Base>
-concept ConvertibleTo = std::convertible_to<T, Base>;
-
 /// A stream type with any error or value type. \sa StreamTag
 template <class T>
 concept AnyStream = std::is_base_of_v<StreamTag, T>;
@@ -483,21 +480,6 @@ concept AnyStream = std::is_base_of_v<StreamTag, T>;
 template <class T>
 concept ErrorFreeStream =
     AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing> && !std::is_same_v<ValueOf<T>, Nothing>;
-
-template <class T>
-constexpr auto is_error_free = std::is_same_v<ErrorOf<T>, Nothing>;
-
-/// Any Stream that holds a value V
-template <class T, class V, class E = Nothing>
-concept StreamOf = AnyStream<T> && std::is_same_v<ValueOf<T>, Nothing>;
-
-/// A stream type is error-free, meaning its Error is Nothing.
-// concept DurationLike = Duration || double;
-
-/// A type that is either
-template <class T, typename Base>
-concept Like =
-    std::convertible_to<T, Base>;  // || (AnyStream<T> && std::is_same_v<ValueOf<T>, Base>);
 
 template <class T>
 constexpr void assert_stream_holds_tuple() {
@@ -745,31 +727,6 @@ public:
     });
   }
 
-  /// Creates a ROS publisher by creating a new stream of type PublisherType and connecting it to
-  /// this stream.
-  template <AnyStream PublisherType, class... Args>
-  void publish(Args &&...args) {
-    assert_we_have_context();
-    static_assert(!std::is_same_v<Value, Nothing>,
-                  "This stream does not have a value, there is nothing to publish, so you cannot "
-                  "call publish() on it.");
-    /// We create this through the context to register it for attachment to the ROS node
-    auto output = this->impl()->context.lock()->template create_stream<PublisherType>(
-        std::forward<Args>(args)...);
-    this->connect_values(output);
-  }
-
-  /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any
-  /// value for some time `max_age`. \param create_extra_timer If set to false, the timeout will
-  /// only be detected after at least one message was received. If set to true, an extra timer is
-  /// created so that timeouts can be detected even if no message is received.
-  TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
-    assert_we_have_context();
-    /// We create this through the context to register it for the ROS node
-    return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
-        *this, max_age, create_extra_timer);
-  }
-
   /// Publish the value of this Stream.
   void publish(const std::string &topic_name,
                const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS()) {
@@ -780,11 +737,16 @@ public:
     this->impl()->context.lock()->create_publisher(*this, topic_name, qos);
   }
 
-  TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame) {
+  template <AnyStream PublisherType, class... Args>
+  void publish(Args &&...args) {
     assert_we_have_context();
-    static_assert(!std::is_same_v<Value, Nothing>, "");
-    /// TODO assert has header
-    this->impl()->context.lock()->synchronize_with_transform(*this, target_frame);
+    static_assert(!std::is_same_v<Value, Nothing>,
+                  "This stream does not have a value, there is nothing to publish, so you cannot "
+                  "call publish() on it.");
+    /// We create this through the context to register it for attachment to the ROS node
+    auto output = this->impl()->context.lock()->template create_stream<PublisherType>(
+        std::forward<Args>(args)...);
+    this->connect_values(output);
   }
 
   /// Publish a transform using the `TFBroadcaster` in case this Stream holds a Value of type
@@ -862,6 +824,24 @@ public:
   /// type std::vector<Value> with exactly N elements.
   Buffer<Value> buffer(std::size_t N) const {
     return this->template create_stream<Buffer<Value>>(N, *this);
+  }
+
+  /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any
+  /// value for some time `max_age`. \param create_extra_timer If set to false, the timeout will
+  /// only be detected after at least one message was received. If set to true, an extra timer is
+  /// created so that timeouts can be detected even if no message is received.
+  TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
+    assert_we_have_context();
+    /// We create this through the context to register it for the ROS node
+    return this->impl()->context.lock()->template create_stream<TimeoutFilter<_Value>>(
+        *this, max_age, create_extra_timer);
+  }
+
+  TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame) {
+    assert_we_have_context();
+    static_assert(!std::is_same_v<Value, Nothing>, "");
+    /// TODO assert has header
+    this->impl()->context.lock()->synchronize_with_transform(*this, target_frame);
   }
 
   /// Creates a new stream of type S using the Context. See Context::create_stream
@@ -1231,12 +1211,11 @@ struct TransformSubscriptionStream
   /// @return A promise that resolves when the transform has arrived
   /*
   Promise<Message, std::string> lookup(std::string target_frame, std::string source_frame, const
-  Time &time) { Promise<Message, std::string> output;
-    this->impl()->tf2_listener.add_temporary_subscription(
-        target_frame, source_frame,
-        [](auto tf) { output.resolve(tf); }
-        [](auto err) { output.reject(err); }
-      );
+  Time &time) {
+    Promise<Message, std::string> output;
+    this->impl()->tf2_listener = ctx.add_tf_listener_if_needed([impl=this->impl()]() {
+          impl->tf2_listener->lookup(target_frame, )};
+
       return output;
     }
     */
@@ -1623,10 +1602,10 @@ struct SimpleFilterAdapter
 /// Holds a message_filters::Synchronizer and operates on it.
 template <class... Messages>
 struct SynchronizerStreamImpl {
-  using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
-  using Sync = message_filters::Synchronizer<Policy>;
-  using Inputs = std::tuple<SimpleFilterAdapter<Messages>...>;
   using Self = SynchronizerStreamImpl<Messages...>;
+  using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
+  using Synchronizer = message_filters::Synchronizer<Policy>;
+  using Inputs = std::tuple<SimpleFilterAdapter<Messages>...>;
   const Inputs &inputs() const { return *inputs_; }
 
   /// TODO Hack we know that his class is derived from Derived, we will need to downcast
@@ -1646,7 +1625,7 @@ struct SynchronizerStreamImpl {
   void create_synchronizer(NodeBookkeeping &node, uint32_t queue_size) {
     queue_size_ = queue_size;
     inputs_ = std::make_shared<Inputs>(std::make_tuple(SimpleFilterAdapter<Messages>(node)...));
-    auto synchronizer = std::make_shared<Sync>(Policy(queue_size_));
+    auto synchronizer = std::make_shared<Synchronizer>(Policy(queue_size_));
     synchronizer_ = synchronizer;
     /// Connect with the input streams
     std::apply(
@@ -1665,7 +1644,7 @@ struct SynchronizerStreamImpl {
 
   uint32_t queue_size_{100};
   std::shared_ptr<Inputs> inputs_;
-  std::shared_ptr<Sync> synchronizer_;
+  std::shared_ptr<Synchronizer> synchronizer_;
 };
 
 /// A Stream representing an approximate time synchronizer.
