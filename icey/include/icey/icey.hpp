@@ -833,27 +833,31 @@ public:
 
   /*!
     Synchronizes a topic with a transform using the `tf2_ros::MessageFilter`.
-    \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message.
-    \param lookup_timeout The maximum time to wait until the transform gets available for a message
+    \param target_frame the transform on which we wait is specified by source_frame and
+    target_frame, where source_frame is the frame in the header of the message. \param
+    lookup_timeout The maximum time to wait until the transform gets available for a message
 
     Example:
     \verbatim
-      /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
-      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform.
-      node->icey().create_subscription<sensor_msgs::msg::Image>("camera")
+      /// Synchronize with a transform: This will yield the message and the transform from the
+    child_frame_id of the header message
+      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to
+    200ms for the transform. node->icey().create_subscription<sensor_msgs::msg::Image>("camera")
         .synchronize_with_transform("map", 200ms)
-        .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error: %s", error);})
-        .then([](sensor_msgs::msg::Image::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
-              
+        .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error:
+    %s", error);}) .then([](sensor_msgs::msg::Image::SharedPtr image, const
+    geometry_msgs::msg::TransformStamped &transform_to_map) {
+
         });
     \endverbatim
   */
   TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame,
-    const Duration &lookup_timeout) {
+                                                          const Duration &lookup_timeout) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>, "");
     /// TODO assert has header
-    return this->template create_stream<TransformSynchronizer<Value>>(target_frame, lookup_timeout, this);
+    return this->template create_stream<TransformSynchronizer<Value>>(target_frame, lookup_timeout,
+                                                                      this);
   }
 
   /// Creates a new stream of type S using the Context. See Context::create_stream
@@ -1435,7 +1439,8 @@ protected:
 
   static void async_call(auto impl, Request request) {
     if (!wait_for_service(impl)) return;
-    impl->timeout_timer->reset();  /// reset turns on a previously cancelled, i.e. turned off timer (according to the rcl documentation).
+    impl->timeout_timer->reset();  /// reset turns on a previously cancelled, i.e. turned off timer
+                                   /// (according to the rcl documentation).
     if (impl->maybe_pending_request)
       impl->client->remove_pending_request(impl->maybe_pending_request.value());
     impl->maybe_pending_request = impl->client->async_send_request(
@@ -1661,7 +1666,8 @@ protected:
 };
 
 /// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
-/// TODO we could implement this much simpler using coroutines anf get rid of the messy tf2_ros::MessageFilter code.
+/// TODO we could implement this much simpler using coroutines anf get rid of the messy
+/// tf2_ros::MessageFilter code.
 template <class Message>
 struct TransformSynchronizerImpl {
   using Self = TransformSynchronizerImpl<Message>;
@@ -1671,54 +1677,56 @@ struct TransformSynchronizerImpl {
   std::shared_ptr<SimpleFilterAdapter<Message>> input_filter;
   std::shared_ptr<tf2_ros::MessageFilter<Message>> synchronizer;
 
-  using Derived = impl::Stream< std::tuple<typename Value::SharedPtr, geometry_msgs::msg::TransformStamped>, std::string,
-                               WithDefaults<Self>, WithDefaults<Nothing>>;
+  using Derived =
+      impl::Stream<std::tuple<typename Message::SharedPtr, geometry_msgs::msg::TransformStamped>,
+                   std::string, WithDefaults<Self>, WithDefaults<Nothing>>;
 
-  void create_synchronizer(NodeBookkeeping &node, const std::string &_target_frame, 
-    const Duration &lookup_timeout) {
-
+  void create_synchronizer(NodeBookkeeping &node, const std::string &_target_frame,
+                           const Duration &lookup_timeout) {
     tf_listener = node.add_tf_listener_if_needed();
     target_frame = _target_frame;
     input_filter = std::make_shared<SimpleFilterAdapter<Message>>(node);
     /// The argument "0" means here infinite message queue size. We set it so
     /// because we must buffer every message for as long as we are waiting for a transform.
     synchronizer = std::make_shared<tf2_ros::MessageFilter<Message>>(
-        input_filter, tf_listener->buffer_, target_frame, 0,
-        node.get_node_logging_interface(), node.get_node_clock_interface(),
-        lookup_timeout);
+        input_filter, tf_listener->buffer_, target_frame, 0, node.get_node_logging_interface(),
+        node.get_node_clock_interface(), lookup_timeout);
 
     synchronizer->registerCallback(&Self::on_message, this);
   }
 
-  void on_message(typename _Message::SharedPtr message) {
+  void on_message(typename Message::SharedPtr message) {
     const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
-    auto result = tf_listener->lookup_in_buffer(impl->target_frame.get(),
-          message->header.frame_id, timestamp);
+    auto result =
+        this->tf_listener->lookup_in_buffer(target_frame, message->header.frame_id, timestamp);
     if (result.has_value())
       static_cast<Derived *>(this)->put_value(std::make_tuple(message, result.value()));
-    else 
-      throw std::logic_error("tf2_ros::MessageFilter broke the promise that the transform is available");
+    else
+      throw std::logic_error(
+          "tf2_ros::MessageFilter broke the promise that the transform is available");
   }
 };
 
 /// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
 template <class Value>
 struct TransformSynchronizer
-    : public Stream< std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
-                    TransformSynchronizerImpl<remove_shared_ptr_t<Value>> > {
-  using Base = Stream< std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
-        TransformSynchronizerImpl<remove_shared_ptr_t<Value>> >;
+    : public Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
+                    TransformSynchronizerImpl<remove_shared_ptr_t<Value>>> {
+  using Base = Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
+                      TransformSynchronizerImpl<remove_shared_ptr_t<Value>>>;
   /*!
-      Construct the TransformSynchronizer and connect it to the input. 
-      \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message
-      \param lookup_timeout The maximum time to wait until the transform gets available for a message
+      Construct the TransformSynchronizer and connect it to the input.
+      \param target_frame the transform on which we wait is specified by source_frame and
+     target_frame, where source_frame is the frame in the header of the message \param
+     lookup_timeout The maximum time to wait until the transform gets available for a message
   */
- template<ErrorFreeStream Input = Stream<int>>
- TransformSynchronizer(NodeBookkeeping &node, const std::string &target_frame, 
-      const Duration &lookup_timeout, Input *input = nullptr) : Base(node) {
+  template <ErrorFreeStream Input = Stream<int>>
+  TransformSynchronizer(NodeBookkeeping &node, const std::string &target_frame,
+                        const Duration &lookup_timeout, Input *input = nullptr)
+      : Base(node) {
     this->impl()->create_synchronizer(node, target_frame, lookup_timeout);
-    if(input) {
-      input->connect_values(this->impl()->input_filter);
+    if (input) {
+      input->connect_values(*this->impl()->input_filter);
     }
   }
 };

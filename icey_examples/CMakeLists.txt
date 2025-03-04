@@ -27,8 +27,6 @@ ament_auto_add_executable(class_based_api_example src/class_based_api.cpp)
 ament_auto_add_executable(service_client_example src/service_client.cpp)
 ament_auto_add_executable(service_server_example src/service_server.cpp)
 
-ament_auto_add_executable(service_client_class_api_example src/service_client_class_api.cpp)
-
 ament_auto_add_executable(signal_generator_async_await_example src/async_await/signal_generator_async_await.cpp)
 
 ament_auto_add_executable(listener_async_await_example src/async_await/listener_async_await.cpp)
