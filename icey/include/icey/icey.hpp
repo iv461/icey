@@ -154,14 +154,6 @@ struct TFListener {
     subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
   }
 
-  /// Add notification for a single transform that gets removed when it has arrived.
-  /// Ie. register a promise instead of a stream.
-  void add_temporary_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
-                                  const OnTransform &on_transform, const OnError &on_error) {
-    temporary_subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform,
-                                                  on_error);
-  }
-
   /// @brief Looks up and returns the transform at the given time between the given frames. It does
   /// not wait but instead only returns something if the transform is already in the buffer.
   ///
@@ -274,8 +266,6 @@ private:
     for (auto &tf_info : subscribed_transforms_) {
       maybe_notify(tf_info);
     }
-    std::erase_if(temporary_subscribed_transforms_,
-                  [this](auto tf_info) { return maybe_notify(tf_info); });
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
@@ -286,7 +276,6 @@ private:
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
   std::vector<TFSubscriptionInfo> subscribed_transforms_;
-  std::vector<TFSubscriptionInfo> temporary_subscribed_transforms_;
 };
 
 /// A node interface that does the same as a rclcpp::Node (of lifecycle node), but additionally
@@ -398,9 +387,11 @@ public:
   }
 
   std::shared_ptr<TFListener> add_tf_listener_if_needed() {
-    if (!tf2_listener_)  /// We need only one subscription on /tf, but we can have multiple
-                         /// transforms on which we listen to
+    if (!tf2_listener_) {
+      /// We need only one subscription on /tf, but we can have multiple transforms on which we
+      /// listen to
       tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeInterfaces &>(*this));
+    }
     return tf2_listener_;
   }
 
@@ -468,7 +459,8 @@ public:
   /// A weak reference to the Context, it is needed so that Streams can create more streams that
   /// need access to the ROS node, i.e. `.publish`.
   std::weak_ptr<Context> context;
-  /// Timeout is useful when using co_await since we can implement Stream timeouts without an extra timer.
+  /// Timeout is useful when using co_await since we can implement Stream timeouts without an extra
+  /// timer.
   std::optional<Duration> timeout{};
 };
 
@@ -1186,7 +1178,6 @@ struct SubscriptionStream
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
       : Base(node) {
-    
     this->impl()->subscriber = node.add_subscription<_Message>(
         topic_name,
         [impl = this->impl()](typename _Message::SharedPtr new_value) {
@@ -1341,7 +1332,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
                   const rclcpp::PublisherOptions publisher_options = {},
                   Input *maybe_input = nullptr)
-      : Base(node) {    
+      : Base(node) {
     this->impl()->publisher = node.add_publisher<Message>(topic_name, qos, publisher_options);
     this->impl()->register_handler(
         [impl = this->impl()](const auto &new_state) { impl->publish(new_state.value()); });
@@ -1356,14 +1347,13 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
   using Base = Stream<geometry_msgs::msg::TransformStamped>;
   using Value = geometry_msgs::msg::TransformStamped;
-  template<AnyStream Input = Stream<geometry_msgs::msg::TransformStamped>>
-  TransformPublisherStream(NodeBookkeeping &node, Input *input=nullptr) : Base(node) {  
+  template <AnyStream Input = Stream<geometry_msgs::msg::TransformStamped>>
+  TransformPublisherStream(NodeBookkeeping &node, Input *input = nullptr) : Base(node) {
     auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
     this->impl()->register_handler([tf_broadcaster](const auto &new_state) {
       tf_broadcaster->sendTransform(new_state.value());
     });
-    if(input)
-      input->connect_values(*this);
+    if (input) input->connect_values(*this);
   }
 };
 
@@ -1429,9 +1419,10 @@ struct ServiceStream
 template <class ServiceT>
 struct ServiceClientImpl {
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
-  /// A timer to detect timeouts in promise-mode. 
+  /// A timer to detect timeouts in promise-mode.
   rclcpp::TimerBase::SharedPtr timeout_timer;
-  std::optional<typename rclcpp::Client<ServiceT>::SharedFutureWithRequestAndRequestId> maybe_pending_request;
+  std::optional<typename rclcpp::Client<ServiceT>::SharedFutureWithRequestAndRequestId>
+      maybe_pending_request;
 };
 
 /// A Stream representing a service client. It stores the response as it's value.
@@ -1445,19 +1436,21 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   using Response = typename _ServiceT::Response::SharedPtr;
 
   /// Create a new Stream and register a new ROS service client with ROS.
-  template<AnyStream Input = Stream<Request>>
+  template <AnyStream Input = Stream<Request>>
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS(), 
-                Input *input=nullptr)
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS(), Input *input = nullptr)
       : Base(node) {
     this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
     this->impl()->timeout = timeout;
-    this->impl()->timeout_timer = node.add_timer(timeout, [impl = this->impl()]() {
-        on_timeout(impl);
-      });
-    this->impl()->timeout_timer->cancel(); /// Stop the timer, we will start it when we do a call. On humble autostart=false is not available, 
-      // therefore we need to cancel manually. (autostart=false just initializes a timer with canceled == true, see rcl implementation of rcl_timer_init2)
-    if(input) {
+    this->impl()->timeout_timer =
+        node.add_timer(timeout, [impl = this->impl()]() { on_timeout(impl); });
+    this->impl()
+        ->timeout_timer
+        ->cancel();  /// Stop the timer, we will start it when we do a call. On humble
+                     /// autostart=false is not available,
+                     // therefore we need to cancel manually. (autostart=false just initializes a
+                     // timer with canceled == true, see rcl implementation of rcl_timer_init2)
+    if (input) {
       connect_input(*input);
     }
   }
@@ -1472,20 +1465,19 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
     icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await
     client.call(request); \endverbatim
     */
-    const Self &call(Request request) const {
-      async_call(this->impl(), request);
-      return *this;
-    }
+  const Self &call(Request request) const {
+    async_call(this->impl(), request);
+    return *this;
+  }
 
 protected:
   using Client = rclcpp::Client<_ServiceT>;
   using Future = typename Client::SharedFutureWithRequest;
 
   static void async_call(auto impl, Request request) {
-    if (!wait_for_service(impl))
-      return;
-    impl->timeout_timer->reset(); /// reset activates a previously cancelled timer.
-    if(impl->maybe_pending_request) 
+    if (!wait_for_service(impl)) return;
+    impl->timeout_timer->reset();  /// reset activates a previously cancelled timer.
+    if (impl->maybe_pending_request)
       impl->client->remove_pending_request(impl->maybe_pending_request.value());
     impl->maybe_pending_request = impl->client->async_send_request(
         request, [impl](Future response_future) { on_response(impl, response_future); });
@@ -1506,7 +1498,7 @@ protected:
 
   /// Consumes the future and sets the value if there is one, otherwise it calls on_timeout
   static void on_response(auto impl, Future response_future) {
-    impl->timeout_timer->cancel(); /// Cancel the timeout timer since we got the response
+    impl->timeout_timer->cancel();  /// Cancel the timeout timer since we got the response
     if (response_future.valid()) {
       impl->maybe_pending_request = {};
       impl->put_value(response_future.get().second);
@@ -1519,19 +1511,22 @@ protected:
   static void on_timeout(auto impl) {
     /// Now do the weird cleanup thing that the API-user definitely neither does need to care
     /// nor know about:
-    if(!impl->maybe_pending_request) {
+    if (!impl->maybe_pending_request) {
       return;
     }
     impl->client->remove_pending_request(impl->maybe_pending_request.value());
-    std::cout <<"Cleaned up request" << impl->maybe_pending_request.value().request_id << std::endl;
+    std::cout << "Cleaned up request" << impl->maybe_pending_request.value().request_id
+              << std::endl;
     impl->maybe_pending_request = {};
-    /// Let's put his assertion here, I'm not sure this will still not leak memory: https://github.com/ros2/rclcpp/issues/1697. 
+    /// Let's put his assertion here, I'm not sure this will still not leak memory:
+    /// https://github.com/ros2/rclcpp/issues/1697.
     if (size_t num_requests_pruned = impl->client->prune_pending_requests() != 0) {
       throw std::runtime_error(
           "Pruned some more requests even after calling remove_pending_request(), you should buy "
           "a new RPC library.");
     }
-    // Reference: https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+    // Reference:
+    // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
     if (!rclcpp::ok()) {
       impl->put_error("INTERRUPTED");
     } else {
@@ -1539,13 +1534,13 @@ protected:
     }
   }
 
-  template<AnyStream Input>
+  template <AnyStream Input>
   void connect_input(Input &input) {
-    input.impl()->register_handler([impl=this->impl()](const auto &new_state) {
-      if(new_state.has_value()) {
+    input.impl()->register_handler([impl = this->impl()](const auto &new_state) {
+      if (new_state.has_value()) {
         async_call(impl, new_state.value());
-      } else if(new_state.has_error()) {
-        if constexpr(!std::is_same_v<ErrorOf<Input>, Nothing>) {
+      } else if (new_state.has_error()) {
+        if constexpr (!std::is_same_v<ErrorOf<Input>, Nothing>) {
           /// Pass the error since service calls are chainable
           impl->put_error(new_state.error());
         }
@@ -1602,7 +1597,7 @@ struct TimeoutFilter
 
 /// This impl is needed because it makes the signalMessage method public, it is otherwise protected.
 template <class Message>
-struct SimpleFilterAdapterImpl : public message_filters::SimpleFilter<Message> {  
+struct SimpleFilterAdapterImpl : public message_filters::SimpleFilter<Message> {
   void signalMessage(auto event) { message_filters::SimpleFilter<Message>::signalMessage(event); }
 };
 
@@ -1721,7 +1716,6 @@ struct TF2MessageFilter
   using Message = _Message;
 
   TF2MessageFilter(NodeBookkeeping &node, const std::string &target_frame) : Base(node) {
-    
     this->impl()->filter = std::make_shared<tf2_ros::MessageFilter<Message>>(
         this->impl()->input_adapter, *node.get_tf_buffer(), target_frame, 10,
         node.get_node_logging_interface(), node.get_node_clock_interface());
@@ -1733,6 +1727,8 @@ struct TF2MessageFilter
 /*!
   Outputs the value or error of any of the inputs. All the inputs must have the same Value and
   ErrorValue type.
+  \tparam Inputs A list of Stream<Value, Error> types, i.e. all the input Streams must have the same
+  Value and ErrorValue type. \returns Stream<Value, Error>
 */
 template <AnyStream... Inputs>
 static auto any(Inputs... inputs) {
@@ -1747,6 +1743,22 @@ static auto any(Inputs... inputs) {
   hana::for_each(std::forward_as_tuple(inputs...),
                  [output](auto &input) { input.connect_values(output); });
   return output;
+}
+
+/// Synchronize at least two streams by approximately matching the header time-stamps (using
+/// the `message_filters::Synchronizer`).
+///
+/// \tparam Inputs the input stream types, not necessarily all the same
+/// \param queue_size the queue size to use, 100 is a good value.
+/// \param inputs the input streams, not necessarily all of the same type
+/// \note The queue size is 100, it cannot be changed currently
+/// \warning Errors are currently not passed through
+template <ErrorFreeStream... Inputs>
+static SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size,
+                                                                        Inputs... inputs) {
+  auto first_input = std::get<0>(std::forward_as_tuple(inputs...));  /// Use the first Stream
+  return first_input.template create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size,
+                                                                                      inputs...);
 }
 
 /// The context owns the streams and is what is returned when calling `node->icey()`
@@ -1901,7 +1913,8 @@ public:
       Input input, const std::string &topic_name,
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::PublisherOptions publisher_options = {}) {
-    return create_stream<PublisherStream<ValueOf<Input>>>(topic_name, qos, publisher_options, &input);
+    return create_stream<PublisherStream<ValueOf<Input>>>(topic_name, qos, publisher_options,
+                                                          &input);
   }
 
   template <AnyStream Input>
@@ -1937,20 +1950,6 @@ public:
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos, &input);
   }
 
-  /// Synchronize at least two streams by approximately matching the header time-stamps (using
-  /// the `message_filters::Synchronizer`).
-  ///
-  /// \tparam Inputs the input stream types, not necessarily all the same
-  /// \param queue_size the queue size to use, 100 is a good value.
-  /// \param inputs the input streams, not necessarily all of the same type
-  /// \note The queue size is 100, it cannot be changed currently
-  /// \warning Errors are currently not passed through
-  template <ErrorFreeStream... Inputs>
-  SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size,
-                                                                   Inputs... inputs) {
-    return create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size, inputs...);
-  }
-
   /// Synchronizes a input stream with a transform: The Streams outputs the input value when the
   /// transform between it's header frame and the target_frame becomes available.
   template <ErrorFreeStream Input>
@@ -1971,9 +1970,10 @@ public:
     if (stream.impl()->has_none()) {
       /// In case rclcpp::ok() returned false, Ctrl+C was pressed while waiting with co_await
       /// stream, just terminate the ROS, this is what we would do in a normal ROS node anyway. We
-      /// handle this case here because if we break because of ok() == false, the Stream 
+      /// handle this case here because if we break because of ok() == false, the Stream
       // does not have a value. But we do not want to force
-      /// the user to do unwrapping in 100 % of the time only to handle the 0.1% percent case that Ctrl+C was pressed.
+      /// the user to do unwrapping in 100 % of the time only to handle the 0.1% percent case that
+      /// Ctrl+C was pressed.
       std::cout << "Exiting Node after ok is false ..." << std::endl;
       rclcpp::shutdown();
       std::exit(0);

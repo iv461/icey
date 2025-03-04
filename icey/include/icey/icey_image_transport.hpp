@@ -39,7 +39,6 @@ struct ImageTransportSubscriber
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime
-    this->impl()->name = base_topic_name;
     const auto cb = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
       impl->put_value(image);
     };
@@ -58,7 +57,6 @@ struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPt
   ImageTransportPublisher(
       NodeBookkeeping &node, const std::string &base_topic_name, const rclcpp::QoS qos,
       const rclcpp::PublisherOptions & /*options*/ = rclcpp::PublisherOptions()): Base(node) {
-    this->impl()->name = base_topic_name;
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime
@@ -85,7 +83,6 @@ struct CameraSubscriber
 image_transport::TransportLoadException, CameraSubscriberImpl>;
   CameraSubscriber(NodeBookkeeping &node, const std::string &base_topic_name,
                    const std::string &transport, const rclcpp::QoS qos): Base (node) {
-    this->impl()->name = base_topic_name;
     const auto cb = [impl = this->impl()](
                         sensor_msgs::msg::Image::ConstSharedPtr image,
                         sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
@@ -110,7 +107,6 @@ struct CameraPublisher
   std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>> ;
   CameraPublisher(NodeBookkeeping &node, const std::string &base_topic_name,
                   const rclcpp::QoS qos): Base(node) {
-    this->impl()->name = base_topic_name;
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime

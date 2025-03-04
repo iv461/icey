@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     });
   
   /// Or synchronize approx time:
-  node->icey().synchronize_approx_time(100, camera_image, point_cloud)
+  icey::synchronize_approx_time(100, camera_image, point_cloud)
     .then([](sensor_msgs::msg::Image::SharedPtr image, sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
 
     });
