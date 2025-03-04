@@ -222,8 +222,8 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
         tf1.header.stamp = icey::rclcpp_from_chrono(base_time); //sender_->get_clock()->now();
         tf1.header.frame_id = "icey_test_frame2";
         tf1.child_frame_id = "icey_test_frame3";
-        tf1.transform.rotation.z = std::pow(std::sin(0.1 * ticks), 2);
-        tf1.transform.rotation.w = std::pow(std::cos(0.1 * ticks), 2);
+        tf1.transform.rotation.z = std::sin(0.1 * ticks);
+        tf1.transform.rotation.w = std::cos(0.1 * ticks);
         if (ticks == 10) 
           return {};
         return tf1;

@@ -173,6 +173,22 @@ struct TFListener {
     }
   }
 
+  using HandlerID = std::size_t;
+  
+  /// Register handler for anything new received on /tf. The returned handler ID is used to cancel, i.e. remove this registered handler.
+  HandlerID on_new_in_buffer(const std::function<void()> &f) {
+    handlers_.emplace(++handler_counter_, f);
+    return handler_counter_;
+  }
+
+  /// Cancel the registered notification for any message on TF
+  void remove_hadler(HandlerID handler_id) {
+    handlers_.erase(handler_id);
+  }
+
+  std::size_t handler_counter_{0};
+  std::unordered_map<std::size_t, std::function<void()>> handlers_;
+
   const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
                                 /// as well, so we avoid circular reference
 
@@ -505,6 +521,27 @@ struct check_callback<F, std::tuple<Args...>> {
   static_assert(std::is_invocable_v<F, Args...>,
                 "The callback has the wrong signature, it has to take the types of the tuple");
 };
+
+/*
+template<class Value, class Error=Nothing>
+struct Promise : public impl::Stream<Value, Error> {
+
+  using Resolve = std::function<void(Value)>;
+  using Reject = std::function<void(Error)>;
+
+  Promise(std::function<void(const Resolve&, const Reject&)> h,   
+                  std::function<void()> wait,
+                  std::function<void()> on_destroy) :
+    on_destroy_(on_destroy) {
+    h([this](Value x) { this->put_value(x); },  
+      [this](Error x) { this->put_error(x); });
+  }
+  ~Promise() {
+    on_destroy_();
+  }
+  std::function<void()> on_destroy_;
+};
+*/
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
@@ -1228,13 +1265,19 @@ struct TransformSubscriptionStream
   /*
   Promise<Message, std::string> lookup(std::string target_frame, std::string source_frame, const
   Time &time) {
-    Promise<Message, std::string> output;
+    
+    Promise<Message, std::string> output{[impl=this->impl()](auto resolve, auto reject) {
+        auto handle_id = impl->tf2_listener->on_new_in_buffer()
+    },
+    []() { }
+    };
     this->impl()->tf2_listener = ctx.add_tf_listener_if_needed([impl=this->impl()]() {
           impl->tf2_listener->lookup(target_frame, )};
 
       return output;
     }
     */
+    
 };
 
 struct TimerImpl {
@@ -1261,7 +1304,7 @@ struct PublisherImpl {
   void publish(const _Value &message) {
     /// TODO(Ivo) We always copy the message for publishing because we do not support so-called
     /// loaned messages: https://design.ros2.org/articles/zero_copy.html The following comment
-    /// explains the reasoning with technical API issues, but conceptually we simply do not support
+    /// explains the reasoning with technical/API issues, but conceptually we simply do not support
     /// loaned messages.
     // Comment: We cannot pass over the pointer since publish expects a unique ptr and we got a
     // shared ptr. We cannot just promote the unique ptr to a shared ptr because we cannot ensure
@@ -1306,16 +1349,25 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 };
 
 // A Stream representing a transform broadcaster that publishes transforms on TF.
-struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped> {
-  using Base = Stream<geometry_msgs::msg::TransformStamped>;
+struct TransformPublisherStreamImpl {
+  Weak<tf2_ros::TransformBroadcaster> tf_broadcaster;
+};
+struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped, Nothing, 
+  TransformPublisherStreamImpl> {
+  using Base = Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl>;
   using Value = geometry_msgs::msg::TransformStamped;
   template <AnyStream Input = Stream<geometry_msgs::msg::TransformStamped>>
   TransformPublisherStream(NodeBookkeeping &node, Input *input = nullptr) : Base(node) {
-    auto tf_broadcaster = node.add_tf_broadcaster_if_needed();
-    this->impl()->register_handler([tf_broadcaster](const auto &new_state) {
-      tf_broadcaster->sendTransform(new_state.value());
+    this->impl()->tf_broadcaster = node.add_tf_broadcaster_if_needed();
+    this->impl()->register_handler([impl=this->impl()](const auto &new_state) {
+      impl->tf_broadcaster->sendTransform(new_state.value());
     });
     if (input) input->connect_values(*this);
+  }
+
+  /// Publish a single message
+  void publish(const geometry_msgs::msg::TransformStamped &message) {
+    this->impl()->tf_broadcaster->sendTransform(message);
   }
 };
 
@@ -1699,10 +1751,10 @@ struct TransformSynchronizerImpl {
 
   void on_message(typename Message::SharedPtr message) {
     const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
-    auto result =
+    auto maybe_transform =
         this->tf_listener->lookup_in_buffer(target_frame, message->header.frame_id, timestamp);
-    if (result.has_value())
-      static_cast<Derived *>(this)->put_value(std::make_tuple(message, result.value()));
+    if (maybe_transform.has_value())
+      static_cast<Derived *>(this)->put_value(std::make_tuple(message, maybe_transform.value()));
     else
       throw std::logic_error(
           "tf2_ros::MessageFilter broke the promise that the transform is available");
@@ -1717,10 +1769,10 @@ struct TransformSynchronizer
   using Base = Stream<std::tuple<Value, geometry_msgs::msg::TransformStamped>, std::string,
                       TransformSynchronizerImpl<remove_shared_ptr_t<Value>>>;
   /*!
-      Construct the TransformSynchronizer and connect it to the input.
-      \param target_frame the transform on which we wait is specified by source_frame and
-     target_frame, where source_frame is the frame in the header of the message \param
-     lookup_timeout The maximum time to wait until the transform gets available for a message
+    \brief Construct the TransformSynchronizer and connect it to the input.
+    \param target_frame the transform on which we wait is specified by source_frame and
+     target_frame, where source_frame is the frame in the header of the message 
+     \param lookup_timeout The maximum time to wait until the transform gets available for a message
   */
   template <ErrorFreeStream Input = Stream<int>>
   TransformSynchronizer(NodeBookkeeping &node, const std::string &target_frame,
@@ -1928,6 +1980,10 @@ public:
 
   template <AnyStream Input>
   TransformPublisherStream create_transform_publisher(Input input) {
+    return create_stream<TransformPublisherStream>(&input);
+  }
+
+  TransformPublisherStream create_transform_publisher() {
     return create_stream<TransformPublisherStream>();
   }
 

@@ -19,8 +19,10 @@ int main(int argc, char **argv) {
   /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
   /// and the given target_frame ("map") at the time of the header stamp.
   camera_image.synchronize_with_transform("map", 100ms)
-    .then([](sensor_msgs::msg::Image::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
-
+    .then([](sensor_msgs::msg::Image::SharedPtr image, 
+        const geometry_msgs::msg::TransformStamped &transform_to_map) { 
+          std::cout << "image width: " << image->width 
+          << " tf w: " << transform_to_map.transform.rotation.w << std::endl;
     });
   
   /// Or synchronize approx time:
