@@ -8,6 +8,7 @@
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int32.hpp"
+using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "synchronization_example");  
@@ -17,7 +18,7 @@ int main(int argc, char **argv) {
 
   /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
   /// and the given target_frame ("map") at the time of the header stamp.
-  camera_image.synchronize_with_transform("map")
+  camera_image.synchronize_with_transform("map", 100ms)
     .then([](sensor_msgs::msg::Image::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
 
     });

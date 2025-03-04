@@ -1688,8 +1688,10 @@ struct TransformSynchronizerImpl {
     input_filter = std::make_shared<SimpleFilterAdapter<Message>>(node);
     /// The argument "0" means here infinite message queue size. We set it so
     /// because we must buffer every message for as long as we are waiting for a transform.
+    auto mf2 = tf2_ros::MessageFilter<Message>(*input_filter->impl(), *tf_listener->buffer_, target_frame, 0, node.get_node_logging_interface(),
+    node.get_node_clock_interface(), lookup_timeout);
     synchronizer = std::make_shared<tf2_ros::MessageFilter<Message>>(
-        input_filter, tf_listener->buffer_, target_frame, 0, node.get_node_logging_interface(),
+        *input_filter->impl(), *tf_listener->buffer_, target_frame, 0, node.get_node_logging_interface(),
         node.get_node_clock_interface(), lookup_timeout);
 
     synchronizer->registerCallback(&Self::on_message, this);
