@@ -188,7 +188,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
             tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms); 
             tf1.header.frame_id = "icey_test_frame1";
             tf1.child_frame_id = "icey_test_frame2";
-            tf1.transform.translation.x = 0. + 0.1 * ticks;
+            tf1.transform.translation.x = 0.1 * ticks;
             if (ticks >= 10) 
               return {};
             return tf1;
@@ -218,8 +218,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
     while(received_cnt <= 20) {
       
       icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
-      /// Subtract a small slop of 10ms 
-          = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms - 10ms), 250ms);
+          = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 210ms);
       
       /// Expect that the one additional last time that we lookup, we do not get anything
       if(received_cnt == 20) {
@@ -227,6 +226,12 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
         EXPECT_TRUE(tf_result.has_error());
       } else {
         EXPECT_TRUE(tf_result.has_value());
+        geometry_msgs::msg::TransformStamped tf = tf_result.value();
+
+        const double kEps = 1e-6;
+        EXPECT_NEAR(tf.transform.translation.x, 0.1 * received_cnt, kEps);
+        EXPECT_NEAR(tf.transform.rotation.z, std::sin(0.1 * received_cnt), kEps);
+        EXPECT_NEAR(tf.transform.rotation.w, std::cos(0.1 * received_cnt), kEps);
       }
 
       received_cnt++;
