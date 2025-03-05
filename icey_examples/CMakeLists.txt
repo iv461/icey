@@ -34,11 +34,11 @@ ament_auto_add_executable(talker_async_await_example src/async_await/talker_asyn
 
 ament_auto_add_executable(tf_pub_test_example src/tf_pub_test.cpp)
 
-
-
-
 ament_auto_add_executable(service_server_async_await_example src/async_await/service_server_async_await.cpp)
 ament_auto_add_executable(service_client_async_await_example src/async_await/service_client_async_await.cpp)
+
+ament_auto_add_executable(tf_lookup_async_await_example src/async_await/tf_lookup_async_await.cpp)
+
 ament_auto_add_executable(using_image_transport_example src/using_image_transport.cpp)
 
 ament_auto_add_executable(listener_example src/listener.cpp)

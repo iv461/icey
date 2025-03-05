@@ -1235,6 +1235,9 @@ struct TransformSubscriptionStream
   using MaybeValue = std::optional<Message>;
   using Self = TransformSubscriptionStream;
 
+  TransformSubscriptionStream(NodeBookkeeping &node) {
+    this->impl()->tf2_listener = node.add_tf_listener_if_needed();
+  }
   TransformSubscriptionStream(NodeBookkeeping &node, ValueOrParameter<std::string> target_frame,
                               ValueOrParameter<std::string> source_frame)
       : Base(node) {
@@ -1974,10 +1977,16 @@ public:
   }
 
   /// Create a subscriber that subscribes to a single transform between two frames.
+  /// It receives a value every time the transform between these two frames changes, i.e. it is a stream
   TransformSubscriptionStream create_transform_subscription(
       ValueOrParameter<std::string> target_frame, ValueOrParameter<std::string> source_frame) {
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
+
+  /// Creates a transform subscription on which we can call lookup() to lookup single transforms.
+  TransformSubscriptionStream create_transform_subscription() {
+  return create_stream<TransformSubscriptionStream>();
+}
 
   /// Create a publisher stream.
   template <class Message>
