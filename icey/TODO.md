@@ -31,15 +31,11 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep
 
-- [ ] `delay` with 
-
-- [ ] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function 
-
 - [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer
 
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
-
+- [ ] Static assert that the callbacks are not coroutines
 ## Error-handling
 
 ## Examples 
@@ -289,3 +285,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Support async TF lookup function
 
 - [X] Service is not a Stream: we cannot await streams, this only works by coincidence because the callback calls all the user-callbacks currenty. Co-await would access the result object after it has been transmitted to the receiver. -> This was fixed by returning the response instead of passing it as an output argument
+
+- [X] `delay` with  -> not needed after we have async TF lookup 
+- [X] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function -> not needed after we have async TF lookup 
