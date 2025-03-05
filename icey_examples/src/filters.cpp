@@ -40,7 +40,7 @@ auto timer_signal = icey.create_timer(period_time);
           
             /// We always have to take a ConstPtr to the message:
             auto pipe1 = float_tfed.then([](std_msgs::msg::Float32::SharedPtr float_val,
-                    geometry_msgs::msg::TransformStamped::SharedPtr tf_val) -> float {
+                    geometry_msgs::msg::TransformStamped tf_val) -> float {
                     return float(float_val->data * tf_val->transform.rotation.z);
                 });*/
           

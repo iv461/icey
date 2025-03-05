@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     .unwrap_or([&](std::string error) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << error);
         })
-        .then([&](geometry_msgs::msg::TransformStamped::SharedPtr new_transform) {
+        .then([&](const geometry_msgs::msg::TransformStamped &new_transform) {
             RCLCPP_INFO_STREAM(node->get_logger(), "Received a new transform: ");
         });
     */

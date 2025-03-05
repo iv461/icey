@@ -232,10 +232,10 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
       .publish_transform();
 
   std::size_t received_cnt = 0;
-  sub.then([&](geometry_msgs::msg::TransformStamped::SharedPtr msg) {
-    std::cout << "Got transform: trans x: " << msg->transform.translation.x 
-      << ", quat z: " << msg->transform.rotation.z
-      << ", quat w: " << msg->transform.rotation.w << std::endl;
+  sub.then([&](const geometry_msgs::msg::TransformStamped &msg) {
+    std::cout << "Got transform: trans x: " << msg.transform.translation.x 
+      << ", quat z: " << msg.transform.rotation.z
+      << ", quat w: " << msg.transform.rotation.w << std::endl;
     received_cnt++;
   });
   

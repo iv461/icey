@@ -1214,25 +1214,19 @@ struct SubscriptionStream
 };
 
 struct TransformSubscriptionStreamImpl {
-  using Message = geometry_msgs::msg::TransformStamped;
   ValueOrParameter<std::string> source_frame;
   ValueOrParameter<std::string> target_frame;
-  /// We allocate a single message that we share with the other streams when notifying them.
-  /// Note that we cannot use the base value since it is needed for notifying, i.e. it is cleared
-  std::shared_ptr<Message> shared_value{std::make_shared<Message>()};
   /// We do not own the listener, the Book owns it
   Weak<TFListener> tf2_listener;
 };
 
 /// A Stream that represents a subscription between two coordinate systems. (See TFListener)
-/// Values can also be pulled with get_at_time.
 struct TransformSubscriptionStream
-    : public Stream<std::shared_ptr<geometry_msgs::msg::TransformStamped>, std::string,
+    : public Stream<geometry_msgs::msg::TransformStamped, std::string,
                     TransformSubscriptionStreamImpl> {
-  using Base = Stream<std::shared_ptr<geometry_msgs::msg::TransformStamped>, std::string,
+  using Base = Stream<geometry_msgs::msg::TransformStamped, std::string,
                       TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
-  using MaybeValue = std::optional<Message>;
   using Self = TransformSubscriptionStream;
 
   TransformSubscriptionStream(NodeBookkeeping &node) {
@@ -1246,8 +1240,7 @@ struct TransformSubscriptionStream
     this->impl()->tf2_listener = node.add_tf_subscription(
         target_frame.get, source_frame.get,
         [impl = this->impl()](const geometry_msgs::msg::TransformStamped &new_value) {
-          *impl->shared_value = new_value;
-          impl->put_value(impl->shared_value);
+          impl->put_value(new_value);
         },
         [impl = this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
   }
@@ -1272,8 +1265,7 @@ struct TransformSubscriptionStream
         target_frame, source_frame, time, timeout, [impl = this->impl()](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
           if (result.valid()) {
             try {
-              *impl->shared_value = result.get();
-              impl->put_value(impl->shared_value);
+              impl->put_value(result.get());
             } catch (const std::exception &e) {
               impl->put_error(e.what());
             }
@@ -1287,21 +1279,6 @@ struct TransformSubscriptionStream
         });
     return *this;
   }
-  /*
-  Promise<Message, std::string> lookup(std::string target_frame, std::string source_frame, const
-  Time &time) {
-
-    Promise<Message, std::string> output{[impl=this->impl()](auto resolve, auto reject) {
-        auto handle_id = impl->tf2_listener->on_new_in_buffer()
-    },
-    []() { }
-    };
-    this->impl()->tf2_listener = ctx.add_tf_listener_if_needed([impl=this->impl()]() {
-          impl->tf2_listener->lookup(target_frame, )};
-
-      return output;
-    }
-    */
 };
 
 struct TimerImpl {

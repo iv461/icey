@@ -14,11 +14,12 @@ icey::Stream<int> spin(int argc, char **argv) {
 
     while(true) {
         sensor_msgs::msg::PointCloud2::SharedPtr point_cloud = co_await sub;
-        icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result = co_await tf_subscriber.lookup("map", point_cloud->header.frame_id, 200ms);
+        icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
+            = co_await tf_subscriber.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
 
         if(tf_result.has_value()) {
             geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
-            RCLCPP_INFO(node->get_logger(), "Got transform %f", transform_to_map.rotation.w);
+            RCLCPP_INFO(node->get_logger(), "Got transform %f", transform_to_map.transform.rotation.w);
         } else {
             RCLCPP_INFO(node->get_logger(), "Transform lookup error %s", tf_result.error());
         }

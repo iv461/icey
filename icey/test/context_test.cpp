@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include "node_fixture.hpp"
 #include "std_srvs/srv/set_bool.hpp"
@@ -114,6 +115,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
   auto buffered_stream = sub.buffer(100);
   EXPECT_EQ(buffered_stream.impl()->context.lock().get(), &node_->icey());
 
-  auto approx_time_synched = icey::synchronize_approx_time(10, sub, tf_sub.unwrap_or([](auto) {}));
+  auto sub_pc = node_->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/maydup_gownlibu");
+  auto approx_time_synched = icey::synchronize_approx_time(10, sub, sub_pc);
   EXPECT_EQ(approx_time_synched.impl()->context.lock().get(), &node_->icey());
 }
