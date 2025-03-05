@@ -9,19 +9,19 @@ using namespace std::chrono_literals;
 icey::Stream<int> spin(int argc, char **argv) {
     auto node = icey::create_node(argc, argv, "tf_lookup_async_await_example");
     
-    auto sub = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
-    auto tf_subscriber = node->icey().create_transform_subscription();
+    auto point_cloud_subscription = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
+    auto tf_subscription = node->icey().create_transform_subscription();
 
     while(true) {
-        sensor_msgs::msg::PointCloud2::SharedPtr point_cloud = co_await sub;
+        sensor_msgs::msg::PointCloud2::SharedPtr point_cloud = co_await point_cloud_subscription;
         icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
-            = co_await tf_subscriber.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+            = co_await tf_subscription.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 1us);
 
         if(tf_result.has_value()) {
             geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
             RCLCPP_INFO(node->get_logger(), "Got transform %f", transform_to_map.transform.rotation.w);
         } else {
-            RCLCPP_INFO(node->get_logger(), "Transform lookup error %s", tf_result.error());
+            RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
         }
 
     }
