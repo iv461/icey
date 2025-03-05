@@ -17,12 +17,6 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenstruct} icey::SynchronizerStreamImpl
 ```
 
-```{doxygenstruct} icey::TransformSubscriptionStream
-```
-
-```{doxygenstruct} icey::TransformSubscriptionStreamImpl
-```
-
 ```{doxygenstruct} icey::TransformSynchronizer
 ```
 
