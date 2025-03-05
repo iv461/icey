@@ -23,7 +23,6 @@ icey::Stream<int> spin(int argc, char **argv) {
         } else {
             RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
         }
-
     }
     co_return 0;
 }

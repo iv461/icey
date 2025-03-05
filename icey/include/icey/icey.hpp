@@ -105,7 +105,7 @@ struct NodeInterfaces {
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
 
   /// This is set to either of the two, depending on which node we got.
-  /// It has to be a raw pointer since this nodeInterface is needed during node construction
+  /// It has to be a raw pointer since this nodeInterface is needed during node construction where we cannot call shared_from_this
   rclcpp::Node *maybe_regular_node{nullptr};
   rclcpp_lifecycle::LifecycleNode *maybe_lifecycle_node{nullptr};
 };
@@ -1158,17 +1158,22 @@ protected:
 template <class Value>
 struct ValueOrParameter {
   ValueOrParameter() = default;
-  /// Convert from something that is like the Value and not a stream, for example "hello" is a const
-  /// char[5] literal that is like a std::string.
+  
+  /// Construct a ValueOrParameter implicitly from a value
+  ValueOrParameter(const Value &value)  // NOLINT
+  : get([value]() { return value; }) {}
+
+  /// Construct a ValueOrParameter implicitly from a something similar to a value: 
+  // For example, `"hello"` is a const char[5] literal that is convertible to a std::string, the value.
   template <class T>
   requires std::convertible_to<T, Value> &&(!AnyStream<T>)ValueOrParameter(const T &v)  // NOLINT
       : get([value = Value(v)]() { return value; }) {}
 
-  ValueOrParameter(const Value &value)  // NOLINT
-      : get([value]() { return value; }) {}
+  /// Construct a ValueOrParameter implicitly from parameter (i.e. ParameterStream)
   ValueOrParameter(const ParameterStream<Value> &param)  // NOLINT
       : get([param_impl = param.impl()]() { return param_impl.lock()->get_value(); }) {}
-  /// We use a std::function for the type erasure.
+
+  /// We use a std::function for the type erasure: When called, it obtains the current value
   std::function<Value()> get;
 };
 
@@ -1227,15 +1232,13 @@ struct TransformSubscriptionStream
         [impl = this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
   }
 
-  /// @brief Does an asynchronous lookup for a single transform. TODO implement
+  /// @brief Does an asynchronous lookup for a single transform.
   ///
   /// @param target_frame
   /// @param source_frame
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
-  /// @return A promise that resolves when the transform has arrived (currently this Stream to avoid
-  /// mem alloc)
-  ///
+  /// @return A promise that resolves with the transform or with an error if a timeout occurs (it will be a Promise in the future)
   Self &lookup(std::string target_frame, std::string source_frame, const Time &time,
                const Duration &timeout) {
     /// This function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
