@@ -161,30 +161,29 @@ struct TFListener {
   /// @param source_frame
   /// @param time
   /// @return The transform or the TF error if the transform is not in the buffer.
-  Result<geometry_msgs::msg::TransformStamped, std::string> lookup_in_buffer(
+  Result<geometry_msgs::msg::TransformStamped, std::string> get_from_buffer(
       std::string target_frame, std::string source_frame, const Time &time) const {
     try {
-      // Note that this call does not wait, the transform must already have arrived.
       const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
+      // Note that this call does not wait, the transform must already have arrived.
       auto tf = buffer_->lookupTransform(target_frame, source_frame, legacy_timepoint);
-      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(tf);
+      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(tf); /// my Result-type is not the best, but it's also only 25 lines :D
     } catch (const tf2::TransformException &e) {
       return Result<geometry_msgs::msg::TransformStamped, std::string>::Err(e.what());
     }
   }
 
   using HandlerID = std::size_t;
-  
-  /// Register handler for anything new received on /tf. The returned handler ID is used to cancel, i.e. remove this registered handler.
+
+  /// Register handler for anything new received on /tf. The returned handler ID is used to cancel,
+  /// i.e. remove this registered handler.
   HandlerID on_new_in_buffer(const std::function<void()> &f) {
     handlers_.emplace(++handler_counter_, f);
     return handler_counter_;
   }
 
   /// Cancel the registered notification for any message on TF
-  void remove_hadler(HandlerID handler_id) {
-    handlers_.erase(handler_id);
-  }
+  void remove_hadler(HandlerID handler_id) { handlers_.erase(handler_id); }
 
   std::size_t handler_counter_{0};
   std::unordered_map<std::size_t, std::function<void()>> handlers_;
@@ -423,26 +422,19 @@ private:
   /// Installs the validator callback
   void add_parameter_validator_if_needed() {
     if (validate_param_cb_) return;
-    auto const set_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters) {
-      rcl_interfaces::msg::SetParametersResult result;
-      result.successful = true;
-      for (const auto &parameter : parameters) {
-        /// We want to skip validating parameters that we didn't declare, for example here we are
-        /// getting called for parameters like "qos_overrides./tf.publisher.durability"
-        if (!parameter_validators_.contains(parameter.get_name())) {
-          continue;
-        }
-        const auto &validator = parameter_validators_.at(parameter.get_name());
-        auto maybe_error = validator(parameter);
-        if (!maybe_error.empty()) {
-          result.successful = false;
-          result.reason = maybe_error;
-          break;
-        }
-      }
-      return result;
-    };
-    this->validate_param_cb_ = node_parameters_->add_on_set_parameters_callback(set_param_cb);
+    this->validate_param_cb_ = node_parameters_->add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter> &parameters) {
+          rcl_interfaces::msg::SetParametersResult result;
+          for (const auto &parameter : parameters) {
+            /// We want to skip validating parameters that we didn't declare, for example here we
+            /// are getting called for parameters like "qos_overrides./tf.publisher.durability"
+            if (parameter_validators_.contains(parameter.get_name())) {
+              result.reason = parameter_validators_.at(parameter.get_name())(parameter);
+            }
+          }
+          result.successful = result.reason == "";
+          return result;
+        });
   }
 
   /// A map that stores for each parameter name some ROS entities that we need to hold to be able to
@@ -529,11 +521,11 @@ struct Promise : public impl::Stream<Value, Error> {
   using Resolve = std::function<void(Value)>;
   using Reject = std::function<void(Error)>;
 
-  Promise(std::function<void(const Resolve&, const Reject&)> h,   
+  Promise(std::function<void(const Resolve&, const Reject&)> h,
                   std::function<void()> wait,
                   std::function<void()> on_destroy) :
     on_destroy_(on_destroy) {
-    h([this](Value x) { this->put_value(x); },  
+    h([this](Value x) { this->put_value(x); },
       [this](Error x) { this->put_error(x); });
   }
   ~Promise() {
@@ -763,8 +755,7 @@ public:
   }
 
   /// Publish the value of this Stream.
-  void publish(const std::string &topic_name,
-               const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
+  void publish(const std::string &topic_name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
                const rclcpp::PublisherOptions publisher_options = {}) {
     assert_we_have_context();
     static_assert(!std::is_same_v<Value, Nothing>,
@@ -1230,7 +1221,7 @@ struct TransformSubscriptionStreamImpl {
   /// Note that we cannot use the base value since it is needed for notifying, i.e. it is cleared
   std::shared_ptr<Message> shared_value{std::make_shared<Message>()};
   /// We do not own the listener, the Book owns it
-  std::weak_ptr<TFListener> tf2_listener;
+  Weak<TFListener> tf2_listener;
 };
 
 /// A Stream that represents a subscription between two coordinate systems. (See TFListener)
@@ -1258,16 +1249,45 @@ struct TransformSubscriptionStream
         [impl = this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
   }
 
-  /// @brief Looks up and returns the current stream. TODO implement
+  /// @brief Does an asynchronous lookup for a single transform. TODO implement
   ///
   /// @param target_frame
   /// @param source_frame
-  /// @param time
-  /// @return A promise that resolves when the transform has arrived
+  /// @param time At which time to get the transform
+  /// @param timeout How long to wait for the transform
+  /// @return A promise that resolves when the transform has arrived (currently this Stream to avoid
+  /// mem alloc)
+  ///
+  Self &lookup(std::string target_frame, std::string source_frame, const Time &time,
+               const Duration &timeout) {
+    /// This function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
+    /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
+    /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
+    /// promise type is available in standard C++ before C++26) and undocumented, so nobody knows
+    /// about them.
+    this->impl()->tf2_listener->buffer_->waitForTransform(
+        target_frame, source_frame, time, timeout, [impl = this->impl()](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
+          if (result.valid()) {
+            try {
+              *impl->shared_value = result.get();
+              impl->put_value(impl->shared_value);
+            } catch (const std::exception &e) {
+              impl->put_error(e.what());
+            }
+          } else {
+            /// Invariant-Trap since the invariants aren't enforced through the type-system (aka
+            /// bad c0de) (It's UB to call .get() on a future for which valid() returns false)
+            throw std::logic_error(
+                "Invariant broke: The tf2_ros::AsyncBufferInterface::waitForTransform gave us an "
+                "invalid std::shared_future.");
+          }
+        });
+    return *this;
+  }
   /*
   Promise<Message, std::string> lookup(std::string target_frame, std::string source_frame, const
   Time &time) {
-    
+
     Promise<Message, std::string> output{[impl=this->impl()](auto resolve, auto reject) {
         auto handle_id = impl->tf2_listener->on_new_in_buffer()
     },
@@ -1279,7 +1299,6 @@ struct TransformSubscriptionStream
       return output;
     }
     */
-    
 };
 
 struct TimerImpl {
@@ -1354,14 +1373,14 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 struct TransformPublisherStreamImpl {
   Weak<tf2_ros::TransformBroadcaster> tf_broadcaster;
 };
-struct TransformPublisherStream : public Stream<geometry_msgs::msg::TransformStamped, Nothing, 
-  TransformPublisherStreamImpl> {
+struct TransformPublisherStream
+    : public Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl> {
   using Base = Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl>;
   using Value = geometry_msgs::msg::TransformStamped;
   template <AnyStream Input = Stream<geometry_msgs::msg::TransformStamped>>
   TransformPublisherStream(NodeBookkeeping &node, Input *input = nullptr) : Base(node) {
     this->impl()->tf_broadcaster = node.add_tf_broadcaster_if_needed();
-    this->impl()->register_handler([impl=this->impl()](const auto &new_state) {
+    this->impl()->register_handler([impl = this->impl()](const auto &new_state) {
       impl->tf_broadcaster->sendTransform(new_state.value());
     });
     if (input) input->connect_values(*this);
@@ -1742,11 +1761,9 @@ struct TransformSynchronizerImpl {
     input_filter = std::make_shared<SimpleFilterAdapter<Message>>(node);
     /// The argument "0" means here infinite message queue size. We set it so
     /// because we must buffer every message for as long as we are waiting for a transform.
-    auto mf2 = tf2_ros::MessageFilter<Message>(*input_filter->impl(), *tf_listener->buffer_, target_frame, 0, node.get_node_logging_interface(),
-    node.get_node_clock_interface(), lookup_timeout);
     synchronizer = std::make_shared<tf2_ros::MessageFilter<Message>>(
-        *input_filter->impl(), *tf_listener->buffer_, target_frame, 0, node.get_node_logging_interface(),
-        node.get_node_clock_interface(), lookup_timeout);
+        *input_filter->impl(), *tf_listener->buffer_, target_frame, 0,
+        node.get_node_logging_interface(), node.get_node_clock_interface(), lookup_timeout);
 
     synchronizer->registerCallback(&Self::on_message, this);
   }
@@ -1754,7 +1771,7 @@ struct TransformSynchronizerImpl {
   void on_message(typename Message::SharedPtr message) {
     const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
     auto maybe_transform =
-        this->tf_listener->lookup_in_buffer(target_frame, message->header.frame_id, timestamp);
+        this->tf_listener->get_from_buffer(target_frame, message->header.frame_id, timestamp);
     if (maybe_transform.has_value())
       static_cast<Derived *>(this)->put_value(std::make_tuple(message, maybe_transform.value()));
     else
@@ -1773,7 +1790,7 @@ struct TransformSynchronizer
   /*!
     \brief Construct the TransformSynchronizer and connect it to the input.
     \param target_frame the transform on which we wait is specified by source_frame and
-     target_frame, where source_frame is the frame in the header of the message 
+     target_frame, where source_frame is the frame in the header of the message
      \param lookup_timeout The maximum time to wait until the transform gets available for a message
   */
   template <ErrorFreeStream Input = Stream<int>>

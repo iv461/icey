@@ -6,18 +6,11 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
-- [X] Fix synchronize with transform and make it the main thing. 
-
-- [ ] Service Client pending request is not cleaned up, it is only cleaned up
-- [ ] Service call has no timeout, only on discovery it has a timeout
-
 - [ ] Service is not a Stream: we cannot await streams, this only works by coincidence because the callback calls all the user-callbacks currenty. Co-await would access the result object after it has been transmitted to the receiver.
 
-- [ ] Support async service server: return tx/rx channels 
+- [ ] Unit-test service client request cleanup using a sleepy service server
 
-- [ ] Test calling service in service server (like Tokio intro)
 - [ ] Test parameter as value for TF sub
-
 
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
 by ROS entities will never yield something regardless of how long we spin the ROS executor if the underlying ROS entity driving them was stopped. For example if the ROS-timer was cancelled. Or the subscription destroyed. In such a case, calling co_await on such streams would hang forever. We need to return None in this case or an extra end-of-Stream identitier (like tokio).
@@ -34,8 +27,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] We still got a crash in service_client_async_await_example
 
-- [ ] Do not accept Streams with Errors in filters that need to throw a new error: This should be a compile-time error, forcing the user to first handle the error
-
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
 - [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep
@@ -46,10 +37,8 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Do not use the TF2 filter but instead make the TF 2 subscriber more flexible. The only reason we need the TF2 message filter is that we might do not know the source frame and want to read it from the message header. But the TF2 message filter does excessive locking and is not equivalent to manually looking up
 
-
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
-- [ ] Improve compile error when passing wrong callback signature -> std::invocable does not yield good ones 
 
 ## Error-handling
 
@@ -64,14 +53,9 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] C++20 Modules support 
 
-- [ ] Remove use of RTTI in interpolateble stream 
-- [ ] Pass error through synchronizers -> for this return Result from Interpolatables
-- [ ] Allow chaining approx-time synchronizer with e.g. reference synchronizer by implementing averaging of all the header stampls of the tuple
 - [ ] Automatic adaption of queue size in ApproxTimeSync
-- [ ] Inputs requiring a parent stream should take it in the constructor 
 - [ ] Maybe generalize concept of push/pull Stream 
 - [ ] Add static asserts that message has header stamp for better compiler error messages
-- [ ] Static_assert for the lambda signature 
 - [ ] Support better parameter API: icey::Interval(0, 5.5) (i.e. determine the common type between the int and double literal) and allow for icey::Set("normal", "pulse", "single"), i.e. determine the common type of fixed-size char arrays correctly as std::string. 
 - [ ] Allow std::array as parameter type with automatic validation for the size -> generally, add parameter type converters.
 
@@ -81,7 +65,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1 -> no cascading, we instread require that th input is error-free 
 
-- [ ] Maybe support cascading the synchronizers -> not for 0.1
 
 - [ ] Auto-pipelining with TBB graph
 
@@ -97,7 +80,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 ## API elegance/clarity
 
-- [] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
+- [X] API cleanup: we should have icey::Parameter instead of icey::ParameterStream, but we should rather rename either everything or nothing 
 - [] API cleanup: Remove publish_transform, instead use simply publish, detect by value type whether we need to publish over the tf broadcaster.
 - [ ] Parameters struct: Inconsistent API, why is it not a stream ? -> to not have to call .value() on it all the time
 
@@ -282,3 +265,23 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Unit-test all entities
 - [X] Unit-test all filters
 - [X] Unit-test parameter stream
+
+- [X] Fix TF subscriber/synchronizer
+
+- [X] Implement service client timeout on the actual call
+
+- [X] Remove use of RTTI in interpolateble stream 
+- [X] Improve compile error when passing wrong callback signature -> std::invocable does not yield good ones 
+- [X] Pass error through synchronizers -> for this return Result from Interpolatables -> nope, we require error-free stream and provide unwrap_or to make it error-free
+- [X] Allow chaining approx-time synchronizer with e.g. reference synchronizer by implementing averaging of all the header stampls of the tuple -> irrelevant
+- [X] Inputs requiring a parent stream should take it in the constructor 
+- [X] Static_assert for the lambda signature 
+- [X] Maybe support cascading the synchronizers -> irrelevant
+
+- [X] Support async service server: return tx/rx channels 
+- [X] Test calling service in service server (like Tokio intro)
+- [X] Fix synchronize with transform and make it the main thing. 
+- [X] Service Client pending request is not cleaned up
+- [X] Service call has no timeout, only on discovery it has a timeout
+
+- [X] Do not accept Streams with Errors in filters that need to throw a new error: This should be a compile-time error, forcing the user to first handle the error

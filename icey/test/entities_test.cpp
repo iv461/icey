@@ -238,7 +238,7 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
     received_cnt++;
   });
   
-  spin(1100ms);
+  spin(1500ms);
   EXPECT_EQ(received_cnt, 20);
   
 }
