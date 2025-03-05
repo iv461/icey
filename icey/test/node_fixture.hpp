@@ -43,7 +43,7 @@ protected:
     EXPECT_TRUE(icey::impl::g_impls.empty())
         << "Some stream impls are still allocated after the node was destroyed, you likely have a "
            "circular reference. Do not capture Streams in lambdas by value, but capture only the "
-           "impl, i.e. stream->impl()";
+           "impl, i.e. stream->impl() by value.";
   }
 
   void spin(icey::Duration timeout) {

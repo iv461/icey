@@ -150,7 +150,6 @@ TEST_F(NodeTest, ParameterStructTest) {
   spin(100ms);  /// Need to spin so that the parameter gets updated  
   EXPECT_TRUE(fields_that_were_updated.contains("frequency"));
 
-  
   fields_that_were_updated.clear();
 
   /// Test parameter update rejection:
@@ -211,6 +210,8 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
         tf1.header.frame_id = "icey_test_frame1";
         tf1.child_frame_id = "icey_test_frame2";
         tf1.transform.translation.x = 0. + 0.1 * ticks;
+        if (ticks >= 10) 
+          return {};
         return tf1;
       })
       .publish_transform();
@@ -224,7 +225,7 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
         tf1.child_frame_id = "icey_test_frame3";
         tf1.transform.rotation.z = std::sin(0.1 * ticks);
         tf1.transform.rotation.w = std::cos(0.1 * ticks);
-        if (ticks == 10) 
+        if (ticks >= 10) 
           return {};
         return tf1;
       })

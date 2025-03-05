@@ -6,8 +6,6 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
-- [ ] Service is not a Stream: we cannot await streams, this only works by coincidence because the callback calls all the user-callbacks currenty. Co-await would access the result object after it has been transmitted to the receiver.
-
 - [ ] Unit-test service client request cleanup using a sleepy service server
 
 - [ ] Test parameter as value for TF sub
@@ -21,7 +19,9 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
 - [ ] Docs: Up-to-date extention tutorial
-- [ ] Docs: Coroutines: add note that coroutines might fail to deliver value if the spin-loop is interrupted by Ctrl
+- [ ] Docs: Coroutines: add note that when coroutines 
+- [ ] Docs: Document that the lifetime of the Streams is tied to the Node 
+- [ ] Docs: Make clear that only synchronous functions are supported as callbacks
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
@@ -35,7 +35,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function 
 
-- [ ] Do not use the TF2 filter but instead make the TF 2 subscriber more flexible. The only reason we need the TF2 message filter is that we might do not know the source frame and want to read it from the message header. But the TF2 message filter does excessive locking and is not equivalent to manually looking up
+- [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer
 
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
@@ -285,3 +285,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Service call has no timeout, only on discovery it has a timeout
 
 - [X] Do not accept Streams with Errors in filters that need to throw a new error: This should be a compile-time error, forcing the user to first handle the error
+
+- [X] Support async TF lookup function
+
+- [X] Service is not a Stream: we cannot await streams, this only works by coincidence because the callback calls all the user-callbacks currenty. Co-await would access the result object after it has been transmitted to the receiver. -> This was fixed by returning the response instead of passing it as an output argument

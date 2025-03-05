@@ -8,8 +8,6 @@
 using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
-TEST_F(NodeTest, SyncWithReferenceTest) {}
-
 TEST_F(NodeTest, SyncApproxTimeTest) {
   auto images = node_->icey().create_stream<icey::Stream<sensor_msgs::msg::Image::SharedPtr>>();
   auto point_clouds =
@@ -41,7 +39,9 @@ TEST_F(NodeTest, SyncApproxTimeTest) {
   // spin(1s);
 }
 
-TEST_F(NodeTest, SynchronizeWithTransformTest) {}
+TEST_F(NodeTest, SynchronizeWithTransformTest) {
+  /// TODO implement
+}
 
 TEST_F(NodeTest, AnyTest) {
   auto s1 = node_->icey().create_timer(43ms).then([](size_t ticks) -> std::optional<std::string> {
