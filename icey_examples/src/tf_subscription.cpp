@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform.
     node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
         .synchronize_with_transform("map", 200ms)
-        .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error %s", error); })
+        .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error: " << error); })
         .then([](sensor_msgs::msg::PointCloud2::SharedPtr image, const geometry_msgs::msg::TransformStamped &transform_to_map) {
             std::cout << "image width: " << image->width 
             << " tf w: " << transform_to_map.transform.rotation.w << std::endl;
