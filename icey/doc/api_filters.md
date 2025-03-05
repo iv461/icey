@@ -5,7 +5,10 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenfunction} icey::any
 ```
 
-```{doxygenclass} icey::Buffer
+```{doxygenfunction} icey::synchronize_approx_time
+```
+
+```{doxygenstruct} icey::Buffer
 ```
 
 ```{doxygenclass} icey::SynchronizerStream
@@ -14,10 +17,16 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenstruct} icey::SynchronizerStreamImpl
 ```
 
-```{doxygenstruct} icey::TF2MessageFilter
+```{doxygenstruct} icey::TransformSubscriptionStream
 ```
 
-```{doxygenstruct} icey::TF2MessageFilterImpl
+```{doxygenstruct} icey::TransformSubscriptionStreamImpl
+```
+
+```{doxygenstruct} icey::TransformSynchronizer
+```
+
+```{doxygenstruct} icey::TransformSynchronizerImpl
 ```
 
 ```{doxygenstruct} icey::TimeoutFilter
@@ -25,5 +34,4 @@ The following filters handle synchronization, serialization  timeout and other o
 
 ```{doxygenstruct} icey::SimpleFilterAdapter
 ```
-
 

@@ -832,7 +832,9 @@ public:
   }
 
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any
-  /// value for some time `max_age`. \param create_extra_timer If set to false, the timeout will
+  /// value for some time `max_age`. 
+  /// \param max_age the maximum age a message is allowed to have before the timeout occurs
+  /// \param create_extra_timer If set to false, the timeout will
   /// only be detected after at least one message was received. If set to true, an extra timer is
   /// created so that timeouts can be detected even if no message is received.
   TimeoutFilter<Value> timeout(const Duration &max_age, bool create_extra_timer = true) {
@@ -1979,6 +1981,7 @@ public:
 
   /// Spins the ROS executor until the Stream has something (value or error). This is also called a
   /// synchronous wait.
+  /// \param stream the stream to wait
   template <AnyStream S>
   void spin_executor_until_stream_has_some(S stream) {
     while (rclcpp::ok() && stream.impl()->has_none()) {
