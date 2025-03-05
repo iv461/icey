@@ -194,7 +194,7 @@ TEST_F(TwoNodesFixture, PubSubTest) {
   EXPECT_EQ(received_cnt, 10);
 }
 
-TEST_F(TwoNodesFixture, TransformPubSubTest) {
+TEST_F(TwoNodesFixture, TransformSubscriberTest) {
   auto sub =
       receiver_->icey().create_transform_subscription("icey_test_frame1", "icey_test_frame3");
 
@@ -225,7 +225,8 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
         tf1.child_frame_id = "icey_test_frame3";
         tf1.transform.rotation.z = std::sin(0.1 * ticks);
         tf1.transform.rotation.w = std::cos(0.1 * ticks);
-        if (ticks >= 10) 
+        /// Since both transforms must be received for the first TF from 1 to 3, we got to publish one of the two once more
+        if (ticks >= 11) 
           return {};
         return tf1;
       })
@@ -233,15 +234,11 @@ TEST_F(TwoNodesFixture, TransformPubSubTest) {
 
   std::size_t received_cnt = 0;
   sub.then([&](const geometry_msgs::msg::TransformStamped &msg) {
-    std::cout << "Got transform: trans x: " << msg.transform.translation.x 
-      << ", quat z: " << msg.transform.rotation.z
-      << ", quat w: " << msg.transform.rotation.w << std::endl;
     received_cnt++;
   });
   
   spin(1500ms);
   EXPECT_EQ(received_cnt, 20);
-  
 }
 
 TEST_F(NodeTest, TimerTest) {

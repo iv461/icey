@@ -29,10 +29,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
-- [ ] Consider mergins NodeBookkeeping and Context: We already hold the shared poitner to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep
-
-- [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer
-
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
 - [ ] Static assert that the callbacks are not coroutines
@@ -43,6 +39,10 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
 
 ## Other nice-to-have features, not for 0.1
+
+- [ ] Consider merging NodeBookkeeping and Context: We already hold the shared pointer to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep issue
+
+- [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer
 
 - [ ] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct
 - [ ] rclcpp also has a TimerInfo (previously called TimerEvent) with the time, use it as the state. 

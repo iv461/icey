@@ -514,26 +514,6 @@ struct check_callback<F, std::tuple<Args...>> {
                 "The callback has the wrong signature, it has to take the types of the tuple");
 };
 
-/*
-template<class Value, class Error=Nothing>
-struct Promise : public impl::Stream<Value, Error> {
-
-  using Resolve = std::function<void(Value)>;
-  using Reject = std::function<void(Error)>;
-
-  Promise(std::function<void(const Resolve&, const Reject&)> h,
-                  std::function<void()> wait,
-                  std::function<void()> on_destroy) :
-    on_destroy_(on_destroy) {
-    h([this](Value x) { this->put_value(x); },
-      [this](Error x) { this->put_error(x); });
-  }
-  ~Promise() {
-    on_destroy_();
-  }
-  std::function<void()> on_destroy_;
-};
-*/
 
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.

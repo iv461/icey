@@ -119,7 +119,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
 
     /// We do not await till the published message was received.
     /// Since the ACK from DDS is exposed in rclcpp via PublisherBase::wait_for_all_acked, we could
-    /// implement a co_await publish(msg).
+    /// implement a co_await publish(msg, timeout).
     EXPECT_EQ(received_cnt, 9);
     async_completed = true;
     co_return 0;
@@ -174,4 +174,63 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
     co_return 0;
   }();
   ASSERT_TRUE(async_completed);
+}
+
+TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
+  [this]() -> icey::Stream<int> {
+
+    const icey::Time base_time{1700000000s};
+    
+    sender_->icey()
+      .create_timer(100ms)
+      .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+            geometry_msgs::msg::TransformStamped tf1;
+            tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms); 
+            tf1.header.frame_id = "icey_test_frame1";
+            tf1.child_frame_id = "icey_test_frame2";
+            tf1.transform.translation.x = 0. + 0.1 * ticks;
+            if (ticks >= 10) 
+              return {};
+            return tf1;
+          })
+        .publish_transform();
+
+    sender_->icey()
+        .create_timer(100ms)
+        .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+          geometry_msgs::msg::TransformStamped tf1;
+          tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms); 
+          tf1.header.frame_id = "icey_test_frame2";
+          tf1.child_frame_id = "icey_test_frame3";
+          tf1.transform.rotation.z = std::sin(0.1 * ticks);
+          tf1.transform.rotation.w = std::cos(0.1 * ticks);
+          /// Since both transforms must be received for the first TF from 1 to 3, we got to publish one of the two once more
+          if (ticks >= 11) 
+            return {};
+          return tf1;
+        })
+        .publish_transform();
+        
+    auto tf_sub =
+        receiver_->icey().create_transform_subscription();;
+
+    std::size_t received_cnt = 0;
+    while(received_cnt <= 20) {
+      
+      icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
+      /// Subtract a small slop of 10ms 
+          = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms - 10ms), 250ms);
+      
+      /// Expect that the one additional last time that we lookup, we do not get anything
+      if(received_cnt == 20) {
+        EXPECT_FALSE(tf_result.has_value());
+        EXPECT_TRUE(tf_result.has_error());
+      } else {
+        EXPECT_TRUE(tf_result.has_value());
+      }
+
+      received_cnt++;
+    }
+    co_return 0;
+  }();
 }
