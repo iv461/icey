@@ -512,7 +512,7 @@ struct check_callback {
 template <class F, class... Args>
 struct check_callback<F, std::tuple<Args...>> {
   static_assert(std::is_invocable_v<F, Args...>,
-                "The callback has the wrong signature, it has to take the types of the tuple");
+                "The callback has the wrong signature, it has to take mutliple arguments (the Stream holds tuple, the arguments are all the elements of the tuple)");
   static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
@@ -1310,6 +1310,8 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
       if (is_one_off_timer) impl->timer->cancel();
     });
   }
+  void reset() { this->impl()->timer->reset(); }
+  void cancel() { this->impl()->timer->cancel(); }
 };
 
 template <class _Value>
