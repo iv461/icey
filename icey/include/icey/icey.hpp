@@ -1390,7 +1390,6 @@ struct ServiceStream
   using Base = Stream<std::tuple<RequestID, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
                       ServiceStreamImpl<_ServiceT>>;
   using Request = std::shared_ptr<typename _ServiceT::Request>;
-  using Value = Request;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
 
   /// The type of the user callback that can response synchronously (i.e. immediately): It receives
@@ -1398,6 +1397,11 @@ struct ServiceStream
   using SyncCallback = std::function<Response(Request)>;
   using AsyncCallback = std::function<Stream<Response>(Request)>;
 
+  /*!
+     \brief Contruct the service server. A synchronous callback `sync_callback` may be provided that will be called every time this 
+     service is called, it returns the response immediatelly. This callback must be synchronous, i.e. no calls to `co_await` are allowed.
+     If you want to respond instead asynchronously, do not provide `sync_callback`, but instead await this stream to get the request and then call the `respond`-method.
+  "*/
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
                 SyncCallback sync_callback = {}, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : Base(node) {
@@ -1417,12 +1421,13 @@ struct ServiceStream
   }
   /// Send the service response to the request identified by the request_id.
   ///  It is RMW implementation defined whether this happens synchronously or asynchronously.
-  /// \throws any exception from `rclcpp::exceptions::throw_from_rcl_error()`
+  /// \throws an exception from `rclcpp::exceptions::throw_from_rcl_error()`
   /// See for a detailed documentation:
   /// - The C-API that rclcpp uses more or less directly:
   /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
   /// - One layer below:
   /// [rmw_send_response](https://docs.ros.org/en/humble/p/rmw/generated/function_rmw_8h_1abb55ba2b2a957cefb0a77b77ddc5afda.html)
+  /// \note ROS does not seem to support awaiting this operation (at the RMW layer), this means you cannot await until the service client received your response.
   void respond(RequestID request_id, Response response) {
     this->impl()->service->send_response(*request_id, *response);
   }
