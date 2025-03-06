@@ -11,14 +11,13 @@ public:
   using Base = icey::LifecycleNode;
 
   ExampleLifecycleNode(std::string name) : Base(name) {
-    /// And as well parameters with constraints and a description:
-    icey().declare_parameter<double>("amplitude", 2.);
-
+    timer_ = icey().create_timer(100ms);
   }
 
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_activate(const rclcpp_lifecycle::State & state) {
     RCLCPP_INFO(get_logger(), "on_activate() was called");
+    /// The base class of an icey::LifecycleNode is a rclcpp::LifecycleNode, so it has all the lifecycle methods:
     Base::on_activate(state);
     /// Reset the timer again, starting the loop:
     timer_.reset();
@@ -28,6 +27,7 @@ public:
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State & state) {
     RCLCPP_INFO(get_logger(), "on_deactivate() was called");
+    /// The base class of an icey::LifecycleNode is a rclcpp::LifecycleNode, so it has all the lifecycle methods:
     Base::on_deactivate(state);
     timer_.cancel();
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -35,11 +35,10 @@ public:
 
   /// Spin the node: we do some work here, other callbacks get called 
   icey::Stream<int> spin() {
-    timer_ = node->icey().create_timer(period_time);
-
+    
     while(true) {
-      std::size_t ticks = co_await timer;
-      RCLCPP_INFO(get_logger(), "Spinning node for the " << ticks << "th time...");
+      std::size_t ticks = co_await timer_;
+      RCLCPP_INFO_STREAM(get_logger(), "Spinning node for the " << ticks << "th time...");
     }
     co_return 0;
   }
@@ -50,7 +49,7 @@ public:
 };
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node<icey::ExampleLifecycleNode>(argc, argv, "lifecycle_node_example");
+  auto node = icey::create_node<ExampleLifecycleNode>(argc, argv, "lifecycle_node_example");
   node->spin();
   return 0;
 }

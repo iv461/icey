@@ -1092,7 +1092,7 @@ struct ParameterStream : public Stream<_Value> {
   using Value = _Value;
   static_assert(is_valid_ros_param_type<_Value>::value,
                 "Type is not an allowed ROS parameter type");
-
+  ParameterStream() = default;
   /// @brief A constructor that should only be used for parameter structs. It does not set the name
   /// of the parameter and therefore leaves this ParameterStream in a not fully initialized state.
   /// Context::declare_parameter_struct later infers the name of this parameter from the name of the
@@ -1215,6 +1215,7 @@ struct SubscriptionStream
     : public Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>> {
   using Base = Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>>;
   using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
+  SubscriptionStream() = default;
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
       : Base(node) {
@@ -1243,7 +1244,7 @@ struct TransformSubscriptionStream
                       TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using Self = TransformSubscriptionStream;
-
+  TransformSubscriptionStream() = default; 
   TransformSubscriptionStream(NodeBookkeeping &node) {
     this->impl()->tf2_listener = node.add_tf_listener_if_needed();
   }
@@ -1302,6 +1303,7 @@ struct TimerImpl {
 /// A Stream representing a ROS-Timer. It saves the number of ticks as it's value.
 struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   using Base = Stream<size_t, Nothing, TimerImpl>;
+  TimerStream() = default;
   TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer) : Base(node) {
     this->impl()->timer = node.add_timer(interval, [impl = this->impl(), is_one_off_timer]() {
       impl->put_value(impl->ticks_counter);
@@ -1346,7 +1348,7 @@ template <class _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Base = Stream<_Value, Nothing, PublisherImpl<_Value>>;
   using Message = remove_shared_ptr_t<_Value>;
-  
+  PublisherStream() = default;
   template <AnyStream Input = Stream<_Value>>
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
@@ -1371,6 +1373,7 @@ struct TransformPublisherStream
     : public Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl> {
   using Base = Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl>;
   using Value = geometry_msgs::msg::TransformStamped;
+  TransformPublisherStream() = default;
   template <AnyStream Input = Stream<geometry_msgs::msg::TransformStamped>>
   TransformPublisherStream(NodeBookkeeping &node, Input *input = nullptr) : Base(node) {
     this->impl()->tf_broadcaster = node.add_tf_broadcaster_if_needed();
@@ -1413,7 +1416,7 @@ struct ServiceStream
   /// the request and returns the response.
   using SyncCallback = std::function<Response(Request)>;
   using AsyncCallback = std::function<Stream<Response>(Request)>;
-
+  ServiceStream() = default;
   /*!
      \brief Contruct the service server. A synchronous callback `sync_callback` may be provided that will be called every time this 
      service is called, it returns the response immediatelly. This callback must be synchronous, i.e. no calls to `co_await` are allowed.
@@ -1468,7 +1471,7 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   using Self = ServiceClient<_ServiceT>;
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
-
+  ServiceClient() = default;
   /// Create a new service client and connect it to the input stream if it is provided (if it is not nullptr.)
   /// \param node 
   /// \param service_name 
