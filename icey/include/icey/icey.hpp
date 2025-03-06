@@ -1809,13 +1809,12 @@ static auto any(Inputs... inputs) {
 }
 
 /// Synchronize at least two streams by approximately matching the header time-stamps (using
-/// the `message_filters::Synchronizer`).
+/// the `message_filters::Synchronizer`). It accepts only an ErrorFreeStream since the synchronizer may emit new errors.
+/// To obtain an ErrorFreeStream, use Stream::unwrap_or.
 ///
 /// \tparam Inputs the input stream types, not necessarily all the same
 /// \param queue_size the queue size to use, 100 is a good value.
 /// \param inputs the input streams, not necessarily all of the same type
-/// \note The queue size is 100, it cannot be changed currently
-/// \warning Errors are currently not passed through
 template <ErrorFreeStream... Inputs>
 static SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size,
                                                                         Inputs... inputs) {
