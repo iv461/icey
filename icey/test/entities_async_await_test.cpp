@@ -186,11 +186,8 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     /// A sleepy service:
     std::size_t i_call = 0;
     auto service_cb = [&](auto request) {
-      std::cout << "Called service for the " << i_call << "th time" << std::endl;
       if(i_call == 0) {
         std::this_thread::sleep_for(100ms);
-      } else {
-        std::this_thread::sleep_for(20ms);
       }
       i_call++;
       auto response = std::make_shared<ExampleService::Response>();
@@ -214,18 +211,13 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     /// This means, we expect that the response from the first request is never received.
     std::vector<std::string> events;
     std::size_t responses_received = 0;
+    std::size_t errors_received = 0;
 
     client1.then([&](auto) { 
-        events.push_back("req1_response_" + std::to_string(responses_received)); 
+        events.push_back("response_" + std::to_string(responses_received)); 
         responses_received++;
-    });
-    std::size_t req2_responses_received = 0;
-    client1.then([&](auto) {
-      events.push_back("req2_response_" + std::to_string(req2_responses_received)); 
-      req2_responses_received++;
-    });
-
-    client1.except([](auto err) { 
+    }).except([&](auto err) { 
+        errors_received++;
         std::cout << "Got err: " << err << std::endl; 
     });
 
@@ -238,8 +230,8 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     client1.call(request);
     events.push_back("after_second_call");
 
-    spin(1500ms);
-    std::vector<std::string> target_events{"before_call", "after_call", "after_second_call", "req2_response_0"};
+    spin(500ms);
+    std::vector<std::string> target_events{"before_call", "after_call", "after_second_call", "response_0"};
     EXPECT_EQ(events, target_events);
     EXPECT_EQ(client1.impl()->client->prune_pending_requests(), 0);
 
