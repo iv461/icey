@@ -14,14 +14,10 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenclass} icey::SynchronizerStream
 ```
 
-```{doxygenstruct} icey::SynchronizerStreamImpl
-```
 
 ```{doxygenstruct} icey::TransformSynchronizer
 ```
 
-```{doxygenstruct} icey::TransformSynchronizerImpl
-```
 
 ```{doxygenstruct} icey::TimeoutFilter
 ```

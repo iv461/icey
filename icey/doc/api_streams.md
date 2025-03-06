@@ -42,22 +42,14 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 
 ```{doxygenstruct} icey::PublisherStream
 ```
-```{doxygenstruct} icey::PublisherImpl
-```
 
 ```{doxygenstruct} icey::ServiceStream
-```
-```{doxygenstruct} icey::ServiceStreamImpl
 ```
 
 ```{doxygenstruct} icey::ServiceClient
 ```
-```{doxygenstruct} icey::ServiceClientImpl
-```
 
 ```{doxygenstruct} icey::TransformSubscriptionStream
-```
-```{doxygenstruct} icey::TransformSubscriptionStreamImpl
 ```
 
 ```{doxygenstruct} icey::TransformPublisherStream
