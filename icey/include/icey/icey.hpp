@@ -857,10 +857,9 @@ public:
 
   // clang-format off
   /*!
-    Synchronizes a topic with a transform using the `tf2_ros::MessageFilter`.
-    \param target_frame the transform on which we wait is specified by source_frame and
-    target_frame, where source_frame is the frame in the header of the message. \param
-    lookup_timeout The maximum time to wait until the transform gets available for a message
+    \brief Synchronizes a topic with a transform using the `tf2_ros::MessageFilter`.
+    \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message. 
+    \param lookup_timeout The maximum time to wait until the transform gets available for a message
     
     Example:
     \verbatim
@@ -1853,7 +1852,7 @@ public:
   /// [rclcpp::Node::declare_parameter](https://docs.ros.org/en/jazzy/p/rclcpp/generated/classrclcpp_1_1Node.html#_CPPv4I0EN6rclcpp4Node17declare_parameterEDaRKNSt6stringERK10ParameterTRKN14rcl_interfaces3msg19ParameterDescriptorEb)
   template <class ParameterT>
   ParameterStream<ParameterT> declare_parameter(const std::string &parameter_name,
-                                                const ParameterT &default_value = {},
+                                                const ParameterT &default_value,
                                                 const Validator<ParameterT> &validator = {},
                                                 std::string description = "",
                                                 bool read_only = false,
