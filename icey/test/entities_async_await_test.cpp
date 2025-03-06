@@ -270,7 +270,6 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
           tf1.child_frame_id = "icey_test_frame3";
           tf1.transform.rotation.z = std::sin(0.1 * ticks);
           tf1.transform.rotation.w = std::cos(0.1 * ticks);
-          /// Since both transforms must be received for the first TF from 1 to 3, we got to publish one of the two once more
           if (ticks >= 10) 
             return {};
           return tf1;
@@ -284,14 +283,14 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
     while(received_cnt <= 13) {
       
       icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
-          = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 210ms);
+          = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 110ms);
       
       /// Expect that the one additional last time that we lookup, we do not get anything
       if(received_cnt >= 10) {
         EXPECT_FALSE(tf_result.has_value());
         EXPECT_TRUE(tf_result.has_error());
       } else {
-        EXPECT_TRUE(tf_result.has_value());
+        EXPECT_TRUE(tf_result.has_value()) << "No TF was received, instead the error: " << tf_result.error();
         geometry_msgs::msg::TransformStamped tf = tf_result.value();
 
         const double kEps = 1e-6;
