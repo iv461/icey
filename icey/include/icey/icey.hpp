@@ -1479,7 +1479,7 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   // clang-format off
   /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
   If there is already a pending request, this pending request will be removed.
-  Requests can never hang forever but will eventually time out. 
+  Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
   \param request the request
   \returns *this stream
 
@@ -1491,7 +1491,7 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   \endverbatim
   */
   // clang-format on
-  const Self &call(Request request) const {
+  Self &call(Request request) {
     async_call(this->impl(), request);
     return *this;
   }
@@ -1528,7 +1528,6 @@ protected:
   static void on_response(auto impl, Future response_future) {
     impl->timeout_timer->cancel();  /// Cancel the timeout timer since we got the response
     if (response_future.valid()) {
-      impl->maybe_pending_request = {};
       impl->put_value(response_future.get().second);
     } else {
       on_timeout(impl);

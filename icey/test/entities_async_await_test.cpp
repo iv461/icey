@@ -176,6 +176,71 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
   ASSERT_TRUE(async_completed);
 }
 
+/// Tests whether timeout works and the requests get cleaned up. 
+// It also tests whether we can make multiple calls to a service and we get only the last one
+TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
+  [this]() -> icey::Stream<int> {
+    // The response we are going to receive from the service call:
+    using Response = ExampleService::Response::SharedPtr;
+
+    /// A sleepy service:
+    auto service_cb = [i_call=0](auto request) mutable {
+      if(i_call == 0) {
+        std::this_thread::sleep_for(100ms);
+      } else {
+        std::this_thread::sleep_for(20ms);
+      }
+      i_call++;
+      auto response = std::make_shared<ExampleService::Response>();
+      response->success = !request->data;
+      return response;
+    };
+    sender_->icey().create_service<ExampleService>("icey_test_sleepy_service1", service_cb);
+    
+    auto client1 = receiver_->icey().create_client<ExampleService>("icey_test_sleepy_service1", 40ms);
+    auto request = std::make_shared<ExampleService::Request>();
+    request->data = true;
+
+    /// First, test that timeouts occur 
+    icey::Result<Response, std::string> result1 = co_await client1.call(request);
+    EXPECT_TRUE(result1.has_error());
+    EXPECT_EQ(result1.error(), "TIMEOUT");
+    /// Expect there are no pending requests in case of timeout: A call to prune must return 0
+    EXPECT_EQ(client1.impl()->client->prune_pending_requests(), 0);
+    
+    /// Second, test that if there is any pending request, it gets replaced by another request.
+    /// This means, we expect that the response from the first request is never received.
+    std::vector<std::string> events;
+    std::size_t responses_received = 0;
+
+    events.push_back("before_call");
+    /// Send the first request but do not await it
+    client1.call(request).then([&](auto) { 
+        events.push_back("req1_response_" + std::to_string(responses_received)); 
+        responses_received++;
+    });
+    events.push_back("after_call");
+
+    std::size_t req2_responses_received = 0;
+    /// Then, send another one:
+    client1.call(request).then([&](auto) {
+      events.push_back("req2_response_" + std::to_string(req2_responses_received)); 
+      req2_responses_received++;
+    });
+    events.push_back("after_second_call");
+
+    spin(1500ms);
+    std::vector<std::string> target_events{"before_call", "after_call", "after_second_call", "req2_response_0"};
+    EXPECT_EQ(events, target_events);
+    EXPECT_EQ(client1.impl()->client->prune_pending_requests(), 0);
+
+    async_completed = true;
+    co_return 0;
+  }();
+  ASSERT_TRUE(async_completed);
+}
+
+
 TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
   [this]() -> icey::Stream<int> {
 
