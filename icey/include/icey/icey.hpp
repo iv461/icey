@@ -734,7 +734,10 @@ public:
     });
   }
 
-  /// Publish the value of this Stream.
+  /*!
+    \brief Creates a publisher so that every new value of this Stream will get published. 
+    \sa PublisherStream
+  */
   void publish(const std::string &topic_name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
                const rclcpp::PublisherOptions publisher_options = {}) {
     assert_we_have_context();
@@ -744,6 +747,10 @@ public:
     this->template create_stream<PublisherStream<Value>>(topic_name, qos, publisher_options, this);
   }
 
+  /*!
+    \brief Creates a custom publisher so that every new value of this Stream will get published. 
+    \sa PublisherStream
+  */
   template <AnyStream PublisherType, class... Args>
   void publish(Args &&...args) {
     assert_we_have_context();
@@ -755,8 +762,10 @@ public:
     this->connect_values(output);
   }
 
-  /// Publish a transform using the `TFBroadcaster` in case this Stream holds a Value of type
-  /// `geometry_msgs::msg::TransformStamped`.
+  /*!
+    \brief Creates a transform publisher so that every new value of this Stream, which must be of type `geometry_msgs::msg::TransformStamped`, will get published. 
+    \sa TransformPublisherStream
+  */
   void publish_transform() {
     assert_we_have_context();
     static_assert(std::is_same_v<Value, geometry_msgs::msg::TransformStamped>,
@@ -766,8 +775,10 @@ public:
     this->template create_stream<TransformPublisherStream>(this);
   }
 
-  /// Calls a ROS service with the Value that this Stream holds. It returns a new ServiceClient
-  /// stream, which gets called by this stream.
+  /*!
+    \brief Creates a service client so that the service will be called with the Value of this Stream as a request.
+    \sa ServiceClient
+  */
   template <class ServiceT>
   ServiceClient<ServiceT> call_service(const std::string &service_name, const Duration &timeout,
                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
@@ -801,8 +812,9 @@ public:
                         [](const auto &...args) { return std::make_tuple(args...); });
   }
 
-  /// Handles the errors of this stream with the given function f and returns an ErrorFreeStream
-  /// that receives only the values of this stream. \tparam F Function receiving the Error of this
+  /// Unwraps, i.e. creates an ErrorFreeStream by handling the error with the given function f.
+  /// The returned Stream will receive only the values of this stream. 
+  /// \tparam F Function receiving the Error of this
   /// Stream (it is unpacked if it's a tuple) and returning void.
   template <class F>
   Stream<Value, Nothing> unwrap_or(F &&f) {
