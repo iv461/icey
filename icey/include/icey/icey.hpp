@@ -855,26 +855,27 @@ public:
     return this->template create_stream<TimeoutFilter<Value>>(*this, max_age, create_extra_timer);
   }
 
+  // clang-format off
   /*!
     Synchronizes a topic with a transform using the `tf2_ros::MessageFilter`.
     \param target_frame the transform on which we wait is specified by source_frame and
     target_frame, where source_frame is the frame in the header of the message. \param
     lookup_timeout The maximum time to wait until the transform gets available for a message
-
+    
     Example:
     \verbatim
-      /// Synchronize with a transform: This will yield the message and the transform from the
-    child_frame_id of the header message
-      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to
-    200ms for the transform. node->icey().create_subscription<sensor_msgs::msg::Image>("camera")
+      /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message
+      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform. 
+      node->icey().create_subscription<sensor_msgs::msg::Image>("camera")
         .synchronize_with_transform("map", 200ms)
-        .unwrap_or([&](std::string error) { RCLCPP_INFO(node->get_logger(), "Transform lookup error:
-    %s", error);}) .then([](sensor_msgs::msg::Image::SharedPtr image, const
-    geometry_msgs::msg::TransformStamped &transform_to_map) {
+        .unwrap_or([&](std::string error) { RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error: " << error);})
+        .then([](sensor_msgs::msg::Image::SharedPtr image, 
+            const geometry_msgs::msg::TransformStamped &transform_to_map) {
 
         });
     \endverbatim
   */
+  // clang-format on
   TransformSynchronizer<Value> synchronize_with_transform(const std::string &target_frame,
                                                           const Duration &lookup_timeout) {
     assert_we_have_context();
