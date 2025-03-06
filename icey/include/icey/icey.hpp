@@ -516,7 +516,6 @@ struct check_callback<F, std::tuple<Args...>> {
   static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
-
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
 template <class DerivedStream>
@@ -1394,7 +1393,6 @@ struct ServiceStreamImpl {
   std::shared_ptr<rclcpp::Service<ServiceT>> service;
 };
 
-using RequestID = std::shared_ptr<rmw_request_id_t>;
 /// A Stream representing a ROS service (server). It stores as its value the RequestID and the the
 /// Request itself. It supports synchronous as well as asynchronous responding.
 ///
@@ -1405,11 +1403,12 @@ using RequestID = std::shared_ptr<rmw_request_id_t>;
 /// - https://github.com/ijnek/nested_services_rclcpp_demo
 template <class _ServiceT>
 struct ServiceStream
-    : public Stream<std::tuple<RequestID, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
-                    ServiceStreamImpl<_ServiceT>> {
-  using Base = Stream<std::tuple<RequestID, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
-                      ServiceStreamImpl<_ServiceT>>;
+: public Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
+ServiceStreamImpl<_ServiceT>> {
+  using Base = Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
+  ServiceStreamImpl<_ServiceT>>;
   using Request = std::shared_ptr<typename _ServiceT::Request>;
+  using RequestID = std::shared_ptr<rmw_request_id_t>;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
 
   /// The type of the user callback that can response synchronously (i.e. immediately): It receives
@@ -1656,8 +1655,8 @@ struct SimpleFilterAdapter
 
 /// Holds a message_filters::Synchronizer and operates on it.
 template <class... Messages>
-struct SynchronizerStreamImpl {
-  using Self = SynchronizerStreamImpl<Messages...>;
+struct ApproxTimeSynchronizerImpl {
+  using Self = ApproxTimeSynchronizerImpl<Messages...>;
   using Policy = message_filters::sync_policies::ApproximateTime<Messages...>;
   using Synchronizer = message_filters::Synchronizer<Policy>;
   using Inputs = std::tuple<SimpleFilterAdapter<Messages>...>;
@@ -1705,17 +1704,17 @@ struct SynchronizerStreamImpl {
 /// A Stream representing an approximate time synchronizer.
 /// \warning All inputs must have the same QoS according to the documentation of message_filters
 template <class... Messages>
-class SynchronizerStream : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
-                                         SynchronizerStreamImpl<Messages...>> {
+class ApproxTimeSynchronizer : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
+                                         ApproxTimeSynchronizerImpl<Messages...>> {
 public:
   using Base = Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
-                      SynchronizerStreamImpl<Messages...>>;
-  using Self = SynchronizerStream<Messages...>;
+                      ApproxTimeSynchronizerImpl<Messages...>>;
+  using Self = ApproxTimeSynchronizer<Messages...>;
 
   /// Constructs the synchronizer and connects it to the input streams so that it is ready to
   /// receive values.
   template <ErrorFreeStream... Inputs>
-  SynchronizerStream(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs) : Base(node) {
+  ApproxTimeSynchronizer(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs) : Base(node) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     this->impl()->create_synchronizer(node, queue_size);
     this->connect_inputs(inputs...);
@@ -1830,10 +1829,10 @@ static auto any(Inputs... inputs) {
 /// \param queue_size the queue size to use, 100 is a good value.
 /// \param inputs the input streams, not necessarily all of the same type
 template <ErrorFreeStream... Inputs>
-static SynchronizerStream<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size,
+static ApproxTimeSynchronizer<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size,
                                                                         Inputs... inputs) {
   auto first_input = std::get<0>(std::forward_as_tuple(inputs...));  /// Use the first Stream
-  return first_input.template create_stream<SynchronizerStream<MessageOf<Inputs>...>>(queue_size,
+  return first_input.template create_stream<ApproxTimeSynchronizer<MessageOf<Inputs>...>>(queue_size,
                                                                                       inputs...);
 }
 

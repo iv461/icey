@@ -11,7 +11,7 @@ The following filters handle synchronization, serialization  timeout and other o
 ```{doxygenstruct} icey::Buffer
 ```
 
-```{doxygenclass} icey::SynchronizerStream
+```{doxygenclass} icey::ApproxTimeSynchronizer
 ```
 
 
