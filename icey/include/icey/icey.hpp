@@ -1537,6 +1537,7 @@ protected:
   /// Removes the pending request and sets an error
   static void on_timeout(auto impl) {
     impl->client->prune_pending_requests();
+    impl->timeout_timer->cancel();
     // Reference:
     // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
     if (!rclcpp::ok()) {

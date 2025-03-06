@@ -184,7 +184,9 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     using Response = ExampleService::Response::SharedPtr;
 
     /// A sleepy service:
-    auto service_cb = [i_call=0](auto request) mutable {
+    std::size_t i_call = 0;
+    auto service_cb = [&](auto request) {
+      std::cout << "Called service for the " << i_call << "th time" << std::endl;
       if(i_call == 0) {
         std::this_thread::sleep_for(100ms);
       } else {
@@ -213,20 +215,27 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     std::vector<std::string> events;
     std::size_t responses_received = 0;
 
-    events.push_back("before_call");
-    /// Send the first request but do not await it
-    client1.call(request).then([&](auto) { 
+    client1.then([&](auto) { 
         events.push_back("req1_response_" + std::to_string(responses_received)); 
         responses_received++;
     });
-    events.push_back("after_call");
-
     std::size_t req2_responses_received = 0;
-    /// Then, send another one:
-    client1.call(request).then([&](auto) {
+    client1.then([&](auto) {
       events.push_back("req2_response_" + std::to_string(req2_responses_received)); 
       req2_responses_received++;
     });
+
+    client1.except([](auto err) { 
+        std::cout << "Got err: " << err << std::endl; 
+    });
+
+    events.push_back("before_call");
+    /// Send the first request but do not await it
+    client1.call(request);
+    events.push_back("after_call");
+
+    /// Then, send another one:
+    client1.call(request);
     events.push_back("after_second_call");
 
     spin(1500ms);

@@ -208,6 +208,7 @@ public:
 
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the
   /// new state as an argument.
+  /// TODO If there is any value to take, we should immediattelly call the handler
   void register_handler(Handler &&cb) { handlers_.emplace_back(std::move(cb)); }
 
   /// Sets the state to hold none, but does not notify about this state change.
@@ -242,6 +243,7 @@ public:
   /// we have an error or value. If the state is none, it does not notify. If the state is an error
   /// and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no
   /// handlers were registered, the exception is re-thrown.
+  /// TODO We should take the value
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the
