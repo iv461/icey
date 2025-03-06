@@ -1861,6 +1861,7 @@ public:
                                                       description, read_only, ignore_override);
   }
 
+  // clang-format off
   /*!
   \brief Declare a given parameter struct to ROS.
   \tparam ParameterStruct the type of the parameter struct. It must be a struct/class with fields of
@@ -1869,8 +1870,8 @@ public:
 
   \param params The instance of the parameter struct where the values will be written to.
   \param notify_callback The callback that gets called when any field changes
-  \param name_prefix Prefix for each parameter. Used by the recursive call to support nested
-  structs. \note The passed object `params` must have the same lifetime as the node, best is to
+  \param name_prefix Prefix for each parameter. Used by the recursive call to support nested structs. 
+  \note The passed object `params` must have the same lifetime as the node, best is to
   store it as a member of the node class.
 
   Example usage:
@@ -1884,25 +1885,28 @@ public:
       icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
                                           std::string("The frequency of the sine")};
 
-      icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double",
-  "pulse"})};
+      icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
 
-      /// We can also have nested structs with more parameters, they will be named others.max_amp,
-  others.cov: struct OtherParams { double max_amp = 6.; std::vector<double> cov; } others;
-
+      /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov: 
+      struct OtherParams { 
+        double max_amp = 6.; 
+        std::vector<double> cov; 
+      } others;
     };
 
-    auto node = icey::create_node(argc, argv, "node_with_many_parameters");
-    // Now create an object of the node-parameters that will be updated:
-    NodeParameters params;
-
-    /// Now simply declare the parameter struct and a callback that is called when any field
-  updates: node->icey().declare_parameter_struct(params, [&](const std::string &changed_parameter) {
-          RCLCPP_INFO_STREAM(node->get_logger(),
-                            "Parameter " << changed_parameter << " changed");
-        });
+    class MyNode : public icey::Node {
+      MyNode(std::string name): icey::Node(name) {
+          /// Now simply declare the parameter struct and a callback that is called when any field updates: 
+          this->icey().declare_parameter_struct(params_, [&](const std::string &changed_parameter) {
+            RCLCPP_INFO_STREAM(node->get_logger(), "Parameter " << changed_parameter << " changed");
+          });
+      }
+      // Hold the parameter struct inside the class:
+      NodeParameters params_;
+    };
   \endverbatim
   */
+  // clang-format on
   template <class ParameterStruct>
   void declare_parameter_struct(
       ParameterStruct &params, const std::function<void(const std::string &)> &notify_callback = {},
