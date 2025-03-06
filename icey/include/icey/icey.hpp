@@ -1434,11 +1434,11 @@ struct ServiceStream
 
 template <class ServiceT>
 struct ServiceClientImpl {
+  /// The RequestID is currently of type int64_t in rclcpp.
+  using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
-  /// A timer to detect timeouts in promise-mode.
+  /// A timer to detect timeouts in promise-mode. (TODO we should have a timer for each request once we support sending out multiple ones)
   rclcpp::TimerBase::SharedPtr timeout_timer;
-  std::optional<typename rclcpp::Client<ServiceT>::SharedFutureWithRequestAndRequestId>
-      maybe_pending_request;
 };
 
 /// A Stream representing a service client. It stores the response as it's value.
@@ -1502,11 +1502,12 @@ protected:
 
   static void async_call(auto impl, Request request) {
     if (!wait_for_service(impl)) return;
-    impl->timeout_timer->reset();  /// reset turns on a previously cancelled, i.e. turned off timer
-                                   /// (according to the rcl documentation).
-    if (impl->maybe_pending_request)
-      impl->client->remove_pending_request(impl->maybe_pending_request.value());
-    impl->maybe_pending_request = impl->client->async_send_request(
+    /// We need to purge the pending request because this is a stream -- we would loose all other 
+    /// other concurrently awaiting responses (we would need to return a Promise from call()  ... )
+    impl->client->prune_pending_requests();
+    /// Service is available, now activate the timer (Explanation: reset turns a previously cancelled (i.e. turned off ) timer on, according to the rcl documentation.)
+    impl->timeout_timer->reset();  
+    impl->client->async_send_request(
         request, [impl](Future response_future) { on_response(impl, response_future); });
   }
 
@@ -1536,22 +1537,7 @@ protected:
 
   /// Removes the pending request and sets an error
   static void on_timeout(auto impl) {
-    /// Now do the weird cleanup thing that the API-user definitely neither does need to care
-    /// nor know about:
-    if (!impl->maybe_pending_request) {
-      return;
-    }
-    impl->client->remove_pending_request(impl->maybe_pending_request.value());
-    std::cout << "Cleaned up request" << impl->maybe_pending_request.value().request_id
-              << std::endl;
-    impl->maybe_pending_request = {};
-    /// Let's put his assertion here, I'm not sure this will still not leak memory:
-    /// https://github.com/ros2/rclcpp/issues/1697.
-    if (size_t num_requests_pruned = impl->client->prune_pending_requests() != 0) {
-      throw std::runtime_error(
-          "Pruned some more requests even after calling remove_pending_request(), you should buy "
-          "a new RPC library.");
-    }
+    impl->client->prune_pending_requests();
     // Reference:
     // https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
     if (!rclcpp::ok()) {
