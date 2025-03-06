@@ -2046,7 +2046,6 @@ public:
       // does not have a value. But we do not want to force
       /// the user to do unwrapping in 100 % of the time only to handle the 0.1% percent case that
       /// Ctrl+C was pressed.
-      std::cout << "Exiting Node after ok is false ..." << std::endl;
       rclcpp::shutdown();
       std::exit(0);
     }

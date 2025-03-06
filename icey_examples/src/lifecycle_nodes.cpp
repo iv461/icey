@@ -25,10 +25,10 @@ public:
   }
 
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_deactivate(const rclcpp_lifecycle::State & state) {
-    RCLCPP_INFO(get_logger(), "on_deactivate() was called");
+  on_cleanup(const rclcpp_lifecycle::State & state) {
+    RCLCPP_INFO(get_logger(), "on_cleanup() was called");
     /// The base class of an icey::LifecycleNode is a rclcpp::LifecycleNode, so it has all the lifecycle methods:
-    Base::on_deactivate(state);
+    Base::on_cleanup(state);
     timer_.cancel();
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }

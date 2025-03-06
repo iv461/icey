@@ -136,3 +136,28 @@ You see you get the notification:
 ```sh 
 [INFO 1740685079.892726882] [parameters_struct_example]: Parameter amplitude changed
 ```
+
+
+# Lifecycle node example 
+
+This example node spins and can be activated and deactivated. 
+
+Run it: 
+
+```sh
+ros2 run icey_examples lifecycle_node_example
+```
+
+Then, from a second terminal deactivate it:
+
+```sh
+ros2 lifecycle set /lifecycle_node_example shutdown
+```
+
+And then activate it again: 
+
+
+```sh
+ros2 lifecycle set /lifecycle_node_example shutdown
+```
+
