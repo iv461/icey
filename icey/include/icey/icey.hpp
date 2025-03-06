@@ -1175,8 +1175,7 @@ struct ValueOrParameter {
   ValueOrParameter(const Value &value)  // NOLINT
   : get([value]() { return value; }) {}
 
-  /// Construct a ValueOrParameter implicitly from a something similar to a value: 
-  // For example, `"hello"` is a const char[5] literal that is convertible to a std::string, the value.
+  /// Construct a ValueOrParameter implicitly from a something similar to a value, For example, `"hello"` is a const char[5] literal that is convertible to a std::string, the value.
   template <class T>
   requires std::convertible_to<T, Value> &&(!AnyStream<T>)ValueOrParameter(const T &v)  // NOLINT
       : get([value = Value(v)]() { return value; }) {}
@@ -1452,7 +1451,12 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
   using Request = typename _ServiceT::Request::SharedPtr;
   using Response = typename _ServiceT::Response::SharedPtr;
 
-  /// Create a new Stream and register a new ROS service client with ROS.
+  /// Create a new service client and connect it to the input stream if it is provided (if it is not nullptr.)
+  /// \param node 
+  /// \param service_name 
+  /// \param timeout the timeout that will be used for each request (i.e. `call`) to this service, as well as for the service discovery, i.e. wait_for_service.
+  /// \param qos 
+  /// \param input the input Stream holding a request. If not provided, you must call `call` manually.
   template <AnyStream Input = Stream<Request>>
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS(), Input *input = nullptr)
@@ -1472,17 +1476,21 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
     }
   }
 
+  // clang-format off
   /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
   If there is already a pending request, this pending request will be removed.
+  Requests can never hang forever but will eventually time out. 
   \param request the request
   \returns *this stream
-    Example usage:
-    \verbatim
+
+  Example usage:
+  \verbatim
     auto client = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
     auto request = std::make_shared<ExampleService::Request>();
-    icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await
-    client.call(request); \endverbatim
-    */
+    icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await client.call(request); 
+  \endverbatim
+  */
+  // clang-format on
   const Self &call(Request request) const {
     async_call(this->impl(), request);
     return *this;
