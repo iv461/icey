@@ -5,6 +5,8 @@
 using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
+
+/// TODO THIS DOES NOT WORK BECAUSE THE CALLS ARE NOT AWAITED (this needs support for async callbacks)
 int main(int argc, char **argv) {
   auto node = icey::create_node<icey::Node>(argc, argv, "service_client_node");
   

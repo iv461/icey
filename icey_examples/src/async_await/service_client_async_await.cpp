@@ -12,13 +12,12 @@ using ExampleService = std_srvs::srv::SetBool;
 icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   auto node = icey::create_node(argc, argv, "service_client_async_await_example");
-  auto &icey = node->icey();
-  
-  /// Create the service clients beforehand: With 1s timeout.
-  auto service1 = icey.create_client<ExampleService>("set_bool_service1", 1s);
-  auto service2 = icey.create_client<ExampleService>("set_bool_service2", 1s);  
 
-  auto timer = icey.create_timer(1s);
+  /// Create the service clients beforehand: With 1s timeout.
+  auto service1 = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
+  auto service2 = node->icey().create_client<ExampleService>("set_bool_service2", 1s);  
+
+  auto timer = node->icey().create_timer(1s);
 
   /// Main spinning loop
   while (true) {

@@ -506,12 +506,14 @@ struct crtp {
 template <class F, class Arg>
 struct check_callback {
   static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature");
+  static_assert(!AnyStream<std::invoke_result_t<F, Arg>>, "No coroutine, i.e. asynchronous functions are allowed as callbacks");
 };
 
 template <class F, class... Args>
 struct check_callback<F, std::tuple<Args...>> {
   static_assert(std::is_invocable_v<F, Args...>,
                 "The callback has the wrong signature, it has to take the types of the tuple");
+  static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
 
@@ -685,6 +687,11 @@ public:
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
+  /// \brief Calls the given function f every time this Stream receives a value.  
+  /// It returns a new Stream that receives the values that this function f returns. 
+  /// The returned Stream also passes though the errors of this stream so that 
+  /// chaining `then`s with an `except` works.
+  /// \note The given function must be synchronous, no asynchronous functions are supported.
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives a value x, where y = f(x).
   /// The type of the returned stream is:
@@ -703,6 +710,9 @@ public:
     return create_from_impl(impl()->then(std::forward<F>(f)));
   }
 
+  /// \brief Calls the given function f every time this Stream receives an error. 
+  /// It returns a new Stream that receives the values that this function f returns. 
+  /// \note The given function must be synchronous, no asynchronous functions are supported.
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives an error x, where y = f(x).
   /// The type of the returned stream is:
@@ -818,10 +828,16 @@ public:
   /// Stream (it is unpacked if it's a tuple) and returning void.
   template <class F>
   Stream<Value, Nothing> unwrap_or(F &&f) {
-    this->except(std::forward<F>(f));
-    auto new_stream = this->template transform_to<Value, Nothing>();
-    this->connect_values(new_stream);
-    return new_stream;
+    /// TODO Can't we just move this stream in, i.e. reuse it instead of creating a new one ? (In this case moving means re-using the impl)
+    auto output = this->template transform_to<Value, Nothing>();
+    this->impl()->register_handler([output_impl = output.impl(), f=std::forward<F>(f)](const auto &new_state) {
+      if (new_state.has_value()) {
+        output_impl->put_value(new_state.value());
+      } else if (new_state.has_error()) {
+        impl::unpack_if_tuple(f, new_state.error());
+      }
+    });
+    return output;
   }
 
   /// Outputs the Value only if the given predicate f returns true.
@@ -931,7 +947,7 @@ struct BufferImpl {
 template <class Value>
 struct Buffer : public Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>> {
   using Base = Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>>;
-  template <AnyStream Input>
+  template <ErrorFreeStream Input>
   explicit Buffer(NodeBookkeeping &node, std::size_t N, Input input) : Base(node) {
     this->impl()->N = N;
     input.impl()->register_handler([impl = this->impl()](auto x) {
@@ -1069,7 +1085,7 @@ struct Validator {
   Validate validate;
 };
 
-/// An stream for ROS parameters.
+/// An stream representing parameters. It always registers the callback to obtain the parameter updates.
 template <class _Value>
 struct ParameterStream : public Stream<_Value> {
   using Base = Stream<_Value>;
@@ -1165,7 +1181,7 @@ protected:
   bool ignore_override = false;
 };
 
-/// A class that abstracts a plain value and a ParameterStream so that both are supported.
+/// A class that abstracts a plain value and a ParameterStream so that both are supported in promise mode.
 /// This is needed for example for timeouts and coordinate system names.
 template <class Value>
 struct ValueOrParameter {
@@ -1218,7 +1234,8 @@ struct TransformSubscriptionStreamImpl {
   Weak<TFListener> tf2_listener;
 };
 
-/// A Stream that represents a subscription between two coordinate systems. (See TFListener)
+/// A Stream that represents a subscription between two coordinate systems. Since such a subscription is always buffered,
+/// we can also make an asynchronous lookup for a transform at a specific point in time. (See TFListener)
 struct TransformSubscriptionStream
     : public Stream<geometry_msgs::msg::TransformStamped, std::string,
                     TransformSubscriptionStreamImpl> {
@@ -1252,7 +1269,7 @@ struct TransformSubscriptionStream
   /// @return A promise that resolves with the transform or with an error if a timeout occurs (it will be a Promise in the future)
   Self &lookup(std::string target_frame, std::string source_frame, const Time &time,
                const Duration &timeout) {
-    /// This function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
+    /// The function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
     /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
     /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
     /// promise type is available in standard C++ before C++26) and undocumented, so nobody knows
@@ -1321,14 +1338,13 @@ struct PublisherImpl {
 };
 
 /// A Stream representing a ROS-publisher.
-/// \tparam _Value Can be either a `Message` or `std::shared_ptr<Message>` where Message is a valid
-/// ROS-message type.
+/// \tparam _Value Can be either a `Message` or `std::shared_ptr<Message>` where `Message` must be something publishable, i.e. either a valid
+/// ROS message or a masquerated type.
 template <class _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Base = Stream<_Value, Nothing, PublisherImpl<_Value>>;
   using Message = remove_shared_ptr_t<_Value>;
-  static_assert(rclcpp::is_ros_compatible_type<Message>::value,
-                "A publisher must use a publishable ROS message (no primitive types are possible)");
+  
   template <AnyStream Input = Stream<_Value>>
   PublisherStream(NodeBookkeeping &node, const std::string &topic_name,
                   const rclcpp::QoS qos = rclcpp::SystemDefaultsQoS(),
@@ -1502,8 +1518,8 @@ protected:
 
   static void async_call(auto impl, Request request) {
     if (!wait_for_service(impl)) return;
-    /// We need to purge the pending request because this is a stream -- we would loose all other 
-    /// other concurrently awaiting responses (we would need to return a Promise from call()  ... )
+    /// We need to purge the pending request because this is a stream -- we would loose the response to this request if in the meantime some other pending request is received
+    //  (we would need to return a Promise from call() to fix this issue)
     impl->client->prune_pending_requests();
     /// Service is available, now activate the timer (Explanation: reset turns a previously cancelled (i.e. turned off ) timer on, according to the rcl documentation.)
     impl->timeout_timer->reset();  
@@ -1945,6 +1961,8 @@ public:
     });
   }
 
+  /// Create a subscription stream.
+  /// Works otherwise the same as [rclcpp::Node::create_subscription].
   template <class MessageT>
   SubscriptionStream<MessageT> create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
@@ -1953,18 +1971,21 @@ public:
   }
 
   /// Create a subscriber that subscribes to a single transform between two frames.
-  /// It receives a value every time the transform between these two frames changes, i.e. it is a stream
+  /// This stream will emit a value every time the transform between these two frames changes, i.e. it is a stream. 
+  /// If you need to lookup transforms at a specific point in time, look instead at `Context::create_transform_subscription`.
   TransformSubscriptionStream create_transform_subscription(
       ValueOrParameter<std::string> target_frame, ValueOrParameter<std::string> source_frame) {
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
-  /// Creates a transform subscription on which we can call lookup() to lookup single transforms.
+  /// Creates a transform subscription that works like the usual combination of a tf2_ros::Buffer and a tf2_ros::TransformListener.
+  /// It is used to `lookup()` transforms asynchronously at a specific point in time.
   TransformSubscriptionStream create_transform_subscription() {
   return create_stream<TransformSubscriptionStream>();
 }
 
   /// Create a publisher stream.
+  /// Works otherwise the same as [rclcpp::Node::create_publisher].
   template <class Message>
   PublisherStream<Message> create_publisher(const std::string &topic_name,
                                             const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
@@ -1972,14 +1993,20 @@ public:
     return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
   }
 
+  /// Create a publisher to publish transforms on the `/tf` topic. Works otherwise the same as [tf2_ros::TransformBroadcaster].
   TransformPublisherStream create_transform_publisher() {
     return create_stream<TransformPublisherStream>();
   }
 
-  TimerStream create_timer(const Duration &interval, bool is_one_off_timer = false) {
-    return create_stream<TimerStream>(interval, is_one_off_timer);
+  /// Create a timer stream. It yields as a value the total number of ticks.
+  /// \param is_one_off_timer if set to true, this timer will execute only once.
+  /// Works otherwise the same as [rclcpp::Node::create_timer].
+  TimerStream create_timer(const Duration &period, bool is_one_off_timer = false) {
+    return create_stream<TimerStream>(period, is_one_off_timer);
   }
 
+  /// Create a service server stream.
+  /// Works otherwise the same as [rclcpp::Node::create_service].
   template <class ServiceT>
   ServiceStream<ServiceT> create_service(const std::string &service_name,
                                          ServiceStream<ServiceT>::SyncCallback sync_callback = {},
@@ -1987,13 +2014,16 @@ public:
     return create_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
   }
 
-  /// Create a service client stream
+  /// Create a service client stream.
+  /// Works otherwise the same as [rclcpp::Node::create_client].
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
   }
 
+
+  /// ICEY creates by default an executor and adds this Node to it to enable using co_await. This method returns this executor.
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
 
   /// Spins the ROS executor until the Stream has something (value or error). This is also called a

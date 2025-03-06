@@ -1,4 +1,4 @@
-/// This example shows how multiple nodes can be created and launched in a single process.
+/// This example shows how multiple nodes can be created and launched in a single process in (promise style).
 #include <icey/icey.hpp>
 #include "std_msgs/msg/float32.hpp"
 
