@@ -55,6 +55,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+  icey::icey_coro_debug_print = true;
   create_and_spin_node(argc, argv);
   rclcpp::shutdown();
 }
