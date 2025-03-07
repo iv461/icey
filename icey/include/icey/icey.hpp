@@ -620,20 +620,20 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, N
 
     using Resolve = std::function<void(const Value &)>;
     using Reject = std::function<void(const Error &)>;
-    using Cancel = std::function<void()>;
-    using Wait = std::function<void()>;
+    using Cancel = std::function<void(Self*)>;
+    using Wait = std::function<void(Self*)>;
 
-    
     Future(std::function<std::tuple<Cancel, Wait>(Self*)> &&h) { std::tie(cancel_, wait_) = h(this); }
-
+    Future(Cancel &&cancel, Wait &&wait) : cancel_(cancel), wait_(wait) {}
+    
     Future(Future &&) = delete;
     Future(const Future &) = delete;
     Future&operator=(Future &&) = delete;
     Future&operator=(const Future &) = delete;
 
     ~Future() {
-        if(cancel_)
-            cancel_();
+      if(cancel_)
+          cancel_();
     }
 
     void wait() { wait_(); }
@@ -1628,6 +1628,7 @@ struct ServiceClient : public StreamImplDefault {
   /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
   If there is already a pending request, this pending request will be removed.
   Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
+  \note A current limitation is that there is a synchronous wait for the service to become available, i.e. connecting to it. This is because rclcpp currently does not offer an asynchronous API for connecting to the service.
   \param request the request
   \returns *this stream
 
@@ -1642,36 +1643,37 @@ struct ServiceClient : public StreamImplDefault {
   Future<Response, std::string> call(Request request) {
     /// TODO no strong ref capture to request, 
     /// TODO this capture with exceptions
-    return Future<Response, std::string>([this, request](auto future) -> std::tuple<std::function<void()>, std::function<void()>> {
-        if(client->wait_for_service(this->timeout.value())) {
-          // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
-          if (!rclcpp::ok()) {
-            future->put_error("INTERRUPTED");
-          } else {
-            future->put_error("SERVICE_UNAVAILABLE");
-          }
-          return std::make_tuple([]{}, []{});
-        } else {
-          auto future_and_req_id = this->client->async_send_request(
-            request, [this, future](Client::SharedFutureWithRequest response_future) { 
-              //impl->timeout_timer->cancel();
-              if (response_future.valid()) {
-                  future->put_value(response_future.get().second);
-              } else {
-                if (!rclcpp::ok()) {
-                  future->put_error("INTERRUPTED");
-                } else {
-                  future->put_error("TIMEOUT");
-                }
+    return {typename Future<Response, std::string>::Cancel{},
+              [this, request](auto future_ptr) {
+                  /// The wait function: We put here all the synchronous code because there is no asynchronous API for wait_for_service.
+                  /// Therefore we use the synchronous API also for the call.
+                  if(!client->wait_for_service(this->timeout.value())) {
+                    // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+                    if (!rclcpp::ok()) {
+                      future_ptr->put_error("INTERRUPTED");
+                    } else {
+                      future_ptr->put_error("SERVICE_UNAVAILABLE");
+                    }
+                  } else  {
+                    auto future_and_req_id = this->client->async_send_request(request);
+                    auto spin_result = this->context.lock()->get_executor()->spin_until_future_complete(future_and_req_id, 
+                      this->timeout.value());
+                    if (spin_result == rclcpp::FutureReturnCode::TIMEOUT) {
+                      this->client->remove_pending_request(future_and_req_id.request_id);
+                      future_ptr->put_error("TIMEOUT");
+                    } else if (spin_result == rclcpp::FutureReturnCode::INTERRUPTED) {
+                      future_ptr->put_error("INTERRUPTED");
+                    } else {
+                      auto &response_future = future_and_req_id.future;
+                      if (!response_future.valid()) {
+                        throw std::logic_error("Invariant broke: Future is invalid after spin");
+                      } else {
+                        future_ptr->put_value(response_future.get()->second);
+                      }
+                    }
+                  }
               }
-            });
-            auto req_id = future_and_req_id.request_id;
-            return std::make_tuple(
-              [this, req_id]() { this->client->remove_pending_request(req_id); }, 
-              [this]() { this->context.lock()->get_executor()->spin_once(); }
-            );
-        }
-      });
+    };
   }
 
 };

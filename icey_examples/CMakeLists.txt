@@ -24,7 +24,6 @@ ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
 ament_auto_add_executable(tf_subscription_example src/tf_subscription.cpp)
 ament_auto_add_executable(tf_broadcaster_example src/tf_broadcaster.cpp)
 ament_auto_add_executable(class_based_api_example src/class_based_api.cpp)
-ament_auto_add_executable(service_client_example src/service_client.cpp)
 ament_auto_add_executable(service_server_example src/service_server.cpp)
 
 ament_auto_add_executable(signal_generator_async_await_example src/async_await/signal_generator_async_await.cpp)

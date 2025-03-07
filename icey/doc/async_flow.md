@@ -27,6 +27,39 @@ See also the [service_client](../../icey_examples/src/service_client.cpp) exampl
 
 This operation is asynchronous in ICEY and so no dead-locks can occur. Services can be called from any other Stream, for example synchronizers
 
+
+## Avoiding callback hell: 
+
+Many ROS application developers are asking how to do synchronous service calls. In ROS 2, there is no synchronous service call anymore (compared to ROS 1), making the translation of ROS 1 code challenging. But actually, the motivatrion behind asking for a synchronous service call is that we want to do somehting only after the service call returned the responce. Meaning, we want to enforce a sequence of the operations. 
+This is actually possible already in regular ROS 2 by simply nesting the callbacks:
+
+```cpp
+/// Inside the callback of a subscriber, we want to call a service and then wait for a transform: 
+void on_message(Msg msg) {
+
+    auto req = get_req();
+    client->async_send_request(req, [](auto future) {
+        if(future.valid()) {
+
+            client1->async_send_request(req, [](auto future1) {
+                if(future1.valid()) {
+                    tf_buffer->waitForTransform(target, source, [](auto tf_future) {
+                        if(tf_future.valid()) {
+                            auto transform = tf_future.get().second;
+                                tranform(msg, transform);
+
+                        }
+                    }); 
+                }
+            });
+        }
+    });
+}
+```
+By nesting the callbacks, you can achieve this sequencing. 
+But as you see, nesting many callbacks (in this case 3) starts making the code unreadable, a common problem that is called *callback hell*. 
+
+
 ## Synchronization
 
 Topics in ICEY can be synchronized in a very simple way using a single `synchronize` function:
