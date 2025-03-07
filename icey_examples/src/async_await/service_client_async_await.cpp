@@ -1,6 +1,7 @@
-/// This example shows how by using async/await syntax (i.e. C++20 coroutines) we achieve a synchronously-looking service calls.
-/// Under the hood, everything is asynchronous, ICEY actually calls client->async_send_request, but Streams
-/// combined with await-syntax make the code look synchronous so that it is easier to see what is going on.
+/// This example shows how to use service clients in icey. 
+/// By using async/await syntax (i.e. C++20 coroutines) we achieve a synchronously-looking service calls.
+/// Under the hood, everything is asynchronous, ICEY actually calls client->async_send_request.
+/// The await-syntax makes the code look synchronous so that it is easier to see what is going on.
 #include <icey/icey.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -13,7 +14,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   auto node = icey::create_node(argc, argv, "service_client_async_await_example");
 
-  /// Create the service clients beforehand: With 1s timeout.
+  /// Create the service clients beforehand: All calls will have a 1s timeout (for both discovery and the actual service call)
   auto service1 = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
   auto service2 = node->icey().create_client<ExampleService>("set_bool_service2", 1s);  
 
@@ -21,9 +22,10 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   /// Main spinning loop
   while (true) {
-    /// Now await the timer callback: This will happen every second
+    /// First, wait until it's time to make the request
     co_await timer;
     
+    /// Create a request:
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     RCLCPP_INFO_STREAM(node->get_logger(),
@@ -35,14 +37,14 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     icey::Result<Response, std::string> result1 = co_await service1.call(request);
 
     if (result1.has_error()) {
+      /// Handle errors: (possibly "SERVICE_UNAVAILABLE", "TIMEOUT" or "INTERRUPTED")
       RCLCPP_INFO_STREAM(node->get_logger(), "Service1 got error: " << result1.error());
     } else {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response1: " << result1.value()->success);
     }
 
-    /// Then call the second service after we got the response from the first one:
+    /// We can chain service calls: Call a second service after we got the response from the first one:
     auto result2 = co_await service2.call(request);
-
     if (result2.has_error()) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Service2 got error: " << result2.error());
     } else {

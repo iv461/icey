@@ -1045,6 +1045,8 @@ protected:
       using E = typename ReturnType::Error;
       auto new_stream = this->template create_new<V, E>();
       /// TODO we need to copy the future ...
+      if(icey_coro_debug_print) 
+        std::cout << "Transforming a future into a stream .. " << std::endl;
       return new_stream;
     } else {
       return this->template create_new<ReturnType, Nothing>();
@@ -1602,9 +1604,6 @@ struct ServiceClient : public StreamImplDefault {
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
   /// A timer to detect timeouts in promise-mode. (TODO we should have a timer for each request once we support sending out multiple ones)
   rclcpp::TimerBase::SharedPtr timeout_timer;
-
-  
-
   //Duration timeout;
   ServiceClient() = default;
   /// Create a new service client

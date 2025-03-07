@@ -8,6 +8,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
+
 icey::Stream<int> serve_downstream_service(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "service_service_async_await_example");
 
@@ -41,6 +42,7 @@ icey::Stream<int> serve_downstream_service(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+  icey::icey_coro_debug_print = true;
   serve_downstream_service(argc, argv);
   rclcpp::shutdown();
 }
