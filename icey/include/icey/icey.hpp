@@ -562,7 +562,13 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
   /// return_value returns the value of the Steam.
   auto return_value() { return this->underlying().value(); }
 
-  void unhandled_exception() {}
+  void unhandled_exception() {
+    /// Wanna hear a joke ? 
+    /// 1. There is a function defined std::exception_ptr current_exception() noexcept;
+    /// 2. It returns: using exception_ptr = /*unspecified*/ (since C++11) 
+    /// ...
+    //this->underlying().set_error(std::current_exception()->what());
+  }
 
   /// If the return_value function is called with a value, it *sets* the value, makes sense
   /// right ? No ? Oh .. (Reference:
@@ -606,8 +612,8 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaul
         Self &promise_;
         Awaiter(Self &p) : promise_(p) {}
         
-        bool await_ready() const noexcept { return promise_.has_none(); }
-        void await_suspend(std::coroutine_handle<> handle) noexcept { promise_.wait(); }
+        bool await_ready() const noexcept { return !promise_.has_none(); }
+        bool await_suspend(std::coroutine_handle<> handle) noexcept { promise_.wait(); return false; }
         auto await_resume() const noexcept { return promise_.take(); }
       };
       return Awaiter{*this};
@@ -683,8 +689,8 @@ public:
     struct ROSExecutorAwaiter {
       const Self &stream_;
       ROSExecutorAwaiter(const Self &p) : stream_(p) {}
-      bool await_ready() const noexcept { return stream_.has_none(); }
-      void await_suspend(std::coroutine_handle<> handle) noexcept { stream_.wait(); }
+      bool await_ready() const noexcept { return !stream_.has_none(); }
+      bool await_suspend(std::coroutine_handle<> handle) noexcept { stream_.wait(); return false; }
       auto await_resume() const noexcept { return stream_.take(); }
     };
     return ROSExecutorAwaiter{*this};
@@ -912,7 +918,8 @@ protected:
   /// Spin the ROS executor until this Stream has something (a value or an error).  
   void wait() const {
     if (this->impl()->context.expired()) {
-      throw std::logic_error("Stream has not context, cannot spin, probably an error in coroutine support implementation.");
+      std::cout << "Stream has not context, cannot spin, probably an error in coroutine support implementation." << std::endl;
+      //throw std::logic_error("Stream has not context, cannot spin, probably an error in coroutine support implementation.");
     } else {
       this->impl()->context.lock()->spin_executor_until_stream_has_some(*this);
     }
@@ -921,7 +928,12 @@ protected:
   /// TODO make non-const, then co_await is also not const anymore,
   void set_value(const Value & x) const { this->impl()->set_value(x); }
   bool has_none() const { return this->impl()->has_none(); }
-  auto take() const { return this->impl()->take(); }
+  auto take() const { 
+    if(this->impl()->has_none()) {
+      std::cout << "Trying to take something but this stream has nothing" << std::endl;
+    }
+    return this->impl()->take(); 
+  }
 
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
