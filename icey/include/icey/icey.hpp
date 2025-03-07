@@ -1984,6 +1984,7 @@ public:
   /// It is used to `lookup()` transforms asynchronously at a specific point in time.
   TransformBuffer<Context> create_transform_buffer() {
     TransformBuffer<Context> tf_buffer(static_cast<NodeBookkeeping &>(*this));
+    tf_buffer.context = this->shared_from_this();
     return tf_buffer;
   }
 
