@@ -590,8 +590,9 @@ struct check_callback<F, std::tuple<Args...>> {
 struct FutureTag {};
 /// A Future is an asynchronous primitve that yields a single value or an error.
 template<class _Value, class _Error = Nothing>
-struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>, 
+class Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>, 
   public PromiseInterfaceForCoroutines<Future<_Value, _Error>> {
+  public:
     using Value = _Value;
     using Error = _Error;
     using Self = Future<Value, Error>;
@@ -1973,7 +1974,7 @@ public:
 
   /// Create a subscriber that subscribes to a single transform between two frames.
   /// This stream will emit a value every time the transform between these two frames changes, i.e. it is a stream. 
-  /// If you need to lookup transforms at a specific point in time, look instead at `Context::create_transform_subscription`.
+  /// If you need to lookup transforms at a specific point in time, look instead at `Context::create_transform_buffer`.
   TransformSubscriptionStream create_transform_subscription(
       ValueOrParameter<std::string> target_frame, ValueOrParameter<std::string> source_frame) {
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
@@ -1981,7 +1982,7 @@ public:
 
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a tf2_ros::TransformListener.
   /// It is used to `lookup()` transforms asynchronously at a specific point in time.
-  TransformBuffer<Context> create_transform_subscription() {
+  TransformBuffer<Context> create_transform_buffer() {
     TransformBuffer<Context> tf_buffer(static_cast<NodeBookkeeping &>(*this));
     return tf_buffer;
   }

@@ -1,6 +1,7 @@
-# Streams 
+# Entities 
 
-These are all the available `Streams`, implementing subscribers, publishers/timers etc.
+All the ROS entities such as subscribers, publishers/timers etc., most of them follow the `Stream` concept.
+
 
 ```{doxygenstruct} icey::Result
 ```
@@ -10,6 +11,9 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```{doxygenstruct} icey::StreamTag
 ```
 ```{doxygenclass} icey::Stream
+```
+
+```{doxygenclass} icey::Future
 ```
 
 ```{doxygentypedef} icey::Clock
@@ -52,6 +56,9 @@ These are all the available `Streams`, implementing subscribers, publishers/time
 ```{doxygenstruct} icey::TransformSubscriptionStream
 ```
 
+```{doxygenstruct} icey::TransformBuffer
+```
+
 ```{doxygenstruct} icey::TransformPublisherStream
 ```
 
@@ -76,5 +83,5 @@ Actual implementation of the stream.
 
 ## C++20 coroutines support 
 
-```{doxygenstruct} icey::StreamCoroutinesSupport
+```{doxygenstruct} icey::PromiseInterfaceForCoroutines
 ```

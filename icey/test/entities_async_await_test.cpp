@@ -260,7 +260,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
         .publish_transform();
         
     auto tf_sub =
-        receiver_->icey().create_transform_subscription();;
+        receiver_->icey().create_transform_buffer();;
 
     std::size_t received_cnt = 0;
     while(received_cnt <= 13) {
