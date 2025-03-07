@@ -25,8 +25,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
-- [ ] We still got a crash in service_client_async_await_example
-
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
 - [ ] Add static asserts for the any filter that all the streams have the same value
@@ -289,3 +287,5 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] `delay` with  -> not needed after we have async TF lookup 
 - [X] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function -> not needed after we have async TF lookup 
+
+- [X] We still got a crash in service_client_async_await_example

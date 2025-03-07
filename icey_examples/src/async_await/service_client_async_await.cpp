@@ -20,7 +20,6 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   auto timer = node->icey().create_timer(1s);
 
-  
   /// Main spinning loop
   while (true) {
     /// First, wait until it's time to make the request

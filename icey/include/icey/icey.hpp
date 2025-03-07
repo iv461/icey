@@ -508,31 +508,19 @@ struct crtp {
   T const &underlying() const { return static_cast<T const &>(*this); }
 };
 
-template <class F, class Arg>
-struct check_callback {
-  static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature");
-  static_assert(!AnyStream<std::invoke_result_t<F, Arg>>, "No coroutine, i.e. asynchronous functions are allowed as callbacks");
-};
-
-template <class F, class... Args>
-struct check_callback<F, std::tuple<Args...>> {
-  static_assert(std::is_invocable_v<F, Args...>,
-                "The callback has the wrong signature, it has to take mutliple arguments (the Stream holds tuple, the arguments are all the elements of the tuple)");
-  static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
-};
-
-/// Generic coroutine support for Futures/Promises/Streams
+struct PromiseInterfaceForCoroutinesTag {};
+/// Implementation of the so-called promise interface needed the C++20 coroutines. It is implemented by Futures/Promises/Streams 
 /// Derived must implement:
-/// set_value, value, take, has_none, transform_to<> and wait
+/// set_value, value, take, has_none, and wait
 template <class Derived>
-struct GenericCoroutinesSupport : public crtp<Derived> {
+struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInterfaceForCoroutinesTag {
   using promise_type = Derived;
 
-  GenericCoroutinesSupport() {
+  PromiseInterfaceForCoroutines() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
   }
 
-  ~GenericCoroutinesSupport() {
+  ~PromiseInterfaceForCoroutines() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
   }
 
@@ -583,11 +571,27 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
 
 };
 
+template <class F, class Arg>
+struct check_callback {
+  static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature");
+  static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, 
+        std::invoke_result_t<F, Arg> >, 
+        "No coroutine, i.e. asynchronous functions are allowed as callbacks");
+};
+
+template <class F, class... Args>
+struct check_callback<F, std::tuple<Args...>> {
+  static_assert(std::is_invocable_v<F, Args...>,
+                "The callback has the wrong signature, it has to take mutliple arguments (the Stream holds tuple, the arguments are all the elements of the tuple)");
+  static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, std::invoke_result_t<F, Args...> >, 
+      "No coroutines, i.e. asynchronous functions are allowed as callbacks");
+};
+
 struct FutureTag {};
-/// set_value, value, take, has_none, transform_to<> and wait
+/// A Future is an asynchronous primitve that yields a single value or an error.
 template<class _Value, class _Error = Nothing>
 struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>, 
-  public GenericCoroutinesSupport<Future<_Value, _Error>> {
+  public PromiseInterfaceForCoroutines<Future<_Value, _Error>> {
     using Value = _Value;
     using Error = _Error;
     using Self = Future<Value, Error>;
@@ -614,7 +618,7 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaul
         
         bool await_ready() const noexcept { return !promise_.has_none(); }
         bool await_suspend(std::coroutine_handle<> handle) noexcept { promise_.wait(); return false; }
-        auto await_resume() const noexcept { return promise_.take(); }
+        auto await_resume() const noexcept { return promise_.get_state(); }
       };
       return Awaiter{*this};
     }
@@ -624,6 +628,7 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaul
           cancel_(*this);
     }
 
+    /// Synchronous wait until this Future has some.
     void wait() { custom_wait_(*this); }
 
     Cancel cancel_;
@@ -661,11 +666,11 @@ struct TransformPublisherStream;
 /// how you should extend the Stream class when implementing your own Streams.
 template <class _Value, class _ErrorValue = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag, 
-  public GenericCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>> {
+  public PromiseInterfaceForCoroutines<Stream<_Value, _ErrorValue, ImplBase>> {
 
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
   friend Context;
-  friend GenericCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>>;
+  friend PromiseInterfaceForCoroutines<Stream<_Value, _ErrorValue, ImplBase>>;
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
@@ -684,7 +689,8 @@ public:
   explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); }
   explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
-  /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines.
+  /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines. 
+  /// It spins the ROS executor until this Stream has something (value or error) and then resumes the coroutine.
   auto operator co_await() const {
     struct ROSExecutorAwaiter {
       const Self &stream_;
@@ -919,7 +925,7 @@ protected:
   void wait() const {
     if (this->impl()->context.expired()) {
       std::cout << "Stream has not context, cannot spin, probably an error in coroutine support implementation." << std::endl;
-      //throw std::logic_error("Stream has not context, cannot spin, probably an error in coroutine support implementation.");
+      throw std::logic_error("Stream has not context, cannot spin, probably an error in coroutine support implementation.");
     } else {
       this->impl()->context.lock()->spin_executor_until_stream_has_some(*this);
     }
