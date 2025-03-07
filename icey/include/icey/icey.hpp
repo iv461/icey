@@ -454,6 +454,10 @@ private:
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };
 
+/// A tag to be able to recognize the type "Stream", all types deriving from StreamTag satisfy the
+/// `AnyStream` concept. \sa AnyStream
+struct StreamTag {};
+
 class Context;
 /// The default augmentation of a stream implementation: The context, holding ROS-related stuff, and
 /// some names for easy debugging.
@@ -467,9 +471,10 @@ public:
   std::optional<Duration> timeout{};
 };
 
-/// A tag to be able to recognize the type "Stream", all types deriving from StreamTag satisfy the
-/// `AnyStream` concept. \sa AnyStream
-struct StreamTag {};
+/// Adds a default extention inside the impl::Stream by default.
+/// Handy to not force the user to declare this, i.e. to not leak implementation details.
+template <class Base>
+struct WithDefaults : public Base, public StreamImplDefault {};
 
 template <class T>
 constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
@@ -516,9 +521,10 @@ struct check_callback<F, std::tuple<Args...>> {
   static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
-/// Generic interface for implementing Promises 
+/// Generic coroutine support for Futures/Promises/Streams
 /// Derived must implement:
 /// set_value, value, take, has_none, transform_to<> and wait
+/// TODO refactor/dedup with StreamCoroutinesSupport
 template <class Derived>
 struct GenericCoroutinesSupport : public crtp<Derived> {
   using promise_type = Derived;
@@ -612,16 +618,18 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
 struct FutureTag {};
 /// set_value, value, take, has_none, transform_to<> and wait
 template<class _Value, class _Error = Nothing>
-struct Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing>, 
+struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>, 
   public GenericCoroutinesSupport<Future<_Value, _Error>> {
     using Value = _Value;
     using Error = _Error;
     using Self = Future<Value, Error>;
 
+    using Storage = impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>;
+
     using Resolve = std::function<void(const Value &)>;
     using Reject = std::function<void(const Error &)>;
-    using Cancel = std::function<void(Self*)>;
-    using Wait = std::function<void(Self*)>;
+    using Cancel = std::function<void(Storage &)>;
+    using Wait = std::function<void(Storage &)>;
 
     Future(std::function<std::tuple<Cancel, Wait>(Self*)> &&h) { std::tie(cancel_, wait_) = h(this); }
     Future(Cancel &&cancel, Wait &&wait) : cancel_(cancel), wait_(wait) {}
@@ -633,10 +641,10 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, N
 
     ~Future() {
       if(cancel_)
-          cancel_(this);
+          cancel_(*this);
     }
 
-    void wait() { wait_(this); }
+    void wait() { wait_(*this); }
 
     template<class ReturnType>
     decltype(auto) transform_to(ReturnType &x) const {
@@ -728,22 +736,13 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
     return this->underlying().transform_to(x);
   }
 
-  /// Spin the ROS executor until this Stream has something (a value or an error).
-  void spin_executor() {
-    this->underlying().impl()->context.lock()->spin_executor_until_stream_has_some(
-        this->underlying());
-  }
-
   /// Returns whether the stream has a value or an error.
   bool await_ready() { return !this->underlying().impl()->has_none(); }
   /// Spin the ROS event loop until we have a value or an error.
   bool await_suspend(auto) {
     if (icey_coro_debug_print)
       std::cout << this->underlying().get_type_info() << " await_suspend called" << std::endl;
-    if (this->underlying().impl()->context.expired()) {
-      throw std::logic_error("Stream has not context");
-    }
-    this->spin_executor();
+    this->underlying().wait();
     return false;  /// Resume the current coroutine, see
                    /// https://en.cppreference.com/w/cpp/language/coroutines
   }
@@ -755,14 +754,10 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
   auto await_resume() {
     if (icey_coro_debug_print)
       std::cout << this->underlying().get_type_info() << " await_resume called" << std::endl;
-    return this->underlying().impl()->take();
+    return this->underlying().take();
   }
 };
 
-/// Adds a default extention inside the impl::Stream by default.
-/// Handy to not force the user to declare this, i.e. to not leak implementation details.
-template <class Base>
-struct WithDefaults : public Base, public StreamImplDefault {};
 
 template <class V>
 struct TimeoutFilter;
@@ -1023,7 +1018,10 @@ public:
     return this->impl()->context.lock()->template create_stream<S>(std::forward<Args>(args)...);
   }
 
+  using CustomWait = std::function<void(Impl &)>;
+  CustomWait custom_wait_; /// Hack to support transforming futures into Streams
 protected:
+
   void assert_we_have_context() {
     if (!this->impl()->context.lock())
       throw std::runtime_error("This stream does not have context");
@@ -1040,11 +1038,11 @@ protected:
       this->impl()->context = x.impl()->context;  /// Get the context from the input stream
       return x;
     } else if constexpr(std::is_base_of_v<FutureTag, ReturnType>) {
-      /// Transform a Future into a stream that yields once
+      /// Transform a Future into a stream by adding a custom wait function to the Stream that is just the Future's wait
       using V = typename ReturnType::Value;
       using E = typename ReturnType::Error;
-      auto new_stream = this->template create_new<V, E>();
-      /// TODO we need to copy the future ...
+      auto new_stream = this->template create_new<V, E>();      
+      new_stream.custom_wait_ = x.wait_;
       if(icey_coro_debug_print) 
         std::cout << "Transforming a future into a stream .. " << std::endl;
       return new_stream;
@@ -1052,6 +1050,21 @@ protected:
       return this->template create_new<ReturnType, Nothing>();
     }
   }
+
+  /// Spin the ROS executor until this Stream has something (a value or an error).
+  void wait() {
+    if(custom_wait_)  
+        custom_wait_(*this->impl_);
+    else  {
+      if (this->impl()->context.expired()) {
+        throw std::logic_error("Stream has not context, cannot spin, probably an error in coroutine support implementation.");
+      } else {
+        this->impl()->context.lock()->spin_executor_until_stream_has_some(*this);
+      }
+    }
+  }
+
+  auto take() { return this->impl()->take(); }
 
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
@@ -1069,6 +1082,7 @@ protected:
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
+
 };
 
 template <class Value>
@@ -1631,30 +1645,30 @@ struct ServiceClient : public StreamImplDefault {
     /// TODO no strong ref capture to request, 
     /// TODO this capture with exceptions
     return {typename Future<Response, std::string>::Cancel{},
-              [icey_ctx = this->context, client = this->client, request, timeout](auto future_ptr) {
+              [icey_ctx = this->context, client = this->client, request, timeout](auto &future) {
                   /// The wait function: We put here all the synchronous code because there is no asynchronous API for wait_for_service.
                   /// Therefore we use the synchronous API also for the call.
                   if(!client->wait_for_service(timeout)) {
                     // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
                     if (!rclcpp::ok()) {
-                      future_ptr->put_error("INTERRUPTED");
+                      future.put_error("INTERRUPTED");
                     } else {
-                      future_ptr->put_error("SERVICE_UNAVAILABLE");
+                      future.put_error("SERVICE_UNAVAILABLE");
                     }
                   } else  {
                     auto future_and_req_id = client->async_send_request(request);
                     auto spin_result = icey_ctx.lock()->get_executor()->spin_until_future_complete(future_and_req_id, timeout);
                     if (spin_result == rclcpp::FutureReturnCode::TIMEOUT) {
                       client->remove_pending_request(future_and_req_id.request_id);
-                      future_ptr->put_error("TIMEOUT");
+                      future.put_error("TIMEOUT");
                     } else if (spin_result == rclcpp::FutureReturnCode::INTERRUPTED) {
-                      future_ptr->put_error("INTERRUPTED");
+                      future.put_error("INTERRUPTED");
                     } else {
                       auto &response_future = future_and_req_id.future;
                       if (!response_future.valid()) {
                         throw std::logic_error("Invariant broke: Future is invalid after spin");
                       } else {
-                        future_ptr->put_value(response_future.get());
+                        future.put_value(response_future.get());
                       }
                     }
                   }
