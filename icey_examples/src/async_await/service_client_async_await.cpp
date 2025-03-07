@@ -14,9 +14,9 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
 
   auto node = icey::create_node(argc, argv, "service_client_async_await_example");
 
-  /// Create the service clients beforehand: All calls will have a 1s timeout (for both discovery and the actual service call)
-  auto service1 = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
-  auto service2 = node->icey().create_client<ExampleService>("set_bool_service2", 1s);  
+  /// Create the service clients beforehand
+  auto service1 = node->icey().create_client<ExampleService>("set_bool_service1");
+  auto service2 = node->icey().create_client<ExampleService>("set_bool_service2");  
 
   auto timer = node->icey().create_timer(1s);
 
@@ -31,10 +31,10 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     RCLCPP_INFO_STREAM(node->get_logger(),
                        "Timer ticked, sending request: " << request->data);
 
-    /// Call the service and await it's response
     // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
-    icey::Result<Response, std::string> result1 = co_await service1.call(request);
+    /// Call the service and await it's response with a 1s timeout: (for both discovery and the actual service call)
+    icey::Result<Response, std::string> result1 = co_await service1.call(request, 1s);
 
     if (result1.has_error()) {
       /// Handle errors: (possibly "SERVICE_UNAVAILABLE", "TIMEOUT" or "INTERRUPTED")
@@ -44,7 +44,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     }
 
     /// We can chain service calls: Call a second service after we got the response from the first one:
-    auto result2 = co_await service2.call(request);
+    auto result2 = co_await service2.call(request, 1s);
     if (result2.has_error()) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Service2 got error: " << result2.error());
     } else {

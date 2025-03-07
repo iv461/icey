@@ -15,8 +15,8 @@ icey::Stream<int> serve_downstream_service(int argc, char **argv) {
   /// Create the service server, without giving it a (synchronous) callback.
   auto service_server = node->icey().create_service<ExampleService>("set_bool_service");
 
-  /// Create a service client for an upstream service that is actually capable of anwsering the request. (1 second timeout)
-  auto upstream_service_client = node->icey().create_client<ExampleService>("set_bool_service_upstream", 1s);  
+  /// Create a service client for an upstream service that is actually capable of anwsering the request.
+  auto upstream_service_client = node->icey().create_client<ExampleService>("set_bool_service_upstream");  
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Created service server, waiting for requests ... ");
 
@@ -25,7 +25,8 @@ icey::Stream<int> serve_downstream_service(int argc, char **argv) {
   
   RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
 
-  icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request);
+  /// Call the upstream service with 1s timeout:
+  icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
 
   if (upstream_result.has_error()) {
     RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());

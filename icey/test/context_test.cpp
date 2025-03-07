@@ -70,7 +70,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
   auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
   EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
 
-  auto client = node_->icey().create_client<ExampleService>("icey_test_service", 1s);
+  auto client = node_->icey().create_client<ExampleService>("icey_test_service");
   EXPECT_EQ(client.impl()->context.lock().get(), &node_->icey());
 
   auto service = node_->icey().create_service<ExampleService>("icey_test_service");

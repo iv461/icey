@@ -633,10 +633,10 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, N
 
     ~Future() {
       if(cancel_)
-          cancel_();
+          cancel_(this);
     }
 
-    void wait() { wait_(); }
+    void wait() { wait_(this); }
 
     template<class ReturnType>
     decltype(auto) transform_to(ReturnType &x) const {
@@ -1593,7 +1593,6 @@ ServiceStreamImpl<_ServiceT>> {
 /// It is not tracked by the context but instead the service client is unregistered from ROS class goes out of scope. 
 template <class ServiceT>
 struct ServiceClient : public StreamImplDefault {
-  
   using Self = ServiceClient<ServiceT>;
   using Request = typename ServiceT::Request::SharedPtr;
   using Response = typename ServiceT::Response::SharedPtr;
@@ -1602,52 +1601,40 @@ struct ServiceClient : public StreamImplDefault {
   using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
   using Client = rclcpp::Client<ServiceT>;
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
-  /// A timer to detect timeouts in promise-mode. (TODO we should have a timer for each request once we support sending out multiple ones)
-  rclcpp::TimerBase::SharedPtr timeout_timer;
-  //Duration timeout;
+  
   ServiceClient() = default;
   /// Create a new service client
   /// \param node 
   /// \param service_name 
   /// \param timeout the timeout that will be used for each request (i.e. `call`) to this service, as well as for the service discovery, i.e. wait_for_service.
   /// \param qos 
-  ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+  ServiceClient(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     client = node.add_client<ServiceT>(service_name, qos);
-    this->timeout = timeout;
-    /*
-    timeout_timer = node.add_timer(timeout, [impl = this->impl()]() { on_timeout(impl); });
-    timeout_timer->cancel();  /// Stop the timer, we will start it when we do a call. On humble
-    /// autostart=false is not available,
-    // therefore we need to cancel manually. (autostart=false just initializes a
-    // timer with cancelled == true, see rcl implementation of rcl_timer_init2)
-    */
   }
 
   // clang-format off
-  /*! Make an asynchronous call to the service. Returns this stream that can be awaited.
-  If there is already a pending request, this pending request will be removed.
+  /*! Make an asynchronous call to the service. Returns a Future that can be awaited using `co_await`.
   Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
-  \note A current limitation is that there is a synchronous wait for the service to become available, i.e. connecting to it. This is because rclcpp currently does not offer an asynchronous API for connecting to the service.
   \param request the request
-  \returns *this stream
+  \param timeout The timeout for the service call, both for service discovery and the actuall call.
+  \returns A future that can be awaited to obtain the response or an error. Possible errors are "TIMEOUT", "SERVICE_UNAVAILABLE" or "INTERRUPTED".
 
   Example usage:
   \verbatim
-    auto client = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
+    auto client = node->icey().create_client<ExampleService>("set_bool_service1");
     auto request = std::make_shared<ExampleService::Request>();
-    icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await client.call(request); 
+    icey::Result<ExampleService::Response::SharedPtr, std::string> result = co_await client.call(request, 1s); 
     \endverbatim
     */
   // clang-format on
-  Future<Response, std::string> call(Request request) {
+  Future<Response, std::string> call(Request request, const Duration &timeout) {
     /// TODO no strong ref capture to request, 
     /// TODO this capture with exceptions
     return {typename Future<Response, std::string>::Cancel{},
-              [this, request](auto future_ptr) {
+              [icey_ctx = this->context, client = this->client, request, timeout](auto future_ptr) {
                   /// The wait function: We put here all the synchronous code because there is no asynchronous API for wait_for_service.
                   /// Therefore we use the synchronous API also for the call.
-                  if(!client->wait_for_service(this->timeout.value())) {
+                  if(!client->wait_for_service(timeout)) {
                     // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
                     if (!rclcpp::ok()) {
                       future_ptr->put_error("INTERRUPTED");
@@ -1655,11 +1642,10 @@ struct ServiceClient : public StreamImplDefault {
                       future_ptr->put_error("SERVICE_UNAVAILABLE");
                     }
                   } else  {
-                    auto future_and_req_id = this->client->async_send_request(request);
-                    auto spin_result = this->context.lock()->get_executor()->spin_until_future_complete(future_and_req_id, 
-                      this->timeout.value());
+                    auto future_and_req_id = client->async_send_request(request);
+                    auto spin_result = icey_ctx.lock()->get_executor()->spin_until_future_complete(future_and_req_id, timeout);
                     if (spin_result == rclcpp::FutureReturnCode::TIMEOUT) {
-                      this->client->remove_pending_request(future_and_req_id.request_id);
+                      client->remove_pending_request(future_and_req_id.request_id);
                       future_ptr->put_error("TIMEOUT");
                     } else if (spin_result == rclcpp::FutureReturnCode::INTERRUPTED) {
                       future_ptr->put_error("INTERRUPTED");
@@ -1668,14 +1654,13 @@ struct ServiceClient : public StreamImplDefault {
                       if (!response_future.valid()) {
                         throw std::logic_error("Invariant broke: Future is invalid after spin");
                       } else {
-                        future_ptr->put_value(response_future.get()->second);
+                        future_ptr->put_value(response_future.get());
                       }
                     }
                   }
               }
     };
   }
-
 };
 
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window.
@@ -2117,9 +2102,8 @@ public:
   /// Create a service client.
   /// Works otherwise the same as [rclcpp::Node::create_client].
   template <class ServiceT>
-  ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
-                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    ServiceClient<ServiceT> client(static_cast<NodeBookkeeping &>(*this), service_name, timeout, qos);
+  ServiceClient<ServiceT> create_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    ServiceClient<ServiceT> client(static_cast<NodeBookkeeping &>(*this), service_name, qos);
     client.context = this->shared_from_this();
     return client;
   }

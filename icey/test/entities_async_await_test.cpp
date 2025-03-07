@@ -132,9 +132,9 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
     // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
 
-    auto client1 = receiver_->icey().create_client<ExampleService>("set_bool_service1", 40ms);
-    auto client2 = receiver_->icey().create_client<ExampleService>("set_bool_service2", 40ms);
-    auto client3 = receiver_->icey().create_client<ExampleService>("set_bool_service3", 40ms);
+    auto client1 = receiver_->icey().create_client<ExampleService>("set_bool_service1");
+    auto client2 = receiver_->icey().create_client<ExampleService>("set_bool_service2");
+    auto client3 = receiver_->icey().create_client<ExampleService>("set_bool_service3");
 
     auto timer = receiver_->icey().create_timer(50ms);
 
@@ -157,17 +157,17 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
     sender_->icey().create_service<ExampleService>("set_bool_service2", service_cb);
     sender_->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 
-    result1 = co_await client1.call(request);
+    result1 = co_await client1.call(request, 40ms);
 
     EXPECT_TRUE(result1.has_value());
     EXPECT_FALSE(result1.value()->success);
 
     /// Then call the second service after we got the response from the first one:
-    auto result2 = co_await client2.call(request);
+    auto result2 = co_await client2.call(request, 40ms);
     EXPECT_TRUE(result2.has_value());
     EXPECT_FALSE(result2.value()->success);
 
-    auto result3 = co_await client3.call(request);
+    auto result3 = co_await client3.call(request, 40ms);
     EXPECT_TRUE(result3.has_value());
     EXPECT_FALSE(result3.value()->success);
     async_completed = true;
