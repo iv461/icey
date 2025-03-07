@@ -24,6 +24,8 @@ include_directories(
     include
 )
 
+#ament_auto_add_executable(test_future test/future_test.cpp)
+
 if(BUILD_TESTING)
   # Automatic inclusion of lint-related tests
   #find_package(ament_lint_auto REQUIRED)

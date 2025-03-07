@@ -8,7 +8,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Stream<int> serve_downstream_service(int argc, char **argv) {
+icey::Future<int> serve_downstream_service(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "service_service_async_await_example");
 
   /// Create the service server, without giving it a (synchronous) callback.

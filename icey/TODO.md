@@ -40,6 +40,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 ## Other nice-to-have features, not for 0.1
 
+- [ ] Consider using designated initializers syntax finally standartized in C++20 for something, for example Parameters would profit.
 - [ ] Consider merging NodeBookkeeping and Context: We already hold the shared pointer to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep issue
 
 - [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer

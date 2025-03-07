@@ -516,7 +516,6 @@ struct check_callback<F, std::tuple<Args...>> {
   static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
-   
 /// Generic interface for implementing Promises 
 /// Derived must implement:
 /// set_value, value, take, has_none, transform_to<> and wait
@@ -588,15 +587,7 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
       std::cout << this->underlying().get_type_info() << " await_transform called to " << to_type
                 << std::endl;
     }
-    return this->underlying().template transform_to<ReturnType>();
-    /*
-    if constexpr (is_stream<ReturnType>) {
-      this->underlying().impl()->context =
-      x.impl()->context;  /// Get the context from the input stream
-      return x;
-    } else {
-    }
-    */
+    return this->underlying().transform_to(x);
   }
 
 
@@ -623,10 +614,13 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
   }
 };
 
+struct FutureTag {};
 /// set_value, value, take, has_none, transform_to<> and wait
-template<class Value, class Error = Nothing>
-struct Future : protected impl::Stream<Value, Error, Nothing, Nothing>, 
-  public GenericCoroutinesSupport<Future<Value, Error>> {
+template<class _Value, class _Error = Nothing>
+struct Future : public FutureTag, protected impl::Stream<_Value, _Error, Nothing, Nothing>, 
+  public GenericCoroutinesSupport<Future<_Value, _Error>> {
+    using Value = _Value;
+    using Error = _Error;
 
     using Resolve = std::function<void(const Value &)>;
     using Reject = std::function<void(const Error &)>;
@@ -646,9 +640,16 @@ struct Future : protected impl::Stream<Value, Error, Nothing, Nothing>,
     }
 
     void wait() { wait_(); }
-    template <class NewValue>
-    Future<NewValue> transform_to() const {
-        return Future<NewValue>{cancel_, wait_};
+
+    template<class ReturnType>
+    auto transform_to(ReturnType x) const {
+      if constexpr (is_stream<ReturnType>) {
+        static_assert(std::is_array_v<int>, "You cannot transform a stream into a future, please return a Stream from the coroutine");
+      } else if constexpr(std::is_base_of_v<FutureTag, ReturnType>) {
+        return x;
+      } else {
+        static_assert(std::is_array_v<int>, "Transforming a value into a Future is not implemented");
+      }
     }
 
     Cancel cancel_;
@@ -727,13 +728,7 @@ struct StreamCoroutinesSupport : public crtp<DerivedStream> {
       std::cout << this->underlying().get_type_info() << " await_transform called to " << to_type
                 << std::endl;
     }
-    if constexpr (is_stream<ReturnType>) {
-      this->underlying().impl()->context =
-          x.impl()->context;  /// Get the context from the input stream
-      return x;
-    } else {
-      return this->underlying().template transform_to<ReturnType, Nothing>();
-    }
+    return this->underlying().transform_to(x);
   }
 
   /// Spin the ROS executor until this Stream has something (a value or an error).
@@ -804,7 +799,7 @@ class Stream : public StreamTag,
                public StreamCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>> {
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
   friend Context;
-
+  friend StreamCoroutinesSupport<Stream<_Value, _ErrorValue, ImplBase>>;
 public:
   using Value = _Value;
   using ErrorValue = _ErrorValue;
@@ -954,7 +949,7 @@ public:
   template <class F>
   Stream<Value, Nothing> unwrap_or(F &&f) {
     /// TODO Can't we just move this stream in, i.e. reuse it instead of creating a new one ? (In this case moving means re-using the impl)
-    auto output = this->template transform_to<Value, Nothing>();
+    auto output = this->template create_new<Value, Nothing>();
     this->impl()->register_handler([output_impl = output.impl(), f=std::forward<F>(f)](const auto &new_state) {
       if (new_state.has_value()) {
         output_impl->put_value(new_state.value());
@@ -1038,8 +1033,25 @@ protected:
   }
 
   template <class NewValue, class NewError>
-  Stream<NewValue, NewError> transform_to() const {
+  Stream<NewValue, NewError> create_new() const {
     return create_stream<Stream<NewValue, NewError>>();
+  }
+
+  template<class ReturnType>
+    auto transform_to(ReturnType x) const {
+    if constexpr (is_stream<ReturnType>) {
+      this->impl()->context = x.impl()->context;  /// Get the context from the input stream
+      return x;
+    } else if constexpr(std::is_base_of_v<FutureTag, ReturnType>) {
+      /// Transform a Future into a stream that yields once
+      using V = typename ReturnType::Value;
+      using E = typename ReturnType::Error;
+      auto new_stream = this->template create_new<V, E>();
+      /// TODO we need to copy the future ...
+      return new_stream;
+    } else {
+      return this->template create_new<ReturnType, Nothing>();
+    }
   }
 
   /// Pattern-maching factory function that creates a New Self with different value and error types
