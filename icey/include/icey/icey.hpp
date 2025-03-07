@@ -259,7 +259,7 @@ private:
 
   /// This simply looks up the transform in the buffer at the latest stamp and checks if it
   /// changed with respect to the previously received one. If the transform has changed, we know
-  /// we have to notify. Returns whether it got it notified about a transform (on_transform)
+  /// we have to notify. Returns true when it notified about a changed transform (called on_transform) and false otherwise.
   bool maybe_notify(TFSubscriptionInfo &info) {
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
@@ -611,13 +611,14 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaul
     Future&operator=(Future &&) = delete;
     Future&operator=(const Future &) = delete;
 
+    /// Await the future 
     auto operator co_await() {
       struct Awaiter {
         Self &promise_;
         Awaiter(Self &p) : promise_(p) {}
         
         bool await_ready() const noexcept { return !promise_.has_none(); }
-        bool await_suspend(std::coroutine_handle<> handle) noexcept { promise_.wait(); return false; }
+        bool await_suspend(std::coroutine_handle<>) noexcept { promise_.wait(); return false; }
         auto await_resume() const noexcept { return promise_.get_state(); }
       };
       return Awaiter{*this};
@@ -628,7 +629,7 @@ struct Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaul
           cancel_(*this);
     }
 
-    /// Synchronous wait until this Future has some.
+    /// Wait until this Future has some. (usually spins the ROS executor)
     void wait() { custom_wait_(*this); }
 
     Cancel cancel_;
@@ -696,7 +697,7 @@ public:
       const Self &stream_;
       ROSExecutorAwaiter(const Self &p) : stream_(p) {}
       bool await_ready() const noexcept { return !stream_.has_none(); }
-      bool await_suspend(std::coroutine_handle<> handle) noexcept { stream_.wait(); return false; }
+      bool await_suspend(std::coroutine_handle<>) noexcept { stream_.wait(); return false; }
       auto await_resume() const noexcept { return stream_.take(); }
     };
     return ROSExecutorAwaiter{*this};
@@ -1429,8 +1430,9 @@ struct ServiceStreamImpl {
 /// - https://github.com/ijnek/nested_services_rclcpp_demo
 template <class _ServiceT>
 struct ServiceStream
-: public Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
-ServiceStreamImpl<_ServiceT>> {
+: public Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, 
+  std::shared_ptr<typename _ServiceT::Request>>, Nothing,
+    ServiceStreamImpl<_ServiceT>> {
   using Base = Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
   ServiceStreamImpl<_ServiceT>>;
   using Request = std::shared_ptr<typename _ServiceT::Request>;
@@ -1532,6 +1534,7 @@ struct ServiceClient : public StreamImplDefault {
                     }
                   } else  {
                     auto future_and_req_id = client->async_send_request(request);
+                    /// The executor that we need depends on the Response ...  No, of course it doesn't
                     auto spin_result = icey_ctx.lock()->get_executor()->spin_until_future_complete(future_and_req_id, timeout);
                     if (spin_result == rclcpp::FutureReturnCode::TIMEOUT) {
                       client->remove_pending_request(future_and_req_id.request_id);
@@ -1705,7 +1708,7 @@ protected:
 };
 
 /// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
-/// TODO we could implement this much simpler using coroutines anf get rid of the messy
+/// TODO we could implement this much simpler in like 50 SLOC once we support coroutines as subscriber callbacks and get rid of the messy
 /// tf2_ros::MessageFilter code.
 template <class Message>
 struct TransformSynchronizerImpl {
@@ -1997,9 +2000,15 @@ public:
     return client;
   }
 
-
   /// ICEY creates by default an executor and adds this Node to it to enable using co_await. This method returns this executor.
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
+
+  /// Both a node and an executor are associated with this Context. The node is by default added to an Executor, this is required to make async/await work. 
+  /// If you wish to spin the ICEY-Node like usual with rclcpp::spin(), you have to first call this function to remove the node from this executor. This of course makes 
+  /// async/await to not work anymore.
+  void remove_node_from_executor() {
+    get_executor()->remove_node(this->get_node_base_interface());
+  }
 
   /// Spins the ROS executor until the Stream has something (value or error). This is also called a
   /// synchronous wait.

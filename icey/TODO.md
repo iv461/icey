@@ -289,3 +289,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Make first argument source_frame of subscribe_to_transform optional and then make a single synchronization function -> not needed after we have async TF lookup 
 
 - [X] We still got a crash in service_client_async_await_example
+
+- [X] Fix conceptual unsoundness: Service clients are no Streams due to the following resons: (1) If we don't request first something, awaiting them will hang forever (API misuse-type problem). (2) There is no guarantee whatsoever how long a service call takes, from this follows that sending multiple request in a row and not awaiting first their responses may lead to a re-ordering of the responses. But the response does not contain the request id, therefore it is impossible to know for which request a response belongs. Returning the request ID however complicated using the API because now the user has to always check whether the response belongs to his or her request, or to some other request that for whatever reason exists. For these resons, it is sensible to remove the promise-style Stream API and instead to provide an API that returns a new Future for every request. The same goes for async TF lookup, wait to finish publishing etc.
+
+- [X] Unnecessary memory allocation on every call to co_await due to wrong await_transform implementation

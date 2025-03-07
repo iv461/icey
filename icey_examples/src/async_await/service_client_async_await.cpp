@@ -1,9 +1,8 @@
 /// This example shows how to use service clients in icey. 
 /// By using async/await syntax (i.e. C++20 coroutines) we achieve a synchronously-looking service calls.
 /// Under the hood, everything is asynchronous, ICEY actually calls client->async_send_request.
-/// The await-syntax makes the code look synchronous so that it is easier to see what is going on.
+/// ICEY gives you a clean and simple service API: no manual spinning of the event-loop, no threads, no manual cleanups needed. 
 #include <icey/icey.hpp>
-
 #include "std_srvs/srv/set_bool.hpp"
 
 using namespace std::chrono_literals;
@@ -25,14 +24,12 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
     /// First, wait until it's time to make the request
     co_await timer;
     
-    /// Create a request:
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
-    RCLCPP_INFO_STREAM(node->get_logger(),
-                       "Timer ticked, sending request: " << request->data);
+    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked, sending request: " << request->data);
 
-    // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
+
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the actual service call)
     icey::Result<Response, std::string> result1 = co_await service1.call(request, 1s);
 
@@ -51,11 +48,9 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response1: " << result2.value()->success);
     }
   }
-  co_return 0;
+  co_return 0; // All coroutines must have co_return
 }
 
 int main(int argc, char **argv) {
-  icey::icey_coro_debug_print = true;
   create_and_spin_node(argc, argv);
-  rclcpp::shutdown();
 }

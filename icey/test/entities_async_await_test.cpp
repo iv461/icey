@@ -142,7 +142,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
 
     auto request = std::make_shared<ExampleService::Request>();
     request->data = true;
-    icey::Result<Response, std::string> result1 = co_await client1.call(request);
+    icey::Result<Response, std::string> result1 = co_await client1.call(request, 40ms);
 
     EXPECT_TRUE(result1.has_error());
     EXPECT_EQ(result1.error(), "SERVICE_UNAVAILABLE");
@@ -177,7 +177,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
 }
 
 /// Tests whether timeout works and the requests get cleaned up. 
-// It also tests whether we can make multiple calls to a service and we get only the last one
+// It also tests whether we can make multiple calls to a service before awaiting them all and after awaiting, we recive all of them
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
   [this]() -> icey::Stream<int> {
     // The response we are going to receive from the service call:
@@ -196,44 +196,27 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     };
     sender_->icey().create_service<ExampleService>("icey_test_sleepy_service1", service_cb);
     
-    auto client1 = receiver_->icey().create_client<ExampleService>("icey_test_sleepy_service1", 40ms);
+    auto client1 = receiver_->icey().create_client<ExampleService>("icey_test_sleepy_service1");
     auto request = std::make_shared<ExampleService::Request>();
     request->data = true;
 
     /// First, test that timeouts occur 
-    icey::Result<Response, std::string> result1 = co_await client1.call(request);
+    icey::Result<Response, std::string> result1 = co_await client1.call(request, 40ms);
     EXPECT_TRUE(result1.has_error());
     EXPECT_EQ(result1.error(), "TIMEOUT");
     /// Expect there are no pending requests in case of timeout: A call to prune must return 0
-    EXPECT_EQ(client1.impl()->client->prune_pending_requests(), 0);
+    EXPECT_EQ(client1.client->prune_pending_requests(), 0);
     
-    /// Second, test that if there is any pending request, it gets replaced by another request.
-    /// This means, we expect that the response from the first request is never received.
-    std::vector<std::string> events;
-    std::size_t responses_received = 0;
-    std::size_t errors_received = 0;
-
-    client1.then([&](auto) { 
-        events.push_back("response_" + std::to_string(responses_received)); 
-        responses_received++;
-    }).except([&](auto err) { 
-        errors_received++;
-        std::cout << "Got err: " << err << std::endl; 
-    });
-
-    events.push_back("before_call");
     /// Send the first request but do not await it
-    client1.call(request);
-    events.push_back("after_call");
+    icey::Future<Response, std::string> response_future1 = client1.call(request, 40ms);
 
     /// Then, send another one:
-    client1.call(request);
-    events.push_back("after_second_call");
+    icey::Future<Response, std::string> response_future2 = client1.call(request, 40ms);
 
-    spin(500ms);
-    std::vector<std::string> target_events{"before_call", "after_call", "after_second_call", "response_0"};
-    EXPECT_EQ(events, target_events);
-    EXPECT_EQ(client1.impl()->client->prune_pending_requests(), 0);
+    EXPECT_TRUE((co_await response_future2).has_value());
+    EXPECT_TRUE((co_await response_future1).has_value());
+
+    EXPECT_EQ(client1.client->prune_pending_requests(), 0);
 
     async_completed = true;
     co_return 0;
