@@ -534,12 +534,7 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
   std::string get_type_info() const {
     std::stringstream ss;
     auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
-    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ ";
-    if (this->underlying().impl().p_.lock())
-      ss << size_t(this->underlying().impl().get());
-    else
-      ss << "nullptr";
-    ss << ")] ";
+    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this);
     return ss.str();
   }
 
@@ -617,17 +612,19 @@ struct GenericCoroutinesSupport : public crtp<Derived> {
 struct FutureTag {};
 /// set_value, value, take, has_none, transform_to<> and wait
 template<class _Value, class _Error = Nothing>
-struct Future : public FutureTag, protected impl::Stream<_Value, _Error, Nothing, Nothing>, 
+struct Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing>, 
   public GenericCoroutinesSupport<Future<_Value, _Error>> {
     using Value = _Value;
     using Error = _Error;
+    using Self = Future<Value, Error>;
 
     using Resolve = std::function<void(const Value &)>;
     using Reject = std::function<void(const Error &)>;
     using Cancel = std::function<void()>;
     using Wait = std::function<void()>;
 
-    Future(auto &&h) { std::tie(cancel_, wait_) = h(this); }
+    
+    Future(std::function<std::tuple<Cancel, Wait>(Self*)> &&h) { std::tie(cancel_, wait_) = h(this); }
 
     Future(Future &&) = delete;
     Future(const Future &) = delete;
@@ -642,11 +639,11 @@ struct Future : public FutureTag, protected impl::Stream<_Value, _Error, Nothing
     void wait() { wait_(); }
 
     template<class ReturnType>
-    auto transform_to(ReturnType x) const {
-      if constexpr (is_stream<ReturnType>) {
-        static_assert(std::is_array_v<int>, "You cannot transform a stream into a future, please return a Stream from the coroutine");
-      } else if constexpr(std::is_base_of_v<FutureTag, ReturnType>) {
+    decltype(auto) transform_to(ReturnType &x) const {
+      if constexpr(std::is_base_of_v<FutureTag, ReturnType>) {
         return x;
+      } else if constexpr (is_stream<ReturnType>) {
+        static_assert(std::is_array_v<int>, "You cannot transform a stream into a future, please return a Stream from the coroutine");
       } else {
         static_assert(std::is_array_v<int>, "Transforming a value into a Future is not implemented");
       }
@@ -1038,7 +1035,7 @@ protected:
   }
 
   template<class ReturnType>
-    auto transform_to(ReturnType x) const {
+    decltype(auto) transform_to(ReturnType &x) const {
     if constexpr (is_stream<ReturnType>) {
       this->impl()->context = x.impl()->context;  /// Get the context from the input stream
       return x;
@@ -1643,7 +1640,7 @@ struct ServiceClient : public StreamImplDefault {
     \endverbatim
     */
   // clang-format on
-  Future<Response, std::string> &call(Request request) {
+  Future<Response, std::string> call(Request request) {
     /// TODO no strong ref capture to request, 
     /// TODO this capture with exceptions
     return Future<Response, std::string>([this, request](auto future) -> std::tuple<std::function<void()>, std::function<void()>> {
@@ -1671,7 +1668,7 @@ struct ServiceClient : public StreamImplDefault {
             });
             auto req_id = future_and_req_id.request_id;
             return std::make_tuple(
-              [this, req_id]() { this->client->prune_pending_requests(req_id); }, 
+              [this, req_id]() { this->client->remove_pending_request(req_id); }, 
               [this]() { this->context.lock()->get_executor()->spin_once(); }
             );
         }
@@ -2121,7 +2118,7 @@ public:
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    ServiceClient<ServiceT> client(service_name, timeout, qos);
+    ServiceClient<ServiceT> client(static_cast<NodeBookkeeping &>(*this), service_name, timeout, qos);
     client.context = this->shared_from_this();
     return client;
   }
