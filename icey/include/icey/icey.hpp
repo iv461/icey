@@ -1261,8 +1261,8 @@ struct TransformSubscriptionStreamImpl {
   Weak<TFListener> tf2_listener;
 };
 
-/// A Stream that represents a subscription between two coordinate systems. Since such a subscription is always buffered,
-/// we can also make an asynchronous lookup for a transform at a specific point in time. (See TFListener)
+/// A Stream that represents a subscription between two coordinate systems. (See TFListener) 
+/// It yields a value each time the transform between these two coordinate systems changes.
 struct TransformSubscriptionStream
     : public Stream<geometry_msgs::msg::TransformStamped, std::string,
                     TransformSubscriptionStreamImpl> {
@@ -1270,10 +1270,9 @@ struct TransformSubscriptionStream
                       TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using Self = TransformSubscriptionStream;
+
   TransformSubscriptionStream() = default; 
-  TransformSubscriptionStream(NodeBookkeeping &node) {
-    this->impl()->tf2_listener = node.add_tf_listener_if_needed();
-  }
+  
   TransformSubscriptionStream(NodeBookkeeping &node, ValueOrParameter<std::string> target_frame,
                               ValueOrParameter<std::string> source_frame)
       : Base(node) {
@@ -1286,39 +1285,65 @@ struct TransformSubscriptionStream
         },
         [impl = this->impl()](const tf2::TransformException &ex) { impl->put_error(ex.what()); });
   }
+};
 
-  /// @brief Does an asynchronous lookup for a single transform.
+/// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given point in time. 
+/// It is similar to the tf2_ros::AsyncBufferInterface, but returns awaitable futures.
+template<class Ctx>
+struct TransformBuffer : public StreamImplDefault {
+  TransformBuffer() = default; 
+
+  TransformBuffer(NodeBookkeeping &node) {
+    tf_listener = node.add_tf_listener_if_needed();
+  }
+
+  /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
   /// @param target_frame
   /// @param source_frame
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
-  /// @return A promise that resolves with the transform or with an error if a timeout occurs (it will be a Promise in the future)
-  Self &lookup(std::string target_frame, std::string source_frame, const Time &time,
+  /// @return A future that resolves with the transform or with an error if a timeout occurs
+  Future<geometry_msgs::msg::TransformStamped, std::string>
+    lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
                const Duration &timeout) {
-    /// The function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
-    /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
-    /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
-    /// promise type is available in standard C++ before C++26) and undocumented, so nobody knows
-    /// about them.
-    this->impl()->tf2_listener->buffer_->waitForTransform(
-        target_frame, source_frame, time, timeout, [impl = this->impl()](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
-          if (result.valid()) {
-            try {
-              impl->put_value(result.get());
-            } catch (const std::exception &e) {
-              impl->put_error(e.what());
-            }
-          } else {
-            /// Invariant-Trap since the invariants aren't enforced through the type-system (aka
-            /// bad c0de) (It's UB to call .get() on a future for which valid() returns false)
-            throw std::logic_error(
-                "Invariant broke: The tf2_ros::AsyncBufferInterface::waitForTransform gave us an "
-                "invalid std::shared_future.");
-          }
-        });
-    return *this;
+    return {typename Future<geometry_msgs::msg::TransformStamped, std::string>::Cancel{},
+        [icey_ctx=this->context, tf2_listener = this->tf_listener, target_frame, source_frame, time, timeout](auto &future) {
+          /// The function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
+          /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
+          /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
+          /// promise type is available in standard C++ before C++26) and undocumented, so nobody knows
+          /// about them.
+          auto tf_future = tf2_listener->buffer_->waitForTransform(
+            target_frame, source_frame, time, timeout, 
+            [&future](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
+              if (result.valid()) {
+                try {
+                  future.put_value(result.get());
+                } catch (const std::exception &e) {
+                  future.put_error(e.what());
+                }
+              } else {
+                /// Invariant-Trap since the invariants aren't enforced through the type-system (aka
+                /// bad c0de) (It's UB to call .get() on a future for which valid() returns false)
+                throw std::logic_error(
+                    "Invariant broke: The tf2_ros::AsyncBufferInterface::waitForTransform gave us an "
+                    "invalid std::shared_future.");
+              }
+            });
+          icey_ctx.lock()->get_executor()->spin_until_future_complete(tf_future, timeout);
+          /// Not sure when exactly we need to call this but it does not do anything if it ware removed
+          tf2_listener->buffer_->cancel(tf_future);
+        }};
   }
+  
+  /// Overload for different time types.
+  /*Future<geometry_msgs::msg::TransformStamped, std::string>
+  lookup(const std::string &target_frame, const std::string &source_frame, const auto &time,
+    const Duration &timeout) { return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout); }
+  */
+
+  Weak<TFListener> tf_listener;
 };
 
 struct TimerImpl {
@@ -1395,6 +1420,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
 struct TransformPublisherStreamImpl {
   Weak<tf2_ros::TransformBroadcaster> tf_broadcaster;
 };
+
 struct TransformPublisherStream
     : public Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl> {
   using Base = Stream<geometry_msgs::msg::TransformStamped, Nothing, TransformPublisherStreamImpl>;
@@ -1519,8 +1545,6 @@ struct ServiceClient : public StreamImplDefault {
     */
   // clang-format on
   Future<Response, std::string> call(Request request, const Duration &timeout) {
-    /// TODO no strong ref capture to request, 
-    /// TODO this capture with exceptions
     return {typename Future<Response, std::string>::Cancel{},
               [icey_ctx = this->context, client = this->client, request, timeout](auto &future) {
                   /// The wait function: We put here all the synchronous code because there is no asynchronous API for wait_for_service.
@@ -1955,11 +1979,12 @@ public:
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
-  /// Creates a transform subscription that works like the usual combination of a tf2_ros::Buffer and a tf2_ros::TransformListener.
+  /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a tf2_ros::TransformListener.
   /// It is used to `lookup()` transforms asynchronously at a specific point in time.
-  TransformSubscriptionStream create_transform_subscription() {
-  return create_stream<TransformSubscriptionStream>();
-}
+  TransformBuffer<Context> create_transform_subscription() {
+    TransformBuffer<Context> tf_buffer(static_cast<NodeBookkeeping &>(*this));
+    return tf_buffer;
+  }
 
   /// Create a publisher stream.
   /// Works otherwise the same as [rclcpp::Node::create_publisher].

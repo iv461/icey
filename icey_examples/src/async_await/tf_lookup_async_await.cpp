@@ -10,12 +10,12 @@ icey::Stream<int> spin(int argc, char **argv) {
     auto node = icey::create_node(argc, argv, "tf_lookup_async_await_example");
     
     auto point_cloud_subscription = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
-    auto tf_subscription = node->icey().create_transform_subscription();
+    icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
     while(true) {
         sensor_msgs::msg::PointCloud2::SharedPtr point_cloud = co_await point_cloud_subscription;
         icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
-            = co_await tf_subscription.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+            = co_await tf_buffer.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
 
         if(tf_result.has_value()) {
             geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
