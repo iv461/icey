@@ -516,6 +516,144 @@ struct check_callback<F, std::tuple<Args...>> {
   static_assert(!AnyStream<std::invoke_result_t<F, Args...>>, "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
+   
+/// Generic interface for implementing Promises 
+/// Derived must implement:
+/// set_value, value, take, has_none, transform_to<> and wait
+template <class Derived>
+struct GenericCoroutinesSupport : public crtp<Derived> {
+  using promise_type = Derived;
+
+  GenericCoroutinesSupport() {
+    if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
+  }
+
+  ~GenericCoroutinesSupport() {
+    if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
+  }
+
+  std::string get_type_info() const {
+    std::stringstream ss;
+    auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
+    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this) << " (impl @ ";
+    if (this->underlying().impl().p_.lock())
+      ss << size_t(this->underlying().impl().get());
+    else
+      ss << "nullptr";
+    ss << ")] ";
+    return ss.str();
+  }
+
+  /// We are still a promise
+  Derived get_return_object() {
+    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
+    return this->underlying();
+  }
+
+  /// We never already got something since this is a stream (we always first need to spin the
+  /// ROS executor to get a message), so we never suspend.
+  std::suspend_never initial_suspend() {
+    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
+    return {};
+  }
+
+  /// return_value returns the value of the Steam.
+  auto return_value() { return this->underlying().value(); }
+
+  /// If the return_value function is called with a value, it *sets* the value, makes sense
+  /// right ? No ? Oh .. (Reference:
+  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+  template <class T>
+  void return_value(const T &x) const {
+    if (icey_coro_debug_print)
+      std::cout << this->get_type_info() << " return value for "
+                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+    this->underlying().set_value(x);
+  }
+  
+  void unhandled_exception() {}
+
+  /// We do not need to do anything at the end, no extra cleanups needed.
+  std::suspend_never final_suspend() const noexcept { return {}; }
+
+  /// Make a Value to a stream (promisify it) if needed, meaning if it is not already a Stream.
+  /// We also need to get the context from the given Stream and set it to our stream,
+  /// since the compiler creates new Streams by just calling operator new. This creates Streams with
+  /// no context, something we do not want. But luckily, we always got a Stream that already has a
+  /// context so we obtain it from there.
+  template <class ReturnType>
+  auto await_transform(ReturnType x) {
+    if (icey_coro_debug_print) {
+      auto to_type = boost::typeindex::type_id_runtime(x).pretty_name();
+      std::cout << this->underlying().get_type_info() << " await_transform called to " << to_type
+                << std::endl;
+    }
+    return this->underlying().template transform_to<ReturnType>();
+    /*
+    if constexpr (is_stream<ReturnType>) {
+      this->underlying().impl()->context =
+      x.impl()->context;  /// Get the context from the input stream
+      return x;
+    } else {
+    }
+    */
+  }
+
+
+  /// Returns whether the stream has a value or an error.
+  bool await_ready() { return !this->underlying().has_none(); }
+  /// Spin the ROS event loop until we have a value or an error.
+  bool await_suspend(auto) {
+    if (icey_coro_debug_print)
+      std::cout << this->get_type_info() << " await_suspend called" << std::endl;
+    
+    this->underlying().wait();
+    return false;  /// Resume the current coroutine, see
+                   /// https://en.cppreference.com/w/cpp/language/coroutines
+  }
+
+  /// Take the value out of the stream and return it (this function gets called after await_suspend
+  /// has finished spinning the ROS executor). \returns If an error is possible (ErrorValue is not
+  /// Nothing), we return a Result<Value, ErrorValue>, otherwise we return just the Value to not
+  /// force the user to write unnecessary error handling/unwraping code.
+  auto await_resume() {
+    if (icey_coro_debug_print)
+      std::cout << this->underlying().get_type_info() << " await_resume called" << std::endl;
+    return this->underlying().take();
+  }
+};
+
+/// set_value, value, take, has_none, transform_to<> and wait
+template<class Value, class Error = Nothing>
+struct Future : protected impl::Stream<Value, Error, Nothing, Nothing>, 
+  public GenericCoroutinesSupport<Future<Value, Error>> {
+
+    using Resolve = std::function<void(const Value &)>;
+    using Reject = std::function<void(const Error &)>;
+    using Cancel = std::function<void()>;
+    using Wait = std::function<void()>;
+
+    Future(auto &&h) { std::tie(cancel_, wait_) = h(this); }
+
+    Future(Future &&) = delete;
+    Future(const Future &) = delete;
+    Future&operator=(Future &&) = delete;
+    Future&operator=(const Future &) = delete;
+
+    ~Future() {
+        if(cancel_)
+            cancel_();
+    }
+
+    void wait() { wait_(); }
+    template <class NewValue>
+    Future<NewValue> transform_to() const {
+        return Future<NewValue>{cancel_, wait_};
+    }
+
+    bool is_done{false};
+};
+
 /// Implements the required interface of C++20's coroutines so that Streams can be used with
 /// co_await syntax and inside coroutines.
 template <class DerivedStream>
@@ -782,21 +920,7 @@ public:
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
     this->template create_stream<TransformPublisherStream>(this);
-  }
-
-  /*!
-    \brief Creates a service client so that the service will be called with the Value of this Stream as a request.
-    \sa ServiceClient
-  */
-  template <class ServiceT>
-  ServiceClient<ServiceT> call_service(const std::string &service_name, const Duration &timeout,
-                                       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    assert_we_have_context();
-    static_assert(!std::is_same_v<Value, Nothing>,
-                  "This stream does not have a value, there is nothing to publish, you cannot "
-                  "call publish() on it.");
-    return this->template create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos, this);
-  }
+  }  
 
   /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
   /// Given that `Value` is of type `std::tuple<Value1, Value2, ..., ValueN>`, it returns
@@ -1452,48 +1576,42 @@ ServiceStreamImpl<_ServiceT>> {
   }
 };
 
-template <class ServiceT>
-struct ServiceClientImpl {
+/// A service client. It can we called asynchronously and then it returns a Future that can be awaited. 
+/// It is not tracked by the context but instead the service client is unregistered from ROS class goes out of scope. 
+template <class _ServiceT>
+struct ServiceClient : public StreamImplDefault {
+  
+  using Self = ServiceClient<_ServiceT>;
+  using Request = typename _ServiceT::Request::SharedPtr;
+  using Response = typename _ServiceT::Response::SharedPtr;
+  
   /// The RequestID is currently of type int64_t in rclcpp.
   using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
   /// A timer to detect timeouts in promise-mode. (TODO we should have a timer for each request once we support sending out multiple ones)
   rclcpp::TimerBase::SharedPtr timeout_timer;
-};
 
-/// A Stream representing a service client. It stores the response as it's value.
-template <class _ServiceT>
-struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, std::string,
-                                     ServiceClientImpl<_ServiceT>> {
-  using Base =
-      Stream<typename _ServiceT::Response::SharedPtr, std::string, ServiceClientImpl<_ServiceT>>;
-  using Self = ServiceClient<_ServiceT>;
-  using Request = typename _ServiceT::Request::SharedPtr;
-  using Response = typename _ServiceT::Response::SharedPtr;
+  using Client = rclcpp::Client<_ServiceT>;
+  using Future = typename Client::SharedFutureWithRequest;
+
+  //Duration timeout;
   ServiceClient() = default;
-  /// Create a new service client and connect it to the input stream if it is provided (if it is not nullptr.)
+  /// Create a new service client
   /// \param node 
   /// \param service_name 
   /// \param timeout the timeout that will be used for each request (i.e. `call`) to this service, as well as for the service discovery, i.e. wait_for_service.
   /// \param qos 
-  /// \param input the input Stream holding a request. If not provided, you must call `call` manually.
-  template <AnyStream Input = Stream<Request>>
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const Duration &timeout,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS(), Input *input = nullptr)
-      : Base(node) {
-    this->impl()->client = node.add_client<_ServiceT>(service_name, qos);
-    this->impl()->timeout = timeout;
-    this->impl()->timeout_timer =
-        node.add_timer(timeout, [impl = this->impl()]() { on_timeout(impl); });
-    this->impl()
-        ->timeout_timer
-        ->cancel();  /// Stop the timer, we will start it when we do a call. On humble
-                     /// autostart=false is not available,
-                     // therefore we need to cancel manually. (autostart=false just initializes a
-                     // timer with cancelled == true, see rcl implementation of rcl_timer_init2)
-    if (input) {
-      connect_input(*input);
-    }
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    client = node.add_client<_ServiceT>(service_name, qos);
+    this->timeout = timeout;
+    /*
+    timeout_timer = node.add_timer(timeout, [impl = this->impl()]() { on_timeout(impl); });
+    timeout_timer->cancel();  /// Stop the timer, we will start it when we do a call. On humble
+    /// autostart=false is not available,
+    // therefore we need to cancel manually. (autostart=false just initializes a
+    // timer with cancelled == true, see rcl implementation of rcl_timer_init2)
+    */
   }
 
   // clang-format off
@@ -1508,20 +1626,41 @@ struct ServiceClient : public Stream<typename _ServiceT::Response::SharedPtr, st
     auto client = node->icey().create_client<ExampleService>("set_bool_service1", 1s);
     auto request = std::make_shared<ExampleService::Request>();
     icey::Result<ExampleService::Response::SharedPtr, std::string> result1 = co_await client.call(request); 
-  \endverbatim
-  */
+    \endverbatim
+    */
   // clang-format on
-  Self &call(Request request) {
-    async_call(this->impl(), request);
-    return *this;
+  Future<Response, std::string> &call(Request request) {
+    /// TODO no strong ref capture to request, 
+    /// TODO this capture with exceptions
+    return Future<Response, std::string>([this, request](auto future) {
+        auto maybe_err = wait_for_service();
+        if(maybe_err != "") {
+          future->put_error("TIMEOUT");;
+        } else {
+          auto future_and_req_id = this->client->async_send_request(
+            request, [this](Future response_future) { 
+              //impl->timeout_timer->cancel();
+              if (response_future.valid()) {
+                  future->put_value(response_future.get().second);
+              } else {
+                if (!rclcpp::ok()) {
+                  future->put_error("INTERRUPTED");
+                } else {
+                  future->put_error("TIMEOUT");
+                }
+              }
+            });
+        }
+        auto req_id = future_and_req_id.request_id;
+        return std::make_tuple(
+          [this, req_id]() { this->client->prune_pending_requests(req_id); }, 
+          [this]() { this->context.lock()->get_executor()->spin_once(); }
+        );
+      });
   }
-
 protected:
-  using Client = rclcpp::Client<_ServiceT>;
-  using Future = typename Client::SharedFutureWithRequest;
 
   static void async_call(auto impl, Request request) {
-    if (!wait_for_service(impl)) return;
     /// We need to purge the pending request because this is a stream -- we would loose the response to this request if in the meantime some other pending request is received
     //  (we would need to return a Promise from call() to fix this issue)
     impl->client->prune_pending_requests();
@@ -1531,23 +1670,22 @@ protected:
         request, [impl](Future response_future) { on_response(impl, response_future); });
   }
 
-  static bool wait_for_service(auto impl) {
-    if (!impl->client->wait_for_service(impl->timeout.value())) {
+  std::string wait_for_service() {
+    if (!client->wait_for_service(impl->timeout.value())) {
       // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
       if (!rclcpp::ok()) {
-        impl->put_error("INTERRUPTED");
+        return "INTERRUPTED";
       } else {
-        impl->put_error("SERVICE_UNAVAILABLE");
+        return "SERVICE_UNAVAILABLE";
       }
-      return false;
     }
-    return true;
+    return "";
   }
 
   /// Consumes the future and sets the value if there is one, otherwise it calls on_timeout
   static void on_response(auto impl, Future response_future) {
-    impl->timeout_timer->cancel();  /// Cancel the timeout timer since we got the response
     if (response_future.valid()) {
+      impl->timeout_timer->cancel();  /// Cancel the timeout timer since we got the response
       impl->put_value(response_future.get().second);
     } else {
       on_timeout(impl);
@@ -2018,12 +2156,14 @@ public:
     return create_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
   }
 
-  /// Create a service client stream.
+  /// Create a service client.
   /// Works otherwise the same as [rclcpp::Node::create_client].
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name, const Duration &timeout,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_stream<ServiceClient<ServiceT>>(service_name, timeout, qos);
+    ServiceClient<ServiceT>> client(service_name, timeout, qos);
+    client.context = this->shared_from_this();
+    return client;
   }
 
 

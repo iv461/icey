@@ -9,7 +9,7 @@ using ExampleService = std_srvs::srv::SetBool;
 /// TODO THIS DOES NOT WORK BECAUSE THE CALLS ARE NOT AWAITED (this needs support for async callbacks)
 int main(int argc, char **argv) {
   auto node = icey::create_node<icey::Node>(argc, argv, "service_client_node");
-  
+  /*
   std::cout << "main This threadId: " << std::this_thread::get_id() << std::endl;
   auto service_response =
       node->icey().create_timer(1s)
@@ -56,4 +56,5 @@ int main(int argc, char **argv) {
           });
 
   icey::spin(node);  
+  */
 }
