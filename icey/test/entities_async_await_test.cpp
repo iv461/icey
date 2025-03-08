@@ -106,7 +106,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
     auto pub =
         sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1);
 
-    auto coro = [timer]() -> icey::Stream<std_msgs::msg::Float32> {
+    auto coro = [&]() -> icey::Stream<std_msgs::msg::Float32> {
       size_t ticks = co_await timer;
       std_msgs::msg::Float32 float_val;
       float_val.data = ticks;

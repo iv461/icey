@@ -556,7 +556,9 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
     return {};
   }
 
-  auto final_suspend() const noexcept { 
+  std::suspend_never final_suspend() const noexcept { 
+    return {};
+    /*
     struct final_awaitable {
       bool await_ready() const noexcept { return false; }
       
@@ -568,6 +570,7 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
       void await_resume() noexcept {}
     };
     return final_awaitable{};
+        */
   }
 
   /// return_value returns the value of the Steam.
@@ -659,19 +662,20 @@ public:
           }
           return !coro_.promise().has_none(); 
         }
-        auto await_suspend(std::coroutine_handle<> h) noexcept { 
+        void await_suspend(std::coroutine_handle<> h) noexcept { 
           /// Resume the coroutine when this promise is done
           std::cout << "Await suspend was called, held Future: " << get_type(coro_.promise()) << std::endl;
           //std::cout << "And the future in the coro handle: " << get_type(h.promise()) << std::endl;
           if(!coro_) {
             std::cout << "No coro, returning false " << std::endl;
-            return coro_;
+            //return coro_;
+            return;
           } else {
             std::cout << "Coro handle is valid " << std::endl;
           }
           coro_.promise().register_handler([h](auto) { if(h) h.resume(); });
           coro_.promise().continuation_ = h;
-          return coro_;
+          //return coro_;
         }
         auto await_resume() const noexcept { 
           std::cout << "Await resume was called, held Future: " << get_type(coro_.promise()) << std::endl;
@@ -747,40 +751,25 @@ public:
 #endif
 
   /// Create s new stream using the context.
-  explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); 
-    
-  }
-  explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {
-    
-  }
+  explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); }
+
+  explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
   explicit Stream(std::coroutine_handle<Self> coro) : coro_(coro) {}
   std::coroutine_handle<Self> coro_;
   /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines. 
   /// It spins the ROS executor until this Stream has something (value or error) and then resumes the coroutine.
-  auto operator co_await() const {
+  auto operator co_await() {
     struct Awaiter {
-      std::coroutine_handle<Self> coro_;
-      Awaiter(std::coroutine_handle<Self> coro) : coro_(coro) {}
+      //std::coroutine_handle<Self> coro_;
+      Self &stream;
+      Awaiter(Self &coro) : stream(coro) {}
       bool await_ready() const noexcept { 
-        std::cout << "Await ready on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
-        if(!coro_) {
-          std::cout << "No coro, returning true" << std::endl;
-          return true;
-        } else {
-          std::cout << "Coro handle is valid " << std::endl;
-        }
-        return !coro_.promise().has_none(); 
+        std::cout << "Await ready on Stream " << stream.get_type_info() << " called" << std::endl;
+        return !stream.has_none(); 
       }
-      auto await_suspend(std::coroutine_handle<> h) noexcept { 
-        std::cout << "Await suspend on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
-        if(!coro_) {
-          std::cout << "No coro, returning false " << std::endl;
-          return coro_;
-        } else {
-          std::cout << "Coro handle is valid " << std::endl;
-        }
-        auto &stream = coro_.promise();
+      void await_suspend(std::coroutine_handle<> h) noexcept { 
+        std::cout << "Await suspend on Stream " << stream.get_type_info() << " called" << std::endl;
         /// Since this is a stream, we need to register a handler that resumes the coroutine, but only once: 
         /// The stream remains the same, but is may be awaited many times. 
         /// (GCC 11.4 can't hash a coroutine_handle, it was added only in GCC 12, Microsoft's STL as expected just takes the address: https://github.com/microsoft/STL/blob/192e861d9ce719e7c0eee42832a7278d80f4172d/stl/inc/coroutine#L191)
@@ -789,20 +778,13 @@ public:
               if(h) h(); });
           stream.impl()->registered_coroutines.emplace(std::size_t(h.address()));
         }
-        coro_.promise().continuation_ = h; /// ???? 
-        return coro_;
       }
       auto await_resume() const noexcept { 
-        std::cout << "Await resume on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
-        if(!coro_) {
-          std::cout << "No coro, guess I'll die now " << std::endl;
-        } else {
-          std::cout << "Coro handle is valid " << std::endl;
-        }
-        return coro_.promise().take(); 
+        std::cout << "Await resume on Stream " << stream.get_type_info() << " called" << std::endl;
+        return stream.take(); 
       }
     };
-    return Awaiter{this->coro_};
+    return Awaiter{*this};
   }
 
   /// Returns a weak pointer to the implementation.
