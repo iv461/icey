@@ -526,8 +526,10 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
 
   ~PromiseInterfaceForCoroutines() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
-  }
-
+    if (this->underlying().coro_) 
+      this->underlying().coro_.destroy();
+    this->underlying().coro_ = nullptr;
+  }  
   std::string get_type_info() const {
     std::stringstream ss;
     auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
@@ -538,7 +540,13 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
   /// We are still a promise
   Derived get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-    return {};
+    /// This trick is used everywhere, in Lewis Bakers tutorial, as well as in there libraries: 
+    // [cppcoro] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
+    // [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
+    // [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
+    // Essentially, we create here a "box"-object (of promise_type) that holds the our actual promise object, that is also a promise_type
+    // Why we need to do this ? Apparently the compiler always needs to box the promises, assuming that promise_type and the implementation might be different types
+    return Derived{std::coroutine_handle<Derived>::from_promise(this->underlying())};
   }
 
   /// We never already got something since this is a stream (we always first need to spin the
@@ -607,6 +615,8 @@ public:
       get_type(*this) << std::endl;
     }
 
+    explicit Future(std::coroutine_handle<Self> coro) : coro_(coro) {}
+    std::coroutine_handle<Self> coro_;
 
     Future(const Self &) = delete;
     Future(Self &&) = delete;
@@ -626,24 +636,23 @@ public:
     /// Await the future 
     auto operator co_await() {
       struct Awaiter {
-        Self &promise_;
-        Awaiter(Self &p) : promise_(p) {}
-
+        std::coroutine_handle<Self> coro_;
+        Awaiter(std::coroutine_handle<Self> coro) : coro_(coro) {}
         bool await_ready() const noexcept { 
-          std::cout << "Await ready was called, held Future: " << get_type(promise_) << std::endl;
-            return !promise_.has_none(); 
+          std::cout << "Await resume on Future " << get_type(coro_.promise()) << " called" << std::endl;
+          return coro_.promise().has_none(); 
         }
         void await_suspend(std::coroutine_handle<> h) noexcept { 
           /// Resume the coroutine when this promise is done
-          std::cout << "Await suspend was called, held Future: " << get_type(promise_) << std::endl;
+          std::cout << "Await suspend was called, held Future: " << get_type(coro_.promise()) << std::endl;
           //std::cout << "And the future in the coro handle: " << get_type(h.promise()) << std::endl;
-          promise_.register_handler([h](auto) { if(h) h(); });
+          coro_.promise().register_handler([h](auto) { if(h) h(); });
         }
         auto await_resume() const noexcept { 
-          std::cout << "Await resume was called, held Future: " << get_type(promise_) << std::endl;
-            return promise_.take(); }
+          std::cout << "Await resume was called, held Future: " << get_type(coro_.promise()) << std::endl;
+            return coro_.promise().take(); }
       };
-      return Awaiter{*this};
+      return Awaiter{this->coro_};
     }
 
     ~Future() {
@@ -710,26 +719,36 @@ public:
   explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); }
   explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
+  explicit Stream(std::coroutine_handle<Self> coro) : coro_(coro) {}
+  std::coroutine_handle<Self> coro_;
   /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines. 
   /// It spins the ROS executor until this Stream has something (value or error) and then resumes the coroutine.
   auto operator co_await() const {
-    struct ROSExecutorAwaiter {
-      const Self &stream_;
-      ROSExecutorAwaiter(const Self &p) : stream_(p) {}
-      bool await_ready() const noexcept { return !stream_.has_none(); }
+    struct Awaiter {
+      std::coroutine_handle<Self> coro_;
+      Awaiter(std::coroutine_handle<Self> coro) : coro_(coro) {}
+      bool await_ready() const noexcept { 
+        std::cout << "Await ready on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
+          return coro_.promise().has_none(); 
+      }
       void await_suspend(std::coroutine_handle<> h) noexcept { 
+        std::cout << "Await suspend on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
+        auto &stream = coro_.promise();
         /// Since this is a stream, we need to register a handler that resumes the coroutine, but only once: 
         /// The stream remains the same, but is may be awaited many times. 
         /// (GCC 11.4 can't hash a coroutine_handle, it was added only in GCC 12, Microsoft's STL as expected just takes the address: https://github.com/microsoft/STL/blob/192e861d9ce719e7c0eee42832a7278d80f4172d/stl/inc/coroutine#L191)
-        if(!stream_.impl()->registered_coroutines.contains(std::size_t(h.address()))) {
-          stream_.impl()->register_handler([h](auto) { 
+        if(!stream.impl()->registered_coroutines.contains(std::size_t(h.address()))) {
+          stream.impl()->register_handler([h](auto) { 
               if(h) h(); });
-          stream_.impl()->registered_coroutines.emplace(std::size_t(h.address()));
+          stream.impl()->registered_coroutines.emplace(std::size_t(h.address()));
         }
       }
-      auto await_resume() const noexcept { return stream_.take(); }
+      auto await_resume() const noexcept { 
+        std::cout << "Await resume on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
+          return coro_.promise().take(); 
+      }
     };
-    return ROSExecutorAwaiter{*this};
+    return Awaiter{this->coro_};
   }
 
   /// Returns a weak pointer to the implementation.
