@@ -28,8 +28,7 @@ icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {
       std_msgs::msg::Float32 result;
       result.data = (ticks % 20 == 0) ? 1.f : 0.f;  
       rectangle_pub.publish(result);
-    } 
-    
+    }
     
     /// Add another computation for the timer
     std_msgs::msg::Float32 float_val;

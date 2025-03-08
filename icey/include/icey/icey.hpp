@@ -602,7 +602,11 @@ public:
     using Self = Future<Value, Error>;
     using Cancel = std::function<void(Self &)>;
 
-    Future() = default;
+    Future() {
+      std::cout << "Future was default-constructed: " << 
+      get_type(*this) << std::endl;
+    }
+
 
     Future(const Self &) = delete;
     Future(Self &&) = delete;
@@ -611,23 +615,39 @@ public:
   
     explicit Future(std::function<Cancel(Self &)> &&h) { cancel_ = h(*this); }
 
+    template<class T>
+    static std::string get_type(T &t) {
+      std::stringstream ss;
+      auto this_class = boost::typeindex::type_id_runtime(t).pretty_name();
+      ss << "[" << this_class << " @ 0x" << std::hex << size_t(&t);
+      return ss.str();
+    }
+
     /// Await the future 
     auto operator co_await() {
       struct Awaiter {
         Self &promise_;
         Awaiter(Self &p) : promise_(p) {}
 
-        bool await_ready() const noexcept { return !promise_.has_none(); }
+        bool await_ready() const noexcept { 
+          std::cout << "Await ready was called, held Future: " << get_type(promise_) << std::endl;
+            return !promise_.has_none(); 
+        }
         void await_suspend(std::coroutine_handle<> h) noexcept { 
           /// Resume the coroutine when this promise is done
+          std::cout << "Await suspend was called, held Future: " << get_type(promise_) << std::endl;
+          //std::cout << "And the future in the coro handle: " << get_type(h.promise()) << std::endl;
           promise_.register_handler([h](auto) { if(h) h(); });
         }
-        auto await_resume() const noexcept { return promise_.take(); }
+        auto await_resume() const noexcept { 
+          std::cout << "Await resume was called, held Future: " << get_type(promise_) << std::endl;
+            return promise_.take(); }
       };
       return Awaiter{*this};
     }
 
     ~Future() {
+      std::cout << "Future was destructed: " << get_type(*this) << std::endl;
       if(cancel_)
           cancel_(*this);
     }
