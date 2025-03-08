@@ -604,6 +604,7 @@ public:
     using Cancel = std::function<void(Self &)>;
     using Wait = std::function<void(Self &)>;
 
+    Future() = default;
     Future(std::function<std::tuple<Cancel, Wait>(Self &)> &&h) { std::tie(cancel_, custom_wait_) = h(*this); }
     Future(Cancel &&cancel, Wait &&wait) : cancel_(cancel), custom_wait_(wait) {}
 
