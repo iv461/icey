@@ -10,9 +10,6 @@ using ExampleService = std_srvs::srv::SetBool;
 
 /// This function creates and spins the node (the main cannot be a coroutine)
 icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {
-
-  
-
   /// Create the service clients beforehand
   auto service1 = node->icey().create_client<ExampleService>("set_bool_service1");
   auto service2 = node->icey().create_client<ExampleService>("set_bool_service2");  

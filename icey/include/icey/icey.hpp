@@ -1567,7 +1567,7 @@ struct ServiceClient : public StreamImplDefault {
                           future.put_error("TIMEOUT");
                         }
                       } else {
-                        future.put_value(result.get()->second);
+                        future.put_value(result.get());
                       }
                     });
                     timeout_timer_ = node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {

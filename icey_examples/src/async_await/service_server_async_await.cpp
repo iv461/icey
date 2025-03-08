@@ -8,10 +8,8 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-
-icey::Stream<int> serve_downstream_service(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "service_service_async_await_example");
-
+icey::Stream<int> serve_downstream_service(std::shared_ptr<icey::Node> node) {
+  
   /// Create the service server, without giving it a (synchronous) callback.
   auto service_server = node->icey().create_service<ExampleService>("set_bool_service");
 
@@ -27,7 +25,7 @@ icey::Stream<int> serve_downstream_service(int argc, char **argv) {
 
   /// Call the upstream service with 1s timeout:
   icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
-
+  
   if (upstream_result.has_error()) {
     RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());
     co_return 0;
@@ -38,12 +36,12 @@ icey::Stream<int> serve_downstream_service(int argc, char **argv) {
 
   /// Now send back the response synchronously: 
   service_server.respond(request_id, upstream_response);
-
+  
   co_return 0;
 }
 
 int main(int argc, char **argv) {
-  icey::icey_coro_debug_print = true;
-  serve_downstream_service(argc, argv);
-  rclcpp::shutdown();
+  auto node = icey::create_node(argc, argv, "service_service_async_await_example");
+  serve_downstream_service(node);
+  icey::spin(node);
 }
