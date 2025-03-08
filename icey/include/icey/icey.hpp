@@ -536,9 +536,9 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
   }
 
   /// We are still a promise
-  Derived &get_return_object() {
+  Derived get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-    return this->underlying();
+    return {};
   }
 
   /// We never already got something since this is a stream (we always first need to spin the
@@ -566,7 +566,7 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
   /// right ? No ? Oh .. (Reference:
   /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
   template <class T>
-  void return_value(const T &x) const {
+  void return_value(const T &x) {
     if (icey_coro_debug_print)
       std::cout << this->get_type_info() << " return value for "
                 << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
@@ -600,13 +600,16 @@ public:
     using Value = _Value;
     using Error = _Error;
     using Self = Future<Value, Error>;
-
     using Cancel = std::function<void(Self &)>;
-    using Wait = std::function<void(Self &)>;
 
     Future() = default;
-    Future(std::function<std::tuple<Cancel, Wait>(Self &)> &&h) { std::tie(cancel_, custom_wait_) = h(*this); }
-    Future(Cancel &&cancel, Wait &&wait) : cancel_(cancel), custom_wait_(wait) {}
+
+    Future(const Self &) = delete;
+    Future(Self &&) = delete;
+    Future &operator=(const Future &) = delete;
+    Future &operator=(Future &&) = delete;
+  
+    explicit Future(std::function<Cancel(Self &)> &&h) { cancel_ = h(*this); }
 
     /// Await the future 
     auto operator co_await() {
@@ -619,7 +622,7 @@ public:
           /// Resume the coroutine when this promise is done
           promise_.register_handler([h](auto) { if(h) h(); });
         }
-        auto await_resume() const noexcept { return promise_.get_state(); }
+        auto await_resume() const noexcept { return promise_.take(); }
       };
       return Awaiter{*this};
     }
@@ -629,11 +632,8 @@ public:
           cancel_(*this);
     }
 
-    /// Wait until this Future has some. (usually spins the ROS executor)
-    void wait() { custom_wait_(*this); }
-
     Cancel cancel_;
-    Wait custom_wait_;
+    
     bool is_done{false};
 };
 
@@ -1330,11 +1330,10 @@ struct TransformBuffer : public StreamImplDefault {
                     "invalid std::shared_future.");
               }
           });
-          return std::make_tuple(typename Fut::Cancel{[&](auto &) {
+          return typename Fut::Cancel{[&](auto &) {
             /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
             tf2_listener->buffer_->cancel(tf_future);
-          }},
-          typename Fut::Wait{[](auto &) {}});  
+          }};  
         });
   }
   
@@ -1548,8 +1547,7 @@ struct ServiceClient : public StreamImplDefault {
   // clang-format on
   Future<Response, std::string> call(Request request, const Duration &timeout) {
     using Cancel = typename Future<Response, std::string>::Cancel;
-    using Wait = typename Future<Response, std::string>::Wait;
-    return {[this, request, timeout](auto &future) {
+    return Future<Response, std::string>{[this, request, timeout](auto &future) {
                   /// We call here the synchronous code because there is no asynchronous API for wait_for_service.
                   if(!client->wait_for_service(timeout)) {
                     // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
@@ -1558,7 +1556,7 @@ struct ServiceClient : public StreamImplDefault {
                     } else {
                       future.put_error("SERVICE_UNAVAILABLE");
                     }
-                    return std::make_tuple(Cancel{}, Wait{});
+                    return Cancel{};
                   } else {
                     auto future_and_req_id = client->async_send_request(request, [&](typename Client::SharedFuture result) {
                       if (!result.valid()) {
@@ -1580,11 +1578,11 @@ struct ServiceClient : public StreamImplDefault {
                       }
                       client->remove_pending_request(req_id);
                     });
-                    return std::make_tuple(Cancel{
+                    return Cancel{
                       [this, req_id = future_and_req_id.request_id](auto &future) {
                         client->remove_pending_request(req_id);
                       }
-                    }, Wait{});  
+                    };  
                   }
               }
             };

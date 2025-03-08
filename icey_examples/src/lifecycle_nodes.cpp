@@ -34,7 +34,7 @@ public:
   }
 
   /// Spin the node: we do some work here, other callbacks get called 
-  icey::Stream<int> spin() {
+  icey::Future<int> run() {
     
     while(true) {
       std::size_t ticks = co_await timer_;
@@ -50,6 +50,7 @@ public:
 
 int main(int argc, char **argv) {
   auto node = icey::create_node<ExampleLifecycleNode>(argc, argv, "lifecycle_node_example");
-  node->spin();
+  node->run();
+  icey::spin(node);
   return 0;
 }
