@@ -19,6 +19,7 @@ icey::Stream<int> talk(std::shared_ptr<icey::Node> node) {
     auto timer = node->icey().create_timer(100ms);
     auto pub = node->icey().create_publisher<std_msgs::msg::String>("/strings");
 
+    
     while(true) {
         std::cout << "3. B4 await " << std::endl;
         std_msgs::msg::String message = co_await async_create_message(timer);

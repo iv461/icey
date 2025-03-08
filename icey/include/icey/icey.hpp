@@ -542,7 +542,7 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
   /// We are still a promise
   Derived get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-    /// This trick is used everywhere, in Lewis Bakers tutorial, as well as in there libraries: 
+    /// This trick is used everywhere, in Lewis Bakers tutorial, as well as in other libraries: 
     // [cppcoro] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
     // [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
     // [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
@@ -657,7 +657,7 @@ public:
           } else {
             std::cout << "Coro handle is valid " << std::endl;
           }
-          return coro_.promise().has_none(); 
+          return !coro_.promise().has_none(); 
         }
         auto await_suspend(std::coroutine_handle<> h) noexcept { 
           /// Resume the coroutine when this promise is done
@@ -747,8 +747,12 @@ public:
 #endif
 
   /// Create s new stream using the context.
-  explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); }
-  explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
+  explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); 
+    
+  }
+  explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {
+    
+  }
 
   explicit Stream(std::coroutine_handle<Self> coro) : coro_(coro) {}
   std::coroutine_handle<Self> coro_;
@@ -766,7 +770,7 @@ public:
         } else {
           std::cout << "Coro handle is valid " << std::endl;
         }
-        return coro_.promise().has_none(); 
+        return !coro_.promise().has_none(); 
       }
       auto await_suspend(std::coroutine_handle<> h) noexcept { 
         std::cout << "Await suspend on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
