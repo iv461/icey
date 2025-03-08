@@ -9,9 +9,9 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
 /// This function creates and spins the node (the main cannot be a coroutine)
-icey::Stream<int> create_and_spin_node(int argc, char **argv) {
+icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {
 
-  auto node = icey::create_node(argc, argv, "service_client_async_await_example");
+  
 
   /// Create the service clients beforehand
   auto service1 = node->icey().create_client<ExampleService>("set_bool_service1");
@@ -51,6 +51,28 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   co_return 0; // All coroutines must have co_return
 }
 
+icey::TimerStream fn1(std::shared_ptr<icey::Node> node) {
+  std::cout << "1. Entering" << std::endl;
+  auto timer = node->icey().create_timer(1s, true);
+  return timer;
+}
+
+icey::Stream<std::size_t> fn2(std::shared_ptr<icey::Node> node) {
+  std::cout << "3. Entering" << std::endl;
+
+  co_await fn1(node);
+
+  std::cout << "4. Entering" << std::endl;
+  std::cout << "5. Entering" << std::endl;
+}
+
+
 int main(int argc, char **argv) {
-  create_and_spin_node(argc, argv);
+  auto node = icey::create_node(argc, argv, "service_client_async_await_example");
+
+  std::cout << "0 Start" << std::endl;
+  fn2(node);
+  std::cout << "6 End" << std::endl;
+  
+  node->icey().get_executor()->spin();
 }

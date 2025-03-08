@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 ```
 
 Using Streams (promises), you can build your own data-driven pipeline of computations, for example sequencing service calls: 
-[Service call example](icey_examples/src/service_client.cpp)
+[Service call example](icey_examples/src/service_client_async_await.cpp)
 ```cpp
 node->icey().create_timer(1s)
     /// Build a request when the timer ticks

@@ -253,7 +253,7 @@ public:
       }
     }
     if (!this->has_none()) {
-      for (const auto &cb : handlers_) cb(state_);
+      for (const auto &cb : handlers_) cb(state_);      
     }
   }
 

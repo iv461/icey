@@ -463,12 +463,16 @@ class Context;
 /// some names for easy debugging.
 class StreamImplDefault {
 public:
+  StreamImplDefault() {}
   /// A weak reference to the Context, it is needed so that Streams can create more streams that
   /// need access to the ROS node, i.e. via `.publish`.
   std::weak_ptr<Context> context;
   /// Timeout is useful when using co_await since we can implement Stream timeouts without an extra
   /// timer.
   std::optional<Duration> timeout{};
+
+  /// We save here all the coroutines that listen on the stream for a continuation
+  std::unordered_set<std::size_t> registered_coroutines;
 };
 
 /// Adds a default extention inside the impl::Stream by default.
@@ -619,7 +623,12 @@ class Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefault
         Awaiter(Self &p) : promise_(p) {}
         
         bool await_ready() const noexcept { return !promise_.has_none(); }
-        bool await_suspend(std::coroutine_handle<>) noexcept { promise_.wait(); return false; }
+        void await_suspend(std::coroutine_handle<> h) noexcept { 
+          /// Resume the coroutine when this promise is done
+          promise_.register_handler([h](auto) {
+                h();
+          });
+        }
         auto await_resume() const noexcept { return promise_.get_state(); }
       };
       return Awaiter{*this};
@@ -698,7 +707,16 @@ public:
       const Self &stream_;
       ROSExecutorAwaiter(const Self &p) : stream_(p) {}
       bool await_ready() const noexcept { return !stream_.has_none(); }
-      bool await_suspend(std::coroutine_handle<>) noexcept { stream_.wait(); return false; }
+      void await_suspend(std::coroutine_handle<> h) noexcept { 
+        /// Since this is a stream, we need to register a handler that resumes the coroutine, but only once: 
+        /// The stream remains the same, but is may be awaited many times. 
+        /// (GCC 11.4 can't hash a coroutine_handle, it was added only in GCC 12, Microsoft's STL as expected just takes the address: https://github.com/microsoft/STL/blob/192e861d9ce719e7c0eee42832a7278d80f4172d/stl/inc/coroutine#L191)
+        if(!stream_.impl()->registered_coroutines.contains(std::size_t(h.address()))) {
+          stream_.impl()->register_handler([h](auto) { 
+              if(h) h(); });
+          stream_.impl()->registered_coroutines.emplace(std::size_t(h.address()));
+        }
+      }
       auto await_resume() const noexcept { return stream_.take(); }
     };
     return ROSExecutorAwaiter{*this};
@@ -707,8 +725,8 @@ public:
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
-  /// \brief Calls the given function f every time this Stream receives a value.  
-  /// It returns a new Stream that receives the values that this function f returns. 
+  /// \brief Calls the given function f every time this stream receives a value.  
+  /// It returns a new stream that receives the values that this function f returns. 
   /// The returned Stream also passes though the errors of this stream so that 
   /// chaining `then`s with an `except` works.
   /// \note The given function must be synchronous, no asynchronous functions are supported.
@@ -2003,6 +2021,7 @@ public:
   }
 
   /// Create a timer stream. It yields as a value the total number of ticks.
+  /// \param period the period time
   /// \param is_one_off_timer if set to true, this timer will execute only once.
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   TimerStream create_timer(const Duration &period, bool is_one_off_timer = false) {

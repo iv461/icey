@@ -5,10 +5,8 @@
 
 using namespace std::chrono_literals;
 
-icey::Stream<int> create_and_spin_node(int argc, char **argv) {
-  std::cout << "Starting node .. " << std::endl;
-
-  auto node = icey::create_node(argc, argv, "signal_generator");
+icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {  
+  
   auto frequency = node->icey().declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2.);
   
@@ -32,6 +30,7 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
       rectangle_pub.publish(result);
     } 
     
+    
     /// Add another computation for the timer
     std_msgs::msg::Float32 float_val;
     double period_time_s = 0.1;
@@ -45,6 +44,9 @@ icey::Stream<int> create_and_spin_node(int argc, char **argv) {
   co_return 0;
 }
 
+
 int main(int argc, char **argv) {
-  create_and_spin_node(argc, argv);
+  auto node = icey::create_node(argc, argv, "signal_generator");
+  create_and_spin_node(node);
+  node->icey().get_executor()->spin();
 }
