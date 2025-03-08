@@ -537,6 +537,8 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
     return ss.str();
   }
 
+  std::coroutine_handle<> continuation_;
+
   /// We are still a promise
   Derived get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
@@ -549,15 +551,24 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
     return Derived{std::coroutine_handle<Derived>::from_promise(this->underlying())};
   }
 
-  /// We never already got something since this is a stream (we always first need to spin the
-  /// ROS executor to get a message), so we never suspend.
   std::suspend_never initial_suspend() {
     // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
     return {};
   }
 
-  /// We do not need to do anything at the end, no extra cleanups needed.
-  std::suspend_never final_suspend() const noexcept { return {}; }
+  auto final_suspend() const noexcept { 
+    struct final_awaitable {
+      bool await_ready() const noexcept { return false; }
+      
+      std::coroutine_handle<> 
+      await_suspend(std::coroutine_handle<Derived> coro) noexcept {
+        std::cout << "Final suspend await_suspend"<< std::endl;
+        return coro.promise().continuation_;
+      }
+      void await_resume() noexcept {}
+    };
+    return final_awaitable{};
+  }
 
   /// return_value returns the value of the Steam.
   auto return_value() { return this->underlying().value(); }
@@ -639,18 +650,38 @@ public:
         std::coroutine_handle<Self> coro_;
         Awaiter(std::coroutine_handle<Self> coro) : coro_(coro) {}
         bool await_ready() const noexcept { 
-          std::cout << "Await resume on Future " << get_type(coro_.promise()) << " called" << std::endl;
+          std::cout << "Await ready on Future " << get_type(coro_.promise()) << " called" << std::endl;
+          if(!coro_) {
+            std::cout << "No coro, returning true " << std::endl;
+            return true;
+          } else {
+            std::cout << "Coro handle is valid " << std::endl;
+          }
           return coro_.promise().has_none(); 
         }
-        void await_suspend(std::coroutine_handle<> h) noexcept { 
+        auto await_suspend(std::coroutine_handle<> h) noexcept { 
           /// Resume the coroutine when this promise is done
           std::cout << "Await suspend was called, held Future: " << get_type(coro_.promise()) << std::endl;
           //std::cout << "And the future in the coro handle: " << get_type(h.promise()) << std::endl;
-          coro_.promise().register_handler([h](auto) { if(h) h(); });
+          if(!coro_) {
+            std::cout << "No coro, returning false " << std::endl;
+            return coro_;
+          } else {
+            std::cout << "Coro handle is valid " << std::endl;
+          }
+          coro_.promise().register_handler([h](auto) { if(h) h.resume(); });
+          coro_.promise().continuation_ = h;
+          return coro_;
         }
         auto await_resume() const noexcept { 
           std::cout << "Await resume was called, held Future: " << get_type(coro_.promise()) << std::endl;
-            return coro_.promise().take(); }
+          if(!coro_) {
+            std::cout << "No coro, guess I'll die now " << std::endl;
+          } else {
+            std::cout << "Coro handle is valid " << std::endl;
+          }
+          return coro_.promise().take(); 
+        }
       };
       return Awaiter{this->coro_};
     }
@@ -729,10 +760,22 @@ public:
       Awaiter(std::coroutine_handle<Self> coro) : coro_(coro) {}
       bool await_ready() const noexcept { 
         std::cout << "Await ready on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
-          return coro_.promise().has_none(); 
+        if(!coro_) {
+          std::cout << "No coro, returning true" << std::endl;
+          return true;
+        } else {
+          std::cout << "Coro handle is valid " << std::endl;
+        }
+        return coro_.promise().has_none(); 
       }
-      void await_suspend(std::coroutine_handle<> h) noexcept { 
+      auto await_suspend(std::coroutine_handle<> h) noexcept { 
         std::cout << "Await suspend on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
+        if(!coro_) {
+          std::cout << "No coro, returning false " << std::endl;
+          return coro_;
+        } else {
+          std::cout << "Coro handle is valid " << std::endl;
+        }
         auto &stream = coro_.promise();
         /// Since this is a stream, we need to register a handler that resumes the coroutine, but only once: 
         /// The stream remains the same, but is may be awaited many times. 
@@ -742,10 +785,17 @@ public:
               if(h) h(); });
           stream.impl()->registered_coroutines.emplace(std::size_t(h.address()));
         }
+        coro_.promise().continuation_ = h; /// ???? 
+        return coro_;
       }
       auto await_resume() const noexcept { 
         std::cout << "Await resume on Stream " << coro_.promise().get_type_info() << " called" << std::endl;
-          return coro_.promise().take(); 
+        if(!coro_) {
+          std::cout << "No coro, guess I'll die now " << std::endl;
+        } else {
+          std::cout << "Coro handle is valid " << std::endl;
+        }
+        return coro_.promise().take(); 
       }
     };
     return Awaiter{this->coro_};
@@ -1618,7 +1668,7 @@ struct ServiceClient : public StreamImplDefault {
                       client->remove_pending_request(req_id);
                     });
                     return Cancel{
-                      [this, req_id = future_and_req_id.request_id](auto &future) {
+                      [this, req_id = future_and_req_id.request_id](auto &) {
                         client->remove_pending_request(req_id);
                       }
                     };  
