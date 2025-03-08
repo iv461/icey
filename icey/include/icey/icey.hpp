@@ -594,40 +594,29 @@ struct check_callback<F, std::tuple<Args...>> {
 struct FutureTag {};
 /// A Future is an asynchronous primitve that yields a single value or an error.
 template<class _Value, class _Error = Nothing>
-class Future : public FutureTag, public impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>, 
+class Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing>,
   public PromiseInterfaceForCoroutines<Future<_Value, _Error>> {
-  public:
+public:
     using Value = _Value;
     using Error = _Error;
     using Self = Future<Value, Error>;
 
-    using Storage = impl::Stream<_Value, _Error, WithDefaults<Nothing>, WithDefaults<Nothing>>;
+    using Cancel = std::function<void(Self &)>;
+    using Wait = std::function<void(Self &)>;
 
-    using Resolve = std::function<void(const Value &)>;
-    using Reject = std::function<void(const Error &)>;
-    using Cancel = std::function<void(Storage &)>;
-    using Wait = std::function<void(Storage &)>;
-
-    Future(std::function<std::tuple<Cancel, Wait>(Self*)> &&h) { std::tie(cancel_, custom_wait_) = h(this); }
+    Future(std::function<std::tuple<Cancel, Wait>(Self &)> &&h) { std::tie(cancel_, custom_wait_) = h(*this); }
     Future(Cancel &&cancel, Wait &&wait) : cancel_(cancel), custom_wait_(wait) {}
-    
-    Future(Future &&) = delete;
-    Future(const Future &) = delete;
-    Future&operator=(Future &&) = delete;
-    Future&operator=(const Future &) = delete;
 
     /// Await the future 
     auto operator co_await() {
       struct Awaiter {
         Self &promise_;
         Awaiter(Self &p) : promise_(p) {}
-        
+
         bool await_ready() const noexcept { return !promise_.has_none(); }
         void await_suspend(std::coroutine_handle<> h) noexcept { 
           /// Resume the coroutine when this promise is done
-          promise_.register_handler([h](auto) {
-                h();
-          });
+          promise_.register_handler([h](auto) { if(h) h(); });
         }
         auto await_resume() const noexcept { return promise_.get_state(); }
       };
@@ -940,17 +929,7 @@ protected:
   Stream<NewValue, NewError> create_new() const {
     return create_stream<Stream<NewValue, NewError>>();
   }
-
-  /// Spin the ROS executor until this Stream has something (a value or an error).  
-  void wait() const {
-    if (this->impl()->context.expired()) {
-      std::cout << "Stream has not context, cannot spin, probably an error in coroutine support implementation." << std::endl;
-      throw std::logic_error("Stream has not context, cannot spin, probably an error in coroutine support implementation.");
-    } else {
-      this->impl()->context.lock()->spin_executor_until_stream_has_some(*this);
-    }
-  }
-
+  
   /// TODO make non-const, then co_await is also not const anymore,
   void set_value(const Value & x) const { this->impl()->set_value(x); }
   bool has_none() const { return this->impl()->has_none(); }
@@ -1326,8 +1305,8 @@ struct TransformBuffer : public StreamImplDefault {
   Future<geometry_msgs::msg::TransformStamped, std::string>
     lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
                const Duration &timeout) {
-    return {typename Future<geometry_msgs::msg::TransformStamped, std::string>::Cancel{},
-        [icey_ctx=this->context, tf2_listener = this->tf_listener, target_frame, source_frame, time, timeout](auto &future) {
+                using Fut = Future<geometry_msgs::msg::TransformStamped, std::string>;
+    return Fut([icey_ctx=this->context, tf2_listener = this->tf_listener, target_frame, source_frame, time, timeout](auto &future) {
           /// The function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
           /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
           /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
@@ -1349,11 +1328,13 @@ struct TransformBuffer : public StreamImplDefault {
                     "Invariant broke: The tf2_ros::AsyncBufferInterface::waitForTransform gave us an "
                     "invalid std::shared_future.");
               }
-            });
-          icey_ctx.lock()->get_executor()->spin_until_future_complete(tf_future, timeout);
-          /// Not sure when exactly we need to call this but it does not do anything if it ware removed
-          tf2_listener->buffer_->cancel(tf_future);
-        }};
+          });
+          return std::make_tuple(typename Fut::Cancel{[&](auto &) {
+            /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
+            tf2_listener->buffer_->cancel(tf_future);
+          }},
+          typename Fut::Wait{[](auto &) {}});  
+        });
   }
   
   /// Overload for different time types.
