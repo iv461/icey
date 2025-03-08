@@ -1518,16 +1518,17 @@ struct ServiceClient : public StreamImplDefault {
   using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
   using Client = rclcpp::Client<ServiceT>;
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
-  
+  std::shared_ptr<rclcpp::TimerBase> timeout_timer_;
   ServiceClient() = default;
   /// Create a new service client
   /// \param node 
   /// \param service_name 
   /// \param timeout the timeout that will be used for each request (i.e. `call`) to this service, as well as for the service discovery, i.e. wait_for_service.
   /// \param qos 
-  ServiceClient(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+  ServiceClient(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()): node_(node) {
     client = node.add_client<ServiceT>(service_name, qos);
   }
+  NodeBookkeeping &node_;
 
   // clang-format off
   /*! Make an asynchronous call to the service. Returns a Future that can be awaited using `co_await`.
@@ -1535,7 +1536,7 @@ struct ServiceClient : public StreamImplDefault {
   \param request the request
   \param timeout The timeout for the service call, both for service discovery and the actuall call.
   \returns A future that can be awaited to obtain the response or an error. Possible errors are "TIMEOUT", "SERVICE_UNAVAILABLE" or "INTERRUPTED".
-
+  \note The 
   Example usage:
   \verbatim
     auto client = node->icey().create_client<ExampleService>("set_bool_service1");
@@ -1545,10 +1546,10 @@ struct ServiceClient : public StreamImplDefault {
     */
   // clang-format on
   Future<Response, std::string> call(Request request, const Duration &timeout) {
-    return {typename Future<Response, std::string>::Cancel{},
-              [icey_ctx = this->context, client = this->client, request, timeout](auto &future) {
-                  /// The wait function: We put here all the synchronous code because there is no asynchronous API for wait_for_service.
-                  /// Therefore we use the synchronous API also for the call.
+    using Cancel = typename Future<Response, std::string>::Cancel;
+    using Wait = typename Future<Response, std::string>::Wait;
+    return {[this, request, timeout](auto &future) {
+                  /// We call here the synchronous code because there is no asynchronous API for wait_for_service.
                   if(!client->wait_for_service(timeout)) {
                     // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
                     if (!rclcpp::ok()) {
@@ -1556,27 +1557,38 @@ struct ServiceClient : public StreamImplDefault {
                     } else {
                       future.put_error("SERVICE_UNAVAILABLE");
                     }
-                  } else  {
-                    auto future_and_req_id = client->async_send_request(request);
-                    /// The executor that we need depends on the Response ...  No, of course it doesn't
-                    auto spin_result = icey_ctx.lock()->get_executor()->spin_until_future_complete(future_and_req_id, timeout);
-                    if (spin_result == rclcpp::FutureReturnCode::TIMEOUT) {
-                      client->remove_pending_request(future_and_req_id.request_id);
-                      future.put_error("TIMEOUT");
-                    } else if (spin_result == rclcpp::FutureReturnCode::INTERRUPTED) {
-                      future.put_error("INTERRUPTED");
-                    } else {
-                      auto &response_future = future_and_req_id.future;
-                      if (!response_future.valid()) {
-                        throw std::logic_error("Invariant broke: Future is invalid after spin");
+                    return std::make_tuple(Cancel{}, Wait{});
+                  } else {
+                    auto future_and_req_id = client->async_send_request(request, [&](typename Client::SharedFuture result) {
+                      if (!result.valid()) {
+                        if (!rclcpp::ok()) {
+                          future.put_error("INTERRUPTED");
+                        } else {
+                          future.put_error("TIMEOUT");
+                        }
                       } else {
-                        future.put_value(response_future.get());
+                        future.put_value(result.get()->second);
                       }
-                    }
+                    });
+                    timeout_timer_ = node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
+                      timeout_timer_->cancel();
+                      if (!rclcpp::ok()) {
+                        future.put_error("INTERRUPTED");
+                      } else {
+                        future.put_error("TIMEOUT");
+                      }
+                      client->remove_pending_request(req_id);
+                    });
+                    return std::make_tuple(Cancel{
+                      [this, req_id = future_and_req_id.request_id](auto &future) {
+                        client->remove_pending_request(req_id);
+                      }
+                    }, Wait{});  
                   }
               }
-    };
+            };
   }
+
 };
 
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window.
@@ -1842,10 +1854,7 @@ public:
   /// Construct a context using the given Node interface, initializing the `node` field. The
   /// interface must always be present because the Context creates new Streams and Streams need a
   /// the node for construction.
-  explicit Context(const NodeInterfaces &node_interface) : NodeBookkeeping(node_interface) {
-    executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-    executor_->add_node(node_interface.get_node_base_interface());
-  }
+  explicit Context(const NodeInterfaces &node_interface) : NodeBookkeeping(node_interface) {}
 
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
   /// list of streams so that it does not go out of scope. It also sets the context.
@@ -2026,52 +2035,6 @@ public:
     client.context = this->shared_from_this();
     return client;
   }
-
-  /// ICEY creates by default an executor and adds this Node to it to enable using co_await. This method returns this executor.
-  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> &get_executor() { return executor_; }
-
-  /// Both a node and an executor are associated with this Context. The node is by default added to an Executor, this is required to make async/await work. 
-  /// If you wish to spin the ICEY-Node like usual with rclcpp::spin(), you have to first call this function to remove the node from this executor. This of course makes 
-  /// async/await to not work anymore.
-  void remove_node_from_executor() {
-    get_executor()->remove_node(this->get_node_base_interface());
-  }
-
-  /// Spins the ROS executor until the Stream has something (value or error). This is also called a
-  /// synchronous wait.
-  /// \param stream the stream to wait
-  template <AnyStream S>
-  void spin_executor_until_stream_has_some(S stream) {
-    while (rclcpp::ok() && stream.impl()->has_none()) {
-      get_executor()->spin_once();
-    }
-    if (stream.impl()->has_none()) {
-      /// In case rclcpp::ok() returned false, Ctrl+C was pressed while waiting with co_await
-      /// stream, just terminate the ROS, this is what we would do in a normal ROS node anyway. We
-      /// handle this case here because if we break because of ok() == false, the Stream
-      // does not have a value. But we do not want to force
-      /// the user to do unwrapping in 100 % of the time only to handle the 0.1% percent case that
-      /// Ctrl+C was pressed.
-      rclcpp::shutdown();
-      std::exit(0);
-    }
-  }
-
-  /// Spins the ROS executor until the Stream has something (value or error) or the timeout occurs.
-  /// This is also called a synchronous wait. \param timeout The maximum duration to wait. If no
-  /// timeout is desired, please use the other overload of this function.
-  template <AnyStream S>
-  void spin_executor_until_stream_has_some(S stream, const Duration &timeout) {
-    const auto start = Clock::now();
-    while (rclcpp::ok() && stream.impl()->has_none() && (Clock::now() - start) < timeout) {
-      get_executor()->spin_once(timeout);
-    }
-  }
-
-protected:
-  /// The executor is needed for async/await because the Streams need to be able to await
-  /// themselves. For this, they access the ROS executor through the Context.
-  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 /// The ROS node, additionally owning the context that holds the Streams.
@@ -2115,10 +2078,6 @@ template <class NodeType>
 static void spin(NodeType node) {
   /// We use single-threaded executor because the MT one can starve due to a bug
   rclcpp::executors::SingleThreadedExecutor executor;
-  if (node->icey().get_executor()) {
-    node->icey().get_executor()->remove_node(node->get_node_base_interface());
-    node->icey().get_executor().reset();
-  }
   executor.add_node(node->get_node_base_interface());
   executor.spin();
   rclcpp::shutdown();
@@ -2130,10 +2089,6 @@ static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   /// https://robotics.stackexchange.com/a/89767. He references
   /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
   for (auto &node : nodes) {
-    if (node->icey().get_executor()) {
-      node->icey().get_executor()->remove_node(node->get_node_base_interface());
-      node->icey().get_executor().reset();
-    }
     executor.add_node(node->get_node_base_interface());
   }
   executor.spin();

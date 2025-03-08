@@ -30,6 +30,7 @@ protected:
   void SetUp() override {
     // Code here will be called immediately after the constructor (right
     // before each test).
+    executor_.add_node(node_->get_node_base_interface());
   }
 
   void TearDown() override {
@@ -49,13 +50,13 @@ protected:
   void spin(icey::Duration timeout) {
     auto start = icey::Clock::now();
     while ((icey::Clock::now() - start) < timeout) {
-      node_->icey().get_executor()->spin_once(10ms);
+      executor_.spin_once(10ms);
     }
   }
-  void spin_all(icey::Duration timeout) { node_->icey().get_executor()->spin_all(timeout); }
+  void spin_all(icey::Duration timeout) { executor_.spin_all(timeout); }
+  void spin_some() { executor_.spin_some(); }
 
-  void spin_some() { node_->icey().get_executor()->spin_some(); }
-
+  rclcpp::executors::SingleThreadedExecutor executor_;
   std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
   // std::shared_ptr<icey::Node> node_{std::make_shared<icey::Node>("icey_context_test_node")};
 };
@@ -70,12 +71,8 @@ protected:
 
   TwoNodesFixture() {
     /// Put both nodes in the same executor so that if it spins, both nodes get what they want
-    if (sender_->icey().get_executor()) {
-      sender_->icey().get_executor()->remove_node(sender_);
-      receiver_->icey().get_executor()->add_node(sender_->get_node_base_interface());
-      /// Assing the context executor so that both nodes use the same executor in async/await mode
-      sender_->icey().get_executor() = receiver_->icey().get_executor();
-    }
+    executor_.add_node(sender_->get_node_base_interface());
+    executor_.add_node(receiver_->get_node_base_interface());
   }
 
   static void spin(rclcpp::executors::SingleThreadedExecutor &executor, icey::Duration timeout) {
@@ -85,8 +82,9 @@ protected:
     }
   }
 
-  void spin(icey::Duration timeout) { spin(*receiver_->icey().get_executor(), timeout); }
+  void spin(icey::Duration timeout) { spin(executor_, timeout); }
 
+  rclcpp::executors::SingleThreadedExecutor executor_;
   std::shared_ptr<icey::Node> sender_{std::make_shared<icey::Node>("icey_test_sender_node")};
   std::shared_ptr<icey::Node> receiver_{std::make_shared<icey::Node>("icey_test_receiver_node")};
 };

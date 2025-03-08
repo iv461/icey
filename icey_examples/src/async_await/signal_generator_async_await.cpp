@@ -48,5 +48,5 @@ icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "signal_generator");
   create_and_spin_node(node);
-  node->icey().get_executor()->spin();
+  icey::spin(node);
 }

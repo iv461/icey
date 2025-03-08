@@ -74,5 +74,5 @@ int main(int argc, char **argv) {
   fn2(node);
   std::cout << "6 End" << std::endl;
   
-  node->icey().get_executor()->spin();
+  icey::spin(node);
 }
