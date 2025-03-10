@@ -5,7 +5,7 @@
 #include <future>
 #include <variant> 
 #include <functional>
-#include <boost/type_index.hpp>
+
 #include <coroutine>
 #include <string> 
 #include <sstream> 
@@ -63,9 +63,8 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived> {
     this->underlying().coro_ = nullptr;
   }  
   std::string get_type_info() const {
-    std::stringstream ss;
-    auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
-    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this);
+    std::stringstream ss;    
+    ss << "[" << " @ 0x" << std::hex << size_t(this);
     return ss.str();
   }
 
@@ -90,19 +89,6 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived> {
 
   std::suspend_never final_suspend() const noexcept { 
     return {};
-    /*
-    struct final_awaitable {
-      bool await_ready() const noexcept { return false; }
-      
-      std::coroutine_handle<> 
-      await_suspend(std::coroutine_handle<Derived> coro) noexcept {
-        std::cout << "Final suspend await_suspend"<< std::endl;
-        return coro.promise().continuation_;
-      }
-      void await_resume() noexcept {}
-    };
-    return final_awaitable{};
-        */
   }
 
   /// return_value returns the value of the Steam.
@@ -121,9 +107,6 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived> {
   /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
   template <class T>
   void return_value(const T &x) {
-    if (icey_coro_debug_print)
-      std::cout << this->get_type_info() << " return value for "
-                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
     this->underlying().set_value(x);
   }
 
@@ -177,8 +160,7 @@ public:
     template<class T>
     static std::string get_type(T &t) {
       std::stringstream ss;
-      auto this_class = boost::typeindex::type_id_runtime(t).pretty_name();
-      ss << "[" << this_class << " @ 0x" << std::hex << size_t(&t);
+      ss << "["  << " @ 0x" << std::hex << size_t(&t) << "]";
       return ss.str();
     }
 
