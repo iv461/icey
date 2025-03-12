@@ -32,6 +32,7 @@ ament_auto_add_executable(listener_async_await_example src/async_await/listener_
 ament_auto_add_executable(talker_async_await_example src/async_await/talker_async_await.cpp)
 
 ament_auto_add_executable(bugtes src/async_await/bugtes.cpp)
+ament_auto_add_executable(bug_repro2 src/async_await/bug_repro2.cpp)
 
 ament_auto_add_executable(tf_pub_test_example src/tf_pub_test.cpp)
 

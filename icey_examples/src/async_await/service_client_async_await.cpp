@@ -17,7 +17,7 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
   auto timer = node->icey().create_timer(1s);
 
   /// Main spinning loop
-  while (true) {
+  
     /// First, wait until it's time to make the request
     co_await timer;
     
@@ -28,7 +28,8 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
     using Response = ExampleService::Response::SharedPtr;
 
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the actual service call)
-    icey::Result<Response, std::string> result1 = co_await service1.call(request, 1s);
+    auto call_p = service1.call(request, 1s);
+    icey::Result<Response, std::string> result1 = co_await call_p;
 
     if (result1.has_error()) {
       /// Handle errors: (possibly "SERVICE_UNAVAILABLE", "TIMEOUT" or "INTERRUPTED")
@@ -38,13 +39,14 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
     }
 
     /// We can chain service calls: Call a second service after we got the response from the first one:
-    auto result2 = co_await service2.call(request, 1s);
+    auto call_p2 = service2.call(request, 1s);
+    auto result2 = co_await call_p2;
     if (result2.has_error()) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Service2 got error: " << result2.error());
     } else {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response1: " << result2.value()->success);
     }
-  }
+  
   co_return 0; // All coroutines must have co_return
 }
 

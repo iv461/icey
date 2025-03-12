@@ -631,7 +631,7 @@ public:
     }
 
     std::suspend_never initial_suspend() { return {}; }
-    std::suspend_never final_suspend() const noexcept { return {}; }
+    std::suspend_always final_suspend() const noexcept { return {}; }
     /// return_value (aka. operator co_return) returns the value if called with no arugments
     auto return_value() { return this->value(); }
     void unhandled_exception() { exception_ptr_ = std::current_exception(); }
@@ -1600,7 +1600,8 @@ struct ServiceClient : public StreamImplDefault {
     using Cancel = typename Future<Response, std::string>::Cancel;
     return Future<Response, std::string>{[this, request, timeout](auto &future) {
                   /// We call here the synchronous code because there is no asynchronous API for wait_for_service.
-                  if(!client->wait_for_service(timeout)) {
+                  /// TODO we cannot even use the synchronous API because this will call the callback and therefore the coroutine continuation directly (i.e. synchronously) instead in the event loop, eventually leading to a stack overflow
+                  /*if(!client->wait_for_service(timeout)) {
                     // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
                     if (!rclcpp::ok()) {
                       future.put_error("INTERRUPTED");
@@ -1608,7 +1609,7 @@ struct ServiceClient : public StreamImplDefault {
                       future.put_error("SERVICE_UNAVAILABLE");
                     }
                     return Cancel{};
-                  } else {
+                  } else {*/
                     auto future_and_req_id = client->async_send_request(request, [&](typename Client::SharedFuture result) {
                       if (!result.valid()) {
                         if (!rclcpp::ok()) {
@@ -1632,9 +1633,9 @@ struct ServiceClient : public StreamImplDefault {
                     return Cancel{
                       [this, req_id = future_and_req_id.request_id](auto &) {
                         client->remove_pending_request(req_id);
+                        timeout_timer_->cancel();
                       }
-                    };  
-                  }
+                    };
               }
             };
   }
