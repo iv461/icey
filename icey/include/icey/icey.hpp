@@ -592,14 +592,17 @@ struct check_callback<F, std::tuple<Args...>> {
 };
 
 struct FutureTag {};
-/// A Future is an asynchronous primitve that yields a single value or an error.
+/// A Promise is an asynchronous primitve that yields a single value or an error.
+/// // [cppcoro] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
+// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
+// [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
 template<class _Value, class _Error = Nothing>
-class Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing>,
-  public PromiseInterfaceForCoroutines<Future<_Value, _Error>> {
+class Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing> {
 public:
     using Value = _Value;
     using Error = _Error;
     using Self = Future<Value, Error>;
+    using promise_type = Self;
     using Cancel = std::function<void(Self &)>;
 
     Future() {
@@ -611,7 +614,9 @@ public:
     Future(Self &&) = delete;
     Future &operator=(const Future &) = delete;
     Future &operator=(Future &&) = delete;
-  
+    
+    /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
+    /// so that it can store it and write to this promise later. It also returns a cancellation function that gets called when this Promise is destructed.
     explicit Future(std::function<Cancel(Self &)> &&h) { 
       std::cout << "Future(h) @  " <<  get_type(*this) << std::endl;
       cancel_ = h(*this); 
@@ -625,7 +630,24 @@ public:
       return ss.str();
     }
 
-    /// Await the future 
+    std::suspend_never initial_suspend() { return {}; }
+    std::suspend_never final_suspend() const noexcept { return {}; }
+    /// return_value (aka. operator co_return) returns the value if called with no arugments
+    auto return_value() { return this->value(); }
+    void unhandled_exception() { exception_ptr_ = std::current_exception(); }
+
+    std::exception_ptr exception_ptr_{nullptr};
+
+    /// return_value (aka. operator co_return) *sets* the value if called with an argument, 
+    /// very confusing, I know
+    /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+    void return_value(const Value &x) {
+      if (icey_coro_debug_print)
+        std::cout << this->get_type_info() << " setting value "
+                  << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+      this->set_value(x);
+    }
+    /// Await the promise 
     auto operator co_await() {
       struct Awaiter {
         Self &fut_;
@@ -655,7 +677,6 @@ public:
     }
 
     Cancel cancel_;
-    bool is_done{false};
 };
 
 
