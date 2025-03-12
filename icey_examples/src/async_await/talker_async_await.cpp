@@ -5,39 +5,22 @@
 
 using namespace std::chrono_literals;
 
-/// We can use coroutines:
-icey::Future<std_msgs::msg::String> async_create_message(auto &timer) {
-    std::cout << "1. In async_create_message " << std::endl;
-    size_t ticks = co_await timer;
-    std::cout << "2. After await timer " << std::endl;
-    std_msgs::msg::String message;
-    message.data = "hello " + std::to_string(ticks);
-    co_return message;
-}
-
-icey::Stream<int> talk(std::shared_ptr<icey::Node> &node,
-    icey::TimerStream &timer, auto &pub) {    
-    
-        
-    
+icey::Stream<int> talk(std::shared_ptr<icey::Node> &node) {    
+    auto timer = node->icey().create_timer(100ms);
+    auto pub = node->icey().create_publisher<std_msgs::msg::String>("/strings");
     while(true) {
-        std::cout << "3. B4 await " << std::endl;
-        auto ret2 = async_create_message(timer);
-        std_msgs::msg::String message = co_await ret2;
-        std::cout << "4. After await async_create_message " << std::endl;
+        size_t ticks = co_await timer;
+        std_msgs::msg::String message;
+        message.data = "hello " + std::to_string(ticks);
         RCLCPP_INFO_STREAM(node->get_logger(), "Publishing: " << message.data);
         pub.publish(message);
     }
     co_return 0;
 }
 
-
 int main(int argc, char **argv) {
     icey::icey_coro_debug_print = true;
-auto node = icey::create_node(argc, argv, "talker_node");
-auto timer = node->icey().create_timer(100ms);
-auto pub = node->icey().create_publisher<std_msgs::msg::String>("/strings");
-  talk(node, timer, pub);
-  std::cout << "5. After talks " << std::endl;
-  icey::spin(node);
+    auto node = icey::create_node(argc, argv, "talker_node");
+    talk(node);
+    icey::spin(node);
 }

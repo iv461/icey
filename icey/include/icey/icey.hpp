@@ -526,9 +526,6 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
 
   ~PromiseInterfaceForCoroutines() {
     if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
-    if (this->underlying().coro_) 
-      this->underlying().coro_.destroy();
-    this->underlying().coro_ = nullptr;
   }  
   std::string get_type_info() const {
     std::stringstream ss;
@@ -540,7 +537,7 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
   std::coroutine_handle<> continuation_;
 
   /// We are still a promise
-  Derived get_return_object() {
+  Derived &get_return_object() {
     // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
     /// This trick is used everywhere, in Lewis Bakers tutorial, as well as in other libraries: 
     // [cppcoro] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
@@ -548,30 +545,11 @@ struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInter
     // [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
     // Essentially, we create here a "box"-object (of promise_type) that holds the our actual promise object, that is also a promise_type
     // Why we need to do this ? Apparently the compiler always needs to box the promises, assuming that promise_type and the implementation might be different types
-    return Derived{std::coroutine_handle<Derived>::from_promise(this->underlying())};
+    return this->underlying();
   }
 
-  std::suspend_never initial_suspend() {
-    // std::cout << get_type_info() <<   " initial_suspend called" << std::endl;
-    return {};
-  }
-
-  std::suspend_never final_suspend() const noexcept { 
-    return {};
-    /*
-    struct final_awaitable {
-      bool await_ready() const noexcept { return false; }
-      
-      std::coroutine_handle<> 
-      await_suspend(std::coroutine_handle<Derived> coro) noexcept {
-        std::cout << "Final suspend await_suspend"<< std::endl;
-        return coro.promise().continuation_;
-      }
-      void await_resume() noexcept {}
-    };
-    return final_awaitable{};
-        */
-  }
+  std::suspend_never initial_suspend() { return {}; }
+  std::suspend_never final_suspend() const noexcept { return {}; }
 
   /// return_value returns the value of the Steam.
   auto return_value() { return this->underlying().value(); }
@@ -629,15 +607,15 @@ public:
       get_type(*this) << std::endl;
     }
 
-    explicit Future(std::coroutine_handle<Self> coro) : coro_(coro) {}
-    std::coroutine_handle<Self> coro_;
-
     Future(const Self &) = delete;
     Future(Self &&) = delete;
     Future &operator=(const Future &) = delete;
     Future &operator=(Future &&) = delete;
   
-    explicit Future(std::function<Cancel(Self &)> &&h) { cancel_ = h(*this); }
+    explicit Future(std::function<Cancel(Self &)> &&h) { 
+      std::cout << "Future(h) @  " <<  get_type(*this) << std::endl;
+      cancel_ = h(*this); 
+    }
 
     template<class T>
     static std::string get_type(T &t) {
@@ -650,44 +628,24 @@ public:
     /// Await the future 
     auto operator co_await() {
       struct Awaiter {
-        std::coroutine_handle<Self> coro_;
-        Awaiter(std::coroutine_handle<Self> coro) : coro_(coro) {}
+        Self &fut_;
+        Awaiter(Self &fut) : fut_(fut) {}
         bool await_ready() const noexcept { 
-          std::cout << "Await ready on Future " << get_type(coro_.promise()) << " called" << std::endl;
-          if(!coro_) {
-            std::cout << "No coro, returning true " << std::endl;
-            return true;
-          } else {
-            std::cout << "Coro handle is valid " << std::endl;
-          }
-          return !coro_.promise().has_none(); 
+          std::cout << "Await ready on Future " << get_type(fut_) << " called" << std::endl;
+          return !fut_.has_none(); 
         }
-        void await_suspend(std::coroutine_handle<> h) noexcept { 
+        void await_suspend(std::coroutine_handle<> continuation) noexcept { 
           /// Resume the coroutine when this promise is done
-          std::cout << "Await suspend was called, held Future: " << get_type(coro_.promise()) << std::endl;
-          //std::cout << "And the future in the coro handle: " << get_type(h.promise()) << std::endl;
-          if(!coro_) {
-            std::cout << "No coro, returning false " << std::endl;
-            //return coro_;
-            return;
-          } else {
-            std::cout << "Coro handle is valid " << std::endl;
-          }
-          coro_.promise().register_handler([h](auto) { if(h) h.resume(); });
-          coro_.promise().continuation_ = h;
-          //return coro_;
+          std::cout << "Await suspend was called, held Future: " << get_type(fut_) << std::endl;
+          fut_.register_handler([continuation](auto) { if(continuation) continuation.resume(); });
         }
+
         auto await_resume() const noexcept { 
-          std::cout << "Await resume was called, held Future: " << get_type(coro_.promise()) << std::endl;
-          if(!coro_) {
-            std::cout << "No coro, guess I'll die now " << std::endl;
-          } else {
-            std::cout << "Coro handle is valid " << std::endl;
-          }
-          return coro_.promise().take(); 
+          std::cout << "Await resume was called, held Future: " << get_type(fut_) << std::endl;
+          return fut_.take(); 
         }
       };
-      return Awaiter{this->coro_};
+      return Awaiter{*this};
     }
 
     ~Future() {
@@ -697,7 +655,6 @@ public:
     }
 
     Cancel cancel_;
-    
     bool is_done{false};
 };
 
@@ -755,13 +712,11 @@ public:
 
   explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
-  explicit Stream(std::coroutine_handle<Self> coro) : coro_(coro) {}
-  std::coroutine_handle<Self> coro_;
   /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines. 
   /// It spins the ROS executor until this Stream has something (value or error) and then resumes the coroutine.
   auto operator co_await() {
     struct Awaiter {
-      //std::coroutine_handle<Self> coro_;
+      
       Self &stream;
       Awaiter(Self &coro) : stream(coro) {}
       bool await_ready() const noexcept { 

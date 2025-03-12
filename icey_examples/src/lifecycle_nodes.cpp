@@ -34,7 +34,7 @@ public:
   }
 
   /// Spin the node: we do some work here, other callbacks get called 
-  icey::Future<int> run() {
+  icey::Stream<int> run() {
     
     while(true) {
       std::size_t ticks = co_await timer_;

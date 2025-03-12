@@ -6,7 +6,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Future<int> get_tf(std::shared_ptr<icey::Node> node) {
+icey::Stream<int> get_tf(std::shared_ptr<icey::Node> node) {
     auto point_cloud_subscription = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
     icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
