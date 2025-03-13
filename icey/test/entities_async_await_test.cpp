@@ -32,7 +32,7 @@ TEST_F(AsyncAwaitNodeTest, ParameterTest) {
 }
 
 TEST_F(AsyncAwaitNodeTest, TimerTest) {
-  [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Stream<int> {
     size_t timer_ticked{0};
     auto timer = node_->icey().create_timer(100ms);
 
@@ -40,17 +40,21 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
 
     while (true) {
       size_t ticks = co_await timer;
+      std::cout << "Ticked # " << ticks << std::endl;
       EXPECT_EQ(timer_ticked, ticks);
       timer_ticked++;
       if (timer_ticked == 10) {
         break;
       }
     }
+    std::cout << "After loop" << std::endl;
 
     EXPECT_EQ(timer_ticked, 10);
     async_completed = true;
     co_return 0;
-  }();
+  };
+  l();
+  spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 
@@ -62,7 +66,7 @@ struct AsyncAwaitTwoNodeTest : TwoNodesFixture {
 };
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
-  [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Stream<int> {
     sender_->icey()
         .create_timer(100ms)
         .then([](size_t ticks) {
@@ -86,7 +90,9 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
     EXPECT_EQ(received_cnt, 10);
     async_completed = true;
     co_return 0;
-  }();
+  };
+  l();
+  spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 

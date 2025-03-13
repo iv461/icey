@@ -620,7 +620,7 @@ public:
     
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
     /// so that it can store it and write to this promise later. It also returns a cancellation function that gets called when this Promise is destructed.
-    explicit Future(std::function<Cancel(Self &)> &&h) { 
+    explicit Future(std::function<Cancel(Self &)> &&h) {
       std::cout << "Future(h) @  " <<  get_type(*this) << std::endl;
       cancel_ = h(*this); 
     }
@@ -750,11 +750,13 @@ public:
       Self &stream;
       Awaiter(Self &coro) : stream(coro) {}
       bool await_ready() const noexcept { 
-        std::cout << "Await ready on Stream " << stream.get_type_info() << " called" << std::endl;
+        if(icey_coro_debug_print)
+          std::cout << "Await ready on Stream " << stream.get_type_info() << " called" << std::endl;
         return !stream.has_none(); 
       }
       void await_suspend(std::coroutine_handle<> continuation) noexcept { 
-        std::cout << "Await suspend on Stream " << stream.get_type_info() << " called" << std::endl;
+        if(icey_coro_debug_print)
+          std::cout << "Await suspend on Stream " << stream.get_type_info() << " called" << std::endl;
         if(!stream.impl()->registered_continuation_callback_) {
           stream.impl()->register_handler([impl=stream.impl()](auto &) {
             /// Important: Call the continuation only once since we may be awaiting the stream only once
@@ -769,7 +771,8 @@ public:
         stream.impl()->continuation_ = continuation;
       }
       auto await_resume() const noexcept { 
-        std::cout << "Await resume on Stream " << stream.get_type_info() << " called" << std::endl;
+        if(icey_coro_debug_print)
+          std::cout << "Await resume on Stream " << stream.get_type_info() << " called" << std::endl;
         return stream.take(); 
       }
     };

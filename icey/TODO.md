@@ -6,8 +6,6 @@ Sorted by decreasing priority.
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
-- [ ] Unit-test service client request cleanup using a sleepy service server
-
 - [ ] Test parameter as value for TF sub
 
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
@@ -293,3 +291,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Fix conceptual unsoundness: Service clients are no Streams due to the following resons: (1) If we don't request first something, awaiting them will hang forever (API misuse-type problem). (2) There is no guarantee whatsoever how long a service call takes, from this follows that sending multiple request in a row and not awaiting first their responses may lead to a re-ordering of the responses. But the response does not contain the request id, therefore it is impossible to know for which request a response belongs. Returning the request ID however complicated using the API because now the user has to always check whether the response belongs to his or her request, or to some other request that for whatever reason exists. For these resons, it is sensible to remove the promise-style Stream API and instead to provide an API that returns a new Future for every request. The same goes for async TF lookup, wait to finish publishing etc.
 
 - [X] Unnecessary memory allocation on every call to co_await due to wrong await_transform implementation
+
+- [X] Unit-test service client request cleanup using a sleepy service server
+
+- [X] (async/await) Fix Promise ownership when using nested async functiions
