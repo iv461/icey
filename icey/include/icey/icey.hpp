@@ -1412,10 +1412,12 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   TimerStream() = default;
   TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer) : Base(node) {
     this->impl()->timer = node.add_timer(interval, [impl = this->impl(), is_one_off_timer]() {
-      impl->put_value(impl->ticks_counter);
       /// Needed as separate state as it might be resetted in async/await mode
+      auto cnt = impl->ticks_counter;
       impl->ticks_counter++;
-      if (is_one_off_timer) impl->timer->cancel();
+      if (is_one_off_timer) 
+        impl->timer->cancel();
+      impl->put_value(cnt);
     });
   }
   void reset() { this->impl()->timer->reset(); }

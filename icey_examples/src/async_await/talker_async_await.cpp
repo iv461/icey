@@ -22,5 +22,6 @@ int main(int argc, char **argv) {
     icey::icey_coro_debug_print = true;
     auto node = icey::create_node(argc, argv, "talker_node");
     talk(node);
+    
     icey::spin(node);
 }

@@ -17,7 +17,7 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
   auto timer = node->icey().create_timer(1s);
 
   /// Main spinning loop
-  
+  while(true) {
     /// First, wait until it's time to make the request
     co_await timer;
     
@@ -46,7 +46,7 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
     } else {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response1: " << result2.value()->success);
     }
-  
+  }
   co_return 0; // All coroutines must have co_return
 }
 
