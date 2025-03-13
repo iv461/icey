@@ -91,13 +91,13 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
     async_completed = true;
     co_return 0;
   };
-  l();
+  l(); /// Temporary lifetime extention is unaware of coroutines and would destroy the lambda after first suspend if we would not assign a name l to it
   spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
-  [this]() -> icey::Stream<int> {
+  const auto l =[this]() -> icey::Stream<int> {
     std::size_t received_cnt{0};
 
     receiver_->icey()
@@ -129,12 +129,14 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
     EXPECT_EQ(received_cnt, 9);
     async_completed = true;
     co_return 0;
-  }();
+  };
+  l();
+  spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
-  [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Stream<int> {
     // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
 
@@ -178,14 +180,16 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
     EXPECT_FALSE(result3.value()->success);
     async_completed = true;
     co_return 0;
-  }();
+  };
+  l();
+  spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 
 /// Tests whether timeout works and the requests get cleaned up. 
 // It also tests whether we can make multiple calls to a service before awaiting them all and after awaiting, we recive all of them
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
-  [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Stream<int> {
     // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
 
@@ -226,13 +230,15 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
 
     async_completed = true;
     co_return 0;
-  }();
+  };
+  l();
+  spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 
 
 TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
-  [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Stream<int> {
 
     const icey::Time base_time{1700000000s};
     
@@ -291,5 +297,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
       received_cnt++;
     }
     co_return 0;
-  }();
+  };
+  l();
+  spin(1100ms);
 }
