@@ -9,7 +9,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
 /// This function creates and spins the node (the main cannot be a coroutine)
-icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
+icey::Future<int> run(std::shared_ptr<icey::Node> node) {
   /// Create the service clients beforehand
   auto service1 = node->icey().create_client<ExampleService>("set_bool_service1");
   auto service2 = node->icey().create_client<ExampleService>("set_bool_service2");  
@@ -28,8 +28,7 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
     using Response = ExampleService::Response::SharedPtr;
 
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the actual service call)
-    auto call_p = service1.call(request, 1s);
-    icey::Result<Response, std::string> result1 = co_await call_p;
+    icey::Result<Response, std::string> result1 = co_await service1.call(request, 1s);
 
     if (result1.has_error()) {
       /// Handle errors: (possibly "SERVICE_UNAVAILABLE", "TIMEOUT" or "INTERRUPTED")
@@ -39,8 +38,7 @@ icey::Stream<int> run(std::shared_ptr<icey::Node> node) {
     }
 
     /// We can chain service calls: Call a second service after we got the response from the first one:
-    auto call_p2 = service2.call(request, 1s);
-    auto result2 = co_await call_p2;
+    auto result2 = co_await service2.call(request, 1s);
     if (result2.has_error()) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Service2 got error: " << result2.error());
     } else {

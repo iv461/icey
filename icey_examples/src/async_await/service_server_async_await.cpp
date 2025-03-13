@@ -6,7 +6,22 @@
 
 using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
+using Request = ExampleService::Request::SharedPtr;
 using Response = ExampleService::Response::SharedPtr;
+
+icey::Future<Response, std::string> async_response(Request request, std::shared_ptr<icey::Node> node, 
+    icey::ServiceClient<ExampleService> &upstream_service_client) {
+  RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
+
+  /// Call the upstream service with 1s timeout:
+  icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
+  
+  if (upstream_result.has_error()) {
+    RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());
+    //co_return 0;
+  }
+  co_return upstream_result;
+}
 
 icey::Stream<int> serve_downstream_service(std::shared_ptr<icey::Node> node) {
   
@@ -21,10 +36,7 @@ icey::Stream<int> serve_downstream_service(std::shared_ptr<icey::Node> node) {
   /// Wait until a request comes in
   auto [request_id, request] = co_await service_server;
   
-  RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
-
-  /// Call the upstream service with 1s timeout:
-  icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
+  icey::Result<Response, std::string> upstream_result = co_await async_response(request, node, upstream_service_client);
   
   if (upstream_result.has_error()) {
     RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());

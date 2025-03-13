@@ -219,6 +219,7 @@ public:
 
   /// Sets the state to hold an error, but does not notify about this state change.
   void set_error(const ErrorValue &x) { state_.set_err(x); }
+  void set_state(const State &x) { state_= x; }
 
   /// Returns the current state and sets it to none.
   State take_state() {

@@ -601,6 +601,7 @@ class Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, No
 public:
     using Value = _Value;
     using Error = _Error;
+    using State = impl::Stream<_Value, _Error, Nothing, Nothing>::State;
     using Self = Future<Value, Error>;
     using promise_type = Self;
     using Cancel = std::function<void(Self &)>;
@@ -615,6 +616,7 @@ public:
     Future &operator=(const Future &) = delete;
     Future &operator=(Future &&) = delete;
     
+    Self get_return_object() {return {};}
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
     /// so that it can store it and write to this promise later. It also returns a cancellation function that gets called when this Promise is destructed.
     explicit Future(std::function<Cancel(Self &)> &&h) { 
@@ -643,10 +645,16 @@ public:
     /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
     void return_value(const Value &x) {
       if (icey_coro_debug_print)
-        std::cout << this->get_type_info() << " setting value "
-                  << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+        std::cout << this->get_type(*this) << " setting value " << std::endl;
       this->set_value(x);
     }
+
+    void return_value(const State &x) {
+      if (icey_coro_debug_print)
+        std::cout << this->get_type(*this) << " setting value " << std::endl;
+      this->set_value(x);
+    }
+
     /// Await the promise 
     auto operator co_await() {
       struct Awaiter {
