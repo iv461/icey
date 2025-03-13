@@ -1622,13 +1622,13 @@ struct ServiceClient : public StreamImplDefault {
                       }
                     });
                     timeout_timer_ = node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
+                      client->remove_pending_request(req_id);
                       timeout_timer_->cancel();
                       if (!rclcpp::ok()) {
                         future.put_error("INTERRUPTED");
                       } else {
                         future.put_error("TIMEOUT");
                       }
-                      client->remove_pending_request(req_id);
                     });
                     return Cancel{
                       [this, req_id = future_and_req_id.request_id](auto &) {
