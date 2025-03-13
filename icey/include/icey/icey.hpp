@@ -29,7 +29,7 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
-
+#include <iostream>
 namespace icey {
 
 template <class T>
@@ -671,9 +671,11 @@ public:
     }
 
     ~Future() {
-      std::cout << "Future was destructed: " << get_type(*this) << std::endl;
-      if(cancel_)
+      std::cout << "Future is getting destroyed .. " << get_type(*this) << std::endl;
+      if(cancel_) {
+          std::cout << "Canceling operation for future: " << get_type(*this) << std::endl;
           cancel_(*this);
+      }
     }
 
     Cancel cancel_;
@@ -1578,7 +1580,13 @@ struct ServiceClient : public StreamImplDefault {
   /// \param qos 
   ServiceClient(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()): node_(node) {
     client = node.add_client<ServiceT>(service_name, qos);
+    std::cout << "created ServiceClient @ " << size_t(this) << std::endl;
   }
+  ~ServiceClient() {
+    std::cout << "~ServiceClient @ " << size_t(this) << std::endl; 
+  }
+
+  
   NodeBookkeeping &node_;
 
   // clang-format off
@@ -1623,12 +1631,13 @@ struct ServiceClient : public StreamImplDefault {
                     });
                     timeout_timer_ = node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
                       timeout_timer_->cancel();
+                      client->remove_pending_request(req_id);
+                      /// putting something into the future resumes the coroutine and therefore must always be the last operation! 
                       if (!rclcpp::ok()) {
                         future.put_error("INTERRUPTED");
                       } else {
                         future.put_error("TIMEOUT");
                       }
-                      client->remove_pending_request(req_id);
                     });
                     return Cancel{
                       [this, req_id = future_and_req_id.request_id](auto &) {
