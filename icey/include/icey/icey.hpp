@@ -1373,13 +1373,17 @@ struct TransformBuffer : public StreamImplDefault {
   Future<geometry_msgs::msg::TransformStamped, std::string>
     lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
                const Duration &timeout) {
-                using Fut = Future<geometry_msgs::msg::TransformStamped, std::string>;
-    return Fut([icey_ctx=this->context, tf2_listener = this->tf_listener, target_frame, source_frame, time, timeout](auto &future) {
+    using Fut = Future<geometry_msgs::msg::TransformStamped, std::string>;
+    return Fut([tf2_listener = this->tf_listener, target_frame, source_frame, time, timeout](auto &future) {
           /// The function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
           /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
           /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
           /// promise type is available in standard C++ before C++26) and undocumented, so nobody knows
           /// about them.
+          /// TODO we MUST guarantee that a callbacks always gets called from the executor (event loop), i.e. asynchronously 
+          /// and never synchronously. But this function calls the callback synchronously (i.e. directly) if the transform is already available. 
+          /// This leads the stack frame to grow, leading eventually to stackoverflow ! So we would have to re-implement this truly 
+          /// asynchronously in our TFListener 
           auto tf_future = tf2_listener->buffer_->waitForTransform(
             target_frame, source_frame, time, timeout, 
             [&future](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
@@ -1397,7 +1401,7 @@ struct TransformBuffer : public StreamImplDefault {
                     "invalid std::shared_future.");
               }
           });
-          return typename Fut::Cancel{[&](auto &) {
+          return typename Fut::Cancel{[tf2_listener, tf_future](auto &) {
             /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
             tf2_listener->buffer_->cancel(tf_future);
           }};  
