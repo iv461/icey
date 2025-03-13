@@ -616,7 +616,8 @@ public:
     Future &operator=(const Future &) = delete;
     Future &operator=(Future &&) = delete;
     
-    Self get_return_object() {return {};}
+    Self get_return_object() { return {}; }
+    
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
     /// so that it can store it and write to this promise later. It also returns a cancellation function that gets called when this Promise is destructed.
     explicit Future(std::function<Cancel(Self &)> &&h) { 
@@ -651,8 +652,8 @@ public:
 
     void return_value(const State &x) {
       if (icey_coro_debug_print)
-        std::cout << this->get_type(*this) << " setting value " << std::endl;
-      this->set_value(x);
+        std::cout << this->get_type(*this) << " setting state " << std::endl;
+      this->set_state(x);
     }
 
     /// Await the promise 
