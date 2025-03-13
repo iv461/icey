@@ -459,8 +459,7 @@ private:
 struct StreamTag {};
 
 class Context;
-/// The default augmentation of a stream implementation: The context, holding ROS-related stuff, and
-/// some names for easy debugging.
+/// The default augmentation of a stream implementation: The context and a timeout.
 class StreamImplDefault {
 public:
   StreamImplDefault() {}
@@ -471,8 +470,9 @@ public:
   /// timer.
   std::optional<Duration> timeout{};
 
-  /// We save here all the coroutines that listen on the stream for a continuation
-  std::unordered_set<std::size_t> registered_coroutines;
+  /// The coroutine that will be called once after this stream has a value
+  std::coroutine_handle<> continuation_;
+  bool registered_continuation_callback_{false};
 };
 
 /// Adds a default extention inside the impl::Stream by default.
@@ -744,16 +744,20 @@ public:
         std::cout << "Await ready on Stream " << stream.get_type_info() << " called" << std::endl;
         return !stream.has_none(); 
       }
-      void await_suspend(std::coroutine_handle<> h) noexcept { 
+      void await_suspend(std::coroutine_handle<> continuation) noexcept { 
         std::cout << "Await suspend on Stream " << stream.get_type_info() << " called" << std::endl;
-        /// Since this is a stream, we need to register a handler that resumes the coroutine, but only once: 
-        /// The stream remains the same, but is may be awaited many times. 
-        /// (GCC 11.4 can't hash a coroutine_handle, it was added only in GCC 12, Microsoft's STL as expected just takes the address: https://github.com/microsoft/STL/blob/192e861d9ce719e7c0eee42832a7278d80f4172d/stl/inc/coroutine#L191)
-        if(!stream.impl()->registered_coroutines.contains(std::size_t(h.address()))) {
-          stream.impl()->register_handler([h](auto) { 
-              if(h) h(); });
-          stream.impl()->registered_coroutines.emplace(std::size_t(h.address()));
+        if(!stream.impl()->registered_continuation_callback_) {
+          stream.impl()->register_handler([impl=stream.impl()](auto &) {
+            /// Important: Call the continuation only once since we may be awaiting the stream only once
+            if(impl->continuation_) {
+              auto c = impl->continuation_; 
+              impl->continuation_ = nullptr;
+              c.resume();
+            }
+          });
+          stream.impl()->registered_continuation_callback_ = true;
         }
+        stream.impl()->continuation_ = continuation;
       }
       auto await_resume() const noexcept { 
         std::cout << "Await resume on Stream " << stream.get_type_info() << " called" << std::endl;
