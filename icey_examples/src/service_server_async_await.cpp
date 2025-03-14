@@ -9,7 +9,7 @@ using ExampleService = std_srvs::srv::SetBool;
 using Request = ExampleService::Request::SharedPtr;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Future<Response, std::string> async_response(Request request, std::shared_ptr<icey::Node> node, 
+icey::Promise<Response, std::string> async_response(Request request, std::shared_ptr<icey::Node> node, 
     icey::ServiceClient<ExampleService> &upstream_service_client) {
   RCLCPP_INFO_STREAM(node->get_logger(), "Received request: " << request->data << ", calling upstream service ... ");
 

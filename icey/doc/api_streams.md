@@ -13,7 +13,7 @@ All the ROS entities such as subscribers, publishers/timers etc., most of them f
 ```{doxygenclass} icey::Stream
 ```
 
-```{doxygenclass} icey::Future
+```{doxygenclass} icey::Promise
 ```
 
 ```{doxygentypedef} icey::Clock

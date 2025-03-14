@@ -541,7 +541,7 @@ struct crtp {
 };
 
 struct PromiseInterfaceForCoroutinesTag {};
-/// Implementation of the so-called promise interface needed the C++20 coroutines. It is implemented by Futures/Promises/Streams 
+/// Implementation of the so-called promise interface needed the C++20 coroutines. It is implemented by Promises/Promises/Streams 
 /// Derived must implement:
 /// set_value, value, take, has_none, and wait
 template <class Derived>
@@ -619,7 +619,7 @@ struct check_callback<F, std::tuple<Args...>> {
       "No coroutines, i.e. asynchronous functions are allowed as callbacks");
 };
 
-struct FutureTag {};
+struct PromiseTag {};
 /// A Promise is an asynchronous primitve that yields a single value or an error.
 /// Can be used with async/await aka coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API. 
@@ -633,34 +633,30 @@ struct FutureTag {};
 /// [cppcoro task] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
 /// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
 /// [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
-template<class _Value, class _Error = Nothing>
-class Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing> {
+template<class _Value= Nothing, class _Error = Nothing>
+class PromiseBase : public PromiseTag, public impl::Stream<_Value, _Error, Nothing, Nothing> {
 public:
     using Value = _Value;
     using Error = _Error;
     using State = impl::Stream<_Value, _Error, Nothing, Nothing>::State;
-    using Self = Future<Value, Error>;
+    using Self = PromiseBase<Value, Error>;
     using promise_type = Self;
     using Cancel = std::function<void(Self &)>;
 
-    Future() {
+    PromiseBase() {
       if(icey_coro_debug_print)
-      std::cout << "Future was default-constructed: " << get_type(*this) << std::endl;
+      std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
     }
 
-    Future(const Self &) = delete;
-    Future(Self &&) = delete;
-    Future &operator=(const Future &) = delete;
-    Future &operator=(Future &&) = delete;
-    
+
     Self get_return_object() { return {}; }
     
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
     /// so that it can store it and write to this promise later. This handler returns a cancellation function that gets called when this Promise is destructed.
     /// This constructor is useful for wrapping an existing callback-based API
-    explicit Future(std::function<Cancel(Self &)> &&h) {
+    explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
       if(icey_coro_debug_print)
-        std::cout << "Future(h) @  " <<  get_type(*this) << std::endl;
+        std::cout << "Promise(h) @  " <<  get_type(*this) << std::endl;
       cancel_ = h(*this); 
     }
 
@@ -675,25 +671,8 @@ public:
     std::suspend_never initial_suspend() { return {}; }
     std::suspend_always final_suspend() const noexcept { return {}; }
     /// return_value (aka. operator co_return) returns the value if called with no arguments
-    auto return_value() { return this->value(); }
     void unhandled_exception() { exception_ptr_ = std::current_exception(); }
-
-    std::exception_ptr exception_ptr_{nullptr};
-
-    /// return_value (aka. operator co_return) *sets* the value if called with an argument, 
-    /// very confusing, I know
-    /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
-    void return_value(const Value &x) {
-      if (icey_coro_debug_print)
-        std::cout << this->get_type(*this) << " setting value " << std::endl;
-      this->set_value(x);
-    }
-
-    void return_value(const State &x) {
-      if (icey_coro_debug_print)
-        std::cout << this->get_type(*this) << " setting state " << std::endl;
-      this->set_state(x);
-    }
+  
 
     /// Await the promise 
     auto operator co_await() {
@@ -702,35 +681,72 @@ public:
         Awaiter(Self &fut) : fut_(fut) {}
         bool await_ready() const noexcept { 
           if(icey_coro_debug_print)
-            std::cout << "Await ready on Future " << get_type(fut_) << " called" << std::endl;
+            std::cout << "Await ready on Promise " << get_type(fut_) << " called" << std::endl;
           return !fut_.has_none(); 
         }
         void await_suspend(std::coroutine_handle<> continuation) noexcept { 
           /// Resume the coroutine when this promise is done
           if(icey_coro_debug_print)
-            std::cout << "Await suspend was called, held Future: " << get_type(fut_) << std::endl;
+            std::cout << "Await suspend was called, held Promise: " << get_type(fut_) << std::endl;
           fut_.register_handler([continuation](auto) { if(continuation) continuation.resume(); });
         }
 
         auto await_resume() const noexcept { 
           if(icey_coro_debug_print)
-            std::cout << "Await resume was called, held Future: " << get_type(fut_) << std::endl;
+            std::cout << "Await resume was called, held Promise: " << get_type(fut_) << std::endl;
           return fut_.get_state2(); 
         }
       };
       return Awaiter{*this};
     }
 
-    ~Future() {
+    ~PromiseBase() {
       if(icey_coro_debug_print)
-        std::cout << "Future was destructed: " << get_type(*this) << std::endl;
+        std::cout << "Promise was destructed: " << get_type(*this) << std::endl;
       if(cancel_)
           cancel_(*this);
     }
 
     Cancel cancel_;
+    std::exception_ptr exception_ptr_{nullptr};
 };
 
+/// Choosing between return value and return_void does not work with SFINAE
+template<class _Value, class _Error = Nothing>
+class Promise : public PromiseBase<_Value, _Error> {
+public:
+  using Base = PromiseBase<_Value, _Error>;
+  using State = Base::State;
+  using Base::Base;
+  using promise_type = Promise<_Value, _Error>;
+  auto return_value() { return this->value(); }
+  /// return_value (aka. operator co_return) *sets* the value if called with an argument, 
+  /// very confusing, I know
+  /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+  void return_value(const _Value &x) {
+    if (icey_coro_debug_print)
+      std::cout << this->get_type(*this) << " setting value " << std::endl;
+    this->put_value(x);
+  }
+
+  void return_value(const State &x) {
+    if (icey_coro_debug_print)
+      std::cout << this->get_type(*this) << " setting state " << std::endl;
+    this->set_state(x);
+    this->notify();
+  }
+};
+
+/// The void version
+template <>
+class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
+public:
+  using PromiseBase<Nothing, Nothing>::PromiseBase;
+  using promise_type = Promise<void, Nothing>;
+  auto return_void() { 
+    this->notify();
+  }
+};
 
 template <class V>
 struct TimeoutFilter;
@@ -1414,10 +1430,10 @@ struct TransformBuffer : public StreamImplDefault {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  Future<geometry_msgs::msg::TransformStamped, std::string>
+  Promise<geometry_msgs::msg::TransformStamped, std::string>
     lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
                const Duration &timeout) {
-    using Fut = Future<geometry_msgs::msg::TransformStamped, std::string>;
+    using Fut = Promise<geometry_msgs::msg::TransformStamped, std::string>;
     return Fut([this, target_frame, source_frame, time, timeout](auto &future) {
         auto request_handle = this->tf_listener->async_lookup(
           target_frame, source_frame, time, 
@@ -1445,7 +1461,7 @@ struct TransformBuffer : public StreamImplDefault {
   }
   
   /// Overload for different time types.
-  /*Future<geometry_msgs::msg::TransformStamped, std::string>
+  /*Promise<geometry_msgs::msg::TransformStamped, std::string>
   lookup(const std::string &target_frame, const std::string &source_frame, const auto &time,
     const Duration &timeout) { return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout); }
   */
@@ -1615,7 +1631,7 @@ struct ServiceStream
   }
 };
 
-/// A service client. It can we called asynchronously and then it returns a Future that can be awaited. 
+/// A service client. It can we called asynchronously and then it returns a Promise that can be awaited. 
 /// It is not tracked by the context but instead the service client is unregistered from ROS class goes out of scope. 
 template <class ServiceT>
 struct ServiceClient : public StreamImplDefault {
@@ -1640,7 +1656,7 @@ struct ServiceClient : public StreamImplDefault {
   NodeBookkeeping &node_;
 
   // clang-format off
-  /*! Make an asynchronous call to the service. Returns a Future that can be awaited using `co_await`.
+  /*! Make an asynchronous call to the service. Returns a Promise that can be awaited using `co_await`.
   Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
   \param request the request
   \param timeout The timeout for the service call, both for service discovery and the actuall call.
@@ -1654,9 +1670,9 @@ struct ServiceClient : public StreamImplDefault {
     \endverbatim
     */
   // clang-format on
-  Future<Response, std::string> call(Request request, const Duration &timeout) {
-    using Cancel = typename Future<Response, std::string>::Cancel;
-    return Future<Response, std::string>{[this, request, timeout](auto &future) {
+  Promise<Response, std::string> call(Request request, const Duration &timeout) {
+    using Cancel = typename Promise<Response, std::string>::Cancel;
+    return Promise<Response, std::string>{[this, request, timeout](auto &future) {
                   /// We call here the synchronous code because there is no asynchronous API for wait_for_service.
                   /// TODO we cannot even use the synchronous API because this will call the callback and therefore the coroutine continuation directly (i.e. synchronously) instead in the event loop, eventually leading to a stack overflow
                   /*if(!client->wait_for_service(timeout)) {
