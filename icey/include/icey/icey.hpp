@@ -621,9 +621,18 @@ struct check_callback<F, std::tuple<Args...>> {
 
 struct FutureTag {};
 /// A Promise is an asynchronous primitve that yields a single value or an error.
-/// // [cppcoro] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
-// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
-// [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
+/// Can be used with async/await aka coroutines in C++20.
+/// It also allows for wrapping an existing callback-based API. 
+/// It does not use dynamic memory allocation to store the value. 
+
+/// For references, see the promise implementations of these libraries: 
+/// To some extent, you can also look at the "task" abstraction. But note that tasks 
+/// were developed to solve very specific kind of problems that arise when developing *concurrent* 
+/// asynchronous code, see Lewis Bakers' talk at CppCon 2019 (https://www.youtube.com/watch?v=1Wy5sq3s2rg), chapter "The Solution".
+
+/// [cppcoro task] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
+/// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
+/// [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
 template<class _Value, class _Error = Nothing>
 class Future : public FutureTag, public impl::Stream<_Value, _Error, Nothing, Nothing> {
 public:
@@ -635,8 +644,8 @@ public:
     using Cancel = std::function<void(Self &)>;
 
     Future() {
-      std::cout << "Future was default-constructed: " << 
-      get_type(*this) << std::endl;
+      if(icey_coro_debug_print)
+      std::cout << "Future was default-constructed: " << get_type(*this) << std::endl;
     }
 
     Future(const Self &) = delete;
@@ -647,9 +656,11 @@ public:
     Self get_return_object() { return {}; }
     
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
-    /// so that it can store it and write to this promise later. It also returns a cancellation function that gets called when this Promise is destructed.
+    /// so that it can store it and write to this promise later. This handler returns a cancellation function that gets called when this Promise is destructed.
+    /// This constructor is useful for wrapping an existing callback-based API
     explicit Future(std::function<Cancel(Self &)> &&h) {
-      std::cout << "Future(h) @  " <<  get_type(*this) << std::endl;
+      if(icey_coro_debug_print)
+        std::cout << "Future(h) @  " <<  get_type(*this) << std::endl;
       cancel_ = h(*this); 
     }
 
