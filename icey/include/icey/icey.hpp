@@ -139,15 +139,13 @@ struct Weak {
   std::weak_ptr<T> p_;
 };
 
-/// A transform listener that allows to subscribe on a single transform between two coordinate
-/// systems. It is implemented similarly to the tf2_ros::TransformListener.
+/// An asynchronous transform listener that allows to asynchronous lookups and to subscribe on a single transform between two coordinate
+/// systems. It is otherwise implemented similarly to the tf2_ros::TransformListener.
 /// Every time a new message is received on /tf, it checks whether a relevant transforms (i.e. ones
 /// we subscribed) was received. It is therefore an asynchronous interface to TF, similar to the
-/// tf2_ros::AsyncBuffer. But the key difference is that tf2_ros::AsyncBuffer can only deliver the
-/// transform once, it is therefore a
-/// [promise](https://github.com/ros2/geometry2/blob/rolling/tf2_ros/src/buffer.cpp#L179), not a
-/// stream. We want however to receive a continuous stream of transforms, like a subscriber. This
-/// class is used to implement the TransformSubscriptionStream.
+/// tf2_ros::AsyncBuffer. We do not use thhe tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot 
+/// make another lookup in the callback of a lookup (it holds a mutex locked while calling the user callback)
+// This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
   using OnTransform = std::function<void(const TransformMsg &)>;
@@ -181,20 +179,38 @@ struct TFListener {
     }
   }
 
-  using HandlerID = std::size_t;
+  using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
 
-  /// Register handler for anything new received on /tf. The returned handler ID is used to cancel,
-  /// i.e. remove this registered handler.
-  HandlerID on_new_in_buffer(const std::function<void()> &f) {
-    handlers_.emplace(++handler_counter_, f);
-    return handler_counter_;
+  struct TFSubscriptionInfo {
+    TFSubscriptionInfo(const GetFrame &target_frame, const GetFrame &source_frame,
+                       OnTransform on_transform, OnError on_error, std::optional<Time> _maybe_time={})
+        : target_frame(target_frame),
+          source_frame(source_frame),
+          on_transform(on_transform),
+          on_error(on_error),
+          maybe_time(_maybe_time) {}
+    GetFrame target_frame;
+    GetFrame source_frame;
+    std::optional<Time> maybe_time;
+    std::optional<TransformMsg> last_received_transform;
+    OnTransform on_transform;
+    OnError on_error;
+  };
+
+  using RequestHandle = std::shared_ptr<TFSubscriptionInfo>;
+  RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame, Time time,
+    OnTransform on_transform, OnError on_error) {
+      RequestHandle request{std::make_shared<TFSubscriptionInfo>(
+          [target_frame]() {return target_frame;}, 
+          [source_frame]() {return source_frame;}, on_transform, on_error, time)};
+      requests_.emplace(request);
+      return request;
   }
 
   /// Cancel the registered notification for any message on TF
-  void remove_hadler(HandlerID handler_id) { handlers_.erase(handler_id); }
+  void cancel_request(RequestHandle request) { requests_.erase(request); }
 
-  std::size_t handler_counter_{0};
-  std::unordered_map<std::size_t, std::function<void()>> handlers_;
+  std::unordered_set<RequestHandle> requests_;
 
   const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
                                 /// as well, so we avoid circular reference
@@ -205,21 +221,6 @@ struct TFListener {
   std::shared_ptr<tf2_ros::Buffer> buffer_;
 
 private:
-  using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
-
-  struct TFSubscriptionInfo {
-    TFSubscriptionInfo(const GetFrame &target_frame, const GetFrame &source_frame,
-                       OnTransform on_transform, OnError on_error)
-        : target_frame(target_frame),
-          source_frame(source_frame),
-          on_transform(on_transform),
-          on_error(on_error) {}
-    GetFrame target_frame;
-    GetFrame source_frame;
-    std::optional<TransformMsg> last_received_transform;
-    OnTransform on_transform;
-    OnError on_error;
-  };
 
   void init() {
     init_tf_buffer();
@@ -285,10 +286,29 @@ private:
     return false;
   }
 
+  bool maybe_notify_specific_time(const TFSubscriptionInfo &info) {
+    try {
+      /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
+      /// std::vector/tree.
+      geometry_msgs::msg::TransformStamped tf_msg =
+          buffer_->lookupTransform(info.target_frame(), info.source_frame(), info.maybe_time.value());
+      info.on_transform(tf_msg);
+      return true;
+    } catch (const tf2::TransformException &e) {//BackwardExtrapolationException
+      /// If we tried to extrapolate back into the past, we cannot fulfill the promise anymore, so we reject it:
+      info.on_error(e);
+      return true;
+    } catch (const tf2::TransformException &e) {
+      /// For any other error, we continue waiting
+    }
+    return false;
+  }
+
   void notify_if_any_relevant_transform_was_received() {
     for (auto &tf_info : subscribed_transforms_) {
       maybe_notify(tf_info);
     }
+    std::erase_if(requests_, [this](auto req) { return maybe_notify_specific_time(*req); });
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
@@ -773,8 +793,7 @@ public:
           stream.impl()->register_handler([impl=stream.impl()](auto &) {
             /// Important: Call the continuation only once since we may be awaiting the stream only once
             if(impl->continuation_) {
-              auto c = impl->continuation_; 
-              impl->continuation_ = nullptr;
+              auto c = std::exchange(impl->continuation_, nullptr); /// Get the continuation and replace it with nullptr 
               c.resume();
             }
           });
@@ -1371,10 +1390,12 @@ template<class Ctx>
 struct TransformBuffer : public StreamImplDefault {
   TransformBuffer() = default; 
 
-  TransformBuffer(NodeBookkeeping &node) {
+  TransformBuffer(NodeBookkeeping &node): node_(node) {
     tf_listener = node.add_tf_listener_if_needed();
   }
-
+  
+  std::shared_ptr<rclcpp::TimerBase> timeout_timer_;
+  NodeBookkeeping &node_;
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
   /// @param target_frame
@@ -1386,42 +1407,25 @@ struct TransformBuffer : public StreamImplDefault {
     lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
                const Duration &timeout) {
     using Fut = Future<geometry_msgs::msg::TransformStamped, std::string>;
-    return Fut([tf2_listener = this->tf_listener, target_frame, source_frame, time, timeout](auto &future) {
-          /// The function that we call here is the tf2_ros::AsyncBufferInterface::waitForTransform,
-          /// it is essentially an async_lookup. So this means tf2_ros actually implements asynchronous
-          /// lookups, they are just underdeveloped (e.g. no proper result type is used and no proper
-          /// promise type is available in standard C++ before C++26) and undocumented, so nobody knows
-          /// about them.
-          /// TODO we MUST guarantee that a callbacks always gets called from the executor (event loop), i.e. asynchronously 
-          /// and never synchronously. But this function calls the callback synchronously (i.e. directly) if the transform is already available. 
-          /// This leads the stack frame to grow, leading eventually to stackoverflow ! So we would have to re-implement this truly 
-          /// asynchronously in our TFListener 
-          auto tf_future = tf2_listener->buffer_->waitForTransform(
-            target_frame, source_frame, time, timeout, 
-            [&future](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
-              std::cout << "TF2buffer promise called from thread " << std::this_thread::get_id() << std::endl;
-              if (result.valid()) {
-                try {
-                  future.put_value(result.get());
-                } catch (const std::exception &e) {
-                  future.put_error(e.what());
-                }
-              } else {
-                /// Invariant-Trap since the invariants aren't enforced through the type-system (aka
-                /// bad c0de) (It's UB to call .get() on a future for which valid() returns false)
-                throw std::logic_error(
-                    "Invariant broke: The tf2_ros::AsyncBufferInterface::waitForTransform gave us an "
-                    "invalid std::shared_future.");
-              }
-          });
-          return typename Fut::Cancel{[tf2_listener, tf_future](auto &fut) {
-            if(fut.has_none()) {
-              std::cout << "Cancelling promise from thread " << std::this_thread::get_id() << std::endl;
-              /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
-              tf2_listener->buffer_->cancel(tf_future);
-            }
-          }};  
+    return Fut([this, target_frame, source_frame, time, timeout](auto &future) {
+        auto request_handle = this->tf_listener->async_lookup(
+          target_frame, source_frame, time, 
+          [&future](const geometry_msgs::msg::TransformStamped &tf) { future.put_value(tf); },
+          [&future](const tf2::TransformException &ex) { future.put_error(ex.what()); }
+        );
+        this->timeout_timer_ = node_.add_timer(timeout, [this, &future]() {
+          this->timeout_timer_->cancel();
+          future.put_error("Timed out waiting for transform");
         });
+        return typename Fut::Cancel{[this, request_handle](auto &fut) {
+          this->timeout_timer_->cancel();
+          if(fut.has_none()) {
+            std::cout << "Cancelling promise from thread " << std::this_thread::get_id() << std::endl;
+            /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
+            this->tf_listener->cancel_request(request_handle);
+          }
+        }};  
+    });
   }
   
   /// Overload for different time types.
