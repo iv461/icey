@@ -294,11 +294,11 @@ private:
           buffer_->lookupTransform(info.target_frame(), info.source_frame(), info.maybe_time.value());
       info.on_transform(tf_msg);
       return true;
-    } catch (const tf2::TransformException &e) {//BackwardExtrapolationException
+    }/* catch (tf2::ExtrapolationException e) { // TODO BackwardExtrapolationException (), 
       /// If we tried to extrapolate back into the past, we cannot fulfill the promise anymore, so we reject it:
       info.on_error(e);
       return true;
-    } catch (const tf2::TransformException &e) {
+    }*/ catch (const tf2::TransformException &e) {
       /// For any other error, we continue waiting
     }
     return false;
@@ -1413,8 +1413,13 @@ struct TransformBuffer : public StreamImplDefault {
           [&future](const geometry_msgs::msg::TransformStamped &tf) { future.put_value(tf); },
           [&future](const tf2::TransformException &ex) { future.put_error(ex.what()); }
         );
-        this->timeout_timer_ = node_.add_timer(timeout, [this, &future]() {
+        //// TODO ADD ONE TIMER PER REQUEST, THIS IS WRONG!
+        this->timeout_timer_ = node_.add_timer(timeout, [this, request_handle, &future]() {
           this->timeout_timer_->cancel();
+          if(future.has_none()) {
+            /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
+            this->tf_listener->cancel_request(request_handle);
+          }
           future.put_error("Timed out waiting for transform");
         });
         return typename Fut::Cancel{[this, request_handle](auto &fut) {

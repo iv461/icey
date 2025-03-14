@@ -3,6 +3,8 @@
 #include "std_msgs/msg/float32.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 
+/// TODO use sync_wait(future, timeout) instead of spin(timeout)
+
 using namespace std::chrono_literals;
 
 using ExampleService = std_srvs::srv::SetBool;
@@ -278,6 +280,8 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
       icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
           = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 110ms);
       
+      std::cout << "After lookup" << received_cnt << std::endl;
+
       /// Expect that the one additional last time that we lookup, we do not get anything
       if(received_cnt >= 10) {
         EXPECT_FALSE(tf_result.has_value());
@@ -300,6 +304,6 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
     co_return 0;
   };
   l();
-  spin(1100ms);
+  spin(2700ms);
   ASSERT_TRUE(async_completed);
 }
