@@ -649,8 +649,6 @@ public:
     }
 
 
-    Self get_return_object() { return {}; }
-    
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
     /// so that it can store it and write to this promise later. This handler returns a cancellation function that gets called when this Promise is destructed.
     /// This constructor is useful for wrapping an existing callback-based API
@@ -719,6 +717,8 @@ public:
   using State = Base::State;
   using Base::Base;
   using promise_type = Promise<_Value, _Error>;
+  promise_type get_return_object() { return {}; }
+    
   auto return_value() { return this->value(); }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument, 
   /// very confusing, I know
@@ -743,6 +743,7 @@ class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
   using PromiseBase<Nothing, Nothing>::PromiseBase;
   using promise_type = Promise<void, Nothing>;
+  promise_type get_return_object() { return {}; }
   auto return_void() { 
     this->notify();
   }

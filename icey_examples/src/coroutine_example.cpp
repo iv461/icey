@@ -1,6 +1,6 @@
 /// This example demonstrates the fundamentals of coroutines: 
 #include <icey/icey.hpp>
-
+using namespace std::chrono_literals;
 icey::Promise<void> a_coroutine(icey::Context &ctx) {
     std::cout << "2. Before create_timer " << std::endl;
     auto timer = ctx.create_timer(1s, true);
@@ -11,7 +11,7 @@ icey::Promise<void> a_coroutine(icey::Context &ctx) {
 }
 
 int main(int argc, char **argv) {
-    auto node = icey::create_node("icey_coroutine_example");
+    auto node = icey::create_node(argc, argv, "icey_coroutine_example");
     std::cout << "1. Before calling coroutine " << std::endl;
     a_coroutine(node->icey());
     std::cout << "5. After calling coroutine " << std::endl;
