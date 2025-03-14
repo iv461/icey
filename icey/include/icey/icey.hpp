@@ -30,7 +30,15 @@
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
 
+
 namespace icey {
+  
+#ifdef ICEY_DEGUG_RECORD_THREAD_IDS
+extern std::unordered_set<std::thread::id> g_used_thread_ids;
+#define ICEY_DEGUG_TRACE_THIS_THREAD_ID g_used_thread_ids.emplace(std::this_thread::get_id());
+#else 
+#define ICEY_DEGUG_TRACE_THIS_THREAD_ID 
+#endif 
 
 template <class T>
 struct t_is_shared_ptr : std::false_type {};
@@ -635,7 +643,7 @@ public:
 
     std::suspend_never initial_suspend() { return {}; }
     std::suspend_always final_suspend() const noexcept { return {}; }
-    /// return_value (aka. operator co_return) returns the value if called with no arugments
+    /// return_value (aka. operator co_return) returns the value if called with no arguments
     auto return_value() { return this->value(); }
     void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
@@ -662,25 +670,29 @@ public:
         Self &fut_;
         Awaiter(Self &fut) : fut_(fut) {}
         bool await_ready() const noexcept { 
-          std::cout << "Await ready on Future " << get_type(fut_) << " called" << std::endl;
+          if(icey_coro_debug_print)
+            std::cout << "Await ready on Future " << get_type(fut_) << " called" << std::endl;
           return !fut_.has_none(); 
         }
         void await_suspend(std::coroutine_handle<> continuation) noexcept { 
           /// Resume the coroutine when this promise is done
-          std::cout << "Await suspend was called, held Future: " << get_type(fut_) << std::endl;
+          if(icey_coro_debug_print)
+            std::cout << "Await suspend was called, held Future: " << get_type(fut_) << std::endl;
           fut_.register_handler([continuation](auto) { if(continuation) continuation.resume(); });
         }
 
         auto await_resume() const noexcept { 
-          std::cout << "Await resume was called, held Future: " << get_type(fut_) << std::endl;
-          return fut_.take(); 
+          if(icey_coro_debug_print)
+            std::cout << "Await resume was called, held Future: " << get_type(fut_) << std::endl;
+          return fut_.get_state2(); 
         }
       };
       return Awaiter{*this};
     }
 
     ~Future() {
-      std::cout << "Future was destructed: " << get_type(*this) << std::endl;
+      if(icey_coro_debug_print)
+        std::cout << "Future was destructed: " << get_type(*this) << std::endl;
       if(cancel_)
           cancel_(*this);
     }
@@ -1387,6 +1399,7 @@ struct TransformBuffer : public StreamImplDefault {
           auto tf_future = tf2_listener->buffer_->waitForTransform(
             target_frame, source_frame, time, timeout, 
             [&future](std::shared_future<geometry_msgs::msg::TransformStamped> result) {
+              std::cout << "TF2buffer promise called from thread " << std::this_thread::get_id() << std::endl;
               if (result.valid()) {
                 try {
                   future.put_value(result.get());
@@ -1401,9 +1414,12 @@ struct TransformBuffer : public StreamImplDefault {
                     "invalid std::shared_future.");
               }
           });
-          return typename Fut::Cancel{[tf2_listener, tf_future](auto &) {
-            /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
-            tf2_listener->buffer_->cancel(tf_future);
+          return typename Fut::Cancel{[tf2_listener, tf_future](auto &fut) {
+            if(fut.has_none()) {
+              std::cout << "Cancelling promise from thread " << std::this_thread::get_id() << std::endl;
+              /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
+              tf2_listener->buffer_->cancel(tf_future);
+            }
           }};  
         });
   }

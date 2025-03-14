@@ -271,8 +271,10 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
         receiver_->icey().create_transform_buffer();;
 
     std::size_t received_cnt = 0;
+    std::cout << "Main thread " << std::this_thread::get_id() << std::endl;
     while(received_cnt <= 13) {
-      
+      std::cout << "b4 lookup " << received_cnt << std::endl;
+
       icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
           = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 110ms);
       
@@ -291,9 +293,13 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
       }
 
       received_cnt++;
+      std::cout << "end loop " << received_cnt << std::endl;
     }
+
+    async_completed = true;
     co_return 0;
   };
   l();
   spin(1100ms);
+  ASSERT_TRUE(async_completed);
 }

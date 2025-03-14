@@ -240,6 +240,14 @@ public:
     }
   }
 
+  MaybeResult get_state2() {
+    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
+      return state_.value();
+    } else {
+      return state_;
+    }
+  }
+
   /// It takes (calls take) the current state and notifies the callbacks. It notifies only in case
   /// we have an error or value. If the state is none, it does not notify. If the state is an error
   /// and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no
