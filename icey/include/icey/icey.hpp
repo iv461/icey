@@ -143,7 +143,7 @@ struct Weak {
     if (!p_.lock()) throw std::bad_weak_ptr();
     return p_.lock().get();
   }
-
+  auto lock() const { return p_.lock(); }
   std::weak_ptr<T> p_;
 };
 
@@ -220,10 +220,10 @@ struct TFListener {
           [source_frame]() {return source_frame;}, on_transform, on_error, time)};
       /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
       request->timer =  rclcpp::create_wall_timer(timeout, [this, on_error, request = Weak(request)]() {
-          request->timer->cancel(); /// cancel the timer, but it still lives
-          active_timers_.erase(request->timer);
+          request->timer->cancel(); /// cancel the timer, (it still lives in the request and in active_timers_)
+          active_timers_.erase(request->timer); // Erase the timer from active_timers_ (it still lives in the request)
           cancelled_timers_.emplace(request->timer);
-          requests_.erase(request); // Destroy the request
+          requests_.erase(request.lock()); // Destroy the request
           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
         }, nullptr,
         node_.get_node_base_interface().get(), node_.get_node_timers_interface().get());
@@ -233,7 +233,7 @@ struct TFListener {
       return request;
   }
 
-  /// Cancel the registered notification for any message on TF
+  /// Cancel the registered notification for any message on TF. If this request does not exist, it does nothing.
   void cancel_request(RequestHandle request) { requests_.erase(request); }
 
   const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
@@ -1387,10 +1387,7 @@ struct TransformSubscriptionStream
 template<class Ctx>
 struct TransformBuffer : public StreamImplDefault {
   TransformBuffer() = default; 
-
-  TransformBuffer(NodeBookkeeping &node): node_(node) {
-    tf_listener = node.add_tf_listener_if_needed();
-  }
+  TransformBuffer(NodeBookkeeping &node): tf_listener(node.add_tf_listener_if_needed()) {}
     
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
