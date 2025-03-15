@@ -151,7 +151,7 @@ struct Weak {
 /// systems. It is otherwise implemented similarly to the tf2_ros::TransformListener.
 /// Every time a new message is received on /tf, it checks whether a relevant transforms (i.e. ones
 /// we subscribed) was received. It is therefore an asynchronous interface to TF, similar to the
-/// tf2_ros::AsyncBuffer. We do not use thhe tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot 
+/// tf2_ros::AsyncBuffer. However, we do not use the tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot 
 /// make another lookup in the callback of a lookup (it holds a mutex locked while calling the user callback)
 // This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
 struct TFListener {
@@ -165,7 +165,7 @@ struct TFListener {
   /// Add notification for a single transform.
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
-    subscribed_transforms_.emplace_back(target_frame, source_frame, on_transform, on_error);
+    requests_.emplace(std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error));
   }
 
   /// @brief Looks up and returns the transform at the given time between the given frames. It does
@@ -192,8 +192,8 @@ struct TFListener {
   /// A transform request stores a request for looking up a transform between two coordinate systems. Either 
   /// (1) at a particular time with a timeout, or (2) as a subscription. When "subscribing" to a transform, we yield 
   /// a transform each time it changes. 
-  struct TFSubscriptionInfo {
-    TFSubscriptionInfo(const GetFrame &target_frame, const GetFrame &source_frame,
+  struct TransformRequest {
+    TransformRequest(const GetFrame &target_frame, const GetFrame &source_frame,
                        OnTransform on_transform, OnError on_error, std::optional<Time> _maybe_time={})
         : target_frame(target_frame),
           source_frame(source_frame),
@@ -209,17 +209,17 @@ struct TFListener {
     std::shared_ptr<rclcpp::TimerBase> timer;
   };
 
-  using RequestHandle = std::shared_ptr<TFSubscriptionInfo>;
+  using RequestHandle = std::shared_ptr<TransformRequest>;
   RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame, Time time,
     const Duration &timeout, OnTransform on_transform, OnError on_error) {
       /// Do the cleanup for the timers (i.e. collect the rclcpp::TimerBase objects) that were cancelled since the last call: We 
       /// have to do this kind of deferred cleanup of timers because timers likely would deadlock if we try to clean them up in their callback. 
       cancelled_timers_.clear(); 
-      RequestHandle request{std::make_shared<TFSubscriptionInfo>(
+      RequestHandle request{std::make_shared<TransformRequest>(
           [target_frame]() {return target_frame;}, 
           [source_frame]() {return source_frame;}, on_transform, on_error, time)};
       /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
-      request->timer =  rclcpp::create_wall_timer(timeout, [this, on_error, request = Weak(request)]() {
+      request->timer = rclcpp::create_wall_timer(timeout, [this, on_error, request = Weak(request)]() {
           request->timer->cancel(); /// cancel the timer, (it still lives in the request and in active_timers_)
           active_timers_.erase(request->timer); // Erase the timer from active_timers_ (it still lives in the request)
           cancelled_timers_.emplace(request->timer);
@@ -297,7 +297,7 @@ private:
   /// This simply looks up the transform in the buffer at the latest stamp and checks if it
   /// changed with respect to the previously received one. If the transform has changed, we know
   /// we have to notify. Returns true when it notified about a changed transform (called on_transform) and false otherwise.
-  bool maybe_notify(TFSubscriptionInfo &info) {
+  bool maybe_notify(TransformRequest &info) {
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
@@ -314,13 +314,15 @@ private:
     return false;
   }
 
-  bool maybe_notify_specific_time(const TFSubscriptionInfo &info) {
+  bool maybe_notify_specific_time(const TransformRequest &request) {
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg =
-          buffer_->lookupTransform(info.target_frame(), info.source_frame(), info.maybe_time.value());
-      info.on_transform(tf_msg);
+          buffer_->lookupTransform(request.target_frame(), request.source_frame(), request.maybe_time.value());
+          request.on_transform(tf_msg);
+      /// If the request is destroyed gracefully(because the lookup succeeded), cancel and destoy the aaccitaited timer:
+      active_timers_.erase(request.timer); 
       return true;
     }/* catch (tf2::ExtrapolationException e) { // TODO BackwardExtrapolationException (), 
       /// If we tried to extrapolate back into the past, we cannot fulfill the promise anymore, so we reject it:
@@ -333,10 +335,16 @@ private:
   }
 
   void notify_if_any_relevant_transform_was_received() {
-    for (auto &tf_info : subscribed_transforms_) {
-      maybe_notify(tf_info);
-    }
-    std::erase_if(requests_, [this](auto req) { return maybe_notify_specific_time(*req); });
+    /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
+    std::erase_if(requests_, [this](auto req) { 
+        if(req->maybe_time) {
+          return maybe_notify_specific_time(*req); 
+        } else {
+          // If it is a regular subscription, is is persistend and never erased
+          maybe_notify(*req);
+          return false; 
+        }
+    });
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
@@ -346,7 +354,6 @@ private:
 
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
-  std::vector<TFSubscriptionInfo> subscribed_transforms_;
   std::unordered_set<RequestHandle> requests_;
 };
 
@@ -1408,6 +1415,7 @@ struct TransformBuffer : public StreamImplDefault {
         );
         return typename P::Cancel{[this, request_handle](auto &promise) {
           if(promise.has_none()) {
+            std::cout << "Cancelling request from promise dtor " << std::endl;
             this->tf_listener->cancel_request(request_handle);
           }
         }};
