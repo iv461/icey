@@ -408,6 +408,12 @@ public:
     parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
     return param;
   }
+
+  template<class T>
+  auto get_parameter(const std::string &name) {
+    return node_parameters_->get_parameter(name).get_value<T>();
+  }
+
   template <class Msg, class F>
   auto add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                         const rclcpp::SubscriptionOptions &options) {
@@ -1273,7 +1279,7 @@ struct ParameterStream : public Stream<_Value> {
         },
         this->create_descriptor(), this->validator.validate, this->ignore_override);
     /// Set the default value
-    this->impl()->put_value(this->default_value);
+    this->impl()->put_value(node.get_parameter<Value>(this->parameter_name));
   }
 
   /// Get the value. Parameters are initialized always at the beginning, so they always have a
