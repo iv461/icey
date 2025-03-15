@@ -77,17 +77,23 @@ And now the the service client prints:
 
 # Run asynchronous service server example: 
 
-Start the upstream server:
+
+Start the asynchronous server: 
+
+```sh
+ros2 run icey_examples service_server_async_await_example
+```
+
+And the upstream server:
 
 ```sh
 ros2 run icey_examples service_server_example --ros-args --remap service_name:=set_bool_service_upstream
 ```
 
-And the asynchronous server: 
-
+And now the service client: 
 
 ```sh
-ros2 run icey_examples service_server_async_await_example
+ros2 run icey_examples service_client_async_await_example
 ```
 
 # Run parameter struct example 
