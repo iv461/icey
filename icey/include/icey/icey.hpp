@@ -188,7 +188,10 @@ struct TFListener {
   }
 
   using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
-
+  
+  /// A transform request stores a request for looking up a transform between two coordinate systems. Either 
+  /// (1) at a particular time with a timeout, or (2) as a subscription. When "subscribing" to a transform, we yield 
+  /// a transform each time it changes. 
   struct TFSubscriptionInfo {
     TFSubscriptionInfo(const GetFrame &target_frame, const GetFrame &source_frame,
                        OnTransform on_transform, OnError on_error, std::optional<Time> _maybe_time={})
@@ -203,14 +206,29 @@ struct TFListener {
     OnTransform on_transform;
     OnError on_error;
     std::optional<Time> maybe_time;
+    std::shared_ptr<rclcpp::TimerBase> timer;
   };
 
   using RequestHandle = std::shared_ptr<TFSubscriptionInfo>;
   RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame, Time time,
-    OnTransform on_transform, OnError on_error) {
+    const Duration &timeout, OnTransform on_transform, OnError on_error) {
+      /// Do the cleanup for the timers (i.e. collect the rclcpp::TimerBase objects) that were cancelled since the last call: We 
+      /// have to do this kind of deferred cleanup of timers because timers likely would deadlock if we try to clean them up in their callback. 
+      cancelled_timers_.clear(); 
       RequestHandle request{std::make_shared<TFSubscriptionInfo>(
           [target_frame]() {return target_frame;}, 
           [source_frame]() {return source_frame;}, on_transform, on_error, time)};
+      /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
+      request->timer =  rclcpp::create_wall_timer(timeout, [this, on_error, request = Weak(request)]() {
+          request->timer->cancel(); /// cancel the timer, but it still lives
+          active_timers_.erase(request->timer);
+          cancelled_timers_.emplace(request->timer);
+          requests_.erase(request); // Destroy the request
+          on_error(tf2::TimeoutException{"Timed out waiting for transform"});
+        }, nullptr,
+        node_.get_node_base_interface().get(), node_.get_node_timers_interface().get());
+
+      active_timers_.emplace(request->timer);
       requests_.emplace(request);
       return request;
   }
@@ -226,6 +244,10 @@ struct TFListener {
   /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
   std::shared_ptr<tf2_ros::Buffer> buffer_;
 
+  /// We unfortunatelly need to store the timers in a separate structure because a timer likely cannot destroy 
+  /// itself in it's own callback 
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> active_timers_;
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
 private:
 
   void init() {
@@ -792,7 +814,6 @@ public:
     };
     return Awaiter{*this};
   }
-  
 
   /// Implementation of the operator co_return(x) for coroutine support: It *sets* the value of the Stream object that is about to get returned (the compier creats it beforehand)
   void return_value(const Value &x) {
@@ -802,7 +823,6 @@ public:
     this->impl()->set_value(x);
   }
   
-
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
@@ -1033,7 +1053,6 @@ protected:
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
-
   std::exception_ptr exception_ptr_{nullptr};
 };
 
@@ -1101,7 +1120,7 @@ constexpr bool is_std_array = t_is_std_array<T>::value;
 /// parameters:
 
 /// A closed interval, meaning a value must be greater or equal to a minimum value
-/// and less or equal to a maximal value.
+/// and less or equal to a maximum value.
 template <class Value>
 struct Interval {
   static_assert(std::is_arithmetic_v<Value>, "The value type must be a number");
@@ -1372,9 +1391,7 @@ struct TransformBuffer : public StreamImplDefault {
   TransformBuffer(NodeBookkeeping &node): node_(node) {
     tf_listener = node.add_tf_listener_if_needed();
   }
-  
-  std::shared_ptr<rclcpp::TimerBase> timeout_timer_;
-  NodeBookkeeping &node_;
+    
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
   /// @param target_frame
@@ -1385,30 +1402,18 @@ struct TransformBuffer : public StreamImplDefault {
   Promise<geometry_msgs::msg::TransformStamped, std::string>
     lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
                const Duration &timeout) {
-    using Fut = Promise<geometry_msgs::msg::TransformStamped, std::string>;
-    return Fut([this, target_frame, source_frame, time, timeout](auto &future) {
+    using P = Promise<geometry_msgs::msg::TransformStamped, std::string>;
+    return P([this, target_frame, source_frame, time, timeout](auto &promise) {
         auto request_handle = this->tf_listener->async_lookup(
-          target_frame, source_frame, time, 
-          [&future](const geometry_msgs::msg::TransformStamped &tf) { future.put_value(tf); },
-          [&future](const tf2::TransformException &ex) { future.put_error(ex.what()); }
+          target_frame, source_frame, time, timeout,
+          [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.put_value(tf); },
+          [&promise](const tf2::TransformException &ex) { promise.put_error(ex.what()); }
         );
-        //// TODO ADD ONE TIMER PER REQUEST, THIS IS WRONG!
-        this->timeout_timer_ = node_.add_timer(timeout, [this, request_handle, &future]() {
-          this->timeout_timer_->cancel();
-          if(future.has_none()) {
-            /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
+        return typename P::Cancel{[this, request_handle](auto &promise) {
+          if(promise.has_none()) {
             this->tf_listener->cancel_request(request_handle);
           }
-          future.put_error("Timed out waiting for transform");
-        });
-        return typename Fut::Cancel{[this, request_handle](auto &fut) {
-          this->timeout_timer_->cancel();
-          if(fut.has_none()) {
-            std::cout << "Cancelling promise from thread " << std::this_thread::get_id() << std::endl;
-            /// Not sure when exactly we need to call this but it does not do anything if it ware removed, so better safe that a big, fat SEGFAULT
-            this->tf_listener->cancel_request(request_handle);
-          }
-        }};  
+        }};
     });
   }
   
@@ -1417,7 +1422,6 @@ struct TransformBuffer : public StreamImplDefault {
   lookup(const std::string &target_frame, const std::string &source_frame, const auto &time,
     const Duration &timeout) { return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout); }
   */
-
   Weak<TFListener> tf_listener;
 };
 
