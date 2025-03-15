@@ -56,6 +56,14 @@ using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
 
+template<class T>
+static std::string get_type(T &t) {
+  std::stringstream ss;
+  auto this_class = boost::typeindex::type_id_runtime(t).pretty_name();
+  ss << "[" << this_class << " @ 0x" << std::hex << size_t(&t) << "]";
+  return ss.str();
+}
+
 static rclcpp::Time rclcpp_from_chrono(const Time &time_point) {
   return rclcpp::Time(std::chrono::time_point_cast<std::chrono::nanoseconds>(time_point)
                           .time_since_epoch()
@@ -534,89 +542,22 @@ constexpr void assert_all_stream_values_are_same() {
                 "The values of all the streams must be the same");
 }
 
-template <class T>
-struct crtp {
-  T &underlying() { return static_cast<T &>(*this); }
-  T const &underlying() const { return static_cast<T const &>(*this); }
-};
-
-struct PromiseInterfaceForCoroutinesTag {};
-/// Implementation of the so-called promise interface needed the C++20 coroutines. It is implemented by Promises/Promises/Streams 
-/// Derived must implement:
-/// set_value, value, take, has_none, and wait
-template <class Derived>
-struct PromiseInterfaceForCoroutines : public crtp<Derived>, public PromiseInterfaceForCoroutinesTag {
-  using promise_type = Derived;
-
-  PromiseInterfaceForCoroutines() {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " Constructor called" << std::endl;
-  }
-
-  ~PromiseInterfaceForCoroutines() {
-    if (icey_coro_debug_print) std::cout << get_type_info() << " Destructor called" << std::endl;
-  }  
-  std::string get_type_info() const {
-    std::stringstream ss;
-    auto this_class = boost::typeindex::type_id_runtime(*this).pretty_name();
-    ss << "[" << this_class << " @ 0x" << std::hex << size_t(this);
-    return ss.str();
-  }
-
-  std::coroutine_handle<> continuation_;
-
-  /// We are still a promise
-  Derived &get_return_object() {
-    // std::cout << get_type_info() <<   " get_return_object called" << std::endl;
-    /// This trick is used everywhere, in Lewis Bakers tutorial, as well as in other libraries: 
-    // [cppcoro] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
-    // [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
-    // [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
-    // Essentially, we create here a "box"-object (of promise_type) that holds the our actual promise object, that is also a promise_type
-    // Why we need to do this ? Apparently the compiler always needs to box the promises, assuming that promise_type and the implementation might be different types
-    return this->underlying();
-  }
-
-  std::suspend_never initial_suspend() { return {}; }
-  std::suspend_never final_suspend() const noexcept { return {}; }
-
-  /// return_value returns the value of the Steam.
-  auto return_value() { return this->underlying().value(); }
-
-  void unhandled_exception() {
-    /// Wanna hear a joke ? 
-    /// 1. There is a function defined std::exception_ptr current_exception() noexcept;
-    /// 2. It returns: using exception_ptr = /*unspecified*/ (since C++11) 
-    /// ...
-    //this->underlying().set_error(std::current_exception()->what());
-  }
-
-  /// If the return_value function is called with a value, it *sets* the value, makes sense
-  /// right ? No ? Oh .. (Reference:
-  /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
-  template <class T>
-  void return_value(const T &x) {
-    if (icey_coro_debug_print)
-      std::cout << this->get_type_info() << " return value for "
-                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
-    this->underlying().set_value(x);
-  }
-
-};
-
 template <class F, class Arg>
 struct check_callback {
   static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature");
-  static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, 
+  using ReturnType = std::invoke_result_t<F, Arg>;
+  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, 
         std::invoke_result_t<F, Arg> >, 
-        "No coroutine, i.e. asynchronous functions are allowed as callbacks");
+        "No coroutine, i.e. asynchronous functions are allowed as callbacks");*/
 };
 
 template <class F, class... Args>
 struct check_callback<F, std::tuple<Args...>> {
   static_assert(std::is_invocable_v<F, Args...>,
                 "The callback has the wrong signature, it has to take mutliple arguments (the Stream holds tuple, the arguments are all the elements of the tuple)");
-  static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, std::invoke_result_t<F, Args...> >, 
-      "No coroutines, i.e. asynchronous functions are allowed as callbacks");
+  using ReturnType = std::invoke_result_t<F, Args...>;
+  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, std::invoke_result_t<F, Args...> >, 
+      "No coroutines, i.e. asynchronous functions are allowed as callbacks");*/
 };
 
 struct PromiseTag {};
@@ -654,45 +595,39 @@ public:
     /// This constructor is useful for wrapping an existing callback-based API
     explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
       if(icey_coro_debug_print)
-        std::cout << "Promise(h) @  " <<  get_type(*this) << std::endl;
+        std::cout << "Promise(h) @  " << get_type(*this) << std::endl;
       cancel_ = h(*this); 
-    }
-
-    template<class T>
-    static std::string get_type(T &t) {
-      std::stringstream ss;
-      auto this_class = boost::typeindex::type_id_runtime(t).pretty_name();
-      ss << "[" << this_class << " @ 0x" << std::hex << size_t(&t);
-      return ss.str();
     }
 
     std::suspend_never initial_suspend() { return {}; }
     std::suspend_always final_suspend() const noexcept { return {}; }
-    /// return_value (aka. operator co_return) returns the value if called with no arguments
+
+    /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The compiler can't do this for us because of reasons)
     void unhandled_exception() { exception_ptr_ = std::current_exception(); }
   
-
     /// Await the promise 
     auto operator co_await() {
       struct Awaiter {
-        Self &fut_;
-        Awaiter(Self &fut) : fut_(fut) {}
+        Self &promise_;
+        Awaiter(Self &fut) : promise_(fut) {}
         bool await_ready() const noexcept { 
           if(icey_coro_debug_print)
-            std::cout << "Await ready on Promise " << get_type(fut_) << " called" << std::endl;
-          return !fut_.has_none(); 
+            std::cout << "Await ready on Promise " << get_type(promise_) << " called" << std::endl;
+          return !promise_.has_none(); 
         }
         void await_suspend(std::coroutine_handle<> continuation) noexcept { 
           /// Resume the coroutine when this promise is done
           if(icey_coro_debug_print)
-            std::cout << "Await suspend was called, held Promise: " << get_type(fut_) << std::endl;
-          fut_.register_handler([continuation](auto) { if(continuation) continuation.resume(); });
+            std::cout << "Await suspend was called, held Promise: " << get_type(promise_) << std::endl;
+          promise_.register_handler([continuation](auto) { if(continuation) continuation.resume(); });
         }
 
         auto await_resume() const noexcept { 
           if(icey_coro_debug_print)
-            std::cout << "Await resume was called, held Promise: " << get_type(fut_) << std::endl;
-          return fut_.get_state().get(); 
+            std::cout << "Await resume was called, held Promise: " << get_type(promise_) << std::endl;
+          if(promise_.exception_ptr_) 
+            std::rethrow_exception(promise_.exception_ptr_);
+          return promise_.get_state().get(); 
         }
       };
       return Awaiter{*this};
@@ -777,22 +712,22 @@ struct TransformPublisherStream;
 /// available through `impl().<my_field>`, i.e. the Impl-class will derive from ImplBase. This is
 /// how you should extend the Stream class when implementing your own Streams.
 template <class _Value, class _Error = Nothing, class ImplBase = Nothing>
-class Stream : public StreamTag, 
-  public PromiseInterfaceForCoroutines<Stream<_Value, _Error, ImplBase>> {
-
-  static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
+class Stream : public StreamTag {
+  static_assert(std::is_default_constructible_v<ImplBase>, "ImplBase must be default constructable");
   friend Context;
-  friend PromiseInterfaceForCoroutines<Stream<_Value, _Error, ImplBase>>;
 public:
   using Value = _Value;
   using Error = _Error;
   using Self = Stream<_Value, _Error, ImplBase>;
-  /// The actual implementation of the Stream.
+  /// The actual implementation of the Stream
   using Impl = impl::Stream<Value, Error, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
 
+  /// [Coroutine support]
+  using promise_type = Self;
+
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
-  Stream() { std::cout << "Created new Stream: " << this->get_type_info() << std::endl; }
-  ~Stream() { std::cout << "Destroying Stream: " << this->get_type_info() << std::endl; }
+  Stream() { std::cout << "Created new Stream: " << get_type(*this) << std::endl; }
+  ~Stream() { std::cout << "Destroying Stream: " << get_type(*this) << std::endl; }
 #else
   Stream() = default;
 #endif
@@ -802,41 +737,63 @@ public:
 
   explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
+  /// [Coroutine support]
+  Self get_return_object() { return *this; }
+  /// [Coroutine support]
+  std::suspend_never initial_suspend() { return {}; }
+  /// [Coroutine support]
+  std::suspend_never final_suspend() const noexcept { return {}; }
+  /// [Coroutine support] return_value returns the value of the Steam.
+  auto return_value() { return this->value(); }
+  /// [Coroutine support] Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The compiler can't do this for us because of reasons)
+  void unhandled_exception() { exception_ptr_ = std::current_exception(); }
+
   /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines. 
   /// It spins the ROS executor until this Stream has something (value or error) and then resumes the coroutine.
   auto operator co_await() {
     struct Awaiter {
-      
       Self &stream;
       Awaiter(Self &coro) : stream(coro) {}
       bool await_ready() const noexcept { 
         if(icey_coro_debug_print)
-          std::cout << "Await ready on Stream " << stream.get_type_info() << " called" << std::endl;
-        return !stream.has_none(); 
+          std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
+        return !stream.impl()->has_none(); 
       }
       void await_suspend(std::coroutine_handle<> continuation) noexcept { 
         if(icey_coro_debug_print)
-          std::cout << "Await suspend on Stream " << stream.get_type_info() << " called" << std::endl;
+          std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
         if(!stream.impl()->registered_continuation_callback_) {
           stream.impl()->register_handler([impl=stream.impl()](auto &) {
             /// Important: Call the continuation only once since we may be awaiting the stream only once
             if(impl->continuation_) {
-              auto c = std::exchange(impl->continuation_, nullptr); /// Get the continuation and replace it with nullptr 
+              auto c = std::exchange(impl->continuation_, nullptr); /// Get the continuation and replace it with nullptr so that it is called only once
               c.resume();
             }
           });
           stream.impl()->registered_continuation_callback_ = true;
         }
-        stream.impl()->continuation_ = continuation;
       }
       auto await_resume() const noexcept { 
         if(icey_coro_debug_print)
-          std::cout << "Await resume on Stream " << stream.get_type_info() << " called" << std::endl;
-        return stream.take(); 
+          std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
+        if(stream.exception_ptr_) /// [Coroutine support] The coroutines are specified so that the compier does not do exception handling 
+        /// everywhere, so they put the burden on the imlementers to defer throwing the exception 
+          std::rethrow_exception(stream.exception_ptr_);
+        return stream.impl()->take(); 
       }
     };
     return Awaiter{*this};
   }
+  
+
+  /// Implementation of the operator co_return(x) for coroutine support: It *sets* the value of the Stream object that is about to get returned (the compier creats it beforehand)
+  void return_value(const Value &x) {
+    if (icey_coro_debug_print)
+      std::cout << get_type(*this) << " setting value using operator co_return for "
+                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+    this->impl()->set_value(x);
+  }
+  
 
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
@@ -969,7 +926,7 @@ public:
   template <class F>
   Stream<Value, Nothing> unwrap_or(F &&f) {
     /// TODO Can't we just move this stream in, i.e. reuse it instead of creating a new one ? (In this case moving means re-using the impl)
-    auto output = this->template create_new<Value, Nothing>();
+    auto output = this->template create_stream<Stream<Value, Nothing>>();
     this->impl()->register_handler([output_impl = output.impl(), f=std::forward<F>(f)](const auto &new_state) {
       if (new_state.has_value()) {
         output_impl->put_value(new_state.value());
@@ -1052,21 +1009,6 @@ protected:
       throw std::runtime_error("This stream does not have context");
   }
 
-  template <class NewValue, class NewError>
-  Stream<NewValue, NewError> create_new() const {
-    return create_stream<Stream<NewValue, NewError>>();
-  }
-  
-  /// TODO make non-const, then co_await is also not const anymore,
-  void set_value(const Value & x) const { this->impl()->set_value(x); }
-  bool has_none() const { return this->impl()->has_none(); }
-  auto take() const { 
-    if(this->impl()->has_none()) {
-      std::cout << "Trying to take something but this stream has nothing" << std::endl;
-    }
-    return this->impl()->take(); 
-  }
-
   /// Pattern-maching factory function that creates a New Self with different value and error types
   /// based on the passed implementation pointer.
   /// (this is only needed for impl::Stream::done, which creates a new stream that always has
@@ -1083,6 +1025,7 @@ protected:
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
+  std::exception_ptr exception_ptr_{nullptr};
 
 };
 
