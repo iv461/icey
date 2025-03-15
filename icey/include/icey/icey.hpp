@@ -692,7 +692,7 @@ public:
         auto await_resume() const noexcept { 
           if(icey_coro_debug_print)
             std::cout << "Await resume was called, held Promise: " << get_type(fut_) << std::endl;
-          return fut_.get_state2(); 
+          return fut_.get_state().get(); 
         }
       };
       return Awaiter{*this};
@@ -745,7 +745,7 @@ public:
   using promise_type = Promise<void, Nothing>;
   promise_type get_return_object() { return {}; }
   auto return_void() { 
-    this->notify();
+    this->put_value(Nothing{});
   }
 };
 
@@ -767,7 +767,7 @@ struct TransformPublisherStream;
 /// final. This is the base class for all the other streams.
 ///
 /// \tparam _Value the type of the value
-/// \tparam _ErrorValue the type of the error. It can also be an exception.
+/// \tparam _Error the type of the error. It can also be an exception.
 /// \tparam ImplBase a class from which the implementation (impl::Stream) derives, used as an
 /// extention point. \note This class does not any fields other than a pointer to the actual
 /// implementation, `std::shared_ptr<Impl>`, i.e. it uses the PIMPL idiom. When deriving from this
@@ -776,19 +776,19 @@ struct TransformPublisherStream;
 /// `MyStreamImpl` and pass it as the `ImplBase` template parameter. Then, these fields become
 /// available through `impl().<my_field>`, i.e. the Impl-class will derive from ImplBase. This is
 /// how you should extend the Stream class when implementing your own Streams.
-template <class _Value, class _ErrorValue = Nothing, class ImplBase = Nothing>
+template <class _Value, class _Error = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag, 
-  public PromiseInterfaceForCoroutines<Stream<_Value, _ErrorValue, ImplBase>> {
+  public PromiseInterfaceForCoroutines<Stream<_Value, _Error, ImplBase>> {
 
   static_assert(std::is_default_constructible_v<ImplBase>, "Impl must be default constructable");
   friend Context;
-  friend PromiseInterfaceForCoroutines<Stream<_Value, _ErrorValue, ImplBase>>;
+  friend PromiseInterfaceForCoroutines<Stream<_Value, _Error, ImplBase>>;
 public:
   using Value = _Value;
-  using ErrorValue = _ErrorValue;
-  using Self = Stream<_Value, _ErrorValue, ImplBase>;
+  using Error = _Error;
+  using Self = Stream<_Value, _Error, ImplBase>;
   /// The actual implementation of the Stream.
-  using Impl = impl::Stream<Value, ErrorValue, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
+  using Impl = impl::Stream<Value, Error, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
 
 #ifdef ICEY_DEBUG_PRINT_STREAM_ALLOCATIONS
   Stream() { std::cout << "Created new Stream: " << this->get_type_info() << std::endl; }
@@ -849,10 +849,10 @@ public:
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives a value x, where y = f(x).
   /// The type of the returned stream is:
-  /// - Stream<Nothing, _ErrorValue> if F is (X) -> void
+  /// - Stream<Nothing, _Error> if F is (X) -> void
   /// - Stream<NewValue, NewError> if F is (X) -> Result<NewValue, NewError>
-  /// - Stream<NewValue, _ErrorValue> if F is (X) -> std::optional<NewValue>
-  /// - Stream<Y, _ErrorValue> otherwise
+  /// - Stream<NewValue, _Error> if F is (X) -> std::optional<NewValue>
+  /// - Stream<Y, _Error> otherwise
   /// \tparam F: Must be (X) -> Y, where X is:
   ///  - V_1, ..., V_n if Value is std::tuple<V_1, ..., V_n>
   ///  - Value otherwise
@@ -879,8 +879,8 @@ public:
   ///  - Value otherwise
   template <class F>
   auto except(F &&f) {
-    check_callback<F, ErrorValue>{};
-    static_assert(!std::is_same_v<ErrorValue, Nothing>,
+    check_callback<F, Error>{};
+    static_assert(!std::is_same_v<Error, Nothing>,
                   "This stream cannot have errors, so you cannot register except() on it.");
     return create_from_impl(impl()->except(std::forward<F>(f)));
   }
@@ -984,7 +984,7 @@ public:
   /// \tparam F Function receiving the Value of this Stream (it is unpacked if it's a tuple) and
   /// returning bool
   template <class F>
-  Stream<Value, ErrorValue> filter(F f) {
+  Stream<Value, Error> filter(F f) {
     return this->then([f = std::move(f)](auto x) -> std::optional<Value> {
       if (!f(x))
         return {};
@@ -1937,9 +1937,9 @@ struct TransformSynchronizer
 
 /*!
   Outputs the value or error of any of the inputs. All the inputs must have the same Value and
-  ErrorValue type.
+  Error type.
   \tparam Inputs A list of Stream<Value, Error> types, i.e. all the input Streams must have the same
-  Value and ErrorValue type. \returns Stream<Value, Error>
+  Value and Error type. \returns Stream<Value, Error>
 */
 template <AnyStream... Inputs>
 static auto any(Inputs... inputs) {
@@ -1947,7 +1947,7 @@ static auto any(Inputs... inputs) {
   auto first_input = std::get<0>(std::forward_as_tuple(inputs...));
   using Input = decltype(first_input);
   using InputValue = typename std::remove_reference_t<Input>::Value;
-  using InputError = typename std::remove_reference_t<Input>::ErrorValue;
+  using InputError = typename std::remove_reference_t<Input>::Error;
   /// First, create a new stream
   auto output = first_input.template create_stream<Stream<InputValue, InputError>>();
   /// Now connect each input with the output

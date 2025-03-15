@@ -5,7 +5,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Stream<int> talk(std::shared_ptr<icey::Node> &node) {    
+icey::Promise<void> talk(std::shared_ptr<icey::Node> &node) {    
     auto timer = node->icey().create_timer(100ms);
     auto pub = node->icey().create_publisher<std_msgs::msg::String>("/strings");
     while(true) {
@@ -15,7 +15,7 @@ icey::Stream<int> talk(std::shared_ptr<icey::Node> &node) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Publishing: " << message.data);
         pub.publish(message);
     }
-    co_return 0;
+    co_return;
 }
 
 int main(int argc, char **argv) {

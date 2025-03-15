@@ -5,7 +5,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {  
+icey::Promise<void> create_and_spin_node(std::shared_ptr<icey::Node> node) {  
   
   auto frequency = node->icey().declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2.);
@@ -40,7 +40,7 @@ icey::Stream<int> create_and_spin_node(std::shared_ptr<icey::Node> node) {
     RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
     sine_pub.publish(float_val);
   }
-  co_return 0;
+  co_return;
 }
 
 

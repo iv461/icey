@@ -9,7 +9,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 
 /// This function creates and spins the node (the main cannot be a coroutine)
-icey::Promise<int> run(std::shared_ptr<icey::Node> node) {
+icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
   /// Create the service clients beforehand
   auto service1 = node->icey().create_client<ExampleService>("set_bool_service1");
   auto service2 = node->icey().create_client<ExampleService>("set_bool_service2");  
@@ -45,7 +45,7 @@ icey::Promise<int> run(std::shared_ptr<icey::Node> node) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response1: " << result2.value()->success);
     }
   }
-  co_return 0; // All coroutines must have co_return
+  co_return; // All coroutines must have co_return
 }
 
 int main(int argc, char **argv) {

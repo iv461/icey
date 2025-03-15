@@ -6,7 +6,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Stream<int> spin(int argc, char **argv) {
+icey::Promise<void> spin(int argc, char **argv) {
     
     auto node = icey::create_node(argc, argv, "tf_pub_test");
     
@@ -37,7 +37,7 @@ icey::Stream<int> spin(int argc, char **argv) {
         cnt++;
         tf_pub.publish(tf);
     }
-    co_return 0;
+    co_return;
 }
 int main(int argc, char **argv) {
     spin(argc, argv);

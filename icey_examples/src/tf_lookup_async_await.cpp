@@ -6,7 +6,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Stream<int> get_tf(std::shared_ptr<icey::Node> node) {
+icey::Promise<void> get_tf(std::shared_ptr<icey::Node> node) {
     auto point_cloud_subscription = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
     icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
@@ -22,7 +22,7 @@ icey::Stream<int> get_tf(std::shared_ptr<icey::Node> node) {
             RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
         }
     }
-    co_return 0;
+    co_return;
 }
     
 int main(int argc, char **argv) {

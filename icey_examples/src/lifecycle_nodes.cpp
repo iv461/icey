@@ -34,13 +34,13 @@ public:
   }
 
   /// Spin the node: we do some work here, other callbacks get called 
-  icey::Stream<int> run() {
+  icey::Promise<void> run() {
     
     while(true) {
       std::size_t ticks = co_await timer_;
       RCLCPP_INFO_STREAM(get_logger(), "Spinning node for the " << ticks << "th time...");
     }
-    co_return 0;
+    co_return;
   }
 
   /// We store the timer here only to be able to cancel it

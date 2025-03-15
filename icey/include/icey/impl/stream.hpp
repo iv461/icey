@@ -18,18 +18,18 @@ struct Nothing {};
 struct ResultTag {};
 /// A Result-type is a sum type that can either hold Value or Error, or, different
 /// to Rust, none. It is used as the state for the Stream
-template <class _Value, class _ErrorValue>
-struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, public ResultTag {
+template <class _Value, class _Error>
+struct Result : private std::variant<std::monostate, _Value, _Error>, public ResultTag {
   using Value = _Value;
-  using ErrorValue = _ErrorValue;
-  using Self = Result<_Value, _ErrorValue>;
-  static Self None() { return Result<_Value, _ErrorValue>{}; }
+  using Error = _Error;
+  using Self = Result<_Value, _Error>;
+  static Self None() { return Result<_Value, _Error>{}; }
   static Self Ok(const _Value &x) {
     Self ret;
     ret.template emplace<1>(x);
     return ret;
   }
-  static Self Err(const _ErrorValue &x) {
+  static Self Err(const _Error &x) {
     Self ret;
     ret.template emplace<2>(x);
     return ret;
@@ -38,10 +38,18 @@ struct Result : private std::variant<std::monostate, _Value, _ErrorValue>, publi
   bool has_value() const { return this->index() == 1; }
   bool has_error() const { return this->index() == 2; }
   const Value &value() const { return std::get<1>(*this); }
-  const ErrorValue &error() const { return std::get<2>(*this); }
+  const Error &error() const { return std::get<2>(*this); }
   void set_none() { this->template emplace<0>(std::monostate{}); }
   void set_ok(const Value &x) { this->template emplace<1>(x); }
-  void set_err(const ErrorValue &x) { this->template emplace<2>(x); }
+  void set_err(const Error &x) { this->template emplace<2>(x); }
+  
+  auto get() const {
+    if constexpr (std::is_same_v<Error, Nothing>) {
+      return this->value();
+    } else {
+      return *this;
+    }
+  }
 };
 
 /// Some pattern matching for type recognition
@@ -105,7 +113,7 @@ template <class T>
 using ValueOf = typename remove_shared_ptr_t<T>::Value;
 /// The value type of the given Stream type
 template <class T>
-using ErrorOf = class remove_shared_ptr_t<T>::ErrorValue;
+using ErrorOf = class remove_shared_ptr_t<T>::Error;
 
 /// The ROS-message of the given Stream type
 template <class T>
@@ -151,23 +159,23 @@ struct StreamImplBase {};
 ///  It is conceptually very similar to a promise in JavaScript but the state transitions are not
 /// final.
 /// \tparam _Value the type of the value
-/// \tparam _ErrorValue the type of the error. It can also be an exception.
+/// \tparam _Error the type of the error. It can also be an exception.
 /// \tparam Base a class from which this class derives, used as an extention point.
 /// \tparam DefaultBase When new `Stream`s get created using `then` and `except`, this is used as
 /// a template parameter for `Base` so that a default extention does not get lost when we call
 /// `then` or `except`.
 ///
-template <class _Value, class _ErrorValue, class Base, class DefaultBase>
+template <class _Value, class _Error, class Base, class DefaultBase>
 class Stream : public StreamImplBase, public Base {
 public:
   using Value = _Value;
-  using ErrorValue = _ErrorValue;
-  using Self = Stream<Value, ErrorValue, Base, DefaultBase>;
-  using State = Result<Value, ErrorValue>;
+  using Error = _Error;
+  using Self = Stream<Value, Error, Base, DefaultBase>;
+  using State = Result<Value, Error>;
 
-  /// If no error is possible (ErrorValue is Nothing), this it just the Value instead of the State
+  /// If no error is possible (Error is Nothing), this it just the Value instead of the State
   /// to not force the user to write unnecessary error handling/unwraping code.
-  using MaybeResult = std::conditional_t<std::is_same_v<ErrorValue, Nothing>, Value, State>;
+  using MaybeResult = std::conditional_t<std::is_same_v<Error, Nothing>, Value, State>;
   using Handler = std::function<void(const State &)>;
 
   Stream() = default;
@@ -202,7 +210,7 @@ public:
   bool has_value() const { return state_.has_value(); }
   bool has_error() const { return state_.has_error(); }
   const Value &value() const { return state_.value(); }
-  const ErrorValue &error() const { return state_.error(); }
+  const Error &error() const { return state_.error(); }
   State &get_state() { return state_; }
   const State &get_state() const { return state_; }
 
@@ -218,7 +226,7 @@ public:
   void set_value(const Value &x) { state_.set_ok(x); }
 
   /// Sets the state to hold an error, but does not notify about this state change.
-  void set_error(const ErrorValue &x) { state_.set_err(x); }
+  void set_error(const Error &x) { state_.set_err(x); }
   void set_state(const State &x) { state_= x; }
 
   /// Returns the current state and sets it to none.
@@ -228,33 +236,20 @@ public:
     return current_state;
   }
 
-  /// Returns the current state and sets it to none. If no error is possible (ErrorValue is not
+  /// Returns the current state and sets it to none. If no error is possible (Error is not
   /// Nothing), it just the Value to not force the user to write unnecessary error
   /// handling/unwraping code.
   MaybeResult take() {
-    auto current_state = this->take_state();
-    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      return current_state.value();
-    } else {
-      return current_state;
-    }
-  }
-
-  MaybeResult get_state2() {
-    if constexpr (std::is_same_v<ErrorValue, Nothing>) {
-      return state_.value();
-    } else {
-      return state_;
-    }
+    return this->take_state().get();
   }
 
   /// It takes (calls take) the current state and notifies the callbacks. It notifies only in case
   /// we have an error or value. If the state is none, it does not notify. If the state is an error
-  /// and the `ErrorValue` is an exception type (a subclass of `std::runtime_error`) and also no
+  /// and the `Error` is an exception type (a subclass of `std::runtime_error`) and also no
   /// handlers were registered, the exception is re-thrown.
-  /// TODO We should take the value
+  /// TODO We should take the value if this is a Stream, but currently Promise also uses this Base
   void notify() {
-    if constexpr (std::is_base_of_v<std::runtime_error, ErrorValue>) {
+    if constexpr (std::is_base_of_v<std::runtime_error, Error>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the
       // error unhandled.
       if (this->has_error() && handlers_.empty()) {
@@ -273,7 +268,7 @@ public:
   }
 
   /// Sets the state to an error and notifies.
-  void put_error(const ErrorValue &x) {
+  void put_error(const Error &x) {
     this->set_error(x);
     this->notify();
   }
@@ -288,7 +283,7 @@ public:
 
   template <class F>
   auto except(F &&f) {
-    static_assert(!std::is_same_v<ErrorValue, Nothing>,
+    static_assert(!std::is_same_v<Error, Nothing>,
                   "This stream cannot have errors, so you cannot register .except() on it.");
     return this->done<false>(std::forward<F>(f));
   }
@@ -348,10 +343,10 @@ protected:
   template <bool put_value, class F>
   auto done(F &&f) {
     /// Return type depending of if the it is called when the Promise put_values or put_errors
-    using FunctionArgument = std::conditional_t<put_value, Value, ErrorValue>;
+    using FunctionArgument = std::conditional_t<put_value, Value, Error>;
     /// Only if we put_value we pass over the error. except does not pass the error, only the
     /// handler may create a new error
-    using NewError = std::conditional_t<put_value, ErrorValue, Nothing>;
+    using NewError = std::conditional_t<put_value, Error, Nothing>;
     using ReturnType = decltype(unpack_if_tuple(f, std::declval<FunctionArgument>()));
     /// Now we want to call put_value only if it is not none, so strip optional
     using ReturnTypeSome = remove_optional_t<ReturnType>;
@@ -362,12 +357,12 @@ protected:
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto output =
-          create_stream<Stream<typename ReturnType::Value, typename ReturnType::ErrorValue,
+          create_stream<Stream<typename ReturnType::Value, typename ReturnType::Error,
                                DefaultBase, DefaultBase>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience
-      /// The resulting stream always has the same ErrorValue so that it can pass through the
+      /// The resulting stream always has the same Error so that it can pass through the
       /// error
       auto output = create_stream<Stream<ReturnTypeSome, NewError, DefaultBase, DefaultBase>>();
       create_handler<put_value>(output, std::forward<F>(f));

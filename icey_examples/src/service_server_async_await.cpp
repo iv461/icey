@@ -23,7 +23,7 @@ icey::Promise<Response, std::string> async_response(Request request, std::shared
   co_return upstream_result;
 }
 
-icey::Stream<int> serve_downstream_service(std::shared_ptr<icey::Node> node) {
+icey::Promise<void> serve_downstream_service(std::shared_ptr<icey::Node> node) {
   
   /// Create the service server, without giving it a (synchronous) callback.
   auto service_server = node->icey().create_service<ExampleService>("set_bool_service");
@@ -40,7 +40,7 @@ icey::Stream<int> serve_downstream_service(std::shared_ptr<icey::Node> node) {
   
   if (upstream_result.has_error()) {
     RCLCPP_INFO_STREAM(node->get_logger(), "Upstream service returned error: " << upstream_result.error());
-    co_return 0;
+    co_return;
   }
 
   Response upstream_response = upstream_result.value();
@@ -48,8 +48,8 @@ icey::Stream<int> serve_downstream_service(std::shared_ptr<icey::Node> node) {
 
   /// Now send back the response synchronously: 
   service_server.respond(request_id, upstream_response);
-  
-  co_return 0;
+
+  co_return;
 }
 
 int main(int argc, char **argv) {
