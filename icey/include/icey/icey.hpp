@@ -199,10 +199,10 @@ struct TFListener {
           maybe_time(_maybe_time) {}
     GetFrame target_frame;
     GetFrame source_frame;
-    std::optional<Time> maybe_time;
     std::optional<TransformMsg> last_received_transform;
     OnTransform on_transform;
     OnError on_error;
+    std::optional<Time> maybe_time;
   };
 
   using RequestHandle = std::shared_ptr<TFSubscriptionInfo>;
@@ -640,6 +640,11 @@ public:
           cancel_(*this);
     }
 
+    /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is not going to be called anymore. 
+    /// Such cancellations are needed because the ROS callback captures the Promises object by reference since it needs to write the result to it. 
+    /// But if we would destruct the Promise and after that this ROS callback gets called, we get an use-after-free bug. 
+    /// The promise must therefore cancel the ROS callback in the destructor.
+    /// Since we have no concurrency, this cancellation function can always be a synchronous function and thus simply be called in the destructor.
     Cancel cancel_;
     std::exception_ptr exception_ptr_{nullptr};
 };
@@ -660,13 +665,13 @@ public:
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
   void return_value(const _Value &x) {
     if (icey_coro_debug_print)
-      std::cout << this->get_type(*this) << " setting value " << std::endl;
+      std::cout << get_type(*this) << " setting value " << std::endl;
     this->put_value(x);
   }
 
   void return_value(const State &x) {
     if (icey_coro_debug_print)
-      std::cout << this->get_type(*this) << " setting state " << std::endl;
+      std::cout << get_type(*this) << " setting state " << std::endl;
     this->set_state(x);
     this->notify();
   }
