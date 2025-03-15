@@ -87,7 +87,7 @@ ros2 run icey_examples service_server_async_await_example
 And the upstream server:
 
 ```sh
-ros2 run icey_examples service_server_example --ros-args --remap service_name:=set_bool_service_upstream
+ros2 run icey_examples service_server_example --ros-args -p service_name:=set_bool_service_upstream
 ```
 
 And now the service client: 

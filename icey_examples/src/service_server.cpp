@@ -6,10 +6,6 @@
 
 using ExampleService = std_srvs::srv::SetBool;
 
-icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
-  co_return;
-}
-
 int main(int argc, char **argv) {  
   auto node = icey::create_node(argc, argv, "service_server");
   auto service_name = node->icey().declare_parameter<std::string>("service_name", "set_bool_service1");
