@@ -218,8 +218,6 @@ struct TFListener {
   /// Cancel the registered notification for any message on TF
   void cancel_request(RequestHandle request) { requests_.erase(request); }
 
-  std::unordered_set<RequestHandle> requests_;
-
   const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
                                 /// as well, so we avoid circular reference
 
@@ -327,6 +325,7 @@ private:
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
   std::vector<TFSubscriptionInfo> subscribed_transforms_;
+  std::unordered_set<RequestHandle> requests_;
 };
 
 /// A node interface that does the same as a rclcpp::Node (of lifecycle node), but additionally
@@ -743,7 +742,7 @@ public:
   explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
   /// [Coroutine support]
-  Self get_return_object() { return *this; }
+  Self &get_return_object() { return *this; }
   /// [Coroutine support]
   std::suspend_never initial_suspend() { return {}; }
   /// [Coroutine support]
@@ -777,6 +776,7 @@ public:
           });
           stream.impl()->registered_continuation_callback_ = true;
         }
+        stream.impl()->continuation_ = continuation;
       }
       auto await_resume() const noexcept { 
         if(icey_coro_debug_print)
@@ -1030,8 +1030,8 @@ protected:
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
   std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
-  std::exception_ptr exception_ptr_{nullptr};
 
+  std::exception_ptr exception_ptr_{nullptr};
 };
 
 template <class Value>

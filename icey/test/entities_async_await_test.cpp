@@ -37,19 +37,15 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
   const auto l = [this]() -> icey::Stream<int> {
     size_t timer_ticked{0};
     auto timer = node_->icey().create_timer(100ms);
-
     EXPECT_EQ(timer_ticked, 0);
-
     while (true) {
       size_t ticks = co_await timer;
-      std::cout << "Ticked # " << ticks << std::endl;
       EXPECT_EQ(timer_ticked, ticks);
       timer_ticked++;
       if (timer_ticked == 10) {
         break;
       }
     }
-    std::cout << "After loop" << std::endl;
 
     EXPECT_EQ(timer_ticked, 10);
     async_completed = true;
@@ -273,15 +269,9 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
         receiver_->icey().create_transform_buffer();;
 
     std::size_t received_cnt = 0;
-    std::cout << "Main thread " << std::this_thread::get_id() << std::endl;
     while(received_cnt <= 13) {
-      std::cout << "b4 lookup " << received_cnt << std::endl;
-
       icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
           = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 110ms);
-      
-      std::cout << "After lookup" << received_cnt << std::endl;
-
       /// Expect that the one additional last time that we lookup, we do not get anything
       if(received_cnt >= 10) {
         EXPECT_FALSE(tf_result.has_value());
@@ -295,11 +285,8 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
         EXPECT_NEAR(tf.transform.rotation.z, std::sin(0.1 * received_cnt), kEps);
         EXPECT_NEAR(tf.transform.rotation.w, std::cos(0.1 * received_cnt), kEps);
       }
-
       received_cnt++;
-      std::cout << "end loop " << received_cnt << std::endl;
     }
-
     async_completed = true;
     co_return 0;
   };
