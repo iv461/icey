@@ -96,6 +96,8 @@ And now the service client:
 ros2 run icey_examples service_client_async_await_example
 ```
 
+You should now receive responses and see how both servers receive requests.
+
 # Run parameter struct example 
 
 The parameter struct example shows how you can declare a lot of parameters without boilerplate code.
