@@ -10,10 +10,6 @@ Sorted by decreasing priority.
 
 - [ ] Investigate whether await in a callback is possible
 
-- [X] Fix hang of getting a message from a separate async function: operator co_return of a Promise should put instead of set so that
-
-- [X] Fix per-request timeout timer for lookup
-
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
 by ROS entities will never yield something regardless of how long we spin the ROS executor if the underlying ROS entity driving them was stopped. For example if the ROS-timer was cancelled. Or the subscription destroyed. In such a case, calling co_await on such streams would hang forever. We need to return None in this case or an extra end-of-Stream identitier (like tokio).
 
@@ -304,3 +300,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Unit-test service client request cleanup using a sleepy service server
 
 - [X] (async/await) Fix Promise ownership when using nested async functiions
+
+- [X] Fix hang of getting a message from a separate async function: operator co_return of a Promise should put instead of set so that
+
+- [X] Fix per-request timeout timer for lookup
