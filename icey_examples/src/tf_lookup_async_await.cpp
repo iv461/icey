@@ -6,7 +6,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Promise<void> get_tf(std::shared_ptr<icey::Node> node) {
+icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
     auto point_cloud_subscription = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
     icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
@@ -27,6 +27,6 @@ icey::Promise<void> get_tf(std::shared_ptr<icey::Node> node) {
     
 int main(int argc, char **argv) {
     auto node = icey::create_node(argc, argv, "tf_lookup_async_await_example");
-    get_tf(node);
+    run(node);
     icey::spin(node);
 }

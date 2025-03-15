@@ -6,10 +6,7 @@
 
 using namespace std::chrono_literals;
 
-icey::Promise<void> spin(int argc, char **argv) {
-    
-    auto node = icey::create_node(argc, argv, "tf_pub_test");
-    
+icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
     /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
     /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform.
     auto pub = node->icey().create_publisher<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
@@ -39,6 +36,9 @@ icey::Promise<void> spin(int argc, char **argv) {
     }
     co_return;
 }
+
 int main(int argc, char **argv) {
-    spin(argc, argv);
+    auto node = icey::create_node(argc, argv, "tf_pub_test");
+    run(node);
+    icey::spin(node);
 }
