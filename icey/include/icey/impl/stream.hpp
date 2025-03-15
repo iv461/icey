@@ -273,6 +273,12 @@ public:
     this->notify();
   }
 
+  /// Sets the state to the given one and notifies.
+  void put_state(const State &x) {
+    this->set_state(x);
+    this->notify();
+  }
+
   template <class F>
   auto then(F &&f) {
     /// Note that it may only have errors

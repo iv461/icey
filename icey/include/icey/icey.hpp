@@ -560,16 +560,18 @@ struct check_callback<F, std::tuple<Args...>> {
 };
 
 struct PromiseTag {};
-/// A Promise is an asynchronous primitve that yields a single value or an error.
-/// Can be used with async/await aka coroutines in C++20.
+/// A Promise is an asynchronous abstraction that yields a single value or an error.
+/// I can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API. 
 /// It does not use dynamic memory allocation to store the value. 
 
-/// For references, see the promise implementations of these libraries: 
-/// To some extent, you can also look at the "task" abstraction. But note that tasks 
+/// For references, see the promise implementations of this library: 
+/// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/promise.h
+///
+/// To some extent, you can also look at the "task" abstraction as a reference. But note that tasks 
 /// were developed to solve very specific kind of problems that arise when developing *concurrent* 
 /// asynchronous code, see Lewis Bakers' talk at CppCon 2019 (https://www.youtube.com/watch?v=1Wy5sq3s2rg), chapter "The Solution".
-
+/// Since we do not have a concurrent application but a single-threaded event-loop, the Promise is sufficient for us and we not need this "task".
 /// [cppcoro task] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
 /// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
 /// [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
@@ -585,17 +587,15 @@ public:
 
     PromiseBase() {
       if(icey_coro_debug_print)
-      std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
+        std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
     }
-
-
     /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
     /// so that it can store it and write to this promise later. This handler returns a cancellation function that gets called when this Promise is destructed.
-    /// This constructor is useful for wrapping an existing callback-based API
+    /// This constructor is useful for wrapping an existing callback-based API.
     explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
       if(icey_coro_debug_print)
         std::cout << "Promise(h) @  " << get_type(*this) << std::endl;
-      cancel_ = h(*this); 
+      cancel_ = h(*this);
     }
 
     std::suspend_never initial_suspend() { return {}; }
@@ -648,7 +648,10 @@ public:
     std::exception_ptr exception_ptr_{nullptr};
 };
 
-/// Choosing between return value and return_void does not work with SFINAE
+/// The whole point of this PromiseBase and Promise is the design of the operator co_return that requires two differently named 
+/// operators, depending on whether a Promise holds a value or not (is the void-version) first one is called return_value, second one is called return_void: 
+/// But choosing between return_value and return_void does not work with SFINAE (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+/// So this is the non-void version:
 template<class _Value, class _Error = Nothing>
 class Promise : public PromiseBase<_Value, _Error> {
 public:
@@ -668,15 +671,15 @@ public:
     this->put_value(x);
   }
 
+  /// Sets the state to the given one:
   void return_value(const State &x) {
     if (icey_coro_debug_print)
       std::cout << get_type(*this) << " setting state " << std::endl;
-    this->set_state(x);
-    this->notify();
+    this->put_state(x);
   }
 };
 
-/// The void version
+/// And this is the void version:
 template <>
 class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
