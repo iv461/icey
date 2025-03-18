@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
         .then([&tf_buffer, &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
             
             icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
-            = co_await tf_buffer.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+                 = co_await tf_buffer.lookup("map", point_cloud->header.frame_id, icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
 
             if(tf_result.has_value()) {
                 geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
@@ -25,6 +25,8 @@ int main(int argc, char **argv) {
                 RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
             }
             co_return;
-        });    
+
+        }); 
+    
     icey::spin(node);
 }

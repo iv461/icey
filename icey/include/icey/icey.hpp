@@ -1560,23 +1560,18 @@ struct ServiceStream
   /// The type of the user callback that can response synchronously (i.e. immediately): It receives
   /// the request and returns the response.
   using SyncCallback = std::function<Response(Request)>;
-  using AsyncCallback = std::function<Stream<Response>(Request)>;
+  
+  /// The type of the user callback that responds asynchronously, i.e. is a coroutine.
+  using AsyncCallback = std::function<Promise<Response>(Request)>;
+
   ServiceStream() = default;
+
   /*!
-     \brief Contruct the service server. A synchronous callback `sync_callback` may be provided that will be called every time this 
-     service is called, it returns the response immediatelly. This callback must be synchronous, i.e. no calls to `co_await` are allowed.
-     If you want to respond instead asynchronously, do not provide `sync_callback`, but instead await this stream to get the request and then call the `respond`-method.
-  "*/
-  ServiceStream(NodeBookkeeping &node, const std::string &service_name,
-                SyncCallback sync_callback = {}, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+     \brief Construct the service server. With this constructor, no callback is provided. Instead, 
+     you must await requests with co_await `service_server` and then respond by calling the`respond`-method on this `service_server`.
+  */
+  ServiceStream(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : Base(node) {
-    if (sync_callback) {
-      this->impl()->register_handler([impl = this->impl(), sync_callback](auto new_state) {
-        const auto [request_id, request] = new_state.value();
-        auto response = sync_callback(request);
-        impl->service->send_response(*request_id, *response);
-      });
-    }
     this->impl()->service = node.add_service<_ServiceT>(
         service_name,
         [impl = this->impl()](RequestID request_id, Request request) {
@@ -1584,6 +1579,41 @@ struct ServiceStream
         },
         qos);
   }
+
+  /*!
+     \brief Construct the service server. A callback may be provided that will be called every time this 
+     service is called, it returns the response immediately. This callback can be either synchronous or asynchronous, i.e. a coroutine, it can contain calls to `co_await`.
+  */
+  ServiceStream(NodeBookkeeping &node, const std::string &service_name,
+                SyncCallback sync_callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+      : ServiceStream(node, service_name, qos) {
+    this->impl()->register_handler([impl = this->impl(), sync_callback](auto new_state) {
+      const auto [request_id, request] = new_state.value();
+      auto response = sync_callback(request);
+      impl->service->send_response(*request_id, *response);
+    });
+  }
+
+  /*!
+     \brief Construct the service server. A callback may be provided that will be called every time this 
+     service is called, it returns the response immediately. This callback can be either synchronous or asynchronous, i.e. a coroutine, it can contain calls to `co_await`.
+  */
+  ServiceStream(NodeBookkeeping &node, const std::string &service_name,
+      AsyncCallback async_callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+      : ServiceStream(node, service_name, qos) {
+    this->impl()->register_handler([impl = this->impl(), async_callback](auto new_state) {
+      const auto continuation = [](auto impl, auto async_callback, 
+          RequestID request_id, Request request) -> Promise<void> {
+        auto response = co_await async_callback(request);
+        if(response) /// If we got nullptr, this means we do not respond.
+          impl->service->send_response(*request_id, *response);
+        co_return;
+      };
+      const auto [request_id, request] = new_state.value();
+      continuation(impl, async_callback, request_id, request);
+    });
+  }
+
   /// Send the service response to the request identified by the request_id.
   ///  It is RMW implementation defined whether this happens synchronously or asynchronously.
   /// \throws an exception from `rclcpp::exceptions::throw_from_rcl_error()`
@@ -2110,13 +2140,20 @@ public:
     return create_stream<TimerStream>(period, is_one_off_timer);
   }
 
-  /// Create a service server stream.
+  /// Create a service server stream. One a request is received, the provided callback will be called. 
+  /// The callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The callbacks returns the response.
+  /// Works otherwise the same as [rclcpp::Node::create_service].
+  template <class ServiceT, class Callback>
+    ServiceStream<ServiceT> create_service(const std::string &service_name,
+          Callback &&callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    return create_stream<ServiceStream<ServiceT>>(service_name, callback, qos);
+  }
+
+  /// Create a service server stream. No callback is provided, therefore requests must be awaited and then a response be send manually by calling respond on the service.
   /// Works otherwise the same as [rclcpp::Node::create_service].
   template <class ServiceT>
-  ServiceStream<ServiceT> create_service(const std::string &service_name,
-                                         ServiceStream<ServiceT>::SyncCallback sync_callback = {},
-                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return create_stream<ServiceStream<ServiceT>>(service_name, sync_callback, qos);
+    ServiceStream<ServiceT> create_service(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+    return create_stream<ServiceStream<ServiceT>>(service_name, qos);
   }
 
   /// Create a service client.
