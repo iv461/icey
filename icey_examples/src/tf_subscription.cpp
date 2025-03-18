@@ -6,7 +6,7 @@
 
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
-
+#include <tf2_eigen/tf2_eigen.hpp>
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
@@ -34,7 +34,8 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << error);
       })
       .then([&](const geometry_msgs::msg::TransformStamped &new_transform) {
-        RCLCPP_INFO_STREAM(node->get_logger(), "Received a new transform: ");
+        Eigen::Matrix4d tf_mat = tf2::transformToEigen(new_transform.transform).matrix();
+        RCLCPP_INFO_STREAM(node->get_logger(), "Received a new transform:\n" << tf_mat);
       });
 
   icey::spin(node);

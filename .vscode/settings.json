@@ -90,10 +90,16 @@
         "hana",
         "ICEY",
         "impls",
+        "libcoro",
         "lvalues",
         "noncopyable",
         "PIMPL",
         "rclcpp",
-        "rvalues"
+        "rosbag",
+        "rosbags",
+        "rvalues",
+        "srvs",
+        "theora",
+        "wjwwood"
     ]
 }

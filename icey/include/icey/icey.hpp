@@ -1696,7 +1696,7 @@ struct ServiceClient : public StreamImplDefault {
   /*! Make an asynchronous call to the service. Returns a Promise that can be awaited using `co_await`.
   Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
   \param request the request
-  \param timeout The timeout for the service call, both for service discovery and the actuall call.
+  \param timeout The timeout for the service call, both for service discovery and the actual call.
   \returns A future that can be awaited to obtain the response or an error. Possible errors are "TIMEOUT", "SERVICE_UNAVAILABLE" or "INTERRUPTED".
   \note The 
   Example usage:

@@ -10,13 +10,13 @@ using ExampleService = std_srvs::srv::SetBool;
 using namespace std::chrono_literals;
 
 TEST_F(NodeTest, ContextCreatesEntities) {
-  EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/maydup_camera"), 0);
-  node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
-  EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/maydup_camera"), 1);
+  EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/test_camera"), 0);
+  node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/test_camera");
+  EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/test_camera"), 1);
 
-  EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/icey/maydup_camera/debug"), 0);
-  node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_camera/debug");
-  EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/icey/maydup_camera/debug"), 1);
+  EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/icey/test_camera/debug"), 0);
+  node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/test_camera/debug");
+  EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/icey/test_camera/debug"), 1);
 
   // EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/tf"), 0);
   node_->icey().create_transform_subscription("map", "base_link");
@@ -64,10 +64,10 @@ TEST_F(NodeTest, StreamsHaveContext) {
   auto param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");
   EXPECT_EQ(param.impl()->context.lock().get(), &node_->icey());
 
-  auto sub = node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/maydup_camera");
+  auto sub = node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/test_camera");
   EXPECT_EQ(sub.impl()->context.lock().get(), &node_->icey());
 
-  auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
+  auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/test_debug_image");
   EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
 
   auto service = node_->icey().create_service<ExampleService>("icey_test_service");
@@ -82,8 +82,8 @@ TEST_F(NodeTest, StreamsHaveContext) {
   EXPECT_EQ(tf_sub.impl()->context.lock().get(), &node_->icey());
 
   //// Filters:
-  auto thened_stream = sub.then([](auto x) { return x; });
-  EXPECT_EQ(thened_stream.impl()->context.lock().get(), &node_->icey());
+  auto next_stream = sub.then([](auto x) { return x; });
+  EXPECT_EQ(next_stream.impl()->context.lock().get(), &node_->icey());
 
   auto timeouted_stream = sub.timeout(1s);
   EXPECT_EQ(timeouted_stream.impl()->context.lock().get(), &node_->icey());

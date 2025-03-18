@@ -12,7 +12,7 @@ using ExampleService = std_srvs::srv::SetBool;
 struct AsyncAwaitNodeTest : NodeTest {
   /// A check that the coroutine actually ran. Compilers (I have GCC 11.4) currently do not do
   /// exception handling in the coroutine code, so if it crashes, the unit-test would just pass
-  /// otherwise without us noticing it didn't acutally run.
+  /// otherwise without us noticing it didn't actually run.
   bool async_completed{false};
 };
 
@@ -59,7 +59,7 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
 struct AsyncAwaitTwoNodeTest : TwoNodesFixture {
   /// A check that the coroutine actually ran. Compilers (I have GCC 11.4) currently do not do
   /// exception handling in the coroutine code, so if it crashes, the unit-test would just pass
-  /// otherwise without us noticing it didn't acutally run.
+  /// otherwise without us noticing it didn't actually run.
   bool async_completed{false};
 };
 
@@ -184,7 +184,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
 
 /// Tests whether timeout works and the requests get cleaned up.
 // It also tests whether we can make multiple calls to a service before awaiting them all and after
-// awaiting, we recive all of them
+// awaiting, we receive all of them
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
   const auto l = [this]() -> icey::Stream<int> {
     // The response we are going to receive from the service call:
