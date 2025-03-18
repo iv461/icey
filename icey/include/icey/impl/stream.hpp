@@ -108,6 +108,16 @@ constexpr bool is_pair_v = is_pair<T>::value;
 
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
+
+template <typename, typename = std::void_t<>>
+struct has_promise_type : std::false_type {};
+
+template <typename T>
+struct has_promise_type<T, std::void_t<typename T::promise_type>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
+
 /// The error type of the given Stream type
 template <class T>
 using ValueOf = typename remove_shared_ptr_t<T>::Value;
@@ -302,7 +312,13 @@ protected:
     using ReturnType = decltype(unpack_if_tuple(f, x));
     if constexpr (std::is_void_v<ReturnType>) {
       unpack_if_tuple(f, x);
-    } else if constexpr (is_result<ReturnType>) {
+    } else if constexpr(has_promise_type_v<ReturnType>) { /// Is a coroutine, i.e. async function
+      const auto hh = [](const auto &x, F &f) -> ReturnType {
+        co_await unpack_if_tuple(f, x);
+        co_return;
+      };
+      hh(x, f);
+    }else if constexpr (is_result<ReturnType>) {
       /// support callbacks that at runtime may return value or error
       output->state_ = unpack_if_tuple(f, x);
       output->notify();
@@ -364,6 +380,13 @@ protected:
       /// In this case we want to be able to pass over the same error
       auto output =
           create_stream<Stream<typename ReturnType::Value, typename ReturnType::Error,
+                               DefaultBase, DefaultBase>>();  // Must pass over error
+      create_handler<put_value>(output, std::forward<F>(f));
+      return output;
+    } else if constexpr(has_promise_type_v<ReturnType>) { /// If it has promsise type, it's a coroutine 
+      using Pr = ReturnType::promise_type;
+      auto output =
+          create_stream<Stream<Nothing, Nothing,
                                DefaultBase, DefaultBase>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
