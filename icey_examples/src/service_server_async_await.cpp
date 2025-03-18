@@ -1,6 +1,6 @@
 /// This example shows how to create an asynchronously responding service server.
 /// After it receives a request, it calls asynchronously another upstream service
-/// that is actually capable of anwsering the request. Once it receives the result, it responds.
+/// that is actually capable of answering the request. Once it receives the result, it responds.
 #include <icey/icey.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -13,7 +13,7 @@ using Response = ExampleService::Response::SharedPtr;
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "service_service_async_await_example");
 
-  /// Create a service client for an upstream service that is actually capable of anwsering the
+  /// Create a service client for an upstream service that is actually capable of answering the
   /// request.
   auto upstream_service_client =
       node->icey().create_client<ExampleService>("set_bool_service_upstream");

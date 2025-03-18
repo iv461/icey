@@ -28,10 +28,12 @@ int main(int argc, char **argv) {
 
   /// Or synchronize approx time:
   icey::synchronize_approx_time(100, camera_image, point_cloud)
-      .then([&](sensor_msgs::msg::Image::SharedPtr image,
-               sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
-          RCLCPP_INFO_STREAM(node->get_logger(), "Received camera with time " << image->header.stamp 
-              << " and point cloud with time " << point_cloud->header.stamp);
+      .then([&](sensor_msgs::msg::Image::SharedPtr,
+               sensor_msgs::msg::PointCloud2::SharedPtr) {
+                /*
+                RCLCPP_INFO_STREAM(node->get_logger(), "Received camera with time " << image->header.stamp 
+                << " and point cloud with time " << point_cloud->header.stamp);
+                */
       });
   icey::spin(node);
 }
