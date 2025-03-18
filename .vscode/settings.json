@@ -82,8 +82,18 @@
         "xutility": "cpp"
     },
     "cSpell.words": [
+        "asyncpp",
+        "coro",
+        "cppcoro",
+        "DEGUG",
+        "endverbatim",
+        "hana",
         "ICEY",
+        "impls",
+        "lvalues",
+        "noncopyable",
         "PIMPL",
-        "rclcpp"
+        "rclcpp",
+        "rvalues"
     ]
 }

@@ -1,6 +1,6 @@
 /// This example demonstrates how to use the class-based API of ICEY
-/// It essentially works the same as the plain ROS API, but we use an icey::Node instead of a rclcpp::Node.
-/// It also shows that we do not need to store the ROS entities in the class
+/// It essentially works the same as the plain ROS API, but we use an icey::Node instead of a
+/// rclcpp::Node. It also shows that we do not need to store the ROS entities in the class
 #include <icey/icey.hpp>
 
 #include "std_msgs/msg/float32.hpp"
@@ -25,9 +25,9 @@ public:
           return float_val;
         })
         .publish("sine_generator");
-  }  
+  }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   icey::spin(icey::create_node<MyNode>(argc, argv, "class_based_node_example"));
 }

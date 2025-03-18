@@ -7,15 +7,15 @@
 /// is useful to be able to record images into a rosbag and prevent it from growing to tens of
 /// gigabytes after just a few minutes.
 
-#include <icey/icey.hpp>             
-#include <icey/icey_image_transport.hpp> 
+#include <icey/icey.hpp>
+#include <icey/icey_image_transport.hpp>
 
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
   /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
-  
+
   auto node = icey::create_node(argc, argv, "signal_generator");
   auto &icey = node->icey();
   auto camera_center_sub =
@@ -23,8 +23,8 @@ int main(int argc, char **argv) {
 
   camera_center_sub
       //.timeout(rclcpp::Duration(100ms))
-      .then([&](sensor_msgs::msg::Image::ConstSharedPtr  /*image*/,
-                sensor_msgs::msg::CameraInfo::ConstSharedPtr  /*camera_info*/) {
+      .then([&](sensor_msgs::msg::Image::ConstSharedPtr /*image*/,
+                sensor_msgs::msg::CameraInfo::ConstSharedPtr /*camera_info*/) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Received image and info: ");
       })
       /// Optionally, you can handle the exception that the transport plugin could not be loaded
@@ -35,8 +35,8 @@ int main(int argc, char **argv) {
       });
 
   /// Create a regular image_transport::Subscriber to receive compressed images
-  auto camera_left_sub =
-      icey::create_image_transport_subscription(icey, "camera_left", "raw", rclcpp::SensorDataQoS());
+  auto camera_left_sub = icey::create_image_transport_subscription(icey, "camera_left", "raw",
+                                                                   rclcpp::SensorDataQoS());
 
   camera_left_sub
       /// We receive here the image after image_transport has decompressed it:

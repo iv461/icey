@@ -30,15 +30,14 @@
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
 
-
 namespace icey {
-  
+
 #ifdef ICEY_DEGUG_RECORD_THREAD_IDS
 extern std::unordered_set<std::thread::id> g_used_thread_ids;
 #define ICEY_DEGUG_TRACE_THIS_THREAD_ID g_used_thread_ids.emplace(std::this_thread::get_id());
-#else 
-#define ICEY_DEGUG_TRACE_THIS_THREAD_ID 
-#endif 
+#else
+#define ICEY_DEGUG_TRACE_THIS_THREAD_ID
+#endif
 
 template <class T>
 struct t_is_shared_ptr : std::false_type {};
@@ -56,7 +55,7 @@ using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
 
-template<class T>
+template <class T>
 static std::string get_type(T &t) {
   std::stringstream ss;
   auto this_class = boost::typeindex::type_id_runtime(t).pretty_name();
@@ -121,7 +120,8 @@ struct NodeInterfaces {
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
 
   /// This is set to either of the two, depending on which node we got.
-  /// It has to be a raw pointer since this nodeInterface is needed during node construction where we cannot call shared_from_this
+  /// It has to be a raw pointer since this nodeInterface is needed during node construction where
+  /// we cannot call shared_from_this
   rclcpp::Node *maybe_regular_node{nullptr};
   rclcpp_lifecycle::LifecycleNode *maybe_lifecycle_node{nullptr};
 };
@@ -147,12 +147,13 @@ struct Weak {
   std::weak_ptr<T> p_;
 };
 
-/// An asynchronous transform listener that allows to asynchronous lookups and to subscribe on a single transform between two coordinate
-/// systems. It is otherwise implemented similarly to the tf2_ros::TransformListener.
-/// Every time a new message is received on /tf, it checks whether a relevant transforms (i.e. ones
-/// we subscribed) was received. It is therefore an asynchronous interface to TF, similar to the
-/// tf2_ros::AsyncBuffer. However, we do not use the tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot 
-/// make another lookup in the callback of a lookup (it holds a mutex locked while calling the user callback)
+/// An asynchronous transform listener that allows to asynchronous lookups and to subscribe on a
+/// single transform between two coordinate systems. It is otherwise implemented similarly to the
+/// tf2_ros::TransformListener. Every time a new message is received on /tf, it checks whether a
+/// relevant transforms (i.e. ones we subscribed) was received. It is therefore an asynchronous
+/// interface to TF, similar to the tf2_ros::AsyncBuffer. However, we do not use the
+/// tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot make another lookup
+/// in the callback of a lookup (it holds a mutex locked while calling the user callback)
 // This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
@@ -165,7 +166,8 @@ struct TFListener {
   /// Add notification for a single transform.
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
-    requests_.emplace(std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error));
+    requests_.emplace(
+        std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error));
   }
 
   /// @brief Looks up and returns the transform at the given time between the given frames. It does
@@ -181,20 +183,22 @@ struct TFListener {
       const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
       // Note that this call does not wait, the transform must already have arrived.
       auto tf = buffer_->lookupTransform(target_frame, source_frame, legacy_timepoint);
-      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(tf); /// my Result-type is not the best, but it's also only 25 lines :D
+      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(
+          tf);  /// my Result-type is not the best, but it's also only 25 lines :D
     } catch (const tf2::TransformException &e) {
       return Result<geometry_msgs::msg::TransformStamped, std::string>::Err(e.what());
     }
   }
 
   using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
-  
-  /// A transform request stores a request for looking up a transform between two coordinate systems. Either 
-  /// (1) at a particular time with a timeout, or (2) as a subscription. When "subscribing" to a transform, we yield 
-  /// a transform each time it changes. 
+
+  /// A transform request stores a request for looking up a transform between two coordinate
+  /// systems. Either (1) at a particular time with a timeout, or (2) as a subscription. When
+  /// "subscribing" to a transform, we yield a transform each time it changes.
   struct TransformRequest {
     TransformRequest(const GetFrame &target_frame, const GetFrame &source_frame,
-                       OnTransform on_transform, OnError on_error, std::optional<Time> _maybe_time={})
+                     OnTransform on_transform, OnError on_error,
+                     std::optional<Time> _maybe_time = {})
         : target_frame(target_frame),
           source_frame(source_frame),
           on_transform(on_transform),
@@ -210,30 +214,38 @@ struct TFListener {
   };
 
   using RequestHandle = std::shared_ptr<TransformRequest>;
-  RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame, Time time,
-    const Duration &timeout, OnTransform on_transform, OnError on_error) {
-      /// Do the cleanup for the timers (i.e. collect the rclcpp::TimerBase objects) that were cancelled since the last call: We 
-      /// have to do this kind of deferred cleanup of timers because timers likely would deadlock if we try to clean them up in their callback. 
-      cancelled_timers_.clear(); 
-      RequestHandle request{std::make_shared<TransformRequest>(
-          [target_frame]() {return target_frame;}, 
-          [source_frame]() {return source_frame;}, on_transform, on_error, time)};
-      /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
-      request->timer = rclcpp::create_wall_timer(timeout, [this, on_error, request = Weak(request)]() {
-          request->timer->cancel(); /// cancel the timer, (it still lives in the request and in active_timers_)
-          active_timers_.erase(request->timer); // Erase the timer from active_timers_ (it still lives in the request)
+  RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame,
+                             Time time, const Duration &timeout, OnTransform on_transform,
+                             OnError on_error) {
+    /// Do the cleanup for the timers (i.e. collect the rclcpp::TimerBase objects) that were
+    /// cancelled since the last call: We have to do this kind of deferred cleanup of timers because
+    /// timers likely would deadlock if we try to clean them up in their callback.
+    cancelled_timers_.clear();
+    RequestHandle request{std::make_shared<TransformRequest>(
+        [target_frame]() { return target_frame; }, [source_frame]() { return source_frame; },
+        on_transform, on_error, time)};
+    /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
+    request->timer = rclcpp::create_wall_timer(
+        timeout,
+        [this, on_error, request = Weak(request)]() {
+          request->timer->cancel();  /// cancel the timer, (it still lives in the request and in
+                                     /// active_timers_)
+          active_timers_.erase(
+              request
+                  ->timer);  // Erase the timer from active_timers_ (it still lives in the request)
           cancelled_timers_.emplace(request->timer);
-          requests_.erase(request.lock()); // Destroy the request
+          requests_.erase(request.lock());  // Destroy the request
           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
-        }, nullptr,
-        node_.get_node_base_interface().get(), node_.get_node_timers_interface().get());
+        },
+        nullptr, node_.get_node_base_interface().get(), node_.get_node_timers_interface().get());
 
-      active_timers_.emplace(request->timer);
-      requests_.emplace(request);
-      return request;
+    active_timers_.emplace(request->timer);
+    requests_.emplace(request);
+    return request;
   }
 
-  /// Cancel the registered notification for any message on TF. If this request does not exist, it does nothing.
+  /// Cancel the registered notification for any message on TF. If this request does not exist, it
+  /// does nothing.
   void cancel_request(RequestHandle request) { requests_.erase(request); }
 
   const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
@@ -244,12 +256,12 @@ struct TFListener {
   /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
   std::shared_ptr<tf2_ros::Buffer> buffer_;
 
-  /// We unfortunatelly need to store the timers in a separate structure because a timer likely cannot destroy 
-  /// itself in it's own callback 
+  /// We unfortunately need to store the timers in a separate structure because a timer likely
+  /// cannot destroy itself in it's own callback
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> active_timers_;
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
-private:
 
+private:
   void init() {
     init_tf_buffer();
     const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
@@ -296,7 +308,8 @@ private:
 
   /// This simply looks up the transform in the buffer at the latest stamp and checks if it
   /// changed with respect to the previously received one. If the transform has changed, we know
-  /// we have to notify. Returns true when it notified about a changed transform (called on_transform) and false otherwise.
+  /// we have to notify. Returns true when it notified about a changed transform (called
+  /// on_transform) and false otherwise.
   bool maybe_notify(TransformRequest &info) {
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
@@ -318,17 +331,18 @@ private:
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
-      geometry_msgs::msg::TransformStamped tf_msg =
-          buffer_->lookupTransform(request.target_frame(), request.source_frame(), request.maybe_time.value());
-          request.on_transform(tf_msg);
-      /// If the request is destroyed gracefully(because the lookup succeeded), cancel and destoy the aaccitaited timer:
-      active_timers_.erase(request.timer); 
+      geometry_msgs::msg::TransformStamped tf_msg = buffer_->lookupTransform(
+          request.target_frame(), request.source_frame(), request.maybe_time.value());
+      request.on_transform(tf_msg);
+      /// If the request is destroyed gracefully(because the lookup succeeded), cancel and destroy
+      /// the associated timer:
+      active_timers_.erase(request.timer);
       return true;
-    }/* catch (tf2::ExtrapolationException e) { // TODO BackwardExtrapolationException (), 
-      /// If we tried to extrapolate back into the past, we cannot fulfill the promise anymore, so we reject it:
-      info.on_error(e);
-      return true;
-    }*/ catch (const tf2::TransformException &e) {
+    } /* catch (tf2::ExtrapolationException e) { // TODO BackwardExtrapolationException (),
+       /// If we tried to extrapolate back into the past, we cannot fulfill the promise anymore, so
+     we reject it: info.on_error(e); return true;
+     }*/
+    catch (const tf2::TransformException &e) {
       /// For any other error, we continue waiting
     }
     return false;
@@ -336,14 +350,14 @@ private:
 
   void notify_if_any_relevant_transform_was_received() {
     /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
-    std::erase_if(requests_, [this](auto req) { 
-        if(req->maybe_time) {
-          return maybe_notify_specific_time(*req); 
-        } else {
-          // If it is a regular subscription, is is persistend and never erased
-          maybe_notify(*req);
-          return false; 
-        }
+    std::erase_if(requests_, [this](auto req) {
+      if (req->maybe_time) {
+        return maybe_notify_specific_time(*req);
+      } else {
+        // If it is a regular subscription, is is persistend and never erased
+        maybe_notify(*req);
+        return false;
+      }
     });
   }
 
@@ -409,7 +423,7 @@ public:
     return param;
   }
 
-  template<class T>
+  template <class T>
   auto get_parameter(const std::string &name) {
     return node_parameters_->get_parameter(name).get_value<T>();
   }
@@ -580,114 +594,123 @@ template <class F, class Arg>
 struct check_callback {
   static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature");
   using ReturnType = std::invoke_result_t<F, Arg>;
-  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, 
-        std::invoke_result_t<F, Arg> >, 
+  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag,
+        std::invoke_result_t<F, Arg> >,
         "No coroutine, i.e. asynchronous functions are allowed as callbacks");*/
 };
 
 template <class F, class... Args>
 struct check_callback<F, std::tuple<Args...>> {
   static_assert(std::is_invocable_v<F, Args...>,
-                "The callback has the wrong signature, it has to take mutliple arguments (the Stream holds tuple, the arguments are all the elements of the tuple)");
+                "The callback has the wrong signature, it has to take multiple arguments (the "
+                "Stream holds tuple, the arguments are all the elements of the tuple)");
   using ReturnType = std::invoke_result_t<F, Args...>;
-  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, std::invoke_result_t<F, Args...> >, 
-      "No coroutines, i.e. asynchronous functions are allowed as callbacks");*/
+  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, std::invoke_result_t<F,
+     Args...> >, "No coroutines, i.e. asynchronous functions are allowed as callbacks");*/
 };
 
 struct PromiseTag {};
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
-/// It also allows for wrapping an existing callback-based API. 
-/// It does not use dynamic memory allocation to store the value. 
+/// It also allows for wrapping an existing callback-based API.
+/// It does not use dynamic memory allocation to store the value.
 
-/// For references, see the promise implementations of this library: 
+/// For references, see the promise implementations of this library:
 /// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/promise.h
 ///
-/// To some extent, you can also look at the "task" abstraction as a reference. But note that tasks 
-/// were developed to solve very specific kind of problems that arise when developing *concurrent* 
-/// asynchronous code, see Lewis Bakers' talk at CppCon 2019 (https://www.youtube.com/watch?v=1Wy5sq3s2rg), chapter "The Solution".
-/// Since we do not have a concurrent application but a single-threaded event-loop, the Promise is sufficient for us and we not need this "task".
-/// [cppcoro task] https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456
-/// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23
-/// [libcoro] https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
-template<class _Value= Nothing, class _Error = Nothing>
+/// To some extent, you can also look at the "task" abstraction as a reference. But note that tasks
+/// were developed to solve very specific kind of problems that arise when developing *concurrent*
+/// asynchronous code, see Lewis Bakers' talk at CppCon 2019
+/// (https://www.youtube.com/watch?v=1Wy5sq3s2rg), chapter "The Solution". Since we do not have a
+/// concurrent application but a single-threaded event-loop, the Promise is sufficient for us and we
+/// not need this "task". [cppcoro task]
+/// https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456 [asyncpp]
+/// https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23 [libcoro]
+/// https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
+template <class _Value = Nothing, class _Error = Nothing>
 class PromiseBase : public PromiseTag, public impl::Stream<_Value, _Error, Nothing, Nothing> {
 public:
-    using Value = _Value;
-    using Error = _Error;
-    using State = impl::Stream<_Value, _Error, Nothing, Nothing>::State;
-    using Self = PromiseBase<Value, Error>;
-    using promise_type = Self;
-    using Cancel = std::function<void(Self &)>;
+  using Value = _Value;
+  using Error = _Error;
+  using State = impl::Stream<_Value, _Error, Nothing, Nothing>::State;
+  using Self = PromiseBase<Value, Error>;
+  using promise_type = Self;
+  using Cancel = std::function<void(Self &)>;
 
-    PromiseBase() {
-      if(icey_coro_debug_print)
-        std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
-    }
-    /// Construct using a handler: This handler is called immeditally in the constructor with the adress to this Promise
-    /// so that it can store it and write to this promise later. This handler returns a cancellation function that gets called when this Promise is destructed.
-    /// This constructor is useful for wrapping an existing callback-based API.
-    explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
-      if(icey_coro_debug_print)
-        std::cout << "Promise(h) @  " << get_type(*this) << std::endl;
-      cancel_ = h(*this);
-    }
+  PromiseBase() {
+    if (icey_coro_debug_print)
+      std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
+  }
+  /// Construct using a handler: This handler is called immediately in the constructor with the
+  /// address to this Promise so that it can store it and write to this promise later. This handler
+  /// returns a cancellation function that gets called when this Promise is destructed. This
+  /// constructor is useful for wrapping an existing callback-based API.
+  explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
+    if (icey_coro_debug_print) std::cout << "Promise(h) @  " << get_type(*this) << std::endl;
+    cancel_ = h(*this);
+  }
 
-    std::suspend_never initial_suspend() { return {}; }
-    std::suspend_always final_suspend() const noexcept { return {}; }
+  std::suspend_never initial_suspend() { return {}; }
+  std::suspend_always final_suspend() const noexcept { return {}; }
 
-    /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The compiler can't do this for us because of reasons)
-    void unhandled_exception() { exception_ptr_ = std::current_exception(); }
-  
-    /// Await the promise 
-    auto operator co_await() {
-      struct Awaiter {
-        Self &promise_;
-        Awaiter(Self &fut) : promise_(fut) {}
-        bool await_ready() const noexcept { 
-          if(icey_coro_debug_print)
-            std::cout << "Await ready on Promise " << get_type(promise_) << " called" << std::endl;
-          return !promise_.has_none(); 
-        }
-        void await_suspend(std::coroutine_handle<> continuation) noexcept { 
-          /// Resume the coroutine when this promise is done
-          if(icey_coro_debug_print)
-            std::cout << "Await suspend was called, held Promise: " << get_type(promise_) << std::endl;
-          promise_.register_handler([continuation](auto) { if(continuation) continuation.resume(); });
-        }
+  /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
+  /// compiler can't do this for us because of reasons)
+  void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
-        auto await_resume() const noexcept { 
-          if(icey_coro_debug_print)
-            std::cout << "Await resume was called, held Promise: " << get_type(promise_) << std::endl;
-          if(promise_.exception_ptr_) 
-            std::rethrow_exception(promise_.exception_ptr_);
-          return promise_.get_state().get(); 
-        }
-      };
-      return Awaiter{*this};
-    }
+  /// Await the promise
+  auto operator co_await() {
+    struct Awaiter {
+      Self &promise_;
+      Awaiter(Self &fut) : promise_(fut) {}
+      bool await_ready() const noexcept {
+        if (icey_coro_debug_print)
+          std::cout << "Await ready on Promise " << get_type(promise_) << " called" << std::endl;
+        return !promise_.has_none();
+      }
+      void await_suspend(std::coroutine_handle<> continuation) noexcept {
+        /// Resume the coroutine when this promise is done
+        if (icey_coro_debug_print)
+          std::cout << "Await suspend was called, held Promise: " << get_type(promise_)
+                    << std::endl;
+        promise_.register_handler([continuation](auto) {
+          if (continuation) continuation.resume();
+        });
+      }
 
-    ~PromiseBase() {
-      if(icey_coro_debug_print)
-        std::cout << "Promise was destructed: " << get_type(*this) << std::endl;
-      if(cancel_)
-          cancel_(*this);
-    }
+      auto await_resume() const noexcept {
+        if (icey_coro_debug_print)
+          std::cout << "Await resume was called, held Promise: " << get_type(promise_) << std::endl;
+        if (promise_.exception_ptr_) std::rethrow_exception(promise_.exception_ptr_);
+        return promise_.get_state().get();
+      }
+    };
+    return Awaiter{*this};
+  }
 
-    /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is not going to be called anymore. 
-    /// Such cancellations are needed because the ROS callback captures the Promises object by reference since it needs to write the result to it. 
-    /// But if we would destruct the Promise and after that this ROS callback gets called, we get an use-after-free bug. 
-    /// The promise must therefore cancel the ROS callback in the destructor.
-    /// Since we have no concurrency, this cancellation function can always be a synchronous function and thus simply be called in the destructor.
-    Cancel cancel_;
-    std::exception_ptr exception_ptr_{nullptr};
+  ~PromiseBase() {
+    if (icey_coro_debug_print)
+      std::cout << "Promise was destructed: " << get_type(*this) << std::endl;
+    if (cancel_) cancel_(*this);
+  }
+
+  /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
+  /// not going to be called anymore. Such cancellations are needed because the ROS callback
+  /// captures the Promises object by reference since it needs to write the result to it. But if we
+  /// would destruct the Promise and after that this ROS callback gets called, we get an
+  /// use-after-free bug. The promise must therefore cancel the ROS callback in the destructor.
+  /// Since we have no concurrency, this cancellation function can always be a synchronous function
+  /// and thus simply be called in the destructor.
+  Cancel cancel_;
+  std::exception_ptr exception_ptr_{nullptr};
 };
 
-/// The whole point of this PromiseBase and Promise is the design of the operator co_return that requires two differently named 
-/// operators, depending on whether a Promise holds a value or not (is the void-version) first one is called return_value, second one is called return_void: 
-/// But choosing between return_value and return_void does not work with SFINAE (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
-/// So this is the non-void version:
-template<class _Value, class _Error = Nothing>
+/// The whole point of this PromiseBase and Promise is the design of the operator co_return that
+/// requires two differently named operators, depending on whether a Promise holds a value or not
+/// (is the void-version) first one is called return_value, second one is called return_void: But
+/// choosing between return_value and return_void does not work with SFINAE (Reference:
+/// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019) So this is the non-void
+/// version:
+template <class _Value, class _Error = Nothing>
 class Promise : public PromiseBase<_Value, _Error> {
 public:
   using Base = PromiseBase<_Value, _Error>;
@@ -695,21 +718,19 @@ public:
   using Base::Base;
   using promise_type = Promise<_Value, _Error>;
   promise_type get_return_object() { return {}; }
-    
+
   auto return_value() { return this->value(); }
-  /// return_value (aka. operator co_return) *sets* the value if called with an argument, 
+  /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
   void return_value(const _Value &x) {
-    if (icey_coro_debug_print)
-      std::cout << get_type(*this) << " setting value " << std::endl;
+    if (icey_coro_debug_print) std::cout << get_type(*this) << " setting value " << std::endl;
     this->put_value(x);
   }
 
   /// Sets the state to the given one:
   void return_value(const State &x) {
-    if (icey_coro_debug_print)
-      std::cout << get_type(*this) << " setting state " << std::endl;
+    if (icey_coro_debug_print) std::cout << get_type(*this) << " setting state " << std::endl;
     this->put_state(x);
   }
 };
@@ -721,9 +742,7 @@ public:
   using PromiseBase<Nothing, Nothing>::PromiseBase;
   using promise_type = Promise<void, Nothing>;
   promise_type get_return_object() { return {}; }
-  auto return_void() { 
-    this->put_value(Nothing{});
-  }
+  auto return_void() { this->put_value(Nothing{}); }
 };
 
 template <class V>
@@ -755,8 +774,10 @@ struct TransformPublisherStream;
 /// how you should extend the Stream class when implementing your own Streams.
 template <class _Value, class _Error = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag {
-  static_assert(std::is_default_constructible_v<ImplBase>, "ImplBase must be default constructable");
+  static_assert(std::is_default_constructible_v<ImplBase>,
+                "ImplBase must be default constructable");
   friend Context;
+
 public:
   using Value = _Value;
   using Error = _Error;
@@ -787,28 +808,33 @@ public:
   std::suspend_never final_suspend() const noexcept { return {}; }
   /// [Coroutine support] return_value returns the value of the Steam.
   auto return_value() { return this->value(); }
-  /// [Coroutine support] Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The compiler can't do this for us because of reasons)
+  /// [Coroutine support] Store the unhandled exception in case it occurs: We will re-throw it when
+  /// it's time. (The compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
-  /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines. 
-  /// It spins the ROS executor until this Stream has something (value or error) and then resumes the coroutine.
+  /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines.
+  /// It spins the ROS executor until this Stream has something (value or error) and then resumes
+  /// the coroutine.
   auto operator co_await() {
     struct Awaiter {
       Self &stream;
       Awaiter(Self &coro) : stream(coro) {}
-      bool await_ready() const noexcept { 
-        if(icey_coro_debug_print)
+      bool await_ready() const noexcept {
+        if (icey_coro_debug_print)
           std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
-        return !stream.impl()->has_none(); 
+        return !stream.impl()->has_none();
       }
-      void await_suspend(std::coroutine_handle<> continuation) noexcept { 
-        if(icey_coro_debug_print)
+      void await_suspend(std::coroutine_handle<> continuation) noexcept {
+        if (icey_coro_debug_print)
           std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
-        if(!stream.impl()->registered_continuation_callback_) {
-          stream.impl()->register_handler([impl=stream.impl()](auto &) {
-            /// Important: Call the continuation only once since we may be awaiting the stream only once
-            if(impl->continuation_) {
-              auto c = std::exchange(impl->continuation_, nullptr); /// Get the continuation and replace it with nullptr so that it is called only once
+        if (!stream.impl()->registered_continuation_callback_) {
+          stream.impl()->register_handler([impl = stream.impl()](auto &) {
+            /// Important: Call the continuation only once since we may be awaiting the stream only
+            /// once
+            if (impl->continuation_) {
+              auto c = std::exchange(impl->continuation_,
+                                     nullptr);  /// Get the continuation and replace it with nullptr
+                                                /// so that it is called only once
               c.resume();
             }
           });
@@ -816,32 +842,34 @@ public:
         }
         stream.impl()->continuation_ = continuation;
       }
-      auto await_resume() const noexcept { 
-        if(icey_coro_debug_print)
+      auto await_resume() const noexcept {
+        if (icey_coro_debug_print)
           std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
-        if(stream.exception_ptr_) /// [Coroutine support] The coroutines are specified so that the compier does not do exception handling 
-        /// everywhere, so they put the burden on the imlementers to defer throwing the exception 
+        if (stream.exception_ptr_)  /// [Coroutine support] The coroutines are specified so that the
+                                    /// compiler does not do exception handling
+          /// everywhere, so they put the burden on the implementers to defer throwing the exception
           std::rethrow_exception(stream.exception_ptr_);
-        return stream.impl()->take(); 
+        return stream.impl()->take();
       }
     };
     return Awaiter{*this};
   }
 
-  /// Implementation of the operator co_return(x) for coroutine support: It *sets* the value of the Stream object that is about to get returned (the compier creats it beforehand)
+  /// Implementation of the operator co_return(x) for coroutine support: It *sets* the value of the
+  /// Stream object that is about to get returned (the compiler creates it beforehand)
   void return_value(const Value &x) {
     if (icey_coro_debug_print)
       std::cout << get_type(*this) << " setting value using operator co_return for "
                 << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
     this->impl()->set_value(x);
   }
-  
+
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
-  /// \brief Calls the given function f every time this stream receives a value.  
-  /// It returns a new stream that receives the values that this function f returns. 
-  /// The returned Stream also passes though the errors of this stream so that 
+  /// \brief Calls the given function f every time this stream receives a value.
+  /// It returns a new stream that receives the values that this function f returns.
+  /// The returned Stream also passes though the errors of this stream so that
   /// chaining `then`s with an `except` works.
   /// \note The given function must be synchronous, no asynchronous functions are supported.
   /// \returns A new Stream that changes it's value to y every time this
@@ -862,8 +890,8 @@ public:
     return create_from_impl(impl()->then(std::forward<F>(f)));
   }
 
-  /// \brief Calls the given function f every time this Stream receives an error. 
-  /// It returns a new Stream that receives the values that this function f returns. 
+  /// \brief Calls the given function f every time this Stream receives an error.
+  /// It returns a new Stream that receives the values that this function f returns.
   /// \note The given function must be synchronous, no asynchronous functions are supported.
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives an error x, where y = f(x).
@@ -897,7 +925,7 @@ public:
   }
 
   /*!
-    \brief Creates a publisher so that every new value of this Stream will get published. 
+    \brief Creates a publisher so that every new value of this Stream will get published.
     \sa PublisherStream
   */
   void publish(const std::string &topic_name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
@@ -910,7 +938,7 @@ public:
   }
 
   /*!
-    \brief Creates a custom publisher so that every new value of this Stream will get published. 
+    \brief Creates a custom publisher so that every new value of this Stream will get published.
     \sa PublisherStream
   */
   template <AnyStream PublisherType, class... Args>
@@ -925,8 +953,8 @@ public:
   }
 
   /*!
-    \brief Creates a transform publisher so that every new value of this Stream, which must be of type `geometry_msgs::msg::TransformStamped`, will get published. 
-    \sa TransformPublisherStream
+    \brief Creates a transform publisher so that every new value of this Stream, which must be of
+    type `geometry_msgs::msg::TransformStamped`, will get published. \sa TransformPublisherStream
   */
   void publish_transform() {
     assert_we_have_context();
@@ -935,7 +963,7 @@ public:
                   "geometry_msgs::msg::TransformStamped[::SharedPtr] to be able to call "
                   "publish_transform() on it.");
     this->template create_stream<TransformPublisherStream>(this);
-  }  
+  }
 
   /// Unpacks an Stream holding a tuple as value to multiple Streams for each tuple element.
   /// Given that `Value` is of type `std::tuple<Value1, Value2, ..., ValueN>`, it returns
@@ -961,20 +989,22 @@ public:
   }
 
   /// Unwraps, i.e. creates an ErrorFreeStream by handling the error with the given function f.
-  /// The returned Stream will receive only the values of this stream. 
+  /// The returned Stream will receive only the values of this stream.
   /// \tparam F Function receiving the Error of this
   /// Stream (it is unpacked if it's a tuple) and returning void.
   template <class F>
   Stream<Value, Nothing> unwrap_or(F &&f) {
-    /// TODO Can't we just move this stream in, i.e. reuse it instead of creating a new one ? (In this case moving means re-using the impl)
+    /// TODO Can't we just move this stream in, i.e. reuse it instead of creating a new one ? (In
+    /// this case moving means re-using the impl)
     auto output = this->template create_stream<Stream<Value, Nothing>>();
-    this->impl()->register_handler([output_impl = output.impl(), f=std::forward<F>(f)](const auto &new_state) {
-      if (new_state.has_value()) {
-        output_impl->put_value(new_state.value());
-      } else if (new_state.has_error()) {
-        impl::unpack_if_tuple(f, new_state.error());
-      }
-    });
+    this->impl()->register_handler(
+        [output_impl = output.impl(), f = std::forward<F>(f)](const auto &new_state) {
+          if (new_state.has_value()) {
+            output_impl->put_value(new_state.value());
+          } else if (new_state.has_error()) {
+            impl::unpack_if_tuple(f, new_state.error());
+          }
+        });
     return output;
   }
 
@@ -998,7 +1028,7 @@ public:
   }
 
   /// \return A new Stream that errors on a timeout, i.e. when this stream has not received any
-  /// value for some time `max_age`. 
+  /// value for some time `max_age`.
   /// \param max_age the maximum age a message is allowed to have before the timeout occurs
   /// \param create_extra_timer If set to false, the timeout will
   /// only be detected after at least one message was received. If set to true, an extra timer is
@@ -1219,7 +1249,8 @@ struct Validator {
   Validate validate;
 };
 
-/// An stream representing parameters. It always registers the callback to obtain the parameter updates.
+/// An stream representing parameters. It always registers the callback to obtain the parameter
+/// updates.
 template <class _Value>
 struct ParameterStream : public Stream<_Value> {
   using Base = Stream<_Value>;
@@ -1315,17 +1346,18 @@ protected:
   bool ignore_override = false;
 };
 
-/// A class that abstracts a plain value and a ParameterStream so that both are supported in promise mode.
-/// This is needed for example for timeouts and coordinate system names.
+/// A class that abstracts a plain value and a ParameterStream so that both are supported in promise
+/// mode. This is needed for example for timeouts and coordinate system names.
 template <class Value>
 struct ValueOrParameter {
   ValueOrParameter() = default;
-  
+
   /// Construct a ValueOrParameter implicitly from a value
   ValueOrParameter(const Value &value)  // NOLINT
-  : get([value]() { return value; }) {}
+      : get([value]() { return value; }) {}
 
-  /// Construct a ValueOrParameter implicitly from a something similar to a value, For example, `"hello"` is a const char[5] literal that is convertible to a std::string, the value.
+  /// Construct a ValueOrParameter implicitly from a something similar to a value, For example,
+  /// `"hello"` is a const char[5] literal that is convertible to a std::string, the value.
   template <class T>
   requires std::convertible_to<T, Value> &&(!AnyStream<T>)ValueOrParameter(const T &v)  // NOLINT
       : get([value = Value(v)]() { return value; }) {}
@@ -1369,18 +1401,17 @@ struct TransformSubscriptionStreamImpl {
   Weak<TFListener> tf2_listener;
 };
 
-/// A Stream that represents a subscription between two coordinate systems. (See TFListener) 
+/// A Stream that represents a subscription between two coordinate systems. (See TFListener)
 /// It yields a value each time the transform between these two coordinate systems changes.
-struct TransformSubscriptionStream
-    : public Stream<geometry_msgs::msg::TransformStamped, std::string,
-                    TransformSubscriptionStreamImpl> {
-  using Base = Stream<geometry_msgs::msg::TransformStamped, std::string,
-                      TransformSubscriptionStreamImpl>;
+struct TransformSubscriptionStream : public Stream<geometry_msgs::msg::TransformStamped,
+                                                   std::string, TransformSubscriptionStreamImpl> {
+  using Base =
+      Stream<geometry_msgs::msg::TransformStamped, std::string, TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using Self = TransformSubscriptionStream;
 
-  TransformSubscriptionStream() = default; 
-  
+  TransformSubscriptionStream() = default;
+
   TransformSubscriptionStream(NodeBookkeeping &node, ValueOrParameter<std::string> target_frame,
                               ValueOrParameter<std::string> source_frame)
       : Base(node) {
@@ -1395,13 +1426,14 @@ struct TransformSubscriptionStream
   }
 };
 
-/// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given point in time. 
-/// It is similar to the tf2_ros::AsyncBufferInterface, but returns awaitable futures.
-template<class Ctx>
+/// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given
+/// point in time. It is similar to the tf2_ros::AsyncBufferInterface, but returns awaitable
+/// futures.
+template <class Ctx>
 struct TransformBuffer : public StreamImplDefault {
-  TransformBuffer() = default; 
-  TransformBuffer(NodeBookkeeping &node): tf_listener(node.add_tf_listener_if_needed()) {}
-    
+  TransformBuffer() = default;
+  TransformBuffer(NodeBookkeeping &node) : tf_listener(node.add_tf_listener_if_needed()) {}
+
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
   /// @param target_frame
@@ -1409,29 +1441,30 @@ struct TransformBuffer : public StreamImplDefault {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  Promise<geometry_msgs::msg::TransformStamped, std::string>
-    lookup(const std::string &target_frame, const std::string &source_frame, const Time &time,
-               const Duration &timeout) {
+  Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+                                                                    const std::string &source_frame,
+                                                                    const Time &time,
+                                                                    const Duration &timeout) {
     using P = Promise<geometry_msgs::msg::TransformStamped, std::string>;
     return P([this, target_frame, source_frame, time, timeout](auto &promise) {
-        auto request_handle = this->tf_listener->async_lookup(
+      auto request_handle = this->tf_listener->async_lookup(
           target_frame, source_frame, time, timeout,
           [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.put_value(tf); },
-          [&promise](const tf2::TransformException &ex) { promise.put_error(ex.what()); }
-        );
-        return typename P::Cancel{[this, request_handle](auto &promise) {
-          if(promise.has_none()) {
-            std::cout << "Cancelling request from promise dtor " << std::endl;
-            this->tf_listener->cancel_request(request_handle);
-          }
-        }};
+          [&promise](const tf2::TransformException &ex) { promise.put_error(ex.what()); });
+      return typename P::Cancel{[this, request_handle](auto &promise) {
+        if (promise.has_none()) {
+          std::cout << "Cancelling request from promise dtor " << std::endl;
+          this->tf_listener->cancel_request(request_handle);
+        }
+      }};
     });
   }
-  
+
   /// Overload for different time types.
   /*Promise<geometry_msgs::msg::TransformStamped, std::string>
   lookup(const std::string &target_frame, const std::string &source_frame, const auto &time,
-    const Duration &timeout) { return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout); }
+    const Duration &timeout) { return lookup(target_frame, source_frame,
+  icey::rclcpp_to_chrono(time), timeout); }
   */
   Weak<TFListener> tf_listener;
 };
@@ -1450,8 +1483,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
       /// Needed as separate state as it might be resetted in async/await mode
       auto cnt = impl->ticks_counter;
       impl->ticks_counter++;
-      if (is_one_off_timer) 
-        impl->timer->cancel();
+      if (is_one_off_timer) impl->timer->cancel();
       impl->put_value(cnt);
     });
   }
@@ -1485,8 +1517,8 @@ struct PublisherImpl {
 };
 
 /// A Stream representing a ROS-publisher.
-/// \tparam _Value Can be either a `Message` or `std::shared_ptr<Message>` where `Message` must be something publishable, i.e. either a valid
-/// ROS message or a masquerated type.
+/// \tparam _Value Can be either a `Message` or `std::shared_ptr<Message>` where `Message` must be
+/// something publishable, i.e. either a valid ROS message or a masqueraded type.
 template <class _Value>
 struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
   using Base = Stream<_Value, Nothing, PublisherImpl<_Value>>;
@@ -1547,12 +1579,12 @@ struct ServiceStreamImpl {
 /// - https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1
 /// - https://github.com/ijnek/nested_services_rclcpp_demo
 template <class _ServiceT>
-struct ServiceStream
-: public Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, 
-  std::shared_ptr<typename _ServiceT::Request>>, Nothing,
-    ServiceStreamImpl<_ServiceT>> {
-  using Base = Stream<std::tuple<std::shared_ptr<rmw_request_id_t>, std::shared_ptr<typename _ServiceT::Request>>, Nothing,
-  ServiceStreamImpl<_ServiceT>>;
+struct ServiceStream : public Stream<std::tuple<std::shared_ptr<rmw_request_id_t>,
+                                                std::shared_ptr<typename _ServiceT::Request>>,
+                                     Nothing, ServiceStreamImpl<_ServiceT>> {
+  using Base = Stream<
+      std::tuple<std::shared_ptr<rmw_request_id_t>, std::shared_ptr<typename _ServiceT::Request>>,
+      Nothing, ServiceStreamImpl<_ServiceT>>;
   using Request = std::shared_ptr<typename _ServiceT::Request>;
   using RequestID = std::shared_ptr<rmw_request_id_t>;
   using Response = std::shared_ptr<typename _ServiceT::Response>;
@@ -1560,17 +1592,19 @@ struct ServiceStream
   /// The type of the user callback that can response synchronously (i.e. immediately): It receives
   /// the request and returns the response.
   using SyncCallback = std::function<Response(Request)>;
-  
+
   /// The type of the user callback that responds asynchronously, i.e. is a coroutine.
   using AsyncCallback = std::function<Promise<Response>(Request)>;
 
   ServiceStream() = default;
 
   /*!
-     \brief Construct the service server. With this constructor, no callback is provided. Instead, 
-     you must await requests with co_await `service_server` and then respond by calling the`respond`-method on this `service_server`.
+     \brief Construct the service server. With this constructor, no callback is provided. Instead,
+     you must await requests with co_await `service_server` and then respond by calling
+     the`respond`-method on this `service_server`.
   */
-  ServiceStream(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+  ServiceStream(NodeBookkeeping &node, const std::string &service_name,
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : Base(node) {
     this->impl()->service = node.add_service<_ServiceT>(
         service_name,
@@ -1581,11 +1615,12 @@ struct ServiceStream
   }
 
   /*!
-     \brief Construct the service server. A callback may be provided that will be called every time this 
-     service is called, it returns the response immediately. This callback can be either synchronous or asynchronous, i.e. a coroutine, it can contain calls to `co_await`.
+     \brief Construct the service server. A callback may be provided that will be called every time
+     this service is called, it returns the response immediately. This callback can be either
+     synchronous or asynchronous, i.e. a coroutine, it can contain calls to `co_await`.
   */
-  ServiceStream(NodeBookkeeping &node, const std::string &service_name,
-                SyncCallback sync_callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+  ServiceStream(NodeBookkeeping &node, const std::string &service_name, SyncCallback sync_callback,
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : ServiceStream(node, service_name, qos) {
     this->impl()->register_handler([impl = this->impl(), sync_callback](auto new_state) {
       const auto [request_id, request] = new_state.value();
@@ -1595,17 +1630,18 @@ struct ServiceStream
   }
 
   /*!
-     \brief Construct the service server. A callback may be provided that will be called every time this 
-     service is called, it returns the response immediately. This callback can be either synchronous or asynchronous, i.e. a coroutine, it can contain calls to `co_await`.
+     \brief Construct the service server. A callback may be provided that will be called every time
+     this service is called, it returns the response immediately. This callback can be either
+     synchronous or asynchronous, i.e. a coroutine, it can contain calls to `co_await`.
   */
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
-      AsyncCallback async_callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+                AsyncCallback async_callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : ServiceStream(node, service_name, qos) {
     this->impl()->register_handler([impl = this->impl(), async_callback](auto new_state) {
-      const auto continuation = [](auto impl, auto async_callback, 
-          RequestID request_id, Request request) -> Promise<void> {
+      const auto continuation = [](auto impl, auto async_callback, RequestID request_id,
+                                   Request request) -> Promise<void> {
         auto response = co_await async_callback(request);
-        if(response) /// If we got nullptr, this means we do not respond.
+        if (response)  /// If we got nullptr, this means we do not respond.
           impl->service->send_response(*request_id, *response);
         co_return;
       };
@@ -1622,20 +1658,22 @@ struct ServiceStream
   /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
   /// - One layer below:
   /// [rmw_send_response](https://docs.ros.org/en/humble/p/rmw/generated/function_rmw_8h_1abb55ba2b2a957cefb0a77b77ddc5afda.html)
-  /// \note ROS does not seem to support awaiting this operation (at the RMW layer), this means you cannot await until the service client received your response.
+  /// \note ROS does not seem to support awaiting this operation (at the RMW layer), this means you
+  /// cannot await until the service client received your response.
   void respond(RequestID request_id, Response response) {
     this->impl()->service->send_response(*request_id, *response);
   }
 };
 
-/// A service client. It can we called asynchronously and then it returns a Promise that can be awaited. 
-/// It is not tracked by the context but instead the service client is unregistered from ROS class goes out of scope. 
+/// A service client. It can we called asynchronously and then it returns a Promise that can be
+/// awaited. It is not tracked by the context but instead the service client is unregistered from
+/// ROS class goes out of scope.
 template <class ServiceT>
 struct ServiceClient : public StreamImplDefault {
   using Self = ServiceClient<ServiceT>;
   using Request = typename ServiceT::Request::SharedPtr;
   using Response = typename ServiceT::Response::SharedPtr;
-  
+
   /// The RequestID is currently of type int64_t in rclcpp.
   using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
   using Client = rclcpp::Client<ServiceT>;
@@ -1643,11 +1681,13 @@ struct ServiceClient : public StreamImplDefault {
   std::shared_ptr<rclcpp::TimerBase> timeout_timer_;
   ServiceClient() = default;
   /// Create a new service client
-  /// \param node 
-  /// \param service_name 
-  /// \param timeout the timeout that will be used for each request (i.e. `call`) to this service, as well as for the service discovery, i.e. wait_for_service.
-  /// \param qos 
-  ServiceClient(NodeBookkeeping &node, const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()): node_(node) {
+  /// \param node
+  /// \param service_name
+  /// \param timeout the timeout that will be used for each request (i.e. `call`) to this service,
+  /// as well as for the service discovery, i.e. wait_for_service. \param qos
+  ServiceClient(NodeBookkeeping &node, const std::string &service_name,
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS())
+      : node_(node) {
     client = node.add_client<ServiceT>(service_name, qos);
   }
   NodeBookkeeping &node_;
@@ -1670,47 +1710,49 @@ struct ServiceClient : public StreamImplDefault {
   Promise<Response, std::string> call(Request request, const Duration &timeout) {
     using Cancel = typename Promise<Response, std::string>::Cancel;
     return Promise<Response, std::string>{[this, request, timeout](auto &future) {
-                  /// We call here the synchronous code because there is no asynchronous API for wait_for_service.
-                  /// TODO we cannot even use the synchronous API because this will call the callback and therefore the coroutine continuation directly (i.e. synchronously) instead in the event loop, eventually leading to a stack overflow
-                  /*if(!client->wait_for_service(timeout)) {
-                    // Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
-                    if (!rclcpp::ok()) {
-                      future.put_error("INTERRUPTED");
-                    } else {
-                      future.put_error("SERVICE_UNAVAILABLE");
-                    }
-                    return Cancel{};
-                  } else {*/
-                    auto future_and_req_id = client->async_send_request(request, [&](typename Client::SharedFuture result) {
-                      if (!result.valid()) {
-                        if (!rclcpp::ok()) {
-                          future.put_error("INTERRUPTED");
-                        } else {
-                          future.put_error("TIMEOUT");
-                        }
-                      } else {
-                        future.put_value(result.get());
-                      }
-                    });
-                    timeout_timer_ = node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
-                      client->remove_pending_request(req_id);
-                      timeout_timer_->cancel();
-                      if (!rclcpp::ok()) {
-                        future.put_error("INTERRUPTED");
-                      } else {
-                        future.put_error("TIMEOUT");
-                      }
-                    });
-                    return Cancel{
-                      [this, req_id = future_and_req_id.request_id](auto &) {
-                        client->remove_pending_request(req_id);
-                        timeout_timer_->cancel();
-                      }
-                    };
+      /// We call here the synchronous code because there is no asynchronous API for
+      /// wait_for_service.
+      /// TODO we cannot even use the synchronous API because this will call the callback and
+      /// therefore the coroutine continuation directly (i.e. synchronously) instead in the event
+      /// loop, eventually leading to a stack overflow
+      /*if(!client->wait_for_service(timeout)) {
+        //
+      Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+        if (!rclcpp::ok()) {
+          future.put_error("INTERRUPTED");
+        } else {
+          future.put_error("SERVICE_UNAVAILABLE");
+        }
+        return Cancel{};
+      } else {*/
+      auto future_and_req_id =
+          client->async_send_request(request, [&](typename Client::SharedFuture result) {
+            if (!result.valid()) {
+              if (!rclcpp::ok()) {
+                future.put_error("INTERRUPTED");
+              } else {
+                future.put_error("TIMEOUT");
               }
-            };
+            } else {
+              future.put_value(result.get());
+            }
+          });
+      timeout_timer_ =
+          node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
+            client->remove_pending_request(req_id);
+            timeout_timer_->cancel();
+            if (!rclcpp::ok()) {
+              future.put_error("INTERRUPTED");
+            } else {
+              future.put_error("TIMEOUT");
+            }
+          });
+      return Cancel{[this, req_id = future_and_req_id.request_id](auto &) {
+        client->remove_pending_request(req_id);
+        timeout_timer_->cancel();
+      }};
+    }};
   }
-
 };
 
 /// A filter that detects timeouts, i.e. whether a value was received in a given time window.
@@ -1835,8 +1877,8 @@ struct ApproxTimeSynchronizerImpl {
 /// A Stream representing an approximate time synchronizer.
 /// \warning All inputs must have the same QoS according to the documentation of message_filters
 template <class... Messages>
-class ApproxTimeSynchronizer : public Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
-                                         ApproxTimeSynchronizerImpl<Messages...>> {
+class ApproxTimeSynchronizer : public Stream<std::tuple<typename Messages::SharedPtr...>,
+                                             std::string, ApproxTimeSynchronizerImpl<Messages...>> {
 public:
   using Base = Stream<std::tuple<typename Messages::SharedPtr...>, std::string,
                       ApproxTimeSynchronizerImpl<Messages...>>;
@@ -1845,7 +1887,8 @@ public:
   /// Constructs the synchronizer and connects it to the input streams so that it is ready to
   /// receive values.
   template <ErrorFreeStream... Inputs>
-  ApproxTimeSynchronizer(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs) : Base(node) {
+  ApproxTimeSynchronizer(NodeBookkeeping &node, uint32_t queue_size, Inputs... inputs)
+      : Base(node) {
     static_assert(sizeof...(Inputs) >= 2, "You need to synchronize at least two inputs.");
     this->impl()->create_synchronizer(node, queue_size);
     this->connect_inputs(inputs...);
@@ -1866,8 +1909,8 @@ protected:
 };
 
 /// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
-/// TODO we could implement this much simpler in like 50 SLOC once we support coroutines as subscriber callbacks and get rid of the messy
-/// tf2_ros::MessageFilter code.
+/// TODO we could implement this much simpler in like 50 SLOC once we support coroutines as
+/// subscriber callbacks and get rid of the messy tf2_ros::MessageFilter code.
 template <class Message>
 struct TransformSynchronizerImpl {
   using Self = TransformSynchronizerImpl<Message>;
@@ -1953,18 +1996,18 @@ static auto any(Inputs... inputs) {
 }
 
 /// Synchronize at least two streams by approximately matching the header time-stamps (using
-/// the `message_filters::Synchronizer`). It accepts only an ErrorFreeStream since the synchronizer may emit new errors.
-/// To obtain an ErrorFreeStream, use Stream::unwrap_or.
+/// the `message_filters::Synchronizer`). It accepts only an ErrorFreeStream since the synchronizer
+/// may emit new errors. To obtain an ErrorFreeStream, use Stream::unwrap_or.
 ///
 /// \tparam Inputs the input stream types, not necessarily all the same
 /// \param queue_size the queue size to use, 100 is a good value.
 /// \param inputs the input streams, not necessarily all of the same type
 template <ErrorFreeStream... Inputs>
 static ApproxTimeSynchronizer<MessageOf<Inputs>...> synchronize_approx_time(uint32_t queue_size,
-                                                                        Inputs... inputs) {
+                                                                            Inputs... inputs) {
   auto first_input = std::get<0>(std::forward_as_tuple(inputs...));  /// Use the first Stream
-  return first_input.template create_stream<ApproxTimeSynchronizer<MessageOf<Inputs>...>>(queue_size,
-                                                                                      inputs...);
+  return first_input.template create_stream<ApproxTimeSynchronizer<MessageOf<Inputs>...>>(
+      queue_size, inputs...);
 }
 
 /// The context owns the streams and is what is returned when calling `node->icey()`
@@ -2103,15 +2146,17 @@ public:
   }
 
   /// Create a subscriber that subscribes to a single transform between two frames.
-  /// This stream will emit a value every time the transform between these two frames changes, i.e. it is a stream. 
-  /// If you need to lookup transforms at a specific point in time, look instead at `Context::create_transform_buffer`.
+  /// This stream will emit a value every time the transform between these two frames changes, i.e.
+  /// it is a stream. If you need to lookup transforms at a specific point in time, look instead at
+  /// `Context::create_transform_buffer`.
   TransformSubscriptionStream create_transform_subscription(
       ValueOrParameter<std::string> target_frame, ValueOrParameter<std::string> source_frame) {
     return create_stream<TransformSubscriptionStream>(target_frame, source_frame);
   }
 
-  /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a tf2_ros::TransformListener.
-  /// It is used to `lookup()` transforms asynchronously at a specific point in time.
+  /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
+  /// tf2_ros::TransformListener. It is used to `lookup()` transforms asynchronously at a specific
+  /// point in time.
   TransformBuffer<Context> create_transform_buffer() {
     TransformBuffer<Context> tf_buffer(static_cast<NodeBookkeeping &>(*this));
     tf_buffer.context = this->shared_from_this();
@@ -2127,7 +2172,8 @@ public:
     return create_stream<PublisherStream<Message>>(topic_name, qos, publisher_options);
   }
 
-  /// Create a publisher to publish transforms on the `/tf` topic. Works otherwise the same as [tf2_ros::TransformBroadcaster].
+  /// Create a publisher to publish transforms on the `/tf` topic. Works otherwise the same as
+  /// [tf2_ros::TransformBroadcaster].
   TransformPublisherStream create_transform_publisher() {
     return create_stream<TransformPublisherStream>();
   }
@@ -2140,26 +2186,30 @@ public:
     return create_stream<TimerStream>(period, is_one_off_timer);
   }
 
-  /// Create a service server stream. One a request is received, the provided callback will be called. 
-  /// The callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The callbacks returns the response.
-  /// Works otherwise the same as [rclcpp::Node::create_service].
+  /// Create a service server stream. One a request is received, the provided callback will be
+  /// called. The callback can be either synchronous (a regular function) or asynchronous, i.e. a
+  /// coroutine. The callbacks returns the response. Works otherwise the same as
+  /// [rclcpp::Node::create_service].
   template <class ServiceT, class Callback>
-    ServiceStream<ServiceT> create_service(const std::string &service_name,
-          Callback &&callback, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+  ServiceStream<ServiceT> create_service(const std::string &service_name, Callback &&callback,
+                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceStream<ServiceT>>(service_name, callback, qos);
   }
 
-  /// Create a service server stream. No callback is provided, therefore requests must be awaited and then a response be send manually by calling respond on the service.
-  /// Works otherwise the same as [rclcpp::Node::create_service].
+  /// Create a service server stream. No callback is provided, therefore requests must be awaited
+  /// and then a response be send manually by calling respond on the service. Works otherwise the
+  /// same as [rclcpp::Node::create_service].
   template <class ServiceT>
-    ServiceStream<ServiceT> create_service(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+  ServiceStream<ServiceT> create_service(const std::string &service_name,
+                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return create_stream<ServiceStream<ServiceT>>(service_name, qos);
   }
 
   /// Create a service client.
   /// Works otherwise the same as [rclcpp::Node::create_client].
   template <class ServiceT>
-  ServiceClient<ServiceT> create_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+  ServiceClient<ServiceT> create_client(const std::string &service_name,
+                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     ServiceClient<ServiceT> client(static_cast<NodeBookkeeping &>(*this), service_name, qos);
     client.context = this->shared_from_this();
     return client;

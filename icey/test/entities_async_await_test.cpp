@@ -89,13 +89,14 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
     async_completed = true;
     co_return 0;
   };
-  l(); /// Temporary lifetime extention is unaware of coroutines and would destroy the lambda after first suspend if we would not assign a name l to it
+  l();  /// Temporary lifetime extention is unaware of coroutines and would destroy the lambda after
+        /// first suspend if we would not assign a name l to it
   spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
-  const auto l =[this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Stream<int> {
     std::size_t received_cnt{0};
 
     receiver_->icey()
@@ -109,7 +110,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
 
     auto pub =
         sender_->icey().create_publisher<std_msgs::msg::Float32>("/icey_test/sine_signal", 1);
-        
+
     for (int i = 0; i < 10; i++) {
       size_t ticks = co_await timer;
       std_msgs::msg::Float32 float_val;
@@ -147,7 +148,8 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
     icey::Result<Response, std::string> result1 = co_await client1.call(request, 40ms);
 
     EXPECT_TRUE(result1.has_error());
-    EXPECT_EQ(result1.error(), "TIMEOUT"); /// TODO change to SERVICE_UNAVAILABLE when we have implemented an asynchronous wait_for_service
+    EXPECT_EQ(result1.error(), "TIMEOUT");  /// TODO change to SERVICE_UNAVAILABLE when we have
+                                            /// implemented an asynchronous wait_for_service
 
     /// Now create the service servers:
     auto service_cb = [](auto request) {
@@ -180,8 +182,9 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
   ASSERT_TRUE(async_completed);
 }
 
-/// Tests whether timeout works and the requests get cleaned up. 
-// It also tests whether we can make multiple calls to a service before awaiting them all and after awaiting, we recive all of them
+/// Tests whether timeout works and the requests get cleaned up.
+// It also tests whether we can make multiple calls to a service before awaiting them all and after
+// awaiting, we recive all of them
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
   const auto l = [this]() -> icey::Stream<int> {
     // The response we are going to receive from the service call:
@@ -190,7 +193,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     /// A sleepy service:
     std::size_t i_call = 0;
     auto service_cb = [&](auto request) {
-      if(i_call == 0) {
+      if (i_call == 0) {
         std::this_thread::sleep_for(100ms);
       }
       i_call++;
@@ -199,18 +202,18 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
       return response;
     };
     sender_->icey().create_service<ExampleService>("icey_test_sleepy_service1", service_cb);
-    
+
     auto client1 = receiver_->icey().create_client<ExampleService>("icey_test_sleepy_service1");
     auto request = std::make_shared<ExampleService::Request>();
     request->data = true;
 
-    /// First, test that timeouts occur 
+    /// First, test that timeouts occur
     icey::Result<Response, std::string> result1 = co_await client1.call(request, 40ms);
     EXPECT_TRUE(result1.has_error());
     EXPECT_EQ(result1.error(), "TIMEOUT");
     /// Expect there are no pending requests in case of timeout: A call to prune must return 0
     EXPECT_EQ(client1.client->prune_pending_requests(), 0);
-    
+
     /// Send the first request but do not await it
     icey::Promise<Response, std::string> response_future1 = client1.call(request, 40ms);
 
@@ -230,54 +233,52 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
   ASSERT_TRUE(async_completed);
 }
 
-
 TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
   const auto l = [this]() -> icey::Stream<int> {
-
     const icey::Time base_time{1700000000s};
-    
+
     sender_->icey()
-      .create_timer(100ms)
-      .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
-            geometry_msgs::msg::TransformStamped tf1;
-            tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms); 
-            tf1.header.frame_id = "icey_test_frame1";
-            tf1.child_frame_id = "icey_test_frame2";
-            tf1.transform.translation.x = 0.1 * ticks;
-            if (ticks >= 10) 
-              return {};
-            return tf1;
-          })
+        .create_timer(100ms)
+        .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+          geometry_msgs::msg::TransformStamped tf1;
+          tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms);
+          tf1.header.frame_id = "icey_test_frame1";
+          tf1.child_frame_id = "icey_test_frame2";
+          tf1.transform.translation.x = 0.1 * ticks;
+          if (ticks >= 10) return {};
+          return tf1;
+        })
         .publish_transform();
 
     sender_->icey()
         .create_timer(100ms)
         .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
           geometry_msgs::msg::TransformStamped tf1;
-          tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms); 
+          tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms);
           tf1.header.frame_id = "icey_test_frame2";
           tf1.child_frame_id = "icey_test_frame3";
           tf1.transform.rotation.z = std::sin(0.1 * ticks);
           tf1.transform.rotation.w = std::cos(0.1 * ticks);
-          if (ticks >= 10) 
-            return {};
+          if (ticks >= 10) return {};
           return tf1;
         })
         .publish_transform();
-        
-    auto tf_sub =
-        receiver_->icey().create_transform_buffer();;
+
+    auto tf_sub = receiver_->icey().create_transform_buffer();
+    ;
 
     std::size_t received_cnt = 0;
-    while(received_cnt <= 13) {
-      icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result 
-          = co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3", (base_time + received_cnt * 100ms), 110ms);
+    while (received_cnt <= 13) {
+      icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
+          co_await tf_sub.lookup("icey_test_frame1", "icey_test_frame3",
+                                 (base_time + received_cnt * 100ms), 110ms);
       /// Expect that the one additional last time that we lookup, we do not get anything
-      if(received_cnt >= 10) {
+      if (received_cnt >= 10) {
         EXPECT_FALSE(tf_result.has_value());
         EXPECT_TRUE(tf_result.has_error());
       } else {
-        EXPECT_TRUE(tf_result.has_value()) << "No TF was received, instead the error: " << tf_result.error();
+        EXPECT_TRUE(tf_result.has_value())
+            << "No TF was received, instead the error: " << tf_result.error();
         geometry_msgs::msg::TransformStamped tf = tf_result.value();
 
         const double kEps = 1e-6;

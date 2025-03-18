@@ -147,7 +147,7 @@ TEST_F(NodeTest, ParameterStructTest) {
 
   /// Test parameter setting:
   node_->set_parameter(rclcpp::Parameter("frequency", 2.5));
-  spin(100ms);  /// Need to spin so that the parameter gets updated  
+  spin(100ms);  /// Need to spin so that the parameter gets updated
   EXPECT_TRUE(fields_that_were_updated.contains("frequency"));
 
   fields_that_were_updated.clear();
@@ -155,7 +155,7 @@ TEST_F(NodeTest, ParameterStructTest) {
   /// Test parameter update rejection:
   node_->set_parameter(rclcpp::Parameter("frequency", 100.));
   spin(100ms);  /// Need to spin so that the parameter gets updated
-  
+
   EXPECT_TRUE(fields_that_were_updated.empty());
   /// The parameter should have stayed the same:
   EXPECT_EQ(node_->get_parameter("frequency").get_value<double>(), 2.5);
@@ -206,12 +206,11 @@ TEST_F(TwoNodesFixture, TransformSubscriberTest) {
       .create_timer(100ms)
       .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
         geometry_msgs::msg::TransformStamped tf1;
-        tf1.header.stamp = icey::rclcpp_from_chrono(base_time); //sender_->get_clock()->now();
+        tf1.header.stamp = icey::rclcpp_from_chrono(base_time);  // sender_->get_clock()->now();
         tf1.header.frame_id = "icey_test_frame1";
         tf1.child_frame_id = "icey_test_frame2";
         tf1.transform.translation.x = 0. + 0.1 * ticks;
-        if (ticks >= 10) 
-          return {};
+        if (ticks >= 10) return {};
         return tf1;
       })
       .publish_transform();
@@ -220,23 +219,21 @@ TEST_F(TwoNodesFixture, TransformSubscriberTest) {
       .create_timer(100ms)
       .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
         geometry_msgs::msg::TransformStamped tf1;
-        tf1.header.stamp = icey::rclcpp_from_chrono(base_time); //sender_->get_clock()->now();
+        tf1.header.stamp = icey::rclcpp_from_chrono(base_time);  // sender_->get_clock()->now();
         tf1.header.frame_id = "icey_test_frame2";
         tf1.child_frame_id = "icey_test_frame3";
         tf1.transform.rotation.z = std::sin(0.1 * ticks);
         tf1.transform.rotation.w = std::cos(0.1 * ticks);
-        /// Since both transforms must be received for the first TF from 1 to 3, we got to publish one of the two once more
-        if (ticks >= 11) 
-          return {};
+        /// Since both transforms must be received for the first TF from 1 to 3, we got to publish
+        /// one of the two once more
+        if (ticks >= 11) return {};
         return tf1;
       })
       .publish_transform();
 
   std::size_t received_cnt = 0;
-  sub.then([&](const geometry_msgs::msg::TransformStamped &msg) {
-    received_cnt++;
-  });
-  
+  sub.then([&](const geometry_msgs::msg::TransformStamped& msg) { received_cnt++; });
+
   spin(1500ms);
   EXPECT_EQ(received_cnt, 20);
 }

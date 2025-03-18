@@ -11,24 +11,26 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "synchronization_example");  
+  auto node = icey::create_node(argc, argv, "synchronization_example");
 
   auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
   auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 
-  /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message 
-  /// and the given target_frame ("map") at the time of the header stamp.
+  /// Synchronize with a transform: This will yield the message and the transform from the
+  /// child_frame_id of the header message and the given target_frame ("map") at the time of the
+  /// header stamp.
   camera_image.synchronize_with_transform("map", 100ms)
-    .then([](sensor_msgs::msg::Image::SharedPtr image, 
-        const geometry_msgs::msg::TransformStamped &transform_to_map) { 
-          std::cout << "image width: " << image->width 
-          << " tf w: " << transform_to_map.transform.rotation.w << std::endl;
-    });
-  
+      .then([](sensor_msgs::msg::Image::SharedPtr image,
+               const geometry_msgs::msg::TransformStamped &transform_to_map) {
+        std::cout << "image width: " << image->width
+                  << " tf w: " << transform_to_map.transform.rotation.w << std::endl;
+      });
+
   /// Or synchronize approx time:
   icey::synchronize_approx_time(100, camera_image, point_cloud)
-    .then([](sensor_msgs::msg::Image::SharedPtr image, sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
+      .then([](sensor_msgs::msg::Image::SharedPtr image,
+               sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
 
-    });
-  icey::spin(node);  
+      });
+  icey::spin(node);
 }

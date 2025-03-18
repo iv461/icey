@@ -31,11 +31,13 @@ struct ImageTransportSubscriberImpl {
 // An stream representing a camera image subscriber.
 struct ImageTransportSubscriber
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                    image_transport::TransportLoadException, ImageTransportSubscriberImpl> { 
-  using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr, image_transport::TransportLoadException, ImageTransportSubscriberImpl>;                  
+                    image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
+  using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr,
+                      image_transport::TransportLoadException, ImageTransportSubscriberImpl>;
   ImageTransportSubscriber(NodeBookkeeping &node, const std::string &base_topic_name,
                            const std::string &transport, const rclcpp::QoS qos,
-                           const rclcpp::SubscriptionOptions &options): Base(node) {
+                           const rclcpp::SubscriptionOptions &options)
+      : Base(node) {
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime
@@ -54,9 +56,10 @@ struct ImageTransportSubscriber
 
 struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPtr> {
   using Base = Stream<sensor_msgs::msg::Image::SharedPtr>;
-  ImageTransportPublisher(
-      NodeBookkeeping &node, const std::string &base_topic_name, const rclcpp::QoS qos,
-      const rclcpp::PublisherOptions & /*options*/ = rclcpp::PublisherOptions()): Base(node) {
+  ImageTransportPublisher(NodeBookkeeping &node, const std::string &base_topic_name,
+                          const rclcpp::QoS qos,
+                          const rclcpp::PublisherOptions & /*options*/ = rclcpp::PublisherOptions())
+      : Base(node) {
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime
@@ -79,10 +82,11 @@ struct CameraSubscriber
                                sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
                     image_transport::TransportLoadException, CameraSubscriberImpl> {
   using Base = Stream<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
-  sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
-image_transport::TransportLoadException, CameraSubscriberImpl>;
+                                 sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
+                      image_transport::TransportLoadException, CameraSubscriberImpl>;
   CameraSubscriber(NodeBookkeeping &node, const std::string &base_topic_name,
-                   const std::string &transport, const rclcpp::QoS qos): Base (node) {
+                   const std::string &transport, const rclcpp::QoS qos)
+      : Base(node) {
     const auto cb = [impl = this->impl()](
                         sensor_msgs::msg::Image::ConstSharedPtr image,
                         sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
@@ -103,10 +107,10 @@ image_transport::TransportLoadException, CameraSubscriberImpl>;
 struct CameraPublisher
     : public Stream<
           std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>> {
-  using Base =  Stream<
-  std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>> ;
-  CameraPublisher(NodeBookkeeping &node, const std::string &base_topic_name,
-                  const rclcpp::QoS qos): Base(node) {
+  using Base = Stream<
+      std::tuple<sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::CameraInfo::SharedPtr>>;
+  CameraPublisher(NodeBookkeeping &node, const std::string &base_topic_name, const rclcpp::QoS qos)
+      : Base(node) {
     assert_is_not_lifecycle_node(
         node);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime

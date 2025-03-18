@@ -42,7 +42,7 @@ struct Result : private std::variant<std::monostate, _Value, _Error>, public Res
   void set_none() { this->template emplace<0>(std::monostate{}); }
   void set_ok(const Value &x) { this->template emplace<1>(x); }
   void set_err(const Error &x) { this->template emplace<2>(x); }
-  
+
   auto get() const {
     if constexpr (std::is_same_v<Error, Nothing>) {
       return this->value();
@@ -237,7 +237,7 @@ public:
 
   /// Sets the state to hold an error, but does not notify about this state change.
   void set_error(const Error &x) { state_.set_err(x); }
-  void set_state(const State &x) { state_= x; }
+  void set_state(const State &x) { state_ = x; }
 
   /// Returns the current state and sets it to none.
   State take_state() {
@@ -249,9 +249,7 @@ public:
   /// Returns the current state and sets it to none. If no error is possible (Error is not
   /// Nothing), it just the Value to not force the user to write unnecessary error
   /// handling/unwraping code.
-  MaybeResult take() {
-    return this->take_state().get();
-  }
+  MaybeResult take() { return this->take_state().get(); }
 
   /// It takes (calls take) the current state and notifies the callbacks. It notifies only in case
   /// we have an error or value. If the state is none, it does not notify. If the state is an error
@@ -267,7 +265,7 @@ public:
       }
     }
     if (!this->has_none()) {
-      for (const auto &cb : handlers_) cb(state_);      
+      for (const auto &cb : handlers_) cb(state_);
     }
   }
 
@@ -312,13 +310,13 @@ protected:
     using ReturnType = decltype(unpack_if_tuple(f, x));
     if constexpr (std::is_void_v<ReturnType>) {
       unpack_if_tuple(f, x);
-    } else if constexpr(has_promise_type_v<ReturnType>) { /// Is a coroutine, i.e. async function
+    } else if constexpr (has_promise_type_v<ReturnType>) {  /// Is a coroutine, i.e. async function
       const auto continuation = [](const auto &x, F &f) -> ReturnType {
         co_await unpack_if_tuple(f, x);
         co_return;
       };
       continuation(x, f);
-    }else if constexpr (is_result<ReturnType>) {
+    } else if constexpr (is_result<ReturnType>) {
       /// support callbacks that at runtime may return value or error
       output->state_ = unpack_if_tuple(f, x);
       output->notify();
@@ -378,15 +376,15 @@ protected:
       return output;
     } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
-      auto output =
-          create_stream<Stream<typename ReturnType::Value, typename ReturnType::Error,
-                               DefaultBase, DefaultBase>>();  // Must pass over error
+      auto output = create_stream<Stream<typename ReturnType::Value, typename ReturnType::Error,
+                                         DefaultBase, DefaultBase>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
-    } else if constexpr(has_promise_type_v<ReturnType>) { /// If it has promsise type, it's a coroutine 
+    } else if constexpr (has_promise_type_v<ReturnType>) {  /// If it has promsise type, it's a
+                                                            /// coroutine
       auto output =
-          create_stream<Stream<Nothing, Nothing,
-                               DefaultBase, DefaultBase>>();  // Must pass over error
+          create_stream<Stream<Nothing, Nothing, DefaultBase, DefaultBase>>();  // Must pass over
+                                                                                // error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
     } else {  /// Any other return type V is interpreted as Result<V, Nothing>::Ok() for convenience

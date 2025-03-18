@@ -69,7 +69,7 @@ TEST_F(NodeTest, StreamsHaveContext) {
 
   auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/maydup_debug_image");
   EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
-  
+
   auto service = node_->icey().create_service<ExampleService>("icey_test_service");
   EXPECT_EQ(service.impl()->context.lock().get(), &node_->icey());
 
@@ -112,7 +112,8 @@ TEST_F(NodeTest, StreamsHaveContext) {
   auto buffered_stream = sub.buffer(100);
   EXPECT_EQ(buffered_stream.impl()->context.lock().get(), &node_->icey());
 
-  auto sub_pc = node_->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/maydup_gownlibu");
+  auto sub_pc =
+      node_->icey().create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_topic");
   auto approx_time_synched = icey::synchronize_approx_time(10, sub, sub_pc);
   EXPECT_EQ(approx_time_synched.impl()->context.lock().get(), &node_->icey());
 }

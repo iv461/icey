@@ -5,16 +5,17 @@
 
 using namespace std::chrono_literals;
 
-icey::Promise<void> create_and_spin_node(std::shared_ptr<icey::Node> node) {  
-  
-  auto frequency = node->icey().declare_parameter<double>("frequency", 10.); // Hz, i.e. 1/s
+icey::Promise<void> create_and_spin_node(std::shared_ptr<icey::Node> node) {
+  auto frequency = node->icey().declare_parameter<double>("frequency", 10.);  // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2.);
-  
+
   auto period_time = 100ms;
   auto timer = node->icey().create_timer(period_time);
 
-  auto rectangle_pub = node->icey().create_publisher<std_msgs::msg::Float32>("rectangle_signal", rclcpp::SystemDefaultsQoS());
-  auto sine_pub = node->icey().create_publisher<std_msgs::msg::Float32>("sine_signal", rclcpp::SystemDefaultsQoS());
+  auto rectangle_pub = node->icey().create_publisher<std_msgs::msg::Float32>(
+      "rectangle_signal", rclcpp::SystemDefaultsQoS());
+  auto sine_pub = node->icey().create_publisher<std_msgs::msg::Float32>(
+      "sine_signal", rclcpp::SystemDefaultsQoS());
 
   std::cout << "Starting loop .. " << std::endl;
   /// Main spinning loop
@@ -23,13 +24,13 @@ icey::Promise<void> create_and_spin_node(std::shared_ptr<icey::Node> node) {
     size_t ticks = co_await timer;
 
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked: " << ticks);
-    
+
     if (ticks % 10 == 0) {  /// Publish with 1/10th of the frequency
       std_msgs::msg::Float32 result;
-      result.data = (ticks % 20 == 0) ? 1.f : 0.f;  
+      result.data = (ticks % 20 == 0) ? 1.f : 0.f;
       rectangle_pub.publish(result);
     }
-    
+
     /// Add another computation for the timer
     std_msgs::msg::Float32 float_val;
     double period_time_s = 0.1;
@@ -42,7 +43,6 @@ icey::Promise<void> create_and_spin_node(std::shared_ptr<icey::Node> node) {
   }
   co_return;
 }
-
 
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "signal_generator");
