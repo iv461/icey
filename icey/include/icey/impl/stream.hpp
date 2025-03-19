@@ -226,7 +226,7 @@ public:
 
   /// Register a handler (i.e. a callback) that gets called when the state changes. It receives the
   /// new state as an argument.
-  /// TODO If there is any value to take, we should immediattelly call the handler
+  /// TODO If there is any value to take, we should immediately call the handler
   void register_handler(Handler &&cb) { handlers_.emplace_back(std::move(cb)); }
 
   /// Sets the state to hold none, but does not notify about this state change.
@@ -380,7 +380,7 @@ protected:
                                          DefaultBase, DefaultBase>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
-    } else if constexpr (has_promise_type_v<ReturnType>) {  /// If it has promsise type, it's a
+    } else if constexpr (has_promise_type_v<ReturnType>) {  /// If it has promise type, it's a
                                                             /// coroutine
       auto output =
           create_stream<Stream<Nothing, Nothing, DefaultBase, DefaultBase>>();  // Must pass over

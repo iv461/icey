@@ -1,4 +1,4 @@
-/// A more complex async/await examples thtat shows how to wait on a timer a
+/// A more complex async/await examples that shows how to wait on a timer a
 #include <icey/icey.hpp>
 
 #include "std_msgs/msg/float32.hpp"

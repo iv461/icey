@@ -102,7 +102,7 @@ TEST_F(NodeTest, ParameterStructTest) {
   I don't think it makes sense to specify exactly how the callback get's called initially,
   it suffices to say it's called so that every parameter is initialized.
   std::unordered_set<std::string> target_updated1{"frequency", "mode"};
-  EXPECT_EQ(fields_that_were_updated, target_updated1); /// At first, all the contrained parameters
+  EXPECT_EQ(fields_that_were_updated, target_updated1); /// At first, all the contained parameters
   update
   */
   fields_that_were_updated.clear();

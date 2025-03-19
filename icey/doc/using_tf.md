@@ -1,6 +1,34 @@
 # Using TF 
 
-Using TF with ICEY is a bit different that in regular ROS: Since everything is asynchronous in ICEY, so are transforms. ICEY allows you to *subscribe* to a single transform between to coordinate systems and then *synchronize* it to another topic.
+Coordinate systems are communicated in ROS over the topic `/tf` and `/tf_static`, so receiving them is an inherently asynchronous operation.
+To obtain coordinate system transforms, ICEY provides again an async/await based API. 
+
+ICEY also allows you to *subscribe* to a single transform between to coordinate system instead of requesting a transform at a specific time. This features is also useful in some applications. 
+
+# Looking up transforms: 
+
+To lookup a transform at a specific time, you first create in ICEY a `icey::TransformBuffer`: This is the usual combination of a subscriber and a buffer bundled in a single object. 
+
+You can then call `lookup` and await it: 
+
+```cpp 
+icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
+
+node->icey()
+      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
+      // Use a coroutine (an asynchronous function) as a callback for the subscriber:
+      .then([&tf_buffer,
+             &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
+    icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
+            co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
+                                      icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+        /// Continue transforming the point cloud here ..
+    });
+```
+
+See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) example.
+
+# Promise mode 
 
 In the following, we explain based on example patterns why this is what you actually want most of the time.
 After this motivation, we explain how TF works in ICEY.
@@ -143,9 +171,6 @@ icey::synchronize(camera_feed, cam_to_map_transfom).then([](sensor_msgs::Camera:
 
 ```
 
-```{warning}
-Do not use the buffer to call `lookupTransform` or `waitforTransform` directly. This will certainly lead to dead-locks and is also discouraged: You need to find a way to describe the data-flow statically, instead on relying on such asynchronous functions. 
-```
 
 ```{note}
 Subscribing to high-frequency TF topics is a known issue in ROS that can cause performance problem, solutions include [2,3,4].
