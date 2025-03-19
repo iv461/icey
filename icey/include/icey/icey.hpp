@@ -758,7 +758,7 @@ struct TransformSynchronizer;
 struct TransformPublisherStream;
 
 /// An awaiter required to implement operator co_await for Streams. (C++ coroutines)
-template<class S>
+template <class S>
 struct Awaiter {
   S &stream;
   Awaiter(S &s) : stream(s) {}
@@ -816,7 +816,8 @@ class Stream : public StreamTag {
   static_assert(std::is_default_constructible_v<ImplBase>,
                 "ImplBase must be default constructable");
   friend Context;
-  public:
+
+public:
   using Value = _Value;
   using Error = _Error;
   using Self = Stream<_Value, _Error, ImplBase>;
@@ -868,13 +869,12 @@ class Stream : public StreamTag {
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
-  /// \brief Calls the given function f every time this stream receives a value.  /// It returns a new stream that receives the values that this function f returns.
-  /// The returned Stream also passes though the errors of this stream so that
-  /// chaining `then`s with an `except` works.
-  /// \note The given function must be synchronous, no asynchronous functions are supported.
-  /// \returns A new Stream that changes it's value to y every time this
-  /// stream receives a value x, where y = f(x).
-  /// The type of the returned stream is:
+  /// \brief Calls the given function f every time this stream receives a value.  /// It returns a
+  /// new stream that receives the values that this function f returns. The returned Stream also
+  /// passes though the errors of this stream so that chaining `then`s with an `except` works. \note
+  /// The given function must be synchronous, no asynchronous functions are supported. \returns A
+  /// new Stream that changes it's value to y every time this stream receives a value x, where y =
+  /// f(x). The type of the returned stream is:
   /// - Stream<Nothing, _Error> if F is (X) -> void
   /// - Stream<NewValue, NewError> if F is (X) -> Result<NewValue, NewError>
   /// - Stream<NewValue, _Error> if F is (X) -> std::optional<NewValue>
