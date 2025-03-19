@@ -757,6 +757,45 @@ template <class V>
 struct TransformSynchronizer;
 struct TransformPublisherStream;
 
+/// An awaiter required to implement operator co_await for Streams. (C++ coroutines)
+template<class S>
+struct Awaiter {
+  S &stream;
+  Awaiter(S &s) : stream(s) {}
+  bool await_ready() const noexcept {
+    if (icey_coro_debug_print)
+      std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
+    return !stream.impl()->has_none();
+  }
+  void await_suspend(std::coroutine_handle<> continuation) noexcept {
+    if (icey_coro_debug_print)
+      std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
+    if (!stream.impl()->registered_continuation_callback_) {
+      stream.impl()->register_handler([impl = stream.impl()](auto &) {
+        /// Important: Call the continuation only once since we may be awaiting the stream only
+        /// once
+        if (impl->continuation_) {
+          auto c = std::exchange(impl->continuation_,
+                                 nullptr);  /// Get the continuation and replace it with nullptr
+                                            /// so that it is called only once
+          c.resume();
+        }
+      });
+      stream.impl()->registered_continuation_callback_ = true;
+    }
+    stream.impl()->continuation_ = continuation;
+  }
+  auto await_resume() const noexcept {
+    if (icey_coro_debug_print)
+      std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
+    if (stream.exception_ptr_)  /// [Coroutine support] The coroutines are specified so that the
+                                /// compiler does not do exception handling
+      /// everywhere, so they put the burden on the implementers to defer throwing the exception
+      std::rethrow_exception(stream.exception_ptr_);
+    return stream.impl()->take();
+  }
+};
+
 /// \brief A stream, an abstraction over an asynchronous sequence of values.
 /// It has a state of type Result and a list of callbacks that get notified when this state changes.
 /// It is conceptually very similar to a promise in JavaScript except that state transitions are not
@@ -777,11 +816,11 @@ class Stream : public StreamTag {
   static_assert(std::is_default_constructible_v<ImplBase>,
                 "ImplBase must be default constructable");
   friend Context;
-
-public:
+  public:
   using Value = _Value;
   using Error = _Error;
   using Self = Stream<_Value, _Error, ImplBase>;
+  friend Awaiter<Self>;
   /// The actual implementation of the Stream
   using Impl = impl::Stream<Value, Error, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
 
@@ -815,45 +854,7 @@ public:
   /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines.
   /// It spins the ROS executor until this Stream has something (value or error) and then resumes
   /// the coroutine.
-  auto operator co_await() {
-    struct Awaiter {
-      Self &stream;
-      Awaiter(Self &coro) : stream(coro) {}
-      bool await_ready() const noexcept {
-        if (icey_coro_debug_print)
-          std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
-        return !stream.impl()->has_none();
-      }
-      void await_suspend(std::coroutine_handle<> continuation) noexcept {
-        if (icey_coro_debug_print)
-          std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
-        if (!stream.impl()->registered_continuation_callback_) {
-          stream.impl()->register_handler([impl = stream.impl()](auto &) {
-            /// Important: Call the continuation only once since we may be awaiting the stream only
-            /// once
-            if (impl->continuation_) {
-              auto c = std::exchange(impl->continuation_,
-                                     nullptr);  /// Get the continuation and replace it with nullptr
-                                                /// so that it is called only once
-              c.resume();
-            }
-          });
-          stream.impl()->registered_continuation_callback_ = true;
-        }
-        stream.impl()->continuation_ = continuation;
-      }
-      auto await_resume() const noexcept {
-        if (icey_coro_debug_print)
-          std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
-        if (stream.exception_ptr_)  /// [Coroutine support] The coroutines are specified so that the
-                                    /// compiler does not do exception handling
-          /// everywhere, so they put the burden on the implementers to defer throwing the exception
-          std::rethrow_exception(stream.exception_ptr_);
-        return stream.impl()->take();
-      }
-    };
-    return Awaiter{*this};
-  }
+  Awaiter<Self> operator co_await() { return Awaiter{*this}; }
 
   /// Implementation of the operator co_return(x) for coroutine support: It *sets* the value of the
   /// Stream object that is about to get returned (the compiler creates it beforehand)
@@ -867,8 +868,7 @@ public:
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
-  /// \brief Calls the given function f every time this stream receives a value.
-  /// It returns a new stream that receives the values that this function f returns.
+  /// \brief Calls the given function f every time this stream receives a value.  /// It returns a new stream that receives the values that this function f returns.
   /// The returned Stream also passes though the errors of this stream so that
   /// chaining `then`s with an `except` works.
   /// \note The given function must be synchronous, no asynchronous functions are supported.
@@ -1380,7 +1380,7 @@ template <class _Message>
 struct SubscriptionStream
     : public Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>> {
   using Base = Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>>;
-  using Value = typename _Message::SharedPtr;  /// Needed for synchronizer to determine message type
+  using Value = typename _Message::SharedPtr;
   SubscriptionStream() = default;
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
@@ -1453,7 +1453,6 @@ struct TransformBuffer : public StreamImplDefault {
           [&promise](const tf2::TransformException &ex) { promise.put_error(ex.what()); });
       return typename P::Cancel{[this, request_handle](auto &promise) {
         if (promise.has_none()) {
-          std::cout << "Cancelling request from promise dtor " << std::endl;
           this->tf_listener->cancel_request(request_handle);
         }
       }};

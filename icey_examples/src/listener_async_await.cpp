@@ -1,6 +1,6 @@
 /// This example shows how to use subscribers with async/await syntax:
-/// Instead of a callback, we must introduce a spinning loop where we receive continously
-/// values from the subcription Stream.
+/// Instead of a callback, we call co_await on the subscriber stream. 
+/// we also must introduce a spinning loop so that we receive values continuously.
 #include <icey/icey.hpp>
 
 #include "std_msgs/msg/string.hpp"
