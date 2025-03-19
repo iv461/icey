@@ -1,9 +1,9 @@
 # Using TF 
 
-Coordinate systems are communicated in ROS over the topic `/tf` and `/tf_static`, so receiving them is an inherently asynchronous operation.
-To obtain coordinate system transforms, ICEY provides again an async/await based API. 
+Coordinate systems are communicated in ROS over the topic `/tf` and `/tf_static`, so receiving them is inherently an asynchronous operation.
+To obtain transforms from TF, ICEY provides again an async/await based API. 
 
-ICEY also allows you to *subscribe* to a single transform between to coordinate system instead of requesting a transform at a specific time. This features is also useful in some applications. 
+Additionally, ICEY allows you to *subscribe* to a single transform between to coordinate system instead of requesting a transform at a specific time. This features is also useful in some applications. 
 
 # Looking up transforms: 
 
@@ -19,14 +19,20 @@ node->icey()
       // Use a coroutine (an asynchronous function) as a callback for the subscriber:
       .then([&tf_buffer,
              &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
-    icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
+
+        icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
             co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
                                       icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
         /// Continue transforming the point cloud here ..
     });
 ```
-
 See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) example.
+
+The signature of the `lookup` function is the same as the `lookupTransform` function that you are used to. The difference is that in ICEY, we provide an async/await API, consistent with other *synchronous* APIs of inherently asynchronous operations (like service calls). 
+This 
+
+The call to lookup returns a `icey::Promise`
+
 
 # Promise mode 
 
