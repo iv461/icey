@@ -28,10 +28,12 @@ Table of Contents
    :maxdepth: 2
    
    getting_started
-   lifecycle_nodes
-   parameters
+   coroutine_basics
    async_flow
+   using_services
+   parameters
    using_tf
+   lifecycle_nodes
    translating_an_autoware_node
 
 .. toctree::    

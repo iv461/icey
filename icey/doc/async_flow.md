@@ -10,7 +10,7 @@ One typical use-case is calling service calls periodically by a timer:
 auto service = node->icey().create_client<ExampleService>("set_bool_service");
 
 icey().create_timer(1s)
-    .then([this](size_t) {
+    .then([this](size_t) -> icey::Promise<void> {
         /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
@@ -22,8 +22,10 @@ icey().create_timer(1s)
         } else {
             RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
         }
+        co_return;
     })
 ```
+
 The biggest difference of ICEY to regular ROS is that we can perform asynchronous operations inside callbacks: We call the service in the timer callback, and due using C++20 coroutines, we can co_await the service response without blocking the event queue. And all this while using only a single thread.
 
 Asynchronous operations can be called from any callback an no deadlocks can occur. 
