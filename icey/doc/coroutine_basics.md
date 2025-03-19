@@ -44,7 +44,7 @@ It is actually:
 4. After awaiting timer
 ```
 
-As you see, the function progresses as usual, there are no surprises up until `3. Before awaiting timer`. After printing this, the coroutine hits a `co_await` and suspends, which looks like it is returning -- `5. After calling coroutine` is printed. This allows it to reach the call to `icey::spin` that spins the ROS exectuor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine, is is therefore seemingly "jumping" in again. 
+As you see, the function progresses as usual, there are no surprises up until `3. Before awaiting timer`. After printing this, the coroutine hits a `co_await` and suspends, which looks like it is returning -- `5. After calling coroutine` is printed. This allows it to reach the call to `icey::spin` that spins the ROS executor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine. This is the interesting part -- the control seemingly "jumps" again inside the coroutine *after* it initially returned (`5. After calling coroutine` was printed).
 
 This is a very powerful behavior that allows for asynchronous programming in a single thread, i.e. without concurrency, as we will see in the following.
 

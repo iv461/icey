@@ -1,7 +1,7 @@
 # Services 
 
 Services are implemented using async/await syntax and service servers also allow to use asynchronous callback functions,  i.e. coroutines. 
-This enables more possibilities that were previously not possible with regular ROS:
+This allows for a more powerful  behavior that was previously not possible with regular ROS.
 
 # Server 
 
@@ -17,7 +17,7 @@ node->icey().create_service<ExampleService>(
       });
 ```
 
-This example used a synchronous callback, that returns imeditely the response. 
+This example used a synchronous callback, it returns the response immediately.
 
 ### With asynchronous callback
 
