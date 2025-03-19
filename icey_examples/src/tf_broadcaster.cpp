@@ -2,7 +2,7 @@
 using namespace std::chrono_literals;
 
 /// You can put the creation of times/subscribers/publishers etc. into a separate function, you do
-/// not have to store them in variables explicity:
+/// not have to store them in variables explicitly:
 auto create_yaw_rotation(icey::Node &node,
                          const icey::ParameterStream<std::string> &base_frame_param) {
   /// Note we do not assign the timer to a variable here, instead we just call then() on it:

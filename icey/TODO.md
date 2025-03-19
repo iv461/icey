@@ -8,8 +8,6 @@ Sorted by decreasing priority.
 
 - [ ] Test parameter as value for TF sub
 
-- [ ] Investigate whether await in a callback is possible
-
 - [ ] A separate Async function creating a result via promise (upstream service example ) is still broken, I guess I'm missing adding a continuation for a default-constructed promise 
 
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
@@ -17,6 +15,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Docs: Explain lambda-ownership, that lambdas need to be copied inside since the lifetime of the Stream is till the program exists. And that lvalues are copied as well. Think about whether it's good idea to force the user to explicitly mode the lambda inside so that the a named lvalue-lambda cannot be called by any other means.
 
+- [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing)
 
 - [ ] Docs: await in a callback is likely supported now, remove misleading notice 
 
@@ -306,3 +305,5 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Fix hang of getting a message from a separate async function: operator co_return of a Promise should put instead of set so that
 
 - [X] Fix per-request timeout timer for lookup
+- [X] Investigate whether await in a callback is possible
+- [X] Support async functions/coroutines as callbacks
