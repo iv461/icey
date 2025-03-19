@@ -7,26 +7,30 @@ ICEY allows to express asynchronous data-flow very easily, which is very useful 
 One typical use-case is calling service calls periodically by a timer:
 
 ```cpp
+auto service = node->icey().create_client<ExampleService>("set_bool_service");
+
 icey().create_timer(1s)
     .then([this](size_t) {
         /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
-        return request;
+        
+        icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+        if (result.has_error()) {
+            /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
+            RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
+        } else {
+            RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
+        }
     })
-    .call_service<ExampleService>("my_service")
-    .then([](ExampleService::Response::SharedPtr response) {
-        /// Builda  second request
-        return std::make_shared<ExampleService::Request>();
-    })
-    .call_service<ExampleService>("my_service2")
-    .except([](std::string error) {});
 ```
+The biggest difference of ICEY to regular ROS is that we can perform asynchronous operations inside callbacks: We call the service in the timer callback, and due using C++20 coroutines, we can co_await the service response without blocking the event queue. And all this while using only a single thread.
 
-See also the [service_client](../../icey_examples/src/service_client.cpp) example.
+Asynchronous operations can be called from any callback an no deadlocks can occur. 
 
-This operation is asynchronous in ICEY and so no dead-locks can occur. Services can be called from any other Stream, for example synchronizers
+See also the [service_client](../../icey_examples/src/service_client_async_await.cpp) example.
 
+No more dead-locks can occur. Services can be called from any other Stream, for example synchronizers
 
 ## Avoiding callback hell: 
 
@@ -88,36 +92,9 @@ ICEY offers two different ways of writing ROS nodes:
 - (1) using promises: create callbacks and use `.then` and `.except`
 - (2) async/await: Use `co_await` to write asynchronous code that looks like it's synchronous
 
-Both are valid ways of doing the same thing. We do not make a clear recommendation which of the two you should use.  You should choose instead one of the two, but feel free to experiment with both ways at he beginning.
-
-Arguments for Promises: 
-
-    - Pro: 
-        - A bit shorter code because ROS entities do not need to be created in advance
-        - Error-handling
-        - Likely more future-proof specifically for C++: the syntax is similar to a proposal for standartization (P2300) in regards to using lambda-continuations 
-        - 
-
-    - Con:
-        - Inherently asynchronous, passing functions as continuatinos which looks a bit like callbacks
-
-Arguments for Async/await aka. coroutines: 
-
-    - Pro: 
-        - Looks like synchronous code and more easy to reason about
-        - 
-    - Con: 
-        - 
-
-Both methods are 
-
-```{warning}
-You should not use asynchronous functions (coroutines) as callbacks: do not use `co_await`/`co_return`/`co_yield` from inside a callback since this will lead to a deadlock.
-Apart from this rule, it is fine to mix callbacks with coroutines.
-```
-
-
-Both ways are however not compatible
+Both are valid ways of doing the same thing. Both ways are useful, depending on the operation: Subscribes, timers and service servers require using callbacks (unless you have only a single one). 
+Service clients must use co_await `client.call(..)`
+Looking up transforms is usually done synchronous, `co_await lookup(...)`, but can be done also in promise-mode: You can *synchronize* with a transform.
 
 ## Control flow: Multiple inputs and multiple outputs
 

@@ -623,10 +623,11 @@ struct PromiseTag {};
 /// asynchronous code, see Lewis Bakers' talk at CppCon 2019
 /// (https://www.youtube.com/watch?v=1Wy5sq3s2rg), chapter "The Solution". Since we do not have a
 /// concurrent application but a single-threaded event-loop, the Promise is sufficient for us and we
-/// not need this "task". [cppcoro task]
-/// https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456 [asyncpp]
-/// https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23 [libcoro]
-/// https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp
+/// not need this "task". 
+///
+/// - [cppcoro task](https://github.com/lewissbaker/cppcoro/blob/master/include/cppcoro/task.hpp#L456)
+/// - [asyncpp](https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/task.h#L23)
+/// - [libcoro](https://github.com/jbaldwin/libcoro/blob/main/include/coro/task.hpp)
 template <class _Value = Nothing, class _Error = Nothing>
 class PromiseBase : public PromiseTag, public impl::Stream<_Value, _Error, Nothing, Nothing> {
 public:
