@@ -1,9 +1,10 @@
 # Coroutine basics
 
-Here we introduce C++20 coroutines. Coroutines are functions that allow for asynchronous programming using async/await syntax, currently the most popular method of doing asynchronous programming. Async/await is used with other programming languages like JavaScript, Rust and C#.
+Before looking intro services and TF, we will need to look intro C++ 20 coroutines.
+ Coroutines are functions that allow for asynchronous programming using async/await syntax, currently the most popular method of doing asynchronous programming. Async/await is used with other programming languages like JavaScript, Rust and C#.
 
 Coroutines contain any of the keywords `co_await`, `co_yield`, `co_return`. 
-A coroutine is a function that looks like it's returning when it needs to wait for an asynchronous operation with `co_await`, this is called *suspending*. Then, once the asynchronous operation is done, it "jumps" back into the function, this is called *resuming*, and cóntinues to executea after the `co_await` statement.
+A coroutine is a function that looks like it's returning when it needs to wait for an asynchronous operation with `co_await`, this is called *suspending*. Then, once the asynchronous operation is done, it "jumps" back into the function, this is called *resuming*, and continues to execute after the `co_await` statement.
 
 To see what this means, let's look at an example: 
 
@@ -47,5 +48,7 @@ It is actually:
 As you see, the function progresses as usual, there are no surprises up until `3. Before awaiting timer`. After printing this, the coroutine hits a `co_await` and suspends, which looks like it is returning -- `5. After calling coroutine` is printed. This allows it to reach the call to `icey::spin` that spins the ROS executor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine. This is the interesting part -- the control seemingly "jumps" again inside the coroutine *after* it initially returned (`5. After calling coroutine` was printed).
 
 This is a very powerful behavior that allows for asynchronous programming in a single thread, i.e. without concurrency, as we will see in the following.
+
+It enables synchronously-looking calls to services inside callbacks -- something that was previously not possible in ROS.
 
 

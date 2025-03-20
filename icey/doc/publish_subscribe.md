@@ -1,58 +1,55 @@
 # Publish and subscribe
 
-In the following, we will look at
+In the following, we will look at how to create publishers and subscriptions.
 
 ## The Stream concept 
 
-Streams are a fundamental concept on which ICEY builds. An `icey::Stream` is an asynchronous abstraction that represents a sequence of values, potentially infinitely many. 
-Subscribers, Service servers and Timers all model the Stream concept. 
-You can either register a callback on a Stream that get's called when a new value (i.e. ROS message) arrives, or asynchronously wait for a new value using `co_await stream`. 
+Streams are a fundamental concept upon which ICEY is built. An `icey::stream` is an asynchronous abstraction that represents a sequence of values, potentially infinitely many. 
+Subscribers, service servers, and timers all model the stream concept. 
+You can either register a callback on a stream that's invoked when a new value (i.e. ROS message) arrives, or you can asynchronously wait for a new value using `co_await stream`. 
 
-Streams shine when we apply transformations on them -- synchronization, filtering, buffering, we can also simply `publish()` a Stream. More on this later in the chapter 
+Streams shine when we apply transformations to them -- synchronization, filtering, buffering, we can also just `publish()` a stream. More on this later.
+
+
+## Subscribe
+
+Subscriptions are created using `node->icey().create_subscription<Message>(<topic-name>, <qos>, <callback>={}, <options>={})`. The meaning of the arguments is the same as that to the `create_subscription`-function of a regular ROS-node. 
+
+Example: 
 
 ```cpp
-#include <icey/icey.hpp>
-
-int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "sine_generator");
-
-  node->icey().create_timer(100ms)
-    .then([](size_t ticks) {
-        /// This function gets called each time the timer ticks
-        return std::sin(0.1 * ticks * 2 * M_PI);
-    })
-    /// The returned value is published on the topic "sine_signal" after the timer ticked.
-    .publish("sine_signal");
-    icey::spin(node);
-}
+auto node = icey::create_node(argc, argv, "yolo_node");
+icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera", 
+  [](sensor_msgs::msg::Image::SharedPtr msg) {
+      /// Consume camera message here ..
+  },
+  rclcpp::SensorDataQoS());
 ```
-See also the [signal generator example](../../icey_examples/src/signal_generator.cpp).
 
-In this simple example we already see some interesting features: You do not need to create a publisher beforehand, instead you declare that the result should be published on a topic. 
-Also, we do not store a timer object anywhere, ICEY stores it internally so that it does not get out of scope. This holds true for classes as well: In ICEY, you do not have to store 
-subscribers/timers/publisher etc. as members of the class, ICEY does this bookkeeping for you. 
+Key differences are: 
+  - The lifetime of the subscriber is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
+  - `create_subscriber` returns a stream, but you can access the ROS-subscriber using `steam.subscriber` 
+  - If no quality of service is given, a uses the so called *system default*
+  - The callback is optional: If you need to synchronize for example the subscriber, you do not need to provide a callback
 
-## The ICEY-node 
+## Publishers
 
-The ICEY library has two node classes: `icey::Node` and `icey::LifecycleNode`. 
-To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function simply creates a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
+Publishers are created using `node->icey().create_publisher<Message>(<topic-name>, <qos>, <options>={})`. The meaning of the arguments is the same as that to the `create_publisher`-function of a regular ROS-node. 
 
-The `icey::Node` is a subclass of an `rclcpp::Node`, so that you can drop-in replace you existing Node and gradually adopt ICEY's features.
-ICEY offers all it's features through the `icey::Context` interface, accessed through `node->icey()`.
+Example: 
 
-Since the ICEY-nodes are just subclasses of regular nodes, you can also build them into shared libraries and load them at runtime, i.e. use them as *components* with the `RCLCPP_COMPONENTS_REGISTER_NODE`-macro
+```cpp
+auto node = icey::create_node(argc, argv, "yolo_node");
+icey::PublisherStream<sensor_msgs::msg::Image> publisher = node->icey().create_publisher<sensor_msgs::msg::Image>("camera", 
+  [](sensor_msgs::msg::Image::SharedPtr msg) {
+      /// Consume camera message here ..
+  },
+  rclcpp::SensorDataQoS());
+```
 
-ICEY represents ROS primitives (sub/pub etc.) as a `Stream`, an asynchronous programming abstraction for a sequence of values. Such `Stream`s can be used with async/await syntax, i.e. `co_awaited` to obtain a new message from a subscriber for example. 
+Key differences are: 
+  - The lifetime of the subscriber is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
+  - `create_subscriber` returns a stream, but you can access the ROS-subscriber using `steam.subscriber` 
+  - If no quality of service is given, a uses the so called *system default*
+  - The callback is optional: If you need to synchronize for example the subscriber, you do not need to provide a callback
 
-If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
-
-In the following, we will look more closely into how Subscribers and Timers follow the `Stream` concept and how this changes the way of asynchronous programming. 
-
-## References: 
-
-- [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
-- [2] Promise proposal by William Woodall and async/await discussion: https://github.com/ros2/ros2_documentation/issues/901
-- [3] Mozilla Promise implementation: https://firefox-source-docs.mozilla.org/xpcom/mozpromise.html
-- [4] std::future lacks continuation, current (2024) state of the art: https://ikriv.com/blog/?p=4916
-- [5] https://engineering.fb.com/2015/06/19/developer-tools/futures-for-c-11-at-facebook/
-- [1] Tutorial on how to use callback groups in rclcpp https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255

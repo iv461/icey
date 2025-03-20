@@ -2,7 +2,7 @@
 
 ICEY is a a new API for the Robot Operating System (ROS) 2 that incorporates modern asynchronous programming concepts such as Promises and Streams and allows to use C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
 
-It is fully compatible to the ROS 2 API and allows for gradual adotoption as the `icey::Node` extends a regular ROS-NOde. It supports all major features of ROS: parameters, subscribers, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
+It is fully compatible to the ROS 2 API and allows for gradual adoption as the `icey::Node` extends a regular ROS-NOde. It supports all major features of ROS: parameters, subscribers, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
 
 ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the already implemented support for `image_transport` camera subscriber/publishers.
 
@@ -13,7 +13,7 @@ It offers additional goodies such as:
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
-The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilites of ICEY.
+The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
 # Install ICEY 
 
