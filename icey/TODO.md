@@ -3,6 +3,7 @@
 ## Must-have  for 0.1
 
 Sorted by decreasing priority. 
+- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
 - [ ] Test installing in Docker base image regarding dependencies 
 
@@ -27,7 +28,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Docs: Document that the lifetime of the Streams is tied to the Node 
 - [ ] Docs: Make clear that only synchronous functions are supported as callbacks
 
-- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 

@@ -219,7 +219,7 @@ struct TFListener {
                              OnError on_error) {
     /// Do the cleanup for the timers (i.e. collect the rclcpp::TimerBase objects) that were
     /// cancelled since the last call: We have to do this kind of deferred cleanup of timers because
-    /// timers likely would deadlock if we try to clean them up in their callback.
+    /// timers likely would deadlock if we try to clean them up in their own callback.
     cancelled_timers_.clear();
     RequestHandle request{std::make_shared<TransformRequest>(
         [target_frame]() { return target_frame; }, [source_frame]() { return source_frame; },
@@ -490,7 +490,7 @@ public:
   }
 
 private:
-  /// The internal rclcpp::Node does not consistently call the free function (i.e. rclcpp::create_*)
+  /// The implementation of rclcpp::Node does not consistently call the free functions (i.e. rclcpp::create_*)
   /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
   /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
   /// regular nodes without templates.
