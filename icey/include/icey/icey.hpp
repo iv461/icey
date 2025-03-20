@@ -2071,6 +2071,7 @@ struct ApproxTimeSynchronizerImpl {
 };
 
 /// A Stream representing an approximate time synchronizer from the message_filters package.
+/// \sa icey::synchronize_approx_time
 template <class... Messages>
 class ApproxTimeSynchronizer : public Stream<std::tuple<typename Messages::SharedPtr...>,
                                              std::string, ApproxTimeSynchronizerImpl<Messages...>> {
@@ -2104,8 +2105,7 @@ protected:
 };
 
 /// Synchronizes a topic with a transform using tf2_ros::MessageFilter.
-/// TODO we could implement this much simpler in like 50 SLOC once we support coroutines as
-/// subscriber callbacks and get rid of the messy tf2_ros::MessageFilter code.
+/// \sa Stream::synchronize_with_transform
 template <class Message>
 struct TransformSynchronizerImpl {
   using Self = TransformSynchronizerImpl<Message>;
