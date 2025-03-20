@@ -457,7 +457,8 @@ struct ServiceClientImpl {
     client(node_.create_client<ServiceT>(service_name, qos)) {}
 
   /// Make an asynchronous call to the service
-  RequestID call(Request request, const Duration &timeout, auto on_response, auto on_error) {
+  RequestID call(Request request, const Duration &timeout, std::function<void(Response)> on_response,
+        std::function<void(const std::string&)> on_error) {
     /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that were
     /// cancelled since the last call: 
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
@@ -478,11 +479,7 @@ struct ServiceClientImpl {
     auto future_and_req_id =
           client->async_send_request(request, [this, on_response, on_error, req_id](typename Client::SharedFuture result) {
             if (!result.valid()) {
-              if (!rclcpp::ok()) {
-                on_error("INTERRUPTED");
-              } else {
-                on_error("TIMEOUT");
-              }
+              on_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
             } else {
               /// Cancel and erase the timeout timer since we got a response
               active_timers_.erase(*req_id);
@@ -496,12 +493,8 @@ struct ServiceClientImpl {
             client->remove_pending_request(request_id);
             active_timers_.at(request_id)->cancel();
             cancelled_timers_.emplace(active_timers_.at(request_id));
-            active_timers_.erase(request_id);
-            if (!rclcpp::ok()) {
-              on_error("INTERRUPTED");
-            } else {
-              on_error("TIMEOUT");
-            }
+            active  _timers_.erase(request_id);
+            on_error("TIMEOUT");
       }));
     return future_and_req_id.request_id;
   }
@@ -514,10 +507,7 @@ struct ServiceClientImpl {
   NodeBase &node_;
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
 protected:
-
-  /// The rclcpp API does not give us a request id inside the callback, so we need to map the request to the ID to be able to cancel the timeout timers
-  std::unordered_map<Request, RequestID> request_to_id_;
-  std::unordered_map<RequestID, Request> request_id_to_request_;
+  
   /// The timeout timers for every lookup transform request: These are only the active timers, i.e. the timeout timers for pending requests.
   std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
   /// A separate hashset for cancelled timers so that we know immediatelly which are cancelled.
