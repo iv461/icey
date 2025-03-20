@@ -147,30 +147,60 @@ struct Weak {
   std::weak_ptr<T> p_;
 };
 
-/// An asynchronous transform listener that allows to asynchronous lookups and to subscribe on a
+/// A subscriber + buffer for transforms that allows for asynchronous lookups and to subscribe on a
 /// single transform between two coordinate systems. It is otherwise implemented similarly to the
-/// tf2_ros::TransformListener. Every time a new message is received on /tf, it checks whether a
-/// relevant transforms (i.e. ones we subscribed) was received. It is therefore an asynchronous
-/// interface to TF, similar to the tf2_ros::AsyncBuffer. However, we do not use the
+/// tf2_ros::TransformListener but offering a well-developed asynchronous API. 
+//  It works like this: Every time a new message is received on /tf, we check whether a
+/// relevant transforms (i.e. ones we subscribed or ones we need to look up) was received. If yes, we notify via a callback. 
+/// It is therefore an asynchronous interface to TF, similar to the tf2_ros::AsyncBuffer. However, we do not use the
 /// tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot make another lookup
-/// in the callback of a lookup (it holds a mutex locked while calling the user callback)
-// This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
+/// in the callback of a lookup (it holds a mutex locked while calling the user callback, which is simply a wrong thing to do)  
+/// This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
+  using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
+
   using OnTransform = std::function<void(const TransformMsg &)>;
   using OnError = std::function<void(const tf2::TransformException &)>;
+
   using GetFrame = std::function<std::string()>;
+  
+  /// A transform request stores a request for looking up a transform between two coordinate
+  /// systems. Either (1) at a particular time with a timeout, or (2) as a subscription. When
+  /// "subscribing" to a transform, we yield a transform each time it changes.
+  struct TransformRequest {
+    TransformRequest(const GetFrame &target_frame, const GetFrame &source_frame,
+      OnTransform on_transform, OnError on_error,
+      std::optional<Time> _maybe_time = {})
+        : target_frame(target_frame),
+        source_frame(source_frame),
+        on_transform(on_transform),
+        on_error(on_error),
+        maybe_time(_maybe_time) {}
+    GetFrame target_frame;
+    GetFrame source_frame;
+    std::optional<TransformMsg> last_received_transform;
+    OnTransform on_transform;
+    OnError on_error;
+    std::optional<Time> maybe_time;
+  };
+
+  /// A request for a transform lookup: It represents effectively a single call to the async_lookup function. 
+  /// Even if you call async_lookup with the exact same arguments (same frames and time), this will count as two separate requests.
+  using RequestHandle = std::shared_ptr<TransformRequest>;
 
   explicit TFListener(const NodeInterfaces &node) : node_(node) { init(); }
 
-  /// Add notification for a single transform.
+  /// @brief Subscribe to a single transform between two coordinate systems target_frame and source_frame: Every time a message arrives on /tf or /tf_static, either the 
+  /// the on_transform or on_error callback is called, depending on whether the lookup succeeds. 
+  // The on_transform callback is called only if the transform between these two coordinate systems changed.
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
     requests_.emplace(
         std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error));
   }
 
-  /// @brief Looks up and returns the transform at the given time between the given frames. It does
+  /// @brief Queries the TF buffer for a transform at the given time between the given frames. It does
   /// not wait but instead only returns something if the transform is already in the buffer.
   ///
   /// @param target_frame
@@ -189,36 +219,24 @@ struct TFListener {
       return Result<geometry_msgs::msg::TransformStamped, std::string>::Err(e.what());
     }
   }
-
-  using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
-
-  /// A transform request stores a request for looking up a transform between two coordinate
-  /// systems. Either (1) at a particular time with a timeout, or (2) as a subscription. When
-  /// "subscribing" to a transform, we yield a transform each time it changes.
-  struct TransformRequest {
-    TransformRequest(const GetFrame &target_frame, const GetFrame &source_frame,
-                     OnTransform on_transform, OnError on_error,
-                     std::optional<Time> _maybe_time = {})
-        : target_frame(target_frame),
-          source_frame(source_frame),
-          on_transform(on_transform),
-          on_error(on_error),
-          maybe_time(_maybe_time) {}
-    GetFrame target_frame;
-    GetFrame source_frame;
-    std::optional<TransformMsg> last_received_transform;
-    OnTransform on_transform;
-    OnError on_error;
-    std::optional<Time> maybe_time;
-  };
-
-  using RequestHandle = std::shared_ptr<TransformRequest>;
+  
+  /// @brief Makes an asynchronous lookup for a for a transform at the given time between the given frames. 
+  ///
+  /// @param target_frame
+  /// @param source_frame
+  /// @param time
+  /// @param timeout
+  /// @param on_transform The callback that is called with the requested transform after it becomes available
+  /// @param on_error The callback that is called if a timeout occurs.
+  /// @return The "handle", identifying this request. You can use this handle to call `cancel_request` if you do not want that the given callbacks are called anymore.
+  /// @warning Currently the timeout is measured with wall-time, i.e. does not consider sim-time due to the limitation of ROS 2 Humble only offering wall-timers
   RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame,
                              Time time, const Duration &timeout, OnTransform on_transform,
                              OnError on_error) {
-    /// Do the cleanup for the timers (i.e. collect the rclcpp::TimerBase objects) that were
-    /// cancelled since the last call: We have to do this kind of deferred cleanup of timers because
-    /// timers likely would deadlock if we try to clean them up in their own callback.
+    /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that were
+    /// cancelled since the last call to async_lookup: 
+    // We need to do this kind of deferred cleanup because we would likely get a deadlock if
+    // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock occurs is currently an unspecified behavior, and therefore likely to change in the future.)
     cancelled_timers_.clear();
     RequestHandle request{std::make_shared<TransformRequest>(
         [target_frame]() { return target_frame; }, [source_frame]() { return source_frame; },
@@ -228,9 +246,9 @@ struct TFListener {
     active_timers_.emplace(request, rclcpp::create_wall_timer(
         timeout,
         [this, on_error, request = Weak(request)]() {
-          active_timers_.at(request.lock())->cancel();  /// cancel the timer, (it still lives in the active_timers_)
+          active_timers_.at(request.lock())->cancel();  /// cancel this timer, (it still lives in the active_timers_)
           cancelled_timers_.emplace(active_timers_.at(request.lock())); /// Copy the timer over to the cancelled ones so that we know we need to clean it up next time
-          active_timers_.erase(request.lock());  // Erase the timer for this request from active_timers_ 
+          active_timers_.erase(request.lock());  // Erase this timer from active_timers_ 
           requests_.erase(request.lock());  // Destroy the request
           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
         },
@@ -238,9 +256,9 @@ struct TFListener {
     return request;
   }
 
-  /// Cancel the registered notification for any message on TF. If this request does not exist, it
-  /// does nothing.
-  void cancel_request(RequestHandle request) { requests_.erase(request); }
+  /// Cancel a transform request: This means that the registered callbacks will no longer be called. If the given request does not exist, this function
+  /// does nothing. 
+  bool cancel_request(RequestHandle request) { return requests_.erase(request); }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
   /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
