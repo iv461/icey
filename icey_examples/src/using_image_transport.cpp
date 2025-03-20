@@ -17,9 +17,7 @@ int main(int argc, char **argv) {
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
 
   auto node = icey::create_node(argc, argv, "signal_generator");
-  auto &icey = node->icey();
-  auto camera_center_sub =
-      icey::create_camera_subscription(icey, "camera_center", "raw", rclcpp::SensorDataQoS());
+  auto camera_center_sub = node->icey().create_stream<icey::CameraSubscriber>("camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
       //.timeout(rclcpp::Duration(100ms))
@@ -35,8 +33,7 @@ int main(int argc, char **argv) {
       });
 
   /// Create a regular image_transport::Subscriber to receive compressed images
-  auto camera_left_sub = icey::create_image_transport_subscription(icey, "camera_left", "raw",
-                                                                   rclcpp::SensorDataQoS());
+  auto camera_left_sub = node->icey().create_stream<icey::ImageTransportSubscriber>("camera_left", "raw", rclcpp::SensorDataQoS());
 
   camera_left_sub
       /// We receive here the image after image_transport has decompressed it:
