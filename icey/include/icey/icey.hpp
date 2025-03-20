@@ -223,6 +223,7 @@ struct TFListener {
     RequestHandle request{std::make_shared<TransformRequest>(
         [target_frame]() { return target_frame; }, [source_frame]() { return source_frame; },
         on_transform, on_error, time)};
+    requests_.emplace(request);
     /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
     active_timers_.emplace(request, rclcpp::create_wall_timer(
         timeout,
@@ -234,7 +235,6 @@ struct TFListener {
           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
         },
         nullptr, node_.get_node_base_interface().get(), node_.get_node_timers_interface().get()));
-    requests_.emplace(request);
     return request;
   }
 
@@ -423,19 +423,19 @@ public:
   }
 
   template <class Msg, class F>
-  auto add_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
+  auto create_subscription(const std::string &topic, F &&cb, const rclcpp::QoS &qos,
                         const rclcpp::SubscriptionOptions &options) {
     return rclcpp::create_subscription<Msg>(node_topics_, topic, qos, cb, options);
   }
 
   template <class Msg>
-  auto add_publisher(const std::string &topic, const rclcpp::QoS &qos,
+  auto create_publisher(const std::string &topic, const rclcpp::QoS &qos,
                      const rclcpp::PublisherOptions publisher_options) {
     return rclcpp::create_publisher<Msg>(node_topics_, topic, qos, publisher_options);
   }
 
   template <class CallbackT>
-  auto add_timer(const Duration &time_interval, CallbackT &&callback,
+  auto create_wall_timer(const Duration &time_interval, CallbackT &&callback,
                  rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     /// We have not no normal timer in Humble, this is why only wall_timer is supported
     return rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group,
@@ -443,7 +443,7 @@ public:
   }
 
   template <class ServiceT, class CallbackT>
-  auto add_service(const std::string &service_name, CallbackT &&callback,
+  auto create_service(const std::string &service_name, CallbackT &&callback,
                    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
@@ -452,7 +452,7 @@ public:
   }
 
   template <class Service>
-  auto add_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+  auto create_client(const std::string &service_name, const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                   rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
                                           qos.get_rmw_qos_profile(), group);
@@ -1380,7 +1380,7 @@ struct SubscriptionStream
   SubscriptionStream(NodeBookkeeping &node, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
       : Base(node) {
-    this->impl()->subscriber = node.add_subscription<_Message>(
+    this->impl()->subscriber = node.create_subscription<_Message>(
         topic_name,
         [impl = this->impl()](typename _Message::SharedPtr new_value) {
           impl->put_value(new_value);
@@ -1470,7 +1470,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   using Base = Stream<size_t, Nothing, TimerImpl>;
   TimerStream() = default;
   TimerStream(NodeBookkeeping &node, const Duration &interval, bool is_one_off_timer) : Base(node) {
-    this->impl()->timer = node.add_timer(interval, [impl = this->impl(), is_one_off_timer]() {
+    this->impl()->timer = node.create_wall_timer(interval, [impl = this->impl(), is_one_off_timer]() {
       /// Needed as separate state as it might be resetted in async/await mode
       auto cnt = impl->ticks_counter;
       impl->ticks_counter++;
@@ -1521,7 +1521,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
                   const rclcpp::PublisherOptions publisher_options = {},
                   Input *maybe_input = nullptr)
       : Base(node) {
-    this->impl()->publisher = node.add_publisher<Message>(topic_name, qos, publisher_options);
+    this->impl()->publisher = node.create_publisher<Message>(topic_name, qos, publisher_options);
     this->impl()->register_handler(
         [impl = this->impl()](const auto &new_state) { impl->publish(new_state.value()); });
     if (maybe_input) {
@@ -1597,7 +1597,7 @@ struct ServiceStream : public Stream<std::tuple<std::shared_ptr<rmw_request_id_t
   ServiceStream(NodeBookkeeping &node, const std::string &service_name,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : Base(node) {
-    this->impl()->service = node.add_service<_ServiceT>(
+    this->impl()->service = node.create_service<_ServiceT>(
         service_name,
         [impl = this->impl()](RequestID request_id, Request request) {
           impl->put_value(std::make_tuple(request_id, request));
@@ -1679,7 +1679,7 @@ struct ServiceClient : public StreamImplDefault {
   ServiceClient(NodeBookkeeping &node, const std::string &service_name,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : node_(node) {
-    client = node.add_client<ServiceT>(service_name, qos);
+    client = node.create_client<ServiceT>(service_name, qos);
   }
   NodeBookkeeping &node_;
 
@@ -1729,7 +1729,7 @@ struct ServiceClient : public StreamImplDefault {
             }
           });
       timeout_timer_ =
-          node_.add_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
+          node_.create_wall_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
             client->remove_pending_request(req_id);
             timeout_timer_->cancel();
             if (!rclcpp::ok()) {
