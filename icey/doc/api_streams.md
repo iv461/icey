@@ -2,19 +2,19 @@
 
 All the ROS entities such as subscribers, publishers/timers etc., most of them follow the `Stream` concept.
 
+## Asynchronous primitives 
 
 ```{doxygenstruct} icey::Result
 ```
 ```{doxygenstruct} icey::Nothing
 ```
 
-```{doxygenstruct} icey::StreamTag
-```
 ```{doxygenclass} icey::Stream
 ```
 
 ```{doxygenclass} icey::Promise
 ```
+
 
 ```{doxygentypedef} icey::Clock
 ```
@@ -22,6 +22,8 @@ All the ROS entities such as subscribers, publishers/timers etc., most of them f
 ```
 ```{doxygentypedef} icey::Duration
 ```
+
+## Entities 
 
 ```{doxygenstruct} icey::ParameterStream
 ```
@@ -83,5 +85,5 @@ Actual implementation of the stream.
 
 ## C++20 coroutines support 
 
-```{doxygenstruct} icey::PromiseInterfaceForCoroutines
+```{doxygenstruct} icey::Awaiter
 ```
