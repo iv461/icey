@@ -463,27 +463,19 @@ struct ServiceClientImpl {
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
     // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock occurs is currently an unspecified behavior, and therefore likely to change in the future.)
     cancelled_timers_.clear();
-
-    /// We call here the synchronous code because there is no asynchronous API for
-      /// wait_for_service.
-      /// TODO we cannot even use the synchronous API because this will call the callback and
-      /// therefore the coroutine continuation directly (i.e. synchronously) instead in the event
-      /// loop, eventually leading to a stack overflow
-      /*if(!client->wait_for_service(timeout)) {
-        //
-      Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
-        if (!rclcpp::ok()) {
-          future.put_error("INTERRUPTED");
-        } else {
-          future.put_error("SERVICE_UNAVAILABLE");
-        }
-        return Cancel{};
-      } else {*/
+    /// TODO we cannot wait for the service synchronously because this will call the callback and
+    /// therefore the coroutine continuation directly (i.e. synchronously) instead in the event
+    /// loop, eventually leading to a stack overflow
+    /*if(!client->wait_for_service(timeout)) {
+      if (!rclcpp::ok()) {
+        future.put_error("INTERRUPTED");
+      } else {
+        future.put_error("SERVICE_UNAVAILABLE");
+      }
+      return Cancel{};
+    } else {*/
     auto future_and_req_id =
-          client->async_send_request(request, [this, on_response, on_error](typename Client::SharedFuture result, 
-            typename Client::SharedRequestId request_id) {
-            /// Cancel and erase the timeout timer since we got a response
-            active_timers_.erase(request_id);
+          client->async_send_request(request, [this, on_response, on_error](typename Client::SharedFutureWithRequest result) {
             if (!result.valid()) {
               if (!rclcpp::ok()) {
                 on_error("INTERRUPTED");
@@ -491,12 +483,19 @@ struct ServiceClientImpl {
                 on_error("TIMEOUT");
               }
             } else {
-              on_response(result.get());
+              /// Cancel and erase the timeout timer since we got a response
+              const auto [request, response] = result.get();
+              active_timers_.erase(request_to_id_.at(request));
+              this->remove_req(request_to_id_.at(request));
+              on_response(response);
             }
         });
+    request_to_id_.emplace(request, future_and_req_id.request_id);
+    request_id_to_request_.emplace(future_and_req_id.request_id, request);
+
     active_timers_.emplace(future_and_req_id.request_id,
         node_.create_wall_timer(timeout, [this, on_error, request_id=future_and_req_id.request_id] {
-            client->remove_pending_request(request_id);
+            this->remove_req(request_id);
             active_timers_.at(request_id)->cancel();
             cancelled_timers_.emplace(active_timers_.at(request_id));
             active_timers_.erase(request_id);
@@ -510,16 +509,23 @@ struct ServiceClientImpl {
   }
 
   bool cancel_request(RequestID request_id) {
-    client->remove_pending_request(request_id);
+    this->remove_req(request_id);
     return active_timers_.erase(request_id);
   }
-
+  
+  NodeBase &node_;
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
 protected:
-  NodeBase &node_;
 
+  void remove_req(RequestID request_id) {
+    client->remove_pending_request(request_id);
+    request_to_id_.erase(request_id_to_request_.at(request_id));
+    request_id_to_request_.erase(request_id);
+  }
 
-  std::unordered_set<RequestID> requests_;
+  /// The rclcpp API does not give us a request id inside the callback, so we need to map the request to the ID to be able to cancel the timeout timers
+  std::unordered_map<Request, RequestID> request_to_id_;
+  std::unordered_map<RequestID, Request> request_id_to_request_;
   /// The timeout timers for every lookup transform request: These are only the active timers, i.e. the timeout timers for pending requests.
   std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
   /// A separate hashset for cancelled timers so that we know immediatelly which are cancelled.
