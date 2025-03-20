@@ -1430,8 +1430,7 @@ struct TransformSubscriptionStream : public Stream<geometry_msgs::msg::Transform
 /// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given
 /// point in time. It is similar to the tf2_ros::AsyncBufferInterface, but returns awaitable
 /// futures.
-template <class Ctx>
-struct TransformBuffer : public StreamImplDefault {
+struct TransformBuffer {
   TransformBuffer() = default;
   TransformBuffer(NodeBookkeeping &node) : tf_listener(node.add_tf_listener_if_needed()) {}
 
@@ -2025,12 +2024,13 @@ public:
   /// list of streams so that it does not go out of scope. It also sets the context.
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
-    S stream(static_cast<NodeBookkeeping &>(*this), std::forward<Args>(args)...);
+    S stream(node(), std::forward<Args>(args)...);
     /// Track (i.e. reference) the Stream impl so that it does not go out of scope.
     stream.impl()->context = this->shared_from_this();
     return stream;
   }
 
+  NodeBookkeeping &node() { return node();}
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
   /// \sa For more detailed documentation:
@@ -2101,7 +2101,7 @@ public:
       using Field = std::remove_reference_t<decltype(field_value)>;
       std::string field_name_r = name_prefix + std::string(field_name);
       if constexpr (is_stream<Field>) {
-        static_cast<NodeBookkeeping &>(*this).stream_impls_.push_back(field_value.impl_);
+        node().stream_impls_.push_back(field_value.impl_);
         field_value.impl()->context =
             this->shared_from_this();  /// First, give it the missing context
 
@@ -2110,7 +2110,7 @@ public:
           field_value.impl()->register_handler(
               [field_name_r, notify_callback](const auto &) { notify_callback(field_name_r); });
         }
-        field_value.register_with_ros(static_cast<NodeBookkeeping &>(*this));
+        field_value.register_with_ros(node());
       } else if constexpr (is_valid_ros_param_type<Field>::value) {
         this->declare_parameter<Field>(field_name_r, field_value)
             .impl()
@@ -2157,11 +2157,7 @@ public:
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
   /// tf2_ros::TransformListener. It is used to `lookup()` transforms asynchronously at a specific
   /// point in time.
-  TransformBuffer<Context> create_transform_buffer() {
-    TransformBuffer<Context> tf_buffer(static_cast<NodeBookkeeping &>(*this));
-    tf_buffer.context = this->shared_from_this();
-    return tf_buffer;
-  }
+  TransformBuffer create_transform_buffer() { return TransformBuffer{node()}; }
 
   /// Create a publisher stream.
   /// Works otherwise the same as [rclcpp::Node::create_publisher].
@@ -2210,7 +2206,7 @@ public:
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    ServiceClient<ServiceT> client(static_cast<NodeBookkeeping &>(*this), service_name, qos);
+    ServiceClient<ServiceT> client(node(), service_name, qos);
     client.context = this->shared_from_this();
     return client;
   }
