@@ -474,8 +474,9 @@ struct ServiceClientImpl {
       }
       return Cancel{};
     } else {*/
+    auto req_id = std::make_shared<RequestID>();
     auto future_and_req_id =
-          client->async_send_request(request, [this, on_response, on_error](typename Client::SharedFutureWithRequest result) {
+          client->async_send_request(request, [this, on_response, on_error, req_id](typename Client::SharedFuture result) {
             if (!result.valid()) {
               if (!rclcpp::ok()) {
                 on_error("INTERRUPTED");
@@ -484,18 +485,15 @@ struct ServiceClientImpl {
               }
             } else {
               /// Cancel and erase the timeout timer since we got a response
-              const auto [request, response] = result.get();
-              active_timers_.erase(request_to_id_.at(request));
-              this->remove_req(request_to_id_.at(request));
-              on_response(response);
+              active_timers_.erase(*req_id);
+              on_response(result.get());
             }
         });
-    request_to_id_.emplace(request, future_and_req_id.request_id);
-    request_id_to_request_.emplace(future_and_req_id.request_id, request);
+    *req_id = future_and_req_id.request_id;
 
     active_timers_.emplace(future_and_req_id.request_id,
         node_.create_wall_timer(timeout, [this, on_error, request_id=future_and_req_id.request_id] {
-            this->remove_req(request_id);
+            client->remove_pending_request(request_id);
             active_timers_.at(request_id)->cancel();
             cancelled_timers_.emplace(active_timers_.at(request_id));
             active_timers_.erase(request_id);
@@ -509,19 +507,13 @@ struct ServiceClientImpl {
   }
 
   bool cancel_request(RequestID request_id) {
-    this->remove_req(request_id);
+    client->remove_pending_request(request_id);
     return active_timers_.erase(request_id);
   }
   
   NodeBase &node_;
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
 protected:
-
-  void remove_req(RequestID request_id) {
-    client->remove_pending_request(request_id);
-    request_to_id_.erase(request_id_to_request_.at(request_id));
-    request_id_to_request_.erase(request_id);
-  }
 
   /// The rclcpp API does not give us a request id inside the callback, so we need to map the request to the ID to be able to cancel the timeout timers
   std::unordered_map<Request, RequestID> request_to_id_;
