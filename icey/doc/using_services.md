@@ -30,10 +30,13 @@ auto upstream_service_client =
       node->icey().create_client<ExampleService>("set_bool_service_upstream");
 
 node->icey().create_service<ExampleService>(
-      "set_bool_service", [&](auto request) -> icey::Promise<Response> {
+      "set_bool_service", 
+        /// An asynchronous callback (coroutine) returns a Promise<Response>:
+        [&](auto request) -> icey::Promise<Response> {
+
         /// Call the upstream service with 1s timeout asynchronously:
-        icey::Result<Response, std::string> upstream_result =
-            co_await upstream_service_client.call(request, 1s);
+        icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
+
         if (upstream_result.has_error()) {
           RCLCPP_INFO_STREAM(node->get_logger(),
                              "Upstream service returned error: " << upstream_result.error());
@@ -44,6 +47,7 @@ node->icey().create_service<ExampleService>(
           /// Respond to the client with the upstream server's response:
           co_return upstream_response;
         }
+        
       });
 ```
 This example calls another service inside the callback: This is an asynchronous operation that is awaited (`co_await`). Once it completes, the server sends the response. 

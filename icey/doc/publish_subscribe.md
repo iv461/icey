@@ -27,7 +27,7 @@ icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().cr
 ```
 
 Key differences are: 
-  - The lifetime of the subscriber is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
+  - The lifetime of the subscription is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
   - `create_subscriber` returns a stream, but you can access the ROS-subscriber using `steam.subscriber` 
   - If no quality of service is given, a uses the so called *system default*
   - The callback is optional: If you need to synchronize for example the subscriber, you do not need to provide a callback
@@ -40,16 +40,14 @@ Example:
 
 ```cpp
 auto node = icey::create_node(argc, argv, "yolo_node");
-icey::PublisherStream<sensor_msgs::msg::Image> publisher = node->icey().create_publisher<sensor_msgs::msg::Image>("camera", 
-  [](sensor_msgs::msg::Image::SharedPtr msg) {
-      /// Consume camera message here ..
-  },
-  rclcpp::SensorDataQoS());
+icey::PublisherStream<sensor_msgs::msg::Image> publisher = node->icey().create_publisher<sensor_msgs::msg::Image>("camera", rclcpp::SensorDataQoS());
+
+publisher.publish(message);
 ```
 
 Key differences are: 
-  - The lifetime of the subscriber is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
-  - `create_subscriber` returns a stream, but you can access the ROS-subscriber using `steam.subscriber` 
-  - If no quality of service is given, a uses the so called *system default*
-  - The callback is optional: If you need to synchronize for example the subscriber, you do not need to provide a callback
+  - The lifetime of the publisher is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
+  - `create_publisher` returns a stream, but you can access the ROS-publisher using `steam.publisher` 
+  - If no quality of service is given, a uses the so called *system default*  
 
+publisher()

@@ -27,7 +27,8 @@ node->icey()
 See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) example.
 
 The signature of the `lookup` function is the same as the `lookupTransform` function that you are used to. The difference is that in ICEY, we provide an async/await API, consistent with other *synchronous* APIs of inherently asynchronous operations (like service calls). 
-This 
+
+This means, while the wait in the original ROS API is synchronous ("busy-wait"), with ICEY it is an *asynchronous* wait. 
 
 The call to lookup returns a `icey::Promise`
 
