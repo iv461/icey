@@ -588,9 +588,6 @@ template <class F, class Arg>
 struct check_callback {
   static_assert(std::is_invocable_v<F, Arg>, "The callback has the wrong signature");
   using ReturnType = std::invoke_result_t<F, Arg>;
-  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag,
-        std::invoke_result_t<F, Arg> >,
-        "No coroutine, i.e. asynchronous functions are allowed as callbacks");*/
 };
 
 template <class F, class... Args>
@@ -599,8 +596,6 @@ struct check_callback<F, std::tuple<Args...>> {
                 "The callback has the wrong signature, it has to take multiple arguments (the "
                 "Stream holds tuple, the arguments are all the elements of the tuple)");
   using ReturnType = std::invoke_result_t<F, Args...>;
-  /*static_assert(!std::is_base_of_v<PromiseInterfaceForCoroutinesTag, std::invoke_result_t<F,
-     Args...> >, "No coroutines, i.e. asynchronous functions are allowed as callbacks");*/
 };
 
 struct PromiseTag {};
@@ -811,15 +806,13 @@ class Stream : public StreamTag {
   static_assert(std::is_default_constructible_v<ImplBase>,
                 "ImplBase must be default constructable");
   friend Context;
-
+  friend Awaiter<Stream<_Value, _Error, ImplBase>>;
 public:
   using Value = _Value;
   using Error = _Error;
   using Self = Stream<_Value, _Error, ImplBase>;
-  friend Awaiter<Self>;
   /// The actual implementation of the Stream
   using Impl = impl::Stream<Value, Error, WithDefaults<ImplBase>, WithDefaults<Nothing>>;
-
   /// [Coroutine support]
   using promise_type = Self;
 
@@ -831,8 +824,7 @@ public:
 #endif
 
   /// Create s new stream using the context.
-  explicit Stream(NodeBookkeeping &book) { book.stream_impls_.push_back(impl_); }
-
+  explicit Stream(NodeBookkeeping &book): impl_(book.create_stream_impl<Impl>()) {}
   explicit Stream(std::shared_ptr<Impl> impl) : impl_(impl) {}
 
   /// [Coroutine support]
@@ -847,12 +839,12 @@ public:
   /// it's time. (The compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
-  /// Allow this stream to be awaited with `co_await stream` in C++20 coroutines.
+  /// [Coroutine support] Allow this stream to be awaited with `co_await stream` in C++20 coroutines.
   /// It spins the ROS executor until this Stream has something (value or error) and then resumes
   /// the coroutine.
   Awaiter<Self> operator co_await() { return Awaiter{*this}; }
 
-  /// Implementation of the operator co_return(x) for coroutine support: It *sets* the value of the
+  /// [Coroutine support] Implementation of the operator co_return(x): It *sets* the value of the
   /// Stream object that is about to get returned (the compiler creates it beforehand)
   void return_value(const Value &x) {
     if (icey_coro_debug_print)
@@ -1090,7 +1082,7 @@ protected:
   }
 
   /// The pointer to the undelying implementation (i.e. PIMPL idiom).
-  std::shared_ptr<Impl> impl_{impl::create_stream<Impl>()};
+  Weak<Impl> impl_{nullptr};
   std::exception_ptr exception_ptr_{nullptr};
 };
 
@@ -2022,7 +2014,8 @@ public:
     return stream;
   }
 
-  NodeBookkeeping &node() { return static_cast<NodeBookkeeping &>(*this);}
+  NodeBookkeeping &node() { return static_cast<NodeBookkeeping &>(*this); }
+
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
   /// \sa For more detailed documentation:
@@ -2093,10 +2086,9 @@ public:
       using Field = std::remove_reference_t<decltype(field_value)>;
       std::string field_name_r = name_prefix + std::string(field_name);
       if constexpr (is_stream<Field>) {
-        node().stream_impls_.push_back(field_value.impl_);
+        field_value.impl_ = node().create_stream_impl<typename Field::Impl>();
         field_value.impl()->context =
             this->shared_from_this();  /// First, give it the missing context
-
         field_value.parameter_name = field_name_r;
         if (notify_callback) {
           field_value.impl()->register_handler(

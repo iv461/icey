@@ -3,6 +3,7 @@
 ## Must-have  for 0.1
 
 Sorted by decreasing priority. 
+
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 
 - [ ] Test installing in Docker base image regarding dependencies 
@@ -34,6 +35,9 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
 - [ ] Static assert that the callbacks are not coroutines
+
+- [ ] Code refactor: re-use common code between Promise and Stream by modifying impl::Stream: Remove `take()` from impl::Stream, rename impl::Stream to Promise. Implement the coroutine support in impl::Stream, i.e. the interface functions as well as storing the coroutine continuation and the exception_ptr. An open question is where to implement then/except: They do the dynamic memory allocation, but the Promise as needed right now by the services do not perform dynamic memory allocation. 
+
 ## Error-handling
 
 ## Examples 
@@ -48,22 +52,23 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer
 
 - [ ] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct
-- [ ] rclcpp also has a TimerInfo (previously called TimerEvent) with the time, use it as the state. 
+- [ ] rclcpp also has a TimerInfo (the thing that previously was called TimerEvent in ROS 1) with the time, use it as the state. 
 
-- [ ] C++20 Modules support 
+- [ ] Consider C++20 Modules support -> insufficient compiler support 
 
 - [ ] Automatic adaption of queue size in ApproxTimeSync
+
 - [ ] Maybe generalize concept of push/pull Stream 
+
 - [ ] Add static asserts that message has header stamp for better compiler error messages
+
 - [ ] Support better parameter API: icey::Interval(0, 5.5) (i.e. determine the common type between the int and double literal) and allow for icey::Set("normal", "pulse", "single"), i.e. determine the common type of fixed-size char arrays correctly as std::string. 
+
 - [ ] Allow std::array as parameter type with automatic validation for the size -> generally, add parameter type converters.
 
-- [ ] In case we have overhead on calling callbacks, use the pmr::mem_pool allocator that acts like a linear allocator in case all Streams are equally large so that we achieve less cache misses.
+- [ ] In case we have overhead on calling callbacks, use the std::pmr::mem_pool allocator that acts like a linear allocator in case all Streams are equally large so that we achieve less cache misses.
 
 - [] [Stream] member-then with static alloc idea: Return the state from the lambda conditionally on param (auto param that can be constexpr in C++17) -> p2300 does pipe then
-
-- [X] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1 -> no cascading, we instread require that th input is error-free 
-
 
 - [ ] Auto-pipelining with TBB graph
 
@@ -307,3 +312,5 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Fix per-request timeout timer for lookup
 - [X] Investigate whether await in a callback is possible
 - [X] Support async functions/coroutines as callbacks
+
+- [X] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1 -> no cascading, we instread require that th input is error-free 
