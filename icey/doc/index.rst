@@ -28,11 +28,14 @@ Table of Contents
    :maxdepth: 2
    
    getting_started
-   coroutine_basics
+   first_icey_node
+   publish_subscribe
    async_flow
+   filtering
+   coroutine_basics
    using_services
-   parameters
    using_tf
+   parameters
    lifecycle_nodes
    translating_an_autoware_node
 

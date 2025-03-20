@@ -437,7 +437,7 @@ protected:
   std::unordered_set<RequestHandle> requests_;
   /// The timeout timers for every lookup transform request: These are only the active timers, i.e. the timeout timers for pending requests.
   std::unordered_map<RequestHandle, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  /// A separate hashset for cancelled timers so that we know immediatelly which are cancelled.
+  /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
 };
 
@@ -510,7 +510,7 @@ protected:
   
   /// The timeout timers for every lookup transform request: These are only the active timers, i.e. the timeout timers for pending requests.
   std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  /// A separate hashset for cancelled timers so that we know immediatelly which are cancelled.
+  /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
 };
 
@@ -2071,7 +2071,7 @@ struct ApproxTimeSynchronizerImpl {
 };
 
 /// A Stream representing an approximate time synchronizer from the message_filters package.
-/// \sa icey::synchronize_approx_time
+/// \sa synchronize_approx_time
 template <class... Messages>
 class ApproxTimeSynchronizer : public Stream<std::tuple<typename Messages::SharedPtr...>,
                                              std::string, ApproxTimeSynchronizerImpl<Messages...>> {

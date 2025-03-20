@@ -10,6 +10,10 @@ Sorted by decreasing priority.
 
 - [ ] Test parameter as value for TF sub
 
+- [ ] Filtering example: filter, timeout unwrap_or, any
+
+- [ ] all filter: Useful for many service calls 
+
 - [ ] A separate Async function creating a result via promise (upstream service example ) is still broken, I guess I'm missing adding a continuation for a default-constructed promise 
 
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
@@ -24,12 +28,13 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Docs: Explain synchronization 
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
-- [ ] Docs: Up-to-date extention tutorial
+- [ ] Docs: Up-to-date extension tutorial
 - [ ] Docs: Coroutines: add note that when coroutines 
 - [ ] Docs: Document that the lifetime of the Streams is tied to the Node 
 - [ ] Docs: Make clear that only synchronous functions are supported as callbacks
-
-
+ 
+- [ ] Add sync wait to wait for a promise or stream 
+ 
 - [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
 - [ ] Add static asserts for the any filter that all the streams have the same value
@@ -37,6 +42,9 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Static assert that the callbacks are not coroutines
 
 - [ ] Code refactor: re-use common code between Promise and Stream by modifying impl::Stream: Remove `take()` from impl::Stream, rename impl::Stream to Promise. Implement the coroutine support in impl::Stream, i.e. the interface functions as well as storing the coroutine continuation and the exception_ptr. An open question is where to implement then/except: They do the dynamic memory allocation, but the Promise as needed right now by the services do not perform dynamic memory allocation. 
+
+- [ ] Lifecycle nodes: a very similar thing is the Actor in Rust's Actix: https://docs.rs/actix/latest/actix/trait.Actor.html
+- [ ] Actix' (a Rust library) node API: https://docs.rs/actix/latest/actix/trait.AsyncContext.html
 
 ## Error-handling
 
@@ -314,3 +322,6 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Support async functions/coroutines as callbacks
 
 - [X] Promise: Variant ErrorValue to be able to handle multiple errors in one `except` block. Needed because we can cascade thens with different ErrorValue types. -> not for 0.1 -> no cascading, we instread require that th input is error-free 
+
+- [X] Refactor: Merge NodeBookkeeping and Context
+- [X] Do not recommend injecting functions into the foreign icey namespace when 
