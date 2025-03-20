@@ -210,7 +210,6 @@ struct TFListener {
     OnTransform on_transform;
     OnError on_error;
     std::optional<Time> maybe_time;
-    std::shared_ptr<rclcpp::TimerBase> timer;
   };
 
   using RequestHandle = std::shared_ptr<TransformRequest>;
@@ -225,21 +224,16 @@ struct TFListener {
         [target_frame]() { return target_frame; }, [source_frame]() { return source_frame; },
         on_transform, on_error, time)};
     /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
-    request->timer = rclcpp::create_wall_timer(
+    active_timers_.emplace(request, rclcpp::create_wall_timer(
         timeout,
         [this, on_error, request = Weak(request)]() {
-          request->timer->cancel();  /// cancel the timer, (it still lives in the request and in
-                                     /// active_timers_)
-          active_timers_.erase(
-              request
-                  ->timer);  // Erase the timer from active_timers_ (it still lives in the request)
-          cancelled_timers_.emplace(request->timer);
+          active_timers_.at(request.lock())->cancel();  /// cancel the timer, (it still lives in the active_timers_)
+          cancelled_timers_.emplace(active_timers_.at(request.lock())); /// Copy the timer over to the cancelled ones so that we know we need to clean it up next time
+          active_timers_.erase(request.lock());  // Erase the timer for this request from active_timers_ 
           requests_.erase(request.lock());  // Destroy the request
           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
         },
-        nullptr, node_.get_node_base_interface().get(), node_.get_node_timers_interface().get());
-
-    active_timers_.emplace(request->timer);
+        nullptr, node_.get_node_base_interface().get(), node_.get_node_timers_interface().get()));
     requests_.emplace(request);
     return request;
   }
@@ -248,20 +242,7 @@ struct TFListener {
   /// does nothing.
   void cancel_request(RequestHandle request) { requests_.erase(request); }
 
-  const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
-                                /// as well, so we avoid circular reference
-
-  /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
-  /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
-  /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
-  std::shared_ptr<tf2_ros::Buffer> buffer_;
-
-  /// We unfortunately need to store the timers in a separate structure because a timer likely
-  /// cannot destroy itself in it's own callback
-  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
-
-private:
+protected:
   void init() {
     init_tf_buffer();
     const rclcpp::QoS qos = tf2_ros::DynamicListenerQoS();
@@ -365,10 +346,24 @@ private:
     store_in_buffer(*msg, is_static);
     notify_if_any_relevant_transform_was_received();
   }
+  
+  /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
+  /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
+  /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
+  std::shared_ptr<tf2_ros::Buffer> buffer_;
+
+  const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
+  /// as well, so we avoid circular reference
 
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
+
   std::unordered_set<RequestHandle> requests_;
+  /// We unfortunately need to store the timers in a separate structure because a timer likely
+  /// cannot destroy itself in it's own callback
+  std::unordered_map<RequestHandle, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
+  /// A separate hashset for cancelled timers so that we know immediatelly which are cancelled.
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
 };
 
 /// A node interface that does the same as a rclcpp::Node (of lifecycle node), but additionally
@@ -1410,9 +1405,7 @@ struct TransformSubscriptionStream : public Stream<geometry_msgs::msg::Transform
       Stream<geometry_msgs::msg::TransformStamped, std::string, TransformSubscriptionStreamImpl>;
   using Message = geometry_msgs::msg::TransformStamped;
   using Self = TransformSubscriptionStream;
-
   TransformSubscriptionStream() = default;
-
   TransformSubscriptionStream(NodeBookkeeping &node, ValueOrParameter<std::string> target_frame,
                               ValueOrParameter<std::string> source_frame)
       : Base(node) {
