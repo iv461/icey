@@ -2022,7 +2022,7 @@ public:
     return stream;
   }
 
-  NodeBookkeeping &node() { return node();}
+  NodeBookkeeping &node() { return static_cast<NodeBookkeeping &>(*this);}
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
   /// \sa For more detailed documentation:
