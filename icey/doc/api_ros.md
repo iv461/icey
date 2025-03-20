@@ -26,6 +26,6 @@ The ICEY context becomes available by calling `node->icey()` and is your new Nod
 ```{doxygenstruct} icey::TFListener
 ```
 
-```{doxygenstruct} icey::NodeInterfaces
+```{doxygenstruct} icey::NodeBase
 ```
 
