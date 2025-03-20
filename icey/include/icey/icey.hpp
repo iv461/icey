@@ -242,6 +242,10 @@ struct TFListener {
   /// does nothing.
   void cancel_request(RequestHandle request) { requests_.erase(request); }
 
+  /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
+  /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
+  /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
+  std::shared_ptr<tf2_ros::Buffer> buffer_;
 protected:
   void init() {
     init_tf_buffer();
@@ -308,16 +312,16 @@ protected:
     return false;
   }
 
-  bool maybe_notify_specific_time(const TransformRequest &request) {
+  bool maybe_notify_specific_time(RequestHandle request) {
     try {
       /// Note that this does not wait/thread-sleep etc. This is simply a lookup in a
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg = buffer_->lookupTransform(
-          request.target_frame(), request.source_frame(), request.maybe_time.value());
-      request.on_transform(tf_msg);
-      /// If the request is destroyed gracefully(because the lookup succeeded), cancel and destroy
+          request->target_frame(), request->source_frame(), request->maybe_time.value());
+      request->on_transform(tf_msg);
+      /// If the request is destroyed gracefully(because the lookup succeeded), destroy (and therefore cancel)
       /// the associated timer:
-      active_timers_.erase(request.timer);
+      active_timers_.erase(request);
       return true;
     } /* catch (tf2::ExtrapolationException e) { // TODO BackwardExtrapolationException (),
        /// If we tried to extrapolate back into the past, we cannot fulfill the promise anymore, so
@@ -333,7 +337,7 @@ protected:
     /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
     std::erase_if(requests_, [this](auto req) {
       if (req->maybe_time) {
-        return maybe_notify_specific_time(*req);
+        return maybe_notify_specific_time(req);
       } else {
         // If it is a regular subscription, is is persistend and never erased
         maybe_notify(*req);
@@ -347,11 +351,6 @@ protected:
     notify_if_any_relevant_transform_was_received();
   }
   
-  /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
-  /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's
-  /// what tf2_ros::Buffer does in addition to tf2::BufferImpl).
-  std::shared_ptr<tf2_ros::Buffer> buffer_;
-
   const NodeInterfaces &node_;  /// Hold weak reference to because the Node owns the NodeInterfaces
   /// as well, so we avoid circular reference
 
