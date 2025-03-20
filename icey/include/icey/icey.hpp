@@ -302,7 +302,7 @@ struct TFListener {
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
     // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock occurs is currently an unspecified behavior, and therefore likely to change in the future.)
     cancelled_timers_.clear();
-    RequestHandle request{std::make_shared<TransformRequest>(
+    auto request{std::make_shared<TransformRequest>(
         [target_frame]() { return target_frame; }, [source_frame]() { return source_frame; },
         on_transform, on_error, time)};
     requests_.emplace(request);
@@ -441,6 +441,91 @@ protected:
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
 };
 
+/// An improved server client that implements per-request timeouts, something currently missing in rclcpp.
+template <class ServiceT>
+struct ServiceClientImpl {
+  using Request = typename ServiceT::Request::SharedPtr;
+  using Response = typename ServiceT::Response::SharedPtr;
+  
+  /// The RequestID is currently of type int64_t in rclcpp.
+  using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
+  using Client = rclcpp::Client<ServiceT>;
+
+  ServiceClientImpl(NodeBase &node, 
+    const std::string &service_name,
+    const rclcpp::QoS &qos = rclcpp::ServicesQoS()) : node_(node),
+    client(node_.create_client<ServiceT>(service_name, qos)) {}
+
+  /// Make an asynchronous call to the service
+  RequestID call(Request request, const Duration &timeout, auto on_response, auto on_error) {
+    /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that were
+    /// cancelled since the last call: 
+    // We need to do this kind of deferred cleanup because we would likely get a deadlock if
+    // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock occurs is currently an unspecified behavior, and therefore likely to change in the future.)
+    cancelled_timers_.clear();
+
+    /// We call here the synchronous code because there is no asynchronous API for
+      /// wait_for_service.
+      /// TODO we cannot even use the synchronous API because this will call the callback and
+      /// therefore the coroutine continuation directly (i.e. synchronously) instead in the event
+      /// loop, eventually leading to a stack overflow
+      /*if(!client->wait_for_service(timeout)) {
+        //
+      Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
+        if (!rclcpp::ok()) {
+          future.put_error("INTERRUPTED");
+        } else {
+          future.put_error("SERVICE_UNAVAILABLE");
+        }
+        return Cancel{};
+      } else {*/
+    auto future_and_req_id =
+          client->async_send_request(request, [this, on_response, on_error](typename Client::SharedFuture result, 
+            typename Client::SharedRequestId request_id) {
+            /// Cancel and erase the timeout timer since we got a response
+            active_timers_.erase(request_id);
+            if (!result.valid()) {
+              if (!rclcpp::ok()) {
+                on_error("INTERRUPTED");
+              } else {
+                on_error("TIMEOUT");
+              }
+            } else {
+              on_response(result.get());
+            }
+        });
+    active_timers_.emplace(future_and_req_id.request_id,
+        node_.create_wall_timer(timeout, [this, on_error, request_id=future_and_req_id.request_id] {
+            client->remove_pending_request(request_id);
+            active_timers_.at(request_id)->cancel();
+            cancelled_timers_.emplace(active_timers_.at(request_id));
+            active_timers_.erase(request_id);
+            if (!rclcpp::ok()) {
+              on_error("INTERRUPTED");
+            } else {
+              on_error("TIMEOUT");
+            }
+      }));
+    return future_and_req_id.request_id;
+  }
+
+  bool cancel_request(RequestID request_id) {
+    client->remove_pending_request(request_id);
+    return active_timers_.erase(request_id);
+  }
+
+  std::shared_ptr<rclcpp::Client<ServiceT>> client;
+protected:
+  NodeBase &node_;
+
+
+  std::unordered_set<RequestID> requests_;
+  /// The timeout timers for every lookup transform request: These are only the active timers, i.e. the timeout timers for pending requests.
+  std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
+  /// A separate hashset for cancelled timers so that we know immediatelly which are cancelled.
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+};
+
 /// A tag to be able to recognize the type "Stream", all types deriving from StreamTag satisfy the
 /// `AnyStream` concept. \sa AnyStream
 struct StreamTag {};
@@ -488,11 +573,9 @@ template <class V>
 struct TransformSynchronizer;
 struct TransformPublisherStream;
 
-/// The context owns the streams and is what is returned when calling `node->icey()`
-/// (NodeWithIceyContext::icey). 
-/// It dditionally
-/// implements holding the shared pointers to subscribers/timers/publishers etc., i.e. provides
-/// bookkeeping, so that you do not have to do it.
+/// The context is what is returned when calling `node->icey()` (NodeWithIceyContext::icey). 
+/// It provides an new node-like API for creating ROS entities, these entities are however streams. 
+//  It also provides bookkeeping i.e. holding the shared pointers to subscribers/timers/publishers etc., so that you do not have to do it.
 class Context : public NodeBase,
                 public std::enable_shared_from_this<Context>,
                 private boost::noncopyable {
@@ -504,10 +587,7 @@ public:
   template <class V>
   using GetValue = std::function<V()>;
 
-  /// Construct a context using the given Node interface, initializing the `node` field. The
-  /// interface must always be present because the Context creates new Streams and Streams need a
-  /// the node for construction.
-  /// Constructs the bookkeeping from NodeBase so that both a rclcpp::Node as well as a
+  /// Constructs a Context from NodeBase so that both a rclcpp::Node as well as a
   /// lifecycle node are supported.
   explicit Context(const NodeBase &node_base) : NodeBase(node_base) {}
 
@@ -528,53 +608,9 @@ public:
     stream_impls_.push_back(impl);
     return impl;
   }
-
+  
+  /// Get the NodeBase, i.e. the ROS node using which this Context was created.
   NodeBase &node_base() { return static_cast<NodeBase&>(*this); }
-
-  /// Declares a parameter and registers a validator callback and a callback that will get called
-  /// when the parameters updates.
-  template <class ParameterT, class CallbackT>
-  auto add_parameter(const std::string &name, const ParameterT &default_value,
-                     CallbackT &&update_callback,
-                     const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = {},
-                     FValidate f_validate = {}, bool ignore_override = false) {
-    parameter_validators_.emplace(name, f_validate);
-    add_parameter_validator_if_needed();
-    auto param = node_parameters_->declare_parameter(name, rclcpp::ParameterValue(default_value),
-                                                     parameter_descriptor, ignore_override);
-    auto param_subscriber =
-        std::make_shared<rclcpp::ParameterEventHandler>(static_cast<NodeBase &>(*this));
-    auto cb_handle =
-        param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
-    parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
-    return param;
-  }
-
-  /// Subscribe to a transform on tf between two frames
-  template <class OnTransform, class OnError>
-  auto add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
-                           OnTransform &&on_transform, OnError &&on_error) {
-    add_tf_listener_if_needed();
-    tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
-    return tf2_listener_;
-  }
-
-  auto add_tf_broadcaster_if_needed() {
-    if (!tf_broadcaster_)
-      tf_broadcaster_ =
-          std::make_shared<tf2_ros::TransformBroadcaster>(static_cast<NodeBase &>(*this));
-    return tf_broadcaster_;
-  }
-
-  std::shared_ptr<TFListener> add_tf_listener_if_needed() {
-    if (!tf2_listener_) {
-      /// We need only one subscription on /tf, but we can have multiple transforms on which we
-      /// listen to
-      tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeBase &>(*this));
-    }
-    return tf2_listener_;
-  }
-
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
@@ -696,7 +732,50 @@ public:
   ServiceClient<ServiceT> create_client(const std::string &service_name,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS());
 
-private:
+  /// Declares a parameter and registers a validator callback and a callback that will get called
+  /// when the parameters updates.
+  template <class ParameterT, class CallbackT>
+  auto add_parameter(const std::string &name, const ParameterT &default_value,
+                     CallbackT &&update_callback,
+                     const rcl_interfaces::msg::ParameterDescriptor &parameter_descriptor = {},
+                     FValidate f_validate = {}, bool ignore_override = false) {
+    parameter_validators_.emplace(name, f_validate);
+    add_parameter_validator_if_needed();
+    auto param = node_parameters_->declare_parameter(name, rclcpp::ParameterValue(default_value),
+                                                     parameter_descriptor, ignore_override);
+    auto param_subscriber =
+        std::make_shared<rclcpp::ParameterEventHandler>(static_cast<NodeBase &>(*this));
+    auto cb_handle =
+        param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
+    parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
+    return param;
+  }
+
+  /// Subscribe to a transform on tf between two frames
+  template <class OnTransform, class OnError>
+  auto add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
+                           OnTransform &&on_transform, OnError &&on_error) {
+    add_tf_listener_if_needed();
+    tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
+    return tf2_listener_;
+  }
+  
+  auto add_tf_broadcaster_if_needed() {
+    if (!tf_broadcaster_)
+      tf_broadcaster_ =
+          std::make_shared<tf2_ros::TransformBroadcaster>(static_cast<NodeBase &>(*this));
+    return tf_broadcaster_;
+  }
+
+  std::shared_ptr<TFListener> add_tf_listener_if_needed() {
+    if (!tf2_listener_) {
+      /// We need only one subscription on /tf, but we can have multiple transforms on which we
+      /// listen to
+      tf2_listener_ = std::make_shared<TFListener>(static_cast<NodeBase &>(*this));
+    }
+    return tf2_listener_;
+  }
+protected:
   /// The implementation of rclcpp::Node does not consistently call the free functions (i.e. rclcpp::create_*)
   /// but instead prepends the sub_namespace. (on humble) This seems to me like a patch, so we have
   /// to apply it here as well. This is unfortunate, but needed to support both lifecycle nodes and
@@ -1840,18 +1919,12 @@ struct ServiceStream : public Stream<std::tuple<std::shared_ptr<rmw_request_id_t
 /// awaited. It is not tracked by the context but instead the service client is unregistered from
 /// ROS class goes out of scope.
 template <class ServiceT>
-struct ServiceClient : public StreamImplDefault {
+struct ServiceClient : public ServiceClientImpl<ServiceT> {
+  using Base = ServiceClientImpl<ServiceT>;
   using Self = ServiceClient<ServiceT>;
   using Request = typename ServiceT::Request::SharedPtr;
   using Response = typename ServiceT::Response::SharedPtr;
-
-  /// TODO SEPARATE TIMER FOR EACH REQUEST !
-
-  /// The RequestID is currently of type int64_t in rclcpp.
-  using RequestID = decltype(rclcpp::Client<ServiceT>::FutureAndRequestId::request_id);
-  using Client = rclcpp::Client<ServiceT>;
-  std::shared_ptr<rclcpp::Client<ServiceT>> client;
-  std::shared_ptr<rclcpp::TimerBase> timeout_timer_;
+  
   ServiceClient() = default;
   /// Create a new service client
   /// \param node
@@ -1860,10 +1933,7 @@ struct ServiceClient : public StreamImplDefault {
   /// as well as for the service discovery, i.e. wait_for_service. \param qos
   ServiceClient(Context &context, const std::string &service_name,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : context_(context) {
-    client = context.node_base().create_client<ServiceT>(service_name, qos);
-  }
-  Context &context_;
+      : Base(context.node_base(), service_name, qos) {}
 
   // clang-format off
   /*! Make an asynchronous call to the service. Returns a Promise that can be awaited using `co_await`.
@@ -1883,47 +1953,11 @@ struct ServiceClient : public StreamImplDefault {
   Promise<Response, std::string> call(Request request, const Duration &timeout) {
     using Cancel = typename Promise<Response, std::string>::Cancel;
     return Promise<Response, std::string>{[this, request, timeout](auto &future) {
-      /// We call here the synchronous code because there is no asynchronous API for
-      /// wait_for_service.
-      /// TODO we cannot even use the synchronous API because this will call the callback and
-      /// therefore the coroutine continuation directly (i.e. synchronously) instead in the event
-      /// loop, eventually leading to a stack overflow
-      /*if(!client->wait_for_service(timeout)) {
-        //
-      Reference:https://github.com/ros2/examples/blob/rolling/rclcpp/services/async_client/main.cpp#L65
-        if (!rclcpp::ok()) {
-          future.put_error("INTERRUPTED");
-        } else {
-          future.put_error("SERVICE_UNAVAILABLE");
-        }
-        return Cancel{};
-      } else {*/
-      auto future_and_req_id =
-          client->async_send_request(request, [&](typename Client::SharedFuture result) {
-            if (!result.valid()) {
-              if (!rclcpp::ok()) {
-                future.put_error("INTERRUPTED");
-              } else {
-                future.put_error("TIMEOUT");
-              }
-            } else {
-              future.put_value(result.get());
-            }
-          });
-      timeout_timer_ =
-          context_.node_base().create_wall_timer(timeout, [this, &future, req_id = future_and_req_id.request_id]() {
-            client->remove_pending_request(req_id);
-            timeout_timer_->cancel();
-            if (!rclcpp::ok()) {
-              future.put_error("INTERRUPTED");
-            } else {
-              future.put_error("TIMEOUT");
-            }
-          });
-      return Cancel{[this, req_id = future_and_req_id.request_id](auto &) {
-        client->remove_pending_request(req_id);
-        timeout_timer_->cancel();
-      }};
+      auto request_id= Base::call(request, timeout, 
+          [&](const auto &x) { future.put_value(x); },
+          [&](const auto &x) { future.put_error(x); }
+        );
+      return Cancel{[this, request_id](auto &) { Base::cancel_request(request_id); }};
     }};
   }
 };
@@ -2284,9 +2318,7 @@ ServiceStream<ServiceT> Context::create_service(const std::string &service_name,
 template <class ServiceT>
 ServiceClient<ServiceT> Context::create_client(const std::string &service_name,
                                       const rclcpp::QoS &qos) {
-  ServiceClient<ServiceT> client(*this, service_name, qos);
-  client.context = this->shared_from_this();
-  return client;
+  return ServiceClient<ServiceT>{*this, service_name, qos};
 }
 
 /// The ROS node, additionally owning the context that holds the Streams.
