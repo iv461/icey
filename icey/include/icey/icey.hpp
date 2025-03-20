@@ -568,8 +568,8 @@ class Context : public NodeBase,
                 public std::enable_shared_from_this<Context>,
                 private boost::noncopyable {
 public:
-  /// The parameter validation function that allows the parameter update if the returned string is
-  /// empty (i.e. "") and otherwise rejects with the error message.
+  /// The parameter validation function that allows the parameter update if the returned error string is
+  /// empty (i.e. "") and rejects it otherwise with this non-empty error string.
   using FValidate = std::function<std::string(const rclcpp::Parameter &)>;
   ///
   template <class V>
@@ -1347,9 +1347,10 @@ struct BufferImpl {
   std::shared_ptr<std::vector<Value>> buffer{std::make_shared<std::vector<Value>>()};
 };
 
-/// A Buffer is a Stream that holds an array of values. It accumulates a certain amount of values
+/// This stream is created when calling Stream::buffer. A Buffer is a Stream that holds an array of values. It accumulates a certain amount of values
 /// and only then it has itself a value. It does not have errors since it does not make much sense
 /// to accumulate errors.
+/// \sa Stream::buffer
 template <class Value>
 struct Buffer : public Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>> {
   using Base = Stream<std::shared_ptr<std::vector<Value>>, Nothing, BufferImpl<Value>>;
@@ -2069,8 +2070,7 @@ struct ApproxTimeSynchronizerImpl {
   std::shared_ptr<Synchronizer> synchronizer_;
 };
 
-/// A Stream representing an approximate time synchronizer.
-/// \warning All inputs must have the same QoS according to the documentation of message_filters
+/// A Stream representing an approximate time synchronizer from the message_filters package.
 template <class... Messages>
 class ApproxTimeSynchronizer : public Stream<std::tuple<typename Messages::SharedPtr...>,
                                              std::string, ApproxTimeSynchronizerImpl<Messages...>> {
