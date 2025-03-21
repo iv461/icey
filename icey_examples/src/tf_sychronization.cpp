@@ -1,7 +1,7 @@
-/// This example shows two other ways to obtain transfroms in ICEY
-/// 1. Synchronizing a topic with a transfrom, which is equivalent to looking it up with the header
-/// stamp and header frame_id as a source_frame
-/// 2. Directly subscribing to a transform between two coordinate systems: A callback gets called each time the transform changes.
+/// This example shows another way to obtain transfroms in ICEY:
+/// Synchronizing a topic with a transform, which is equivalent to looking it up with the header
+/// stamp and header frame_id as a source_frame.
+
 #include <icey/icey.hpp>
 
 #include "sensor_msgs/msg/point_cloud2.hpp"
@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
       .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
       .synchronize_with_transform("map", 200ms)
       .unwrap_or([&](std::string error) {
+        /// TODO [ROS limitation]: Currently this is never called because we can't register an error callback when using the tf2_ros::MessageFilter
+        /// (it will still print an error, but we can't register a custom callback)
         RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error: " << error);
       })
       .then([](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud,
