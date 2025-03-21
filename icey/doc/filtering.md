@@ -4,7 +4,7 @@ ICEY provides some useful transformations of streams. These transformations resu
 
 ## Publish
 
-We have already demonstrated that you can publish the contents of a stream using the [signal generator example](../../icey_examples/src/signal_generator.cpp):
+We have already demonstrated that you can publish the contents of a stream using `.publish(<topic>, <qos>, <options>={})`
 
 ```cpp
   node->icey().create_timer(100ms)
@@ -14,6 +14,8 @@ We have already demonstrated that you can publish the contents of a stream using
     })
     .publish("sine_signal");
 ```
+See also the [signal generator example](../../icey_examples/src/signal_generator.cpp):
+
 For this to work, a Stream must hold a ROS-message type. 
 
 ## Filter 
@@ -32,6 +34,7 @@ You can filter values of a Stream using a function that returns false if it shou
       /// Here we receive only NaN-free messages for further processing
     });
 ```
+TODO link example 
 
 ## Synchronization 
 
@@ -54,8 +57,9 @@ See also the [synchronization example](../../icey_examples/src/synchronization.c
 
 Streams can yield not only values but also errors: This allows for more advanced error handling. 
 But because streams are statically typed on the error, a stream can only store a single type of error. 
-Stream transformations, however, can produce new, different types of errors. This requires that we first handle possible errors, resulting in an `ErrorFreeStream'. This is what `unwrap_or` does. 
-These error-free streams can then be fed into transformations that require an `ErrorFreeStream`. For example, the `icey::synchronize_approx_time` transformation we used earlier requires such a stream that satisfies the concept of an `ErrorFreeStream`.
+Stream transformations, however, can produce new, different types of errors. This requires that we first handle possible errors, resulting in an `ErrorFreeStream`. 
+
+This is what `unwrap_or` does. These error-free streams can then be fed into transformations that require an `ErrorFreeStream`. For example, the `icey::synchronize_approx_time` transformation we used earlier requires such a stream that satisfies the concept of an `ErrorFreeStream`.
 
 ```cpp
 auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");

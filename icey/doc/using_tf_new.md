@@ -1,13 +1,11 @@
 # Using transforms (TF)
 
 Coordinate system transforms are communicated in ROS over the topic `/tf` and `/tf_static`, so receiving them is inherently an asynchronous operation.
-To obtain transforms from TF, ICEY provides again an async/await based API. 
-
-Additionally, ICEY allows you to *subscribe* to a single transform between to coordinate system instead of requesting a transform at a specific time. This features is also useful in some applications. 
+ICEY provides different ways for obtaining transforms: The usual `lookup` function (with async/await API), but also synchronizing a topic like a point cloud with a transform. ICEY even allows *subscribing* to a transform: A callback will be called every time a transform between two coordinate systems changes.
 
 # Looking up transforms: 
 
-To lookup a transform at a specific time, you first create in ICEY a `icey::TransformBuffer`: This is the usual combination of a subscriber and a buffer bundled in a single object. 
+To lookup a transform at a specific time, you first create a `icey::TransformBuffer`: This is the usual combination of a subscriber on `/tf`/`/tf_static` and a buffer bundled in a single object. 
 
 You can then call `lookup` and await it: 
 
@@ -15,27 +13,78 @@ You can then call `lookup` and await it:
 icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
 node->icey()
-      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
       // Use a coroutine (an asynchronous function) as a callback for the subscriber:
-      .then([&tf_buffer, &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
+      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", 
+        [&tf_buffer, &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
 
         auto tf_result = co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
                                       icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
-        /// Continue transforming the point cloud here ..
-    });
+
+        if (tf_result.has_value()) {
+          geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
+          /// Continue transforming the point cloud here ..
+        } else {
+          RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
+        }
+
+      });
 ```
 See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) example.
 
-The signature of the `lookup` function is the same as the `lookupTransform` function that you are used to. The difference is that in ICEY, we provide an async/await API, consistent with other *synchronous* APIs of inherently asynchronous operations (like service calls). 
+The code that follows `co_await tf_buffer.lookup` will execute only after the transform is available (or a timeout occurs) -- the behavior is therefore the same to the regular `lookupTransform` function that you are used to, no surprises.
 
-This means, while the wait in the original ROS API is synchronous ("busy-wait"), with ICEY it is an *asynchronous* wait. 
+The difference is that in ICEY, the `lookup`-call is asynchronous while the original ROS API (`tf2_ros::Buffer::lookupTransform`) is synchronous, it does *"busy-wait"* with a separate executor.
 
-The call to lookup returns a `icey::Promise`
-
+ICEY on the other hand provides an API allows to write *synchronously-looking* code using async/await, consistent with  the APIs of other inherently asynchronous operations like service calls.
 
 # Subscribing to single transforms 
 
+When working with transforms between coordinate systems, you don't always need to request the transform at a specific time. Instead, you can subscribe to a single transform between two coordinate systems and receive each time it changes. 
 
 # Synchronizing and transforming data 
 
-A common pattern of using transforms in ROS is 
+Another way of obtaining transforms is to *declare* that you need the transform at a header time of another message from another subscriber, i.e. to *synchronize* a topic with a transform. This is in contrast to the *imperative* style
+where you say that you need a transform at a given time via a call to `lookup`.
+
+With the declarative style you can essentially say *"I need this point cloud transformed in the map frame before further processing"* 
+
+To see why this is useful, we will analyze some common usage patterns of `LookupTransform`. 
+
+
+The following patterns of using TF are the most often:
+
+1: Getting the transform at the time the measurement was done (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main///nav2_amcl/src/amcl_node.cpp#L577)): 
+```cpp
+/// On receiving a measurement, for example an image:
+void on_camera_image(sensor_msgs::Image::SharedPtr img) {
+    auto camera_stamp = img->header.stamp;
+    /// Get the pose of the camera with respect to the map at the time the image was shot:
+    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2_ros::fromMsg(camera_stamp));
+}
+```
+
+
+Other variants of this pattern (that are rather anti-patterns) are:
+
+1. Just taking the last transform in the buffer to avoid waiting, and therefore assuming the latest transform in the buffer is approximately the same as the message stamp (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main//nav2_costmap_2d/plugins/costmap_filters/keepout_filter.cpp#L177) ):
+```cpp
+
+void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
+    /// Get the latest transform in the buffer 
+    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2::TimePointZero);
+}
+```
+
+
+2. Looking up at the current time in the callback: This is the time the message was received, not the time the measurement was made (which may have been multiple milliseconds earlier):
+```cpp
+
+void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
+    ...
+    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, this->get_clock().now());
+    ...
+}
+```
+
+
+So, we are usually always interested in getting the transform for a time of another topic: We are therefore *synchronizing* the transform with another topic.
