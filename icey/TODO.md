@@ -14,6 +14,9 @@ Sorted by decreasing priority.
 
 - [ ] all filter: Useful for many service calls 
 
+- [ ] We have likely three times duplicated the timeout handling: TF, service and TimeoutFilter.
+    Can't we try to 
+    
 - [ ] A separate Async function creating a result via promise (upstream service example ) is still broken, I guess I'm missing adding a continuation for a default-constructed promise 
 
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
