@@ -48,7 +48,7 @@ public:
 };
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node<ExampleLifecycleNode>(argc, argv, "lifecycle_node_example");
+  auto node = icey::create_node<ExampleLifecycleNode>(argc, argv, "icey_lifecycle_node_example");
   node->run();
   icey::spin(node);
   return 0;

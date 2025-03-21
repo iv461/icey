@@ -7,7 +7,7 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto generator_node = icey::create_node(argc, argv, "generator_node");
+  auto generator_node = icey::create_node(argc, argv, "icey_generator_node_example");
   auto timer_signal = generator_node->icey().create_timer(500ms);
 
   timer_signal.then([&](size_t ticks) {
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
       })
       .publish("sine_generator");
 
-  auto receiver_node = icey::create_node(argc, argv, "receiver_node");
+  auto receiver_node = icey::create_node(argc, argv, "icey_receiver_node_example");
   auto received_sine_signal =
       receiver_node->icey().create_subscription<std_msgs::msg::Float32>("sine_generator");
 

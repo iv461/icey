@@ -21,7 +21,7 @@ icey::Promise<void> talk(std::shared_ptr<icey::Node> &node) {
 
 int main(int argc, char **argv) {
   icey::icey_coro_debug_print = true;
-  auto node = icey::create_node(argc, argv, "talker_node");
+  auto node = icey::create_node(argc, argv, "icey_talker_async_await_example");
   talk(node);
 
   icey::spin(node);

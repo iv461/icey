@@ -11,7 +11,7 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "synchronization_example");
+  auto node = icey::create_node(argc, argv, "icey_synchronization_example");
 
   auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
   auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");

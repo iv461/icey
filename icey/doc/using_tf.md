@@ -1,37 +1,3 @@
-# Using TF 
-
-Coordinate systems are communicated in ROS over the topic `/tf` and `/tf_static`, so receiving them is inherently an asynchronous operation.
-To obtain transforms from TF, ICEY provides again an async/await based API. 
-
-Additionally, ICEY allows you to *subscribe* to a single transform between to coordinate system instead of requesting a transform at a specific time. This features is also useful in some applications. 
-
-# Looking up transforms: 
-
-To lookup a transform at a specific time, you first create in ICEY a `icey::TransformBuffer`: This is the usual combination of a subscriber and a buffer bundled in a single object. 
-
-You can then call `lookup` and await it: 
-
-```cpp 
-icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
-
-node->icey()
-      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
-      // Use a coroutine (an asynchronous function) as a callback for the subscriber:
-      .then([&tf_buffer,
-             &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
-
-        icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
-            co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
-                                      icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
-        /// Continue transforming the point cloud here ..
-    });
-```
-See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) example.
-
-The signature of the `lookup` function is the same as the `lookupTransform` function that you are used to. The difference is that in ICEY, we provide an async/await API, consistent with other *synchronous* APIs of inherently asynchronous operations (like service calls). 
-This 
-
-The call to lookup returns a `icey::Promise`
 
 
 # Promise mode 
@@ -39,43 +5,6 @@ The call to lookup returns a `icey::Promise`
 In the following, we explain based on example patterns why this is what you actually want most of the time.
 After this motivation, we explain how TF works in ICEY.
 
-The following patterns of using TF are the most often:
-
-1: Getting the transform at the time the measurement was done (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main///nav2_amcl/src/amcl_node.cpp#L577)): 
-```cpp
-/// On receiving a measurement, for example an image:
-void on_camera_image(sensor_msgs::Image::SharedPtr img) {
-    auto camera_stamp = img->header.stamp;
-    /// Get the pose of the camera with respect to the map at the time the image was shot:
-    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2_ros::fromMsg(camera_stamp));
-}
-```
-
-
-Other variants of this pattern (that are rather anti-patterns) are:
-
-1. Just taking the last transform in the buffer to avoid waiting, and therefore assuming the latest transform in the buffer is approximately the same as the message stamp (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main//nav2_costmap_2d/plugins/costmap_filters/keepout_filter.cpp#L177) ):
-```cpp
-
-void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
-    /// Get the latest transform in the buffer 
-    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2::TimePointZero);
-}
-```
-
-
-2. Looking up at the current time in the callback: This is the time the message was received, not the time the measurement was made (which may have been multiple milliseconds earlier):
-```cpp
-
-void on_camera_iamge(sensor_msgs::Image::SharedPtr img) {
-    ...
-    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, this->get_clock().now());
-    ...
-}
-```
-
-
-So, we are usually always interested in getting the transform for a time of another topic: We are therefore *synchronizing* the transform with another topic.
 
 ## How TF works in ICEY
 In ICEY, you *subscribe* to a transform between two frames:

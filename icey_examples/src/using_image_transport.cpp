@@ -13,14 +13,13 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
+  auto node = icey::create_node(argc, argv, "icey_image_transport_example");
+  
   /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
-
-  auto node = icey::create_node(argc, argv, "signal_generator");
   auto camera_center_sub = node->icey().create_stream<icey::CameraSubscriber>("camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
-      //.timeout(rclcpp::Duration(100ms))
       .then([&](sensor_msgs::msg::Image::ConstSharedPtr /*image*/,
                 sensor_msgs::msg::CameraInfo::ConstSharedPtr /*camera_info*/) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Received image and info: ");

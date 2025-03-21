@@ -6,7 +6,7 @@
 using StringMsg = std_msgs::msg::String;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "listener_example");
+  auto node = icey::create_node(argc, argv, "icey_listener_example");
   auto my_string = node->icey().create_subscription<StringMsg>("my_string", 1);
 
   /// This callback gets called for each message (it is like the subscriber callback)

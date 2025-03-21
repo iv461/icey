@@ -41,7 +41,7 @@ icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
 }
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "service_client_async_await_example");
+  auto node = icey::create_node(argc, argv, "icey_service_client_async_await_example");
   run(node);
   icey::spin(node);
 }

@@ -29,5 +29,5 @@ public:
 };
 
 int main(int argc, char** argv) {
-  icey::spin(icey::create_node<MyNode>(argc, argv, "class_based_node_example"));
+  icey::spin(icey::create_node<MyNode>(argc, argv, "icey_class_based_node_example"));
 }

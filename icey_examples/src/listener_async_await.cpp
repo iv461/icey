@@ -17,7 +17,7 @@ icey::Promise<void> receive(std::shared_ptr<icey::Node> node) {
 }
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "listener_node");
+  auto node = icey::create_node(argc, argv, "icey_listener_node");
   receive(node);
   icey::spin(node);
 }

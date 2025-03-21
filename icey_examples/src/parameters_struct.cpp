@@ -21,7 +21,7 @@ struct NodeParameters {
 };
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "parameters_struct_example");
+  auto node = icey::create_node(argc, argv, "icey_parameters_struct_example");
 
   /// Now create an object of the node-parameters that will be updated:
   NodeParameters params;

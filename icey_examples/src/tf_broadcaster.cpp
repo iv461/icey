@@ -22,7 +22,7 @@ auto create_yaw_rotation(icey::Node &node,
   });
 }
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "tf_broadcaster_example");
+  auto node = icey::create_node(argc, argv, "icey_tf_broadcaster_example");
 
   icey::ParameterStream<std::string> base_frame_param =
       node->icey().declare_parameter<std::string>("base_frame", "base_link");

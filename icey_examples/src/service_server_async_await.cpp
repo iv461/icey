@@ -11,7 +11,7 @@ using Request = ExampleService::Request::SharedPtr;
 using Response = ExampleService::Response::SharedPtr;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "service_service_async_await_example");
+  auto node = icey::create_node(argc, argv, "icey_service_service_async_await_example");
 
   /// Create a service client for an upstream service that is actually capable of answering the
   /// request.

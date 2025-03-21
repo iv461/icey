@@ -2148,9 +2148,9 @@ struct TransformSynchronizerImpl {
         this->tf_listener->get_from_buffer(target_frame, message->header.frame_id, timestamp);
     if (maybe_transform.has_value())
       static_cast<Derived *>(this)->put_value(std::make_tuple(message, maybe_transform.value()));
-    else
+    else /// Invariant trap since I don't own the tf2_ros code and therefore can't prove it is correct:
       throw std::logic_error(
-          "tf2_ros::MessageFilter broke the promise that the transform is available");
+          "Invariant broke: tf2_ros::MessageFilter broke the promise that the transform is available");
   }
 };
 

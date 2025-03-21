@@ -1,4 +1,4 @@
-/// Driver for the tf_subscriber test
+/// Driver for the tf_subscriber test: It publishes a point cloud with a synchronized transform.
 #include <icey/icey.hpp>
 
 #include "sensor_msgs/msg/image.hpp"
@@ -32,14 +32,14 @@ icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
 
     tf.transform.rotation.z = std::sin(0.001 * cnt);
     tf.transform.rotation.w = std::cos(0.001 * cnt);
-    cnt++;
     tf_pub.publish(tf);
+    cnt++;
   }
   co_return;
 }
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "tf_pub_test");
+  auto node = icey::create_node(argc, argv, "icey_tf_pub_example");
   run(node);
   icey::spin(node);
 }

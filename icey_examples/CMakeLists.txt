@@ -32,6 +32,7 @@ ament_auto_add_executable(listener_async_await_example src/listener_async_await.
 ament_auto_add_executable(talker_async_await_example src/talker_async_await.cpp)
 
 ament_auto_add_executable(tf_pub_test_example src/tf_pub_test.cpp)
+ament_auto_add_executable(tf_sychronization_example src/tf_sychronization.cpp)
 
 ament_auto_add_executable(service_server_async_await_example src/service_server_async_await.cpp)
 ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)

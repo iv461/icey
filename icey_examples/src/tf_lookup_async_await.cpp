@@ -9,7 +9,7 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "tf_lookup_async_await_example");
+  auto node = icey::create_node(argc, argv, "icey_tf_lookup_async_await_example");
   icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
   node->icey()
