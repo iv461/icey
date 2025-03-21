@@ -39,7 +39,7 @@ See also the [signal generator example](../../icey_examples/src/signal_generator
 
 ## Parameter structs 
 
-Using ICEY, you can declare a single struct with many different parameters: 
+Using ICEY, you can put many parameters in a normal struct, adding constraints like minimum and maximum values to them, or even using nested structs with more parameters:
 
 ```cpp
 /// Here you declare in a single struct all parameters of the node:
@@ -55,16 +55,17 @@ struct NodeParameters {
   icey::Parameter<std::string> mode{"single",
                                     icey::Set<std::string>({"single", "double", "pulse"})};
 
-  /// We can also have nested structs with more parameters, they will be named others.max_amp,
+  /// We can even have nested structs with more parameters, they will be named others.max_amp,
   /// others.cov:
   struct OtherParams {
     double max_amp = 6.;
     std::vector<double> cov;
   } others;
-  
+
 };
 ```
-And then let ICEY declare all of them automatically to ROS: 
+
+Store an instance of this parameter struct as a member (as you are used to) then then simply call `declare_parameter_struct`, ICEY declares automatically every parameter:
 
 ```cpp
 class MyNode : icey::Node {
@@ -85,6 +86,10 @@ auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_exampl
 
 See also the [parameter structs example](../../icey_examples/src/parameters_struct.cpp).
 
+Whereas with other approaches, you would have to manually repeat each parameter declaration, with ICEY it is just a single call to `declare_parameter_struct`. 
+
+ICEY uses for this static reflection -- since C++20 it became possible to use static reflection completly transparent to the user, i.e. no annotations of any kind (macros, typing out everything twice) are needed for a struct to be eligible for reflection.
+
 ICEY will update the parameter struct automatically when any parameter changes. 
 
 When you start the example node and inspect it's parameters you see: 
@@ -100,13 +105,6 @@ ros2 param dump /icey_parameters_struct_example
     others:
       cov: []
       max_amp: 6.0
-    qos_overrides:
-      /parameter_events:
-        publisher:
-          depth: 1000
-          durability: volatile
-          history: keep_last
-          reliability: reliable
+      [...]
     use_sim_time: false
-
 ```
