@@ -2,7 +2,7 @@
 
 ## Parameters 
 
-ICEY simplifies handling of parameters, we can declare them with:
+Parameters are are declared in ICEY similar to regular ROS. They model however the Stream concept and allow therefore to subscribe for updates like regular subscribers:
 
 ```cpp
 auto offset_param = node->icey().declare_parameter<double>("offset", 0.);
@@ -24,21 +24,24 @@ RCLCPP_INFO_STREAM(node->get_logger(), "Initial offset: " << offset_param.value(
 ```
 This inly works for parameters -- they always have initial values, which is generally not true for other Streams.
 
-We can also contrain parameters, for example in an interval:
+### Validators 
+ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary function generally.  Some convineint validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
+
+Set of values: 
 ```cpp
-auto offset_param = icey::parameter<double>("offset", 0., icey::Interval(0, 1));
+auto mode_param = node->icey().declare_parameter<std::string>("mode", "single",   icey::Set<std::string>({"single", "double", "pulse"}));
 ```
 
-Or to a set of values: 
-
+Interval:
 ```cpp
-auto offset_param = icey::parameter<double>("offset", 0., icey::Set(0, 0.5, 1));
+auto frequency = node->icey().declare_parameter<double>("frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
 ```
 
 See also the [signal generator example](../../icey_examples/src/signal_generator.cpp). 
 
 ## Parameter structs 
 
+ICEY offers an even more great way of declaring many parameters at once: parameter structs.
 Using ICEY, you can put many parameters in a normal struct, adding constraints like minimum and maximum values to them, or even using nested structs with more parameters:
 
 ```cpp
@@ -68,7 +71,8 @@ struct NodeParameters {
 Store an instance of this parameter struct as a member (as you are used to) then then simply call `declare_parameter_struct`, ICEY declares automatically every parameter:
 
 ```cpp
-class MyNode : icey::Node {
+class MyNode : public icey::Node {
+public: 
   MyNode(std::string name) : icey::Node(name) {
     /// Now simply declare the parameter struct and a callback that is called when any field updates:
     icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
@@ -79,7 +83,6 @@ class MyNode : icey::Node {
   /// Store the parameters as a class member: 
   NodeParameters params_;
 };
-
 
 auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_example");
 ```
