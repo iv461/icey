@@ -493,7 +493,7 @@ struct ServiceClientImpl {
             client->remove_pending_request(request_id);
             active_timers_.at(request_id)->cancel();
             cancelled_timers_.emplace(active_timers_.at(request_id));
-            active  _timers_.erase(request_id);
+            active_timers_.erase(request_id);
             on_error("TIMEOUT");
       }));
     return future_and_req_id.request_id;
@@ -2278,7 +2278,7 @@ SubscriptionStream<MessageT> Context::create_subscription(
 template <class MessageT>
 SubscriptionStream<MessageT> Context::create_subscription(
       const std::string &name, SubscriptionStream<MessageT>::Callback cb,
-      const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
+      const rclcpp::QoS &qos,
       const rclcpp::SubscriptionOptions &options) {
   auto sub = create_stream<SubscriptionStream<MessageT>>(name, qos, options);
   sub.then(cb);
