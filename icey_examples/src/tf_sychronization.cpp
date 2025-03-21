@@ -6,6 +6,8 @@
 
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <fmt/format.h>
+#include <fmt/chrono.h>
 
 using namespace std::chrono_literals;
 
@@ -23,13 +25,13 @@ int main(int argc, char **argv) {
         /// (it will still print an error, but we can't register a custom callback)
         RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error: " << error);
       })
-      .then([](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud,
+      .then([&](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud,
                const geometry_msgs::msg::TransformStamped &transform_to_map) {
 
         Eigen::Matrix4d tf_mat = tf2::transformToEigen(transform_to_map.transform).matrix();
 
-        RCLCPP_INFO_STREAM(node->get_logger(), "Received point cloud with header time: " << icey::rclcpp_to_chrono(point_cloud->header.stamp)
-                  << "\nAnd transform at time: " << icey::rclcpp_to_chrono(transform_to_map.header.stamp)
+        RCLCPP_INFO_STREAM(node->get_logger(), "Received point cloud with header time: " << fmt::format("{:%H:%M:%S}\n", icey::rclcpp_to_chrono(point_cloud->header.stamp))
+                  << "\nAnd transform at time: " << fmt::format("{:%H:%M:%S}\n", icey::rclcpp_to_chrono(transform_to_map.header.stamp))
                   << "\nTransform matrix is:\n" << tf_mat);
       });
 

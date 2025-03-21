@@ -15,6 +15,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=return-stack-address) 
 endif()
 
+find_package(fmt)
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
@@ -33,6 +34,7 @@ ament_auto_add_executable(talker_async_await_example src/talker_async_await.cpp)
 
 ament_auto_add_executable(tf_pub_test_example src/tf_pub_test.cpp)
 ament_auto_add_executable(tf_sychronization_example src/tf_sychronization.cpp)
+target_link_libraries(tf_sychronization_example fmt::fmt)
 
 ament_auto_add_executable(service_server_async_await_example src/service_server_async_await.cpp)
 ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)
