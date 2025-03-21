@@ -20,7 +20,8 @@ struct NodeParameters {
   } others;
 };
 
-class MyNode : icey::Node {
+class MyNode : public icey::Node {
+public: 
   MyNode(std::string name) : icey::Node(name) {
     /// Now simply declare the parameter struct and a callback that is called when any field updates:
     icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
