@@ -39,39 +39,74 @@ See also the [signal generator example](../../icey_examples/src/signal_generator
 
 ## Parameter structs 
 
-Do you have many parameters ? 
-You can declare a single struct with all the parameters: 
+Using ICEY, you can declare a single struct with many different parameters: 
 
 ```cpp
+/// Here you declare in a single struct all parameters of the node:
 struct NodeParameters {
-  /// We can have regular fields :
+  /// We can have regular fields:
   double amplitude{3};
 
   /// And as well parameters with constraints and a description:
   icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
-                                       std::string("The frequency of the sine")};
-  
-  icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
-  /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+                                    std::string("The frequency of the sine")};
+
+  /// Constrain a string parameter to a set of values:
+  icey::Parameter<std::string> mode{"single",
+                                    icey::Set<std::string>({"single", "double", "pulse"})};
+
+  /// We can also have nested structs with more parameters, they will be named others.max_amp,
+  /// others.cov:
   struct OtherParams {
     double max_amp = 6.;
     std::vector<double> cov;
   } others;
+  
 };
 ```
 And then let ICEY declare all of them automatically to ROS: 
 
 ```cpp
-auto node = icey::create_node<icey::Node>(argc, argv, "parameters_struct_example");
-  
-  /// Now create an object of the node-parameters that will be updated:
-  NodeParameters params;
+class MyNode : icey::Node {
+  MyNode(std::string name) : icey::Node(name) {
+    /// Now simply declare the parameter struct and a callback that is called when any field updates:
+    icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
+      RCLCPP_INFO_STREAM(this->get_logger(), "Parameter " << changed_parameter << " changed");
+    });
+  }
 
-  /// Now simply declare the parameter struct and a callback that is called when any field updates: 
-  icey::declare_parameter_struct(node->icey(), params, [&](const std::string &changed_parameter) {
-        RCLCPP_INFO_STREAM(node->get_logger(),
-                           "Parameter " << changed_parameter << " changed");
-  });
+  /// Store the parameters as a class member: 
+  NodeParameters params_;
+};
+
+
+auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_example");
 ```
 
-See the [parameter structs example](../../icey_examples/src/parameters_struct.cpp) for details.
+See also the [parameter structs example](../../icey_examples/src/parameters_struct.cpp).
+
+ICEY will update the parameter struct automatically when any parameter changes. 
+
+When you start the example node and inspect it's parameters you see: 
+
+```sh 
+ros2 param dump /icey_parameters_struct_example
+
+/icey_parameters_struct_example:
+  ros__parameters:
+    amplitude: 3.0
+    frequency: 10.0
+    mode: single
+    others:
+      cov: []
+      max_amp: 6.0
+    qos_overrides:
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    use_sim_time: false
+
+```

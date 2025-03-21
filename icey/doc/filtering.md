@@ -1,6 +1,6 @@
-# Transforming Streams: Synchronization and Filters
+# Synchronize and Filter Streams
 
-ICEY provides some useful transformations of streams. These transformations result in a more concise dataflow and a more readable, declarative style.
+ICEY provides some useful filters on streams: publishing, synchronizing with other streams, removing unwanted values.
 
 ## Publish
 

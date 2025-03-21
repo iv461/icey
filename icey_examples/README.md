@@ -111,9 +111,9 @@ ros2 run icey_examples parameters_struct_example
 Then inspect the parameters of the node from another terminal:
 
 ```sh 
-ros2 param dump /parameters_struct_example
+ros2 param dump /icey_parameters_struct_example
 
-/parameters_struct_example:
+/icey_parameters_struct_example:
   ros__parameters:
     amplitude: 3.0
     frequency: 10.0
@@ -136,7 +136,7 @@ You see all the parameter declared as well as the nested parameter (`others`)
 
 If you change one parameter now: 
 ```sh 
-ros2 param set /parameters_struct_example amplitude 4.0
+ros2 param set /icey_parameters_struct_example amplitude 4.0
 ```
 
 You see you get the notification: 

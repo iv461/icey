@@ -20,16 +20,19 @@ struct NodeParameters {
   } others;
 };
 
+class MyNode : icey::Node {
+  MyNode(std::string name) : icey::Node(name) {
+    /// Now simply declare the parameter struct and a callback that is called when any field updates:
+    icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
+      RCLCPP_INFO_STREAM(this->get_logger(), "Parameter " << changed_parameter << " changed");
+    });
+  }
+
+  /// Store the parameters as a class member: 
+  NodeParameters params_;
+};
+
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_parameters_struct_example");
-
-  /// Now create an object of the node-parameters that will be updated:
-  NodeParameters params;
-
-  /// Now simply declare the parameter struct and a callback that is called when any field updates:
-  node->icey().declare_parameter_struct(params, [&](const std::string &changed_parameter) {
-    RCLCPP_INFO_STREAM(node->get_logger(), "Parameter " << changed_parameter << " changed");
-  });
-
+  auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_example");
   icey::spin(node);
 }

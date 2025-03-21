@@ -108,9 +108,9 @@ This performs the synchronization using the `tf2_ros::MessageFilter`.
 
 You will have to do however the actual transformation of the data (i.e. rigid transformation of the point cloud) yourself (PR are welcome to improve this!)
 
-## Subscribing to single transforms 
+## Subscribing to transforms 
 
-When working with transforms between coordinate systems, you don't always need to request the transform at a specific time. Instead, you can subscribe to a single transform between two coordinate systems and receive each time it changes: 
+When working with transforms between coordinate systems, you don't always need to request the transform at a specific time. Instead, you can subscribe to a single transform between two coordinate systems and receive it each time it changes: 
 
 ```cpp 
 node->icey()
