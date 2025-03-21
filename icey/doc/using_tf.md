@@ -1,11 +1,11 @@
 # Using transforms (TF)
 
-Coordinate system transforms are communicated in ROS over the topic `/tf` and `/tf_static`, so receiving them is inherently an asynchronous operation.
-ICEY provides different ways for obtaining transforms: The usual `lookup` function (with async/await API), but also synchronizing a topic like a point cloud with a transform. ICEY even allows *subscribing* to a transform: A callback will be called every time a transform between two coordinate systems changes.
+Coordinate system transforms are communicated in ROS via the `/tf` and `/tf_static` topics, so receiving them is inherently an asynchronous operation.
+ICEY provides several ways to retrieve transforms: The usual `lookup` function (with async/await API), but also synchronizing a topic like a point cloud with a transform. ICEY even allows you to *subscribe* to a transform: A callback will be called every time a transform changes between two coordinate systems.
 
 ## Looking up transforms: 
 
-To lookup a transform at a specific time, you first create a `icey::TransformBuffer`: This is the usual combination of a subscriber on `/tf`/`/tf_static` and a buffer bundled in a single object. 
+To lookup a transform at a given time, you first create an`icey::TransformBuffer`: This is the usual combination of a subscriber on `/tf`/`/tf_static` and a buffer bundled into a single object. 
 
 You can then call `lookup` and await it: 
 
@@ -33,59 +33,60 @@ See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) exam
 
 The code that follows `co_await tf_buffer.lookup` will execute only after the transform is available (or a timeout occurs) -- the behavior is therefore the same to the regular `lookupTransform` function that you are used to, no surprises.
 
-The difference is that in ICEY, the `lookup`-call is asynchronous while the original ROS API (`tf2_ros::Buffer::lookupTransform`) is synchronous, it does *"busy-wait"* with a separate executor.
+The difference is that in ICEY, the `lookup` call is asynchronous, while the original ROS API (`tf2_ros::Buffer::lookupTransform`) is synchronous -- it does *busy-waiting* with a separate executor.
 
-ICEY on the other hand provides an API allows to write *synchronously-looking* code using async/await, consistent with  the APIs of other inherently asynchronous operations like service calls.
+ICEY, on the other hand, allows you to write *synchronous-looking* code using async/await, consistent with the APIs of other inherently asynchronous operations like service calls.
 
-This difference is rather subtle and shouldn't be too relevant if you are only a user of TF. 
-TODO maybe write mode
+This difference is rather subtle, and shouldn't be too relevant if you're just a TF user.
 
-## Synchronizing and transforming data 
 
-Another way of obtaining transforms is to *declare* that you need a transform for every point in time of another sensor measurement like a point cloud was made. This is on contrast to the *imperative* style
+## Synchronizing with a transform
+
+Another way of obtaining transforms is to *declare* that you need a transform for each measurement time of another message like a point cloud. This is in contrast to the *imperative* style
 where you explicitly request every single transform at a given time via a call to `lookup`.
 
 With the declarative style you can essentially say *"I need this point cloud transformed in the map frame before further processing"* 
 
 ### Motivation 
-To see why this is useful, we will analyze some common usage patterns of `lookupTransform`. 
 
-1: Getting the transform at the time the measurement was done:
+To see why this is useful, we will analyze some common usage patterns of `lookupTransform'. 
+
+1: Get the transform at the time of the measurement:
 
 ```cpp
-/// On receiving a measurement, for example an image:
-void on_camera_image(sensor_msgs::Image::SharedPtr img) {
-    auto camera_stamp = img->header.stamp;
-    /// Get the pose of the camera with respect to the map at the time the image was shot:
-    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2_ros::fromMsg(camera_stamp), 200ms);
-}
-```
-Other variants of this pattern (that are rather anti-patterns) are:
-
-1. Just taking the last transform in the buffer to avoid waiting, and therefore assuming the latest transform in the buffer is approximately the same as the message stamp (Source: [Nav2 Stack](https://github.com/ros-navigation/navigation2/blob/main//nav2_costmap_2d/plugins/costmap_filters/keepout_filter.cpp#L177) ):
-```cpp
-
-void on_camera_image(sensor_msgs::Image::SharedPtr img) {
-    /// Get the latest transform in the buffer 
-    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, tf2::TimePointZero);
+void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {
+    auto measurement_time = point_cloud_msg->header.stamp;
+    /// Get the pose of the LiDAR with respect to the map at the time this point cloud was measured:
+    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, map_frame_, tf2_ros::fromMsg(measurement_time), 200ms);
 }
 ```
 
-2. Looking up at the current time in the callback: This is the time the message was received, not the time the measurement was made (which may have been multiple milliseconds earlier):
-```cpp
+Other variants of this pattern (which are rather anti-patterns) are:
 
-void on_camera_image(sensor_msgs::Image::SharedPtr img) {
-    ...
-    auto cam_to_map = tf_buffer_->lookupTransform(cam_frame_, map_frame_, this->get_clock().now());
-    ...
+2: Ignore the header timestamp and just take the last transformation in the buffer to avoid waiting:
+
+```cpp
+void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {        
+    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, map_frame_, tf2::TimePointZero, 200ms);
 }
 ```
 
-So, we are usually always interested in getting the transform for a time of another topic: We are therefore *synchronizing* the transform with another topic.
+This assumes that the last transformation in the buffer is approximately at the same time as the message header time, an assumption that is generally unjustified.
 
-### Synchronizing with transform with ICEY:
+3: Looking up at the current time in the callback: This is the time the message was *received* in callback, not the time the measurement *taken* (which may have been several milliseconds earlier):
 
-ICEY supports this kind synchronization with the transform: 
+```cpp
+void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {     
+    /// Get the current time as this code (i.e. the callback) is executed:
+    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, map_frame_, this->get_clock().now(), 200ms);
+}
+```
+
+However, all of these patterns have in common that we are interested in getting the transform for a time from another topic: We are *synchronizing* the transform with the messages of another topic.
+
+### Usage with ICEY:
+
+To synchronize a message (that has a header timestamp) with a transform in ICEY, you do:
 
 ```cpp 
 node->icey()
@@ -103,9 +104,11 @@ node->icey()
 
 See also the [TF synchronization example](../../icey_examples/src/tf_sychronization_example.cpp).
 
+This performs the synchronization using the `tf2_ros::MessageFilter`. 
+
 You will have to do however the actual transformation of the data (i.e. rigid transformation of the point cloud) yourself (PR are welcome to improve this!)
 
-# Subscribing to single transforms 
+## Subscribing to single transforms 
 
 When working with transforms between coordinate systems, you don't always need to request the transform at a specific time. Instead, you can subscribe to a single transform between two coordinate systems and receive each time it changes: 
 
