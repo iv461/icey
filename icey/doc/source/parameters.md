@@ -74,7 +74,7 @@ ros2 param dump /icey_parameters_struct_example
 ```
 
 ### Validators 
-ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary function generally.  Some convineint validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
+ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary functions generally.  Some convenient validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
 
 Set of values: 
 ```cpp
@@ -95,12 +95,12 @@ Parameters are are declared in ICEY similar to regular ROS. They model however t
 ```cpp
 bool is_read_only = false;
 bool ignore_overrides = false;
-auto offset_param = node->icey().declare_parameter<double>("offset", 0., icey::Validator<double>{}, "description", is_read_only, ignore_overrides);
+double default_value = 0.;
+auto offset_param = node->icey().declare_parameter<double>("offset", default_value, icey::Validator<double>{}, "description", is_read_only, ignore_overrides);
 ```
 
-Where the argument `0.` is the default value and `is_read_only` indicates this parameter is dynamic, i.e. it can be changed at runtime. The parameter name and the default value are mandatory, all other arguments are not. 
-
-The variable `offset_param` is as everything else in ICEY a Stream as well, and we can therefore subscribe to updates of the parameters with `.then`:
+The parameter name and the default value are mandatory, all other arguments are not. 
+We can subscribe to updates of this parameters with `.then`:
 
 ```cpp
 offset_param.then([&](const auto &new_value) {

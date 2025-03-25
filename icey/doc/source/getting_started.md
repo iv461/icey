@@ -15,16 +15,16 @@ ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
 The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
-# Install ICEY 
+# Install 
 
 ICEY comes as a regular ROS 2 package, to install it just clone it in you colcon workspace and build it:
 
 TODO update link 
 
 ```sh
-git clone git@github.com:iv461/icey.git
-sudo apt install liboost-dev libfmt-dev
-colcon build  --packages-up-to icey icey_examples -DCMAKE_BUILD_TYPE=Release
+git clone https://github.com/DriverlessMobility/icey.git
+sudo apt install libboost-dev libfmt-dev
+MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
 In the following, 

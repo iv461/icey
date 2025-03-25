@@ -12,12 +12,12 @@ Sorted by decreasing priority.
 
 - [ ] Filtering example: filter, timeout unwrap_or, any
 
-- [ ] all filter: Useful for many service calls 
+- [ ] `all` filter: Useful for many service calls 
 
 - [ ] We have likely three times duplicated the timeout handling: TF, service and TimeoutFilter.
-    Can't we try to 
+    Can't we try to move it to some common code ? I.e. one-off timer handler
     
-- [ ] A separate Async function creating a result via promise (upstream service example ) is still broken, I guess I'm missing adding a continuation for a default-constructed promise 
+- [ ] We can't use nested async functions: A separate async-function creating a result via promise (upstream service example ) is still broken, I guess I'm missing adding a continuation for a default-constructed promise 
 
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
 by ROS entities will never yield something regardless of how long we spin the ROS executor if the underlying ROS entity driving them was stopped. For example if the ROS-timer was cancelled. Or the subscription destroyed. In such a case, calling co_await on such streams would hang forever. We need to return None in this case or an extra end-of-Stream identitier (like tokio).
@@ -26,7 +26,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing)
 
-- [ ] Docs: await in a callback is likely supported now, remove misleading notice 
+- [X] Docs: await in a callback is likely supported now, remove misleading notice 
 
 - [ ] Docs: Explain synchronization 
 - [ ] Docs: Explain Result-type for error handling 
