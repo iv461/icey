@@ -1,4 +1,4 @@
-# Synchronize and Filter Streams
+# Synchronizing and filtering Streams
 
 ICEY provides some useful filters on streams: publishing, synchronizing with other streams, removing unwanted values.
 
@@ -20,12 +20,12 @@ For this to work, a Stream must hold a ROS-message type.
 
 ## Filter 
 
-You can filter values of a Stream using a function that returns false if it should be filtered and true if the value should be passed through: 
+You can filter a Stream using a function that returns false if the message should be filtered and true if the message should be passed through: 
 
 ```cpp
   node->icey().create_subscriber<geometry_msgs::PoseStamped>("ego_pose")
-    /// Filter (i.e. remove) messages that contain NaNs 
-    .filter([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
+    /// Filter (i.e. remove) messages that contain NaNs:
+    .filter([](geometry_msgs::PoseStamped::SharedPtr pose_msg) -> bool {
         return !(std::isnan(pose_msg->pose.x) 
                   ||std::isnan(pose_msg->pose.y) 
                   || std::isnan(pose_msg->pose.z));
@@ -34,7 +34,13 @@ You can filter values of a Stream using a function that returns false if it shou
       /// Here we receive only NaN-free messages for further processing
     });
 ```
+
 TODO link example 
+
+## Timeout 
+
+A common requirement is to check whether the header stamp of a ROS message is too old, for this we use `.timeout(<duration>)`. 
+
 
 ## Synchronization 
 
@@ -52,6 +58,8 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
 ```
 
 See also the [synchronization example](../../icey_examples/src/synchronization.cpp)
+
+This method will synchronize both topics by approximately matching their header timestamps. For this, ICEY uses the `message_filters::Synchronizer` with the `ApproxTime` policy. 
 
 ## Error handling: `unwrap_or`
 
@@ -71,9 +79,5 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
                sensor_msgs::msg::PointCloud2::SharedPtr) {
       });
 ```
-
-## Timeout 
-
-A common requirement is to check whether the header stamp of a ROS message is too old, for this we use `.timeout(<duration>)`. 
 
 

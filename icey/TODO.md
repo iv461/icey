@@ -9,11 +9,14 @@ Sorted by decreasing priority.
 
 - [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
 
+- [ ] Docs: Async flow article: Rewrite: callback hell as motivation (do not focus on services only), going to CPS, explain promise-mode .then(). Then, unify or remove advanced promise-mode flow chains.
+
 - [ ] Docs: Explain synchronization approx time 
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
- 
 - [ ] Docs: Up-to-date extension tutorial
+
+- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 - [ ] Test installing in Docker base image regarding dependencies 
@@ -33,6 +36,8 @@ Sorted by decreasing priority.
 ## Other nice-to-have features, not for 0.1
 
 - [ ] Add sync wait to wait for a promise or stream 
+
+- [ ] Refactor: All Stream-Impls should derive from the base impl::Stream since we need to static-downcast already at two places 
 
 - [ ] Code refactor: re-use common code between Promise and Stream by modifying impl::Stream: Remove `take()` from impl::Stream, rename impl::Stream to Promise. Implement the coroutine support in impl::Stream, i.e. the interface functions as well as storing the coroutine continuation and the exception_ptr. An open question is where to implement then/except: They do the dynamic memory allocation, but the Promise as needed right now by the services do not perform dynamic memory allocation. 
 
@@ -312,7 +317,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Unit-test service client request cleanup using a sleepy service server
 
-- [X] (async/await) Fix Promise ownership when using nested async functiions
+- [X] (async/await) Fix Promise ownership when using nested async functions
 
 - [X] Fix hang of getting a message from a separate async function: operator co_return of a Promise should put instead of set so that
 
@@ -334,3 +339,5 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Consider merging NodeBookkeeping and Context: We already hold the shared pointer to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep issue
 - [X] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
+
+- [X] Docs: `icey::create_node` and `icey::spin_node`

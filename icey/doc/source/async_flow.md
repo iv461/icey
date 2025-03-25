@@ -1,6 +1,44 @@
 # Asynchronous data-flow in ICEY 
 
-ICEY allows to express asynchronous data-flow very easily, which is very useful for implementing service calls:
+ICEY allows to express asynchronous data-flow very easily by applying transformations on Streams, leading to easy-to-read declarative code. 
+In the following we look at various transformations that we can apply on Streams. 
+
+## Motivation: avoiding *callback hell*: 
+
+When writing complex ROS application code that uses in combination subscribers, timers and services, the limits of the regular ROS API quickly become apparent.
+
+One typical use-case is calling service calls periodically by a timer:
+Many ROS application developers are asking how to do synchronous service calls. In ROS 2, there is no synchronous service call anymore (compared to ROS 1), making the translation of ROS 1 code challenging. But actually, the motivation behind asking for a synchronous service call is that we want to do something only after the service call returned the response. Meaning, we want to enforce a sequence of the operations. 
+This is actually possible already in regular ROS 2 by simply nesting the callbacks:
+
+```cpp
+/// Inside the callback of a timer, we want to call a service and then wait for a transform: 
+void on_timer() {
+    auto req = create_request();
+    ...
+    client->async_send_request(req, [](auto future) {
+        if(!future.valid()) {
+            /// do error handling
+            return;
+        }
+        client1->async_send_request(req, [](auto future1) {
+            if(!future1.valid()) {
+                /// do error handling
+                return;
+            }
+            tf_buffer->waitForTransform(target, source, [](auto tf_future) {
+                if(tf_future.valid()) {
+                    auto transform = tf_future.get().second;
+                        transform_message(msg, transform);
+                    ...
+                }
+            }); 
+        });    
+    });
+}
+```
+By nesting the callbacks, you can achieve the sequence of operations. 
+But as you see, nesting many callbacks (in this case 3) starts making the code unreadable due to excessive indentation, a common problem that is called *callback hell*. 
 
 ## Chaining of service calls 
 
@@ -34,69 +72,6 @@ See also the [service_client](../../icey_examples/src/service_client_async_await
 
 No more dead-locks can occur. Services can be called from any other Stream, for example synchronizers
 
-## Avoiding callback hell: 
-
-Many ROS application developers are asking how to do synchronous service calls. In ROS 2, there is no synchronous service call anymore (compared to ROS 1), making the translation of ROS 1 code challenging. But actually, the motivatrion behind asking for a synchronous service call is that we want to do somehting only after the service call returned the responce. Meaning, we want to enforce a sequence of the operations. 
-This is actually possible already in regular ROS 2 by simply nesting the callbacks:
-
-```cpp
-/// Inside the callback of a subscriber, we want to call a service and then wait for a transform: 
-void on_message(Msg msg) {
-
-    auto req = get_req();
-    client->async_send_request(req, [](auto future) {
-        if(future.valid()) {
-
-            client1->async_send_request(req, [](auto future1) {
-                if(future1.valid()) {
-                    tf_buffer->waitForTransform(target, source, [](auto tf_future) {
-                        if(tf_future.valid()) {
-                            auto transform = tf_future.get().second;
-                                tranform(msg, transform);
-
-                        }
-                    }); 
-                }
-            });
-        }
-    });
-}
-```
-By nesting the callbacks, you can achieve this sequencing. 
-But as you see, nesting many callbacks (in this case 3) starts making the code unreadable, a common problem that is called *callback hell*. 
-
-
-## Synchronization
-
-Topics in ICEY can be synchronized in a very simple way using a single `synchronize` function:
-```cpp 
-auto camera_image_sub = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
-auto point_cloud_sub = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
-
-///
-node->icey().synchronize(camera_image_sub, point_cloud_sub)
-    .then([](sensor_msgs::msg::Image::SharedPtr img, 
-             sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
-
-    });
-```
-
-See also the [automatic_synchronization](../../icey_examples/src/automatic_synchronization.cpp) example.
-
-This method will synchronize both topics by approximately matching their header timestamps. For this, ICEY uses the `message_filters::Synchronizer` with the `ApproxTime` policy. 
-
-TODO sync_with_reference 
-
-
-## Promise vs. async/await API
-
-ICEY offers two different ways of writing ROS nodes: 
-- (1) using promises: create callbacks and use `.then` and `.except`
-- (2) async/await: Use `co_await` to write asynchronous code that looks like it's synchronous
-
-Both are valid ways of doing the same thing. Both ways are useful, depending on the operation: Subscribes, timers and service servers require using callbacks (unless you have only a single one). 
-Service clients must use co_await `client.call(..)`
-Looking up transforms is usually done synchronous, `co_await lookup(...)`, but can be done also in promise-mode: You can *synchronize* with a transform.
 
 ## Control flow: Multiple inputs and multiple outputs
 
@@ -225,50 +200,6 @@ Filtering is also useful for conditional publishing.
 
 Streams in ICEY can have errors: A service call might fail, or a transform might not be available.
 If no error occurs a *value* is returned, otherwise an error. We handle errors by creatin
-
-
-TODO explain promises here 
-
-
-
-## Unwrapping: Handling the error and continuing with an error-free Stream
-
-Filters generally emit new types of errors. But since the error of a Stream can only have a single type, filters cannot accept input Streams that already have errors, possibly of different type. We of course do not want to leave errors unhandled. 
-So we need to first handle the error and only then can return an error-free stream. 
-
-This is exactly for what the Stream-method `unwrap_or` exists: It takes a callback that receives the error value, this callback should not return anyghing.
-It then returns a stream that is error-free. This is handy if we want to handle a timeout and then synchronize a topic for example: 
-
-```cpp
-
-auto cam_sub = node->icey().create_subscription<sensor_msgs::msg::Image>("/camera_center");
-
-/// The resulting Stream does not have an error:
-icey::Stream<sensor_msgs::msg::Image::SharedPtr, icey::Nothing> cam_sub_with_timeout_handled = cam_sub
-    .timeout(300ms)
-    .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
-        RCLCPP_WARN_STREAM(node->get_logger(), "Image timed out");
-    });
-    
-/// And can be synchronized therefore: 
-node->icey().synchronize(cam_sub_with_timeout_handled, ...);
-```
-
-
-Compiler error: If you try to compile a function where an `ErrorFreeStream` is expected, you will get an "contraints not satisfied" error that looks something like this, so keep an eye on it:
-
-```sh
-/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:1601:27: note:   template argument deduction/substitution failed:
-/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:1601:27: note: constraints not satisfied
-/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp: In substitution of ‘template<class ServiceT, class Input>  requires  ErrorFreeStream<Input> icey::ServiceClient<ServiceT> icey::Context::create_client(Input, const string&, const Duration&, const rclcpp::QoS&) [with ServiceT = std_srvs::srv::SetBool; Input = icey::Stream<std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >, std::__cxx11::basic_string<char>, icey::Nothing>]’:
-/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:693:74:   required from ‘icey::ServiceClient<ServiceT> icey::Stream<_Value, _ErrorValue, ImplBase>::call_service(const string&, const Duration&, const rclcpp::QoS&) [with ServiceT = std_srvs::srv::SetBool; _Value = std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >; _ErrorValue = std::__cxx11::basic_string<char>; ImplBase = icey::Nothing; std::string = std::__cxx11::basic_string<char>; icey::Duration = std::chrono::duration<long int, std::ratio<1, 1000000000> >]’
-/home/ivo/autoware/src/icey/icey/test/entities_test.cpp:86:40:   required from here
-/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:423:9:   required for the satisfaction of ‘ErrorFreeStream<Input>’ [with Input = icey::Stream<std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, icey::Nothing>]
-/home/ivo/autoware/src/icey/icey/include/icey/icey.hpp:423:48: note: the expression ‘is_same_v<typename icey::remove_shared_ptr<T>::remove_shared_ptr_t<T>::ErrorValue, icey::Nothing> [with T = icey::Stream<std::shared_ptr<std_srvs::srv::SetBool_Request_<std::allocator<void> > >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, icey::Nothing>]’ evaluated to ‘false’
-  423 | concept ErrorFreeStream = AnyStream<T> && std::is_same_v<ErrorOf<T>, Nothing>;
-      |                                           ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-```
-
 
 
 ## Where are the callback groups ? 
