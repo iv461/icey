@@ -322,7 +322,10 @@ struct TFListener {
 
   /// Cancel a transform request: This means that the registered callbacks will no longer be called. If the given request does not exist, this function
   /// does nothing. 
-  bool cancel_request(RequestHandle request) { return requests_.erase(request); }
+  bool cancel_request(RequestHandle request) { 
+      requests_.erase(request); 
+      return active_timers_.erase(request);
+  }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
   /// (internally TF2 has it's own timestamps...), not because we need to wait on anything (that's

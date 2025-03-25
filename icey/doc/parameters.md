@@ -1,43 +1,4 @@
-
-
-## Parameters 
-
-Parameters are are declared in ICEY similar to regular ROS. They model however the Stream concept and allow therefore to subscribe for updates like regular subscribers:
-
-```cpp
-auto offset_param = node->icey().declare_parameter<double>("offset", 0.);
-```
-
-Where the argument `0.` is the default value and the argument `true` indicates this parameter is dynamic, i.e. it can be changed at runtime.
-
-The variable `offset_param` is as everything else in ICEY a Stream as well, and we can therefore subscribe to updates of the parameters with `.then`:
-
-```cpp
-offset_param.then([&](const auto &new_value) {
-	RCLCPP_INFO_STREAM(node->get_logger(), "Offset changed: " << new_value);
-});
-```
-If you instead want to obtain the value, you can call `.value()`:
-
-```cpp
-RCLCPP_INFO_STREAM(node->get_logger(), "Initial offset: " << offset_param.value());
-```
-This inly works for parameters -- they always have initial values, which is generally not true for other Streams.
-
-### Validators 
-ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary function generally.  Some convineint validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
-
-Set of values: 
-```cpp
-auto mode_param = node->icey().declare_parameter<std::string>("mode", "single",   icey::Set<std::string>({"single", "double", "pulse"}));
-```
-
-Interval:
-```cpp
-auto frequency = node->icey().declare_parameter<double>("frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
-```
-
-See also the [signal generator example](../../icey_examples/src/signal_generator.cpp). 
+# Parameters 
 
 ## Parameter structs 
 
@@ -111,3 +72,44 @@ ros2 param dump /icey_parameters_struct_example
       [...]
     use_sim_time: false
 ```
+
+### Validators 
+ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary function generally.  Some convineint validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
+
+Set of values: 
+```cpp
+auto mode_param = node->icey().declare_parameter<std::string>("mode", "single",   icey::Set<std::string>({"single", "double", "pulse"}));
+```
+
+Interval:
+```cpp
+auto frequency = node->icey().declare_parameter<double>("frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
+```
+
+See also the [signal generator example](../../icey_examples/src/signal_generator.cpp). 
+
+## Declaring single parameters 
+
+Parameters are are declared in ICEY similar to regular ROS. They model however the Stream concept and allow therefore to subscribe for updates like regular subscribers:
+
+```cpp
+bool is_read_only = false;
+bool ignore_overrides = false;
+auto offset_param = node->icey().declare_parameter<double>("offset", 0., icey::Validator<double>{}, "description", is_read_only, ignore_overrides);
+```
+
+Where the argument `0.` is the default value and `is_read_only` indicates this parameter is dynamic, i.e. it can be changed at runtime. The parameter name and the default value are mandatory, all other arguments are not. 
+
+The variable `offset_param` is as everything else in ICEY a Stream as well, and we can therefore subscribe to updates of the parameters with `.then`:
+
+```cpp
+offset_param.then([&](const auto &new_value) {
+	RCLCPP_INFO_STREAM(node->get_logger(), "Offset changed: " << new_value);
+});
+```
+If you instead want to obtain the value, you can call `.value()`:
+
+```cpp
+RCLCPP_INFO_STREAM(node->get_logger(), "Initial offset: " << offset_param.value());
+```
+This inly works for parameters -- they always have initial values, which is generally not true for other Streams.
