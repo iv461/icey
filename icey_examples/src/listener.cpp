@@ -1,22 +1,14 @@
-/// This example is for a simple listener, i.e. subscriber in promise style.
+/// This example shows how to write a simple subscriber.
+/// It receives messages from the talker example.
 #include <icey/icey.hpp>
-
 #include "std_msgs/msg/string.hpp"
-
-using StringMsg = std_msgs::msg::String;
 
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "icey_listener_example");
-  auto my_string = node->icey().create_subscription<StringMsg>("my_string", 1);
-
-  /// This callback gets called for each message (it is like the subscriber callback)
-  auto derived_value =
-      my_string.then([](StringMsg::SharedPtr my_string_val) { return my_string_val->data; });
-
-  /// We can add a continuation:
-  derived_value.then([&](const std::string &derived_string) {
-    RCLCPP_INFO_STREAM(node->get_logger(), "Got value: " << derived_string);
-  });
-
+  
+  node->icey().create_subscription<std_msgs::msg::String>("my_string", 1, 
+    [](std_msgs::msg::String::SharedPtr msg) {
+      RCLCPP_INFO_STREAM(node->get_logger(), "Got value: " << msg->data);
+     });
   icey::spin(node);
 }

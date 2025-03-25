@@ -4,19 +4,25 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Docs: Group callback based entities: Sub/Parameter/Timer
-- [ ] Docs: Explain timer: 
-
-- [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
-
 - [ ] Docs: Async flow article: Rewrite: callback hell as motivation (do not focus on services only), going to CPS, explain promise-mode .then(). Then, unify or remove advanced promise-mode flow chains.
+- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 
-- [ ] Docs: Explain synchronization approx time 
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
+
+- [ ] Docs: Polish/sell better services article since it is a big deal: we are the first ROS library to allow for async/await services
+
+- [ ] Docs: Explain timers
+- [ ] Docs: Maybe Group callback based entities: Sub/Parameter/Timer
+
+- [ ] Docs: Mention how to publish on TF 
+
+- [ ] Docs: Polish parameters article 
+
+
 - [ ] Docs: Up-to-date extension tutorial
 
-- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
+- [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 - [ ] Test installing in Docker base image regarding dependencies 
@@ -341,3 +347,4 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
 
 - [X] Docs: `icey::create_node` and `icey::spin_node`
+- [X] Docs: Explain synchronization approx time 
