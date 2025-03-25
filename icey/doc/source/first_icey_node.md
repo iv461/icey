@@ -28,15 +28,27 @@ subscribers/timers/publisher etc. as members of the class, ICEY does this bookke
 
 ## The ICEY-node 
 
-The ICEY library has two node classes: `icey::Node` and `icey::LifecycleNode`. 
-To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function simply creates a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
-
+The ICEY library has two node classes: `icey::Node` and `icey::LifecycleNode`.
 The `icey::Node` is a subclass of an `rclcpp::Node`, so that you can drop-in replace you existing Node and gradually adopt ICEY's features.
 ICEY offers all it's features through the `icey::Context` interface, accessed through `node->icey()`.
 
-Since the ICEY-nodes are just subclasses of regular nodes, you can also build them into shared libraries and load them at runtime, i.e. use them as *components* with the `RCLCPP_COMPONENTS_REGISTER_NODE`-macro
+### Creating ICEY-nodes 
 
-ICEY represents ROS primitives (sub/pub etc.) as a `Stream`, an asynchronous programming abstraction for a sequence of values. Such `Stream`s can be used with async/await syntax, i.e. `co_awaited` to obtain a new message from a subscriber for example. 
+To create new ICEY-nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function simply creates a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
+This means, you do not have to use the `icey::create_node` function, you can instead create a node like you would create a regular `rclcpp::Node`.
+
+Since the ICEY-nodes are just subclasses of regular nodes, you can also build them into shared libraries and load them at runtime, i.e. use them as *components* with the `RCLCPP_COMPONENTS_REGISTER_NODE`-macro.
+
+### Spinning ICEY-nodes 
+
+To spin ICEY-nodes, you use the `icey::spin_node(<node>)` function. This function simply spins the node in a `rclcpp::SingleThreadedExecutor`, but additionally calls `rclcpp::shutdown` at the end, so that you don't have to do it. 
+This means, you do not have to use the `icey::spin_node(<node>)` function, you can instead spin it manually. 
+
+```{warning}
+ICEY-nodes can only be used with a single-threaded executor.
+```
+
+ICEY represents ROS primitives (sub/pub etc.) as a `Stream`, an asynchronous programming abstraction for a sequence of values. Such `Stream`s can be used with async/await syntax, i.e. `co_await`ed to obtain a new message from a subscriber for example. 
 
 If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
 

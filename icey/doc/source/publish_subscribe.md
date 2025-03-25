@@ -27,10 +27,10 @@ icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().cr
 ```
 
 Key differences are: 
-  - The lifetime of the subscription is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
-  - `create_subscriber` returns a stream, but you can access the ROS-subscriber using `steam.subscriber` 
-  - If no quality of service is given, a uses the so called *system default*
-  - The callback is optional: If you need to synchronize for example the subscriber, you do not need to provide a callback
+  - The lifetime of the subscription is bound to the lifetime of the node: This means, you don't need to store  the subscriber as a member in the node class (i.e. do bookkeeping)
+  - `create_subscriber` returns a `stream`, but you can access the `rclcpp::Subscriber` using `stream.subscriber` 
+  - The quality of service is optional: If it is not given, the so called *system default* one is used
+  - The callback is optional: You do not need to provide a callback if you plan for example to first synchronize the subscriber with another stream
 
 ## Publishers
 

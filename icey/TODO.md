@@ -4,13 +4,40 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
+- [ ] Docs: Group callback based entities: Sub/Parameter/Timer
+- [ ] Docs: Explain timer: 
 
+- [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
+
+- [ ] Docs: Explain synchronization approx time 
+- [ ] Docs: Explain Result-type for error handling 
+- [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
+ 
+- [ ] Docs: Up-to-date extension tutorial
+
+- [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
 - [ ] Test installing in Docker base image regarding dependencies 
 
-- [ ] Test parameter as value for TF sub
-
 - [ ] Filtering example: filter, timeout unwrap_or, any
+
+- [ ] Add static asserts for the any filter that all the streams have the same value
+- [ ] Add static asserts for the unpack transform that the stream holds a tuple
+
+
+## Error-handling
+
+## Examples 
+
+- [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
+
+## Other nice-to-have features, not for 0.1
+
+- [ ] Add sync wait to wait for a promise or stream 
+
+- [ ] Code refactor: re-use common code between Promise and Stream by modifying impl::Stream: Remove `take()` from impl::Stream, rename impl::Stream to Promise. Implement the coroutine support in impl::Stream, i.e. the interface functions as well as storing the coroutine continuation and the exception_ptr. An open question is where to implement then/except: They do the dynamic memory allocation, but the Promise as needed right now by the services do not perform dynamic memory allocation. 
+
+- [ ] Lifecycle nodes: a very similar thing is the Actor in Rust's Actix: https://docs.rs/actix/latest/actix/trait.Actor.html
+- [ ] Actix' (a Rust library) node API: https://docs.rs/actix/latest/actix/trait.AsyncContext.html
 
 - [ ] `all` filter: Useful for many service calls 
 
@@ -22,47 +49,14 @@ Sorted by decreasing priority.
 - [] Async/await: We maybe need a "Stream was closed" concept: Streams that are generally driven 
 by ROS entities will never yield something regardless of how long we spin the ROS executor if the underlying ROS entity driving them was stopped. For example if the ROS-timer was cancelled. Or the subscription destroyed. In such a case, calling co_await on such streams would hang forever. We need to return None in this case or an extra end-of-Stream identitier (like tokio).
 
-- [ ] Docs: Explain lambda-ownership, that lambdas need to be copied inside since the lifetime of the Stream is till the program exists. And that lvalues are copied as well. Think about whether it's good idea to force the user to explicitly mode the lambda inside so that the a named lvalue-lambda cannot be called by any other means.
-
-- [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing)
-
-- [X] Docs: await in a callback is likely supported now, remove misleading notice 
-
-- [ ] Docs: Explain synchronization 
-- [ ] Docs: Explain Result-type for error handling 
-- [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
-- [ ] Docs: Up-to-date extension tutorial
-- [ ] Docs: Coroutines: add note that when coroutines 
-- [ ] Docs: Document that the lifetime of the Streams is tied to the Node 
-- [ ] Docs: Make clear that only synchronous functions are supported as callbacks
- 
-- [ ] Add sync wait to wait for a promise or stream 
- 
-- [ ] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
-
-- [ ] Add static asserts for the any filter that all the streams have the same value
-- [ ] Add static asserts for the unpack transform that the stream holds a tuple
-- [ ] Static assert that the callbacks are not coroutines
-
-- [ ] Code refactor: re-use common code between Promise and Stream by modifying impl::Stream: Remove `take()` from impl::Stream, rename impl::Stream to Promise. Implement the coroutine support in impl::Stream, i.e. the interface functions as well as storing the coroutine continuation and the exception_ptr. An open question is where to implement then/except: They do the dynamic memory allocation, but the Promise as needed right now by the services do not perform dynamic memory allocation. 
-
-- [ ] Lifecycle nodes: a very similar thing is the Actor in Rust's Actix: https://docs.rs/actix/latest/actix/trait.Actor.html
-- [ ] Actix' (a Rust library) node API: https://docs.rs/actix/latest/actix/trait.AsyncContext.html
-
-## Error-handling
-
-## Examples 
-
-- [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
-
-## Other nice-to-have features, not for 0.1
-
-- [ ] Consider using designated initializers syntax finally standartized in C++20 for something, for example Parameters would profit.
-- [ ] Consider merging NodeBookkeeping and Context: We already hold the shared pointer to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep issue
+- [ ] Docs: Explain lambda-ownership, that lambdas need to be copied inside since the lifetime of the Stream is till the program exists. And that lvalues are copied as well. Think about whether it's good idea to force the user to explicitly move the lambda inside so that the a named lvalue-lambda cannot be called by any other means.
 
 - [ ] Do not use the TF2 message filter but instead reimplement it using async lookup -> needs input buffer
 
-- [ ] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct
+- [ ] Consider using designated initializers syntax finally standardized in C++20 for something, for example Parameters would profit.
+
+- [X] Look into rclcpp::AsyncParametersClient, may be better suitable for the Parameter struct -> currently buggy 
+
 - [ ] rclcpp also has a TimerInfo (the thing that previously was called TimerEvent in ROS 1) with the time, use it as the state. 
 
 - [ ] Consider C++20 Modules support -> insufficient compiler support 
@@ -70,6 +64,8 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] Automatic adaption of queue size in ApproxTimeSync
 
 - [ ] Maybe generalize concept of push/pull Stream 
+
+- [ ] Support messages without header stamp (use arrive time) for synchronization   
 
 - [ ] Add static asserts that message has header stamp for better compiler error messages
 
@@ -91,7 +87,7 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [ ] publishing scalar values directly is implemented in autoware quite competently, re-use it: https://github.com/autowarefoundation/autoware.universe/blob/main/common/autoware_universe_utils/include/autoware/universe_utils/ros/debug_publisher.hpp#L33
 
 - [ ] Maybe Simulink-style blocks, i.e. constant, step, function etc.
-- [ ] Actions ? See https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble
+- [ ] Support for Actions (similar to gRPC C# API) https://github.com/BehaviorTree/BehaviorTree.ROS2/tree/humble
 
 ## API elegance/clarity
 
@@ -328,3 +324,13 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Refactor: Merge NodeBookkeeping and Context
 - [X] Do not recommend injecting functions into the foreign icey namespace when 
+
+
+- [X] Docs: await in a callback is likely supported now, remove misleading notice 
+- [X] Docs: Coroutines: 
+- [X] Docs: Document that the lifetime of the Streams is tied to the Node 
+- [X] Docs: Make clear that only synchronous functions are supported as callbacks -> outdated
+- [X] Docs: Explain TF synchronization
+
+- [X] Consider merging NodeBookkeeping and Context: We already hold the shared pointer to timers and publishers in the Stream impl. Since stream impls are held by the Context, this already makes sure they live for as long as the node. So we would only need to hold stuff that is present once like a TF broadcaster in the context. By using auto node as the first argument, we could actually solve the cyclic dep issue
+- [X] Document how to access the internal ROS stuff in case it is needed, e.g. queue of syncher -> for this, after initialize callback is needed.
