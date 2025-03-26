@@ -2,8 +2,17 @@
 
 ## Parameter structs 
 
-ICEY offers an even more great way of declaring many parameters at once: parameter structs.
-Using ICEY, you can put many parameters in a normal struct, adding constraints like minimum and maximum values to them, or even using nested structs with more parameters:
+
+### Motivation 
+
+Typically, a ROS node has many parameters that require additional constraints such as minimum and maximum values. 
+Many application developers create a struct that contains a copy of the current value of each ROS parameter. This parameter struct is then stored as a field of the node class.
+
+If a ROS node wraps an algorithm that has many parameters, this means many calls to `declare_parameter`, `get_parameter`, and also every single parameter has to be copied to the parameter struct in the on-change callback. This means a lot of boilerplate code. 
+
+ICEY provides a solution to this problem by automatically declaring all parameters of a given struct using static reflection.
+
+With ICEY, you can put many parameters in a normal struct, add constraints like minimum and maximum values, or even use nested structs with more parameters:
 
 ```cpp
 /// Here you declare in a single struct all parameters of the node:
@@ -29,7 +38,7 @@ struct NodeParameters {
 };
 ```
 
-Store an instance of this parameter struct as a member (as you are used to) then then simply call `declare_parameter_struct`, ICEY declares automatically every parameter:
+Store an instance of this parameter struct as a member (as you are used to) then then simply call `declare_parameter_struct`, ICEY declares automatically every parameter, without any further boilerplate code:
 
 ```cpp
 class MyNode : public icey::Node {
@@ -50,13 +59,7 @@ auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_exampl
 
 See also the [parameter structs example](../../icey_examples/src/parameters_struct.cpp).
 
-Whereas with other approaches, you would have to manually repeat each parameter declaration, with ICEY it is just a single call to `declare_parameter_struct`. 
-
-ICEY uses for this static reflection -- since C++20 it became possible to use static reflection completly transparent to the user, i.e. no annotations of any kind (macros, typing out everything twice) are needed for a struct to be eligible for reflection.
-
-ICEY will update the parameter struct automatically when any parameter changes. 
-
-When you start the example node and inspect it's parameters you see: 
+After examining the parameters of the sample node, you see:
 
 ```sh 
 ros2 param dump /icey_parameters_struct_example
@@ -72,6 +75,13 @@ ros2 param dump /icey_parameters_struct_example
       [...]
     use_sim_time: false
 ```
+
+ICEY will update the parameter struct automatically when any parameter changes. 
+
+Whereas with other approaches you would have to manually repeat each parameter declaration, with ICEY it is just a single call to `declare_parameter_struct'. 
+
+ICEY uses static reflection for this -- since C++20 it is possible to use static reflection completely transparent to the user, i.e. no annotations of any kind (macros, typing everything twice) are required for a struct to be eligible for reflection.
+
 
 ### Validators 
 ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary functions generally.  Some convenient validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
