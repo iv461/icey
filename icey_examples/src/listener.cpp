@@ -6,8 +6,8 @@
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "icey_listener_example");
   
-  node->icey().create_subscription<std_msgs::msg::String>("my_string", 1, 
-    [](std_msgs::msg::String::SharedPtr msg) {
+  node->icey().create_subscription<std_msgs::msg::String>("my_string", 
+    [&](std_msgs::msg::String::SharedPtr msg) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got value: " << msg->data);
      });
   icey::spin(node);

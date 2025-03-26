@@ -48,6 +48,9 @@ struct t_is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
 template <class T>
 constexpr bool is_shared_ptr = t_is_shared_ptr<T>::value;
 
+template <typename T, typename... Ts>
+concept AnyOf = (std::is_convertible_v<T, Ts> || ...);
+
 namespace hana = boost::hana;
 
 inline bool icey_debug_print = false;
@@ -673,14 +676,15 @@ public:
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
 
-  /// Create a subscription stream and registers the given callback via .then().
+  /// Create a subscription stream and registers the given (synchronous) callback via .then().
   /// Works otherwise the same as [rclcpp::Node::create_subscription].
-  template <class MessageT>
+  template <class MessageT, class Callback>
   SubscriptionStream<MessageT> create_subscription(
-      const std::string &name, SubscriptionStream<MessageT>::Callback cb,
+      const std::string &name, 
+      Callback cb,
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
-      
+
   /// Create a subscriber that subscribes to a single transform between two frames.
   /// This stream will emit a value every time the transform between these two frames changes, i.e.
   /// it is a stream. If you need to lookup transforms at a specific point in time, look instead at
@@ -1635,7 +1639,8 @@ struct SubscriptionStream
     : public Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>> {
   using Base = Stream<typename _Message::SharedPtr, Nothing, SubscriptionStreamImpl<_Message>>;
   using Value = typename _Message::SharedPtr;
-  using Callback = std::function<void(const Value&)>;
+  using SyncCallback = std::function<void(Value)>;
+  using AsyncCallback = std::function<Promise<void>(Value)>;
   SubscriptionStream() = default;
   SubscriptionStream(Context &context, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
@@ -2278,16 +2283,16 @@ SubscriptionStream<MessageT> Context::create_subscription(
   return create_stream<SubscriptionStream<MessageT>>(name, qos, options);
 }
 
-template <class MessageT>
+template <class MessageT, class Callback>
 SubscriptionStream<MessageT> Context::create_subscription(
-      const std::string &name, SubscriptionStream<MessageT>::Callback cb,
+      const std::string &name, 
+      Callback cb,
       const rclcpp::QoS &qos,
       const rclcpp::SubscriptionOptions &options) {
   auto sub = create_stream<SubscriptionStream<MessageT>>(name, qos, options);
   sub.then(cb);
   return sub;
 }
-    
 
 inline TransformSubscriptionStream Context::create_transform_subscription(
     ValueOrParameter<std::string> target_frame, ValueOrParameter<std::string> source_frame) {

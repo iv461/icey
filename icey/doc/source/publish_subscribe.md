@@ -27,6 +27,7 @@ icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().cr
 ```
 
 Key differences are: 
+  - Asynchronous functions, i.e. coroutines, can be used as callbacks
   - The lifetime of the subscription is bound to the lifetime of the node: This means, you don't need to store  the subscriber as a member in the node class (i.e. do bookkeeping)
   - `create_subscriber` returns a `stream`, but you can access the `rclcpp::Subscriber` using `stream.subscriber` 
   - The quality of service is optional: If it is not given, the so called *system default* one is used
