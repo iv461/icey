@@ -52,3 +52,20 @@ Key differences are:
   - If no quality of service is given, a uses the so called *system default*  
 
 publisher()
+
+## Timers 
+
+Timers Streams as well that behave similarly to subscribers. 
+We can easily register a callback and use the timer like you usually would: 
+
+```cpp
+icey::TimerStream my_timer = node->icey().create_timer(100ms);
+```
+
+```cpp
+auto my_timer = node->icey().create_timer(100ms);
+
+my_timer.then([](size_t ticks) {
+    /// Do work
+});
+```

@@ -27,15 +27,12 @@ sudo apt install libboost-dev libfmt-dev
 MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
-In the following, 
-
-
 # Your first ICEY-Node 
 
-In the following, we will assume you are already familiar writing ROS nodes in C++ (See [Ófficial ROS Tutorials](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries.html)).
+In the following, we will assume you are already familiar writing ROS nodes in C++ (See [Official Client library Tutorials](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries.html)).
 
-The ICEY library has two node classes `icey::Node` and an `icey::LifecycleNode`. 
-To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function does simply create a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it
+The ICEY library has two node classes: `icey::Node` and an `icey::LifecycleNode`. 
+To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function does simply create a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
 
 ```cpp
 #include <icey/icey.hpp>
@@ -56,32 +53,12 @@ int main(int argc, char **argv) {
 
 See also the [signal generator example](../../icey_examples/src/signal_generator.cpp).
 
-ICEY represents every ROS primitive (sub/pub etc.) as a `Stream`, an abstraction of an asynchronous sequence of values. 
-If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
-
-In this simple example we already see some interesting features: You do not need to create a publisher beforehand, instead you declare that the result should be published on a topic. 
-Also, we do not store a timer object anywhere, ICEY stores it internally so that it does not get out of scope. This holds true for classes as well: In ICEY, you do not have to store 
-subscribers/timers/publisher etc. as members of the class, ICEY does this bookkeeping for you. 
-
-
-## Timers 
-
-Timers are also signals:
-
-```cpp
-auto my_timer = node->icey().create_timer(100ms);
-```
-
-You can think of them as sources similar to subscribers but with no information, publishing periodically. 
-We can easily register a callback and use the timer like you usually would: 
-
-```cpp
-auto my_timer = node->icey().create_timer(100ms);
-
-my_timer.then([](size_t ticks) {
-    /// Do work
-});
-```
+In this simple example, we can already see some interesting features:
+ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over an asynchronous sequence of values. 
+If you are familiar with JavaScript, this is essentially a promise, except that the state transitions are not final.
+Such streams allow calls to `publish', i.e. they can be published directly. 
+You do not need to create a publisher first, you just declare that the result should be published to a topic. 
+Finally, we do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. This is generally true for other entities as well: In ICEY, you do not need to store subscribers/timers/services as members of the class, ICEY does this bookkeeping for you.
 
 ## References 
 
