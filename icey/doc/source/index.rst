@@ -30,6 +30,7 @@ Table of Contents
    getting_started
    first_icey_node
    publish_subscribe
+   timers
    parameters
    async_flow
    filtering
@@ -37,7 +38,6 @@ Table of Contents
    using_services
    using_tf
    lifecycle_nodes
-   translating_an_autoware_node
 
 .. toctree::    
    :caption: Advanced

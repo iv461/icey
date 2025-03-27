@@ -32,6 +32,7 @@ Sorted by decreasing priority.
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
 
+- [ ] Manage one-off timers in the Context to compensate for the missing API: When we create a one-off timer, we also have to do the book-keeping ! This means that ICEY-API users cannot create many one-off-timers because this will consume more and more memory ! 
 
 ## Error-handling
 

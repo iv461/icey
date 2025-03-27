@@ -60,9 +60,9 @@ ROS treats publishing a message as a fire-and-forget task: The `publish` call se
 
 What we want therefore is a publish function that returns a promise and allows to be awaited. By calling `co_await publish(<message>)`, we suspend execution until the has ACK arrived.
 This also allows to have the old behavior: We simply do not need to `co_await` if it is undesired. 
-This is how many other message passing libraries implement a `publish` function [1, 2, 3].
+This is how many other message passing libraries implement a `publish` function [1, 2, 3, 4].
 
-Unfortunately, ROS does not provide an API for asynchronous ACK waiting, only a synchronous one (`rclcpp::Publisher::wait_for_all_acked`). This is a fundamental limitation of ROS 2 (at the RMW API), and therefore ICEY cannot provide an awaitable `publish' function.
+__Unfortunately, ROS does not provide an asynchronous API for waiting on the ACK, only a synchronous one (`rclcpp::PublisherBase::wait_for_all_acked`). This is a fundamental limitation of ROS 2 (at the RMW API layer), and for this reason ICEY cannot provide an awaitable `publish' function.__
 
 It would be required to add an asynchronous `async_wait_for_all_acked` to the RMW API so that an  an awaitable `publish` function can be implemented.
 
@@ -71,3 +71,4 @@ It would be required to add an asynchronous `async_wait_for_all_acked` to the RM
 - [1] `await writer.WriteAsync` [using channels in C#](https://learn.microsoft.com/en-us/dotnet/core/extensions/channels)
 - [2] `send(...).await` using [Tokio channels in Rust](https://tokio.rs/tokio/tutorial/channels)
 - [3] [MQTT in C#](https://github.com/dotnet/MQTTnet/blob/980a5d0a6d58d77318056cd50d35602c34622360/Samples/Client/Client_Publish_Samples.cs#L39)
+- [4] `await asyncPublish` using [MQTT.js in JavaScript](https://github.com/mqttjs/MQTT.js?tab=readme-ov-file#publish-async)
