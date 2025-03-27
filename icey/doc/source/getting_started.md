@@ -32,7 +32,7 @@ MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -
 In the following, we will assume you are already familiar writing ROS nodes in C++ (See [Official Client library Tutorials](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries.html)).
 
 The ICEY library has two node classes: `icey::Node` and an `icey::LifecycleNode`. 
-To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function does simply create a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
+To create new nodes, you use the `icey::create_node<NodeType>(argc, argv, <node_name>)` function (default `NodeType` is `icey::Node`). This function simply creates a node with `std::make_shared<NodeType>`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
 
 ```cpp
 #include <icey/icey.hpp>

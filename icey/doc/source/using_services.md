@@ -1,17 +1,19 @@
-# Services 
+# Services using async/await
 
-Services are implemented using async/await syntax and service servers also allow to use asynchronous callback functions,  i.e. coroutines. 
-This allows for a more powerful  behavior that was previously not possible with regular ROS.
+One of the biggest novelties of ICEY is that it allows to use services with async/await syntax.
+ICEY is the first library to provide such an API using the new C++20 coroutine feature.
 
+ICEY also allows for service servers to use asynchronous callback functions,  i.e. coroutines which enables 
+ a more powerful behavior like calling other services inside callbacks, something that was previously only difficult and clumsy to achieve with regular ROS [1].
 
 ## Client 
 
-Service clients call a service service, and this is an inherently asynchronous operation -- we do not know when we will receive the response. 
+Service clients call a service, and this is an inherently asynchronous operation -- we don't know when (or if) we will receive the response. 
 What we want most of the time however is to continue doing other work only *after* we got the response. 
 
-The regular ROS API does not offer a synchronous API for calling services -- instead it forces the user to manually spin the event loop. 
+The regular ROS 2 API does not offer a synchronous API for calling services (meaning a function that calls the service and blocks until the response was received) -- instead the user has to manually spin the event loop which is error-prone because it leads to deadlocks when done inside a callback. 
 
-ICEY on the other hand provides a async/await- based API: 
+With ICEY, waiting for the response becomes easy thanks to the async/await based API: 
 
 ```cpp
 auto service = node->icey().create_client<ExampleService>("set_bool_service");
@@ -33,48 +35,13 @@ icey().create_timer(1s)
     })
 ```
 
-Using that, you can call services and await the response inside any callback. This means, you can implement a synchronous operations while the underlying operations are still asynchronous. 
+You can call services and await the response inside any callback (timer, subscriber, service server). You can implement synchronization of operations (*first* call service, *then* do x) while the underlying operations remain asynchronous. 
 
-All of this is possible thanks to coroutines, they allow to write a __single-threaded__ asynchronous code. 
-
-
-What the compiler does is something along the lines of: 
-
-```cpp
-          
-//// Compiler creates a continuation
-auto coro_continuation1 = [](icey::Result<Response, std::string> result) {
-  if (result.has_error()) {
-        /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
-        RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
-    } else {
-        RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
-    }
-};
-
-node->create_wall_timer(1s, [this]() {
-        /// Build a request each time the timer ticks
-        auto request = std::make_shared<ExampleService::Request>();
-        request->data = true;
-        
-        icey::Promise<Response, std::string> output_promise;                  /// <-- Compiler constructs the output promise
-        service.async_send_request(request, [&result](auto future) {          /// <--- ICEY code
-            if(future.valid()) {
-              output_promise.set_value(future.get()); 
-              continuation1(output_promise.get_state().get());
-            } else {
-              output_promise.set_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
-              continuation1(output_promise.get_state().get());
-            }
-        }); /// Enqueues the call
-    });
-rclcpp::spin(node);
-```
-
+All of this is possible thanks to coroutines which allow to write __single-threaded__ asynchronous code. 
 
 ## Server 
 
-To create a service server, you use your usual `create_service` function, which returns the response: 
+To create a service server, you use your usual `create_service` function and pass it a callback that receives the request and returns the response: 
 
 ### With synchronous callback
 ```cpp
@@ -90,7 +57,7 @@ This example used a synchronous callback, it returns the response immediately.
 
 ### With asynchronous callback
 
-The novelty of ICEY is that we can also use *asynchronous* callbacks, i.e. coroutines:
+The novelty of ICEY is that we can also use *asynchronous* callbacks, i.e. coroutines as service callbacks:
 
 ```cpp
 /// Create a service client for an upstream service that is actually capable of answering the
@@ -119,7 +86,13 @@ node->icey().create_service<ExampleService>(
         
       });
 ```
+
 This example calls another service inside the callback: This is an asynchronous operation that is awaited (`co_await`). Once it completes, the server sends the response. 
 The difference between the synchronous callback is that the asynchronous one returns a `icey::Promise<Result>` instead of a `Result`. 
 
 See also the [Service server](../../icey_examples/src/service_server_async_await.cpp) example.
+
+
+# References 
+
+- [1] 
