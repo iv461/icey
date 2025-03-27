@@ -6,15 +6,17 @@ You can always go on and read the API documentation on `Promise`, `Stream`, `imp
 
 ## Extending with custom subscribers and publishers: image_transport
 
-In the following, we will extend ICEY to support the subscribers from the `image_transport` package that allows subscribing to compressed camera images.
+In the following, we will extend ICEY to support the subscribers from the `image_transport` package which allow subscribing to compressed camera images.
 
-For this, we essentially need to wrap the subscriber in a new Stream. This Stream holds as value the ROS-message. We then put the ROS-message in the Stream each time the subscriber callback gets called. 
+For this, we essentially need to wrap the subscriber in a custom Stream. We then put the ROS message into this custom Stream each time the subscriber callback is called. 
 
-We create a new `ImageTransportSubscriber`-stream by deriving from the class `icey::Stream`.
-The class template `Stream<Value, Error, BaseImpl>`
-is parametrized on the `Value` it holds, for this we use the ROS-message type `sensor_msgs::Image::ConstSharedPtr `.
+We create a new `ImageTransportSubscriber` class that inherits from `icey::Stream`.
+The class template `icey::Stream<Value, Error, BaseImpl>`
+expects a `Value`, which is the ROS message type `sensor_msgs::Image::ConstSharedPtr `. As an `Error`, we will use `image_transport::TransportLoadException`, more on error handling later. 
 
-An `icey::Stream` does not to not have any fields except a weak reference to an `icey::impl::Stream` (PIMPL idiom). This allows them to be passed around by value (= clean code) while they actually referring to an unique object like a ROS subscriber. 
+The `BaseImpl` parameter needs some background information: 
+
+An `icey::Stream` does not have any fields except a weak pointer to an `icey::impl::Stream<Base>` (PIMPL idiom). This allows them to be passed around by value (= clean code) while they actually referring to an unique object like a ROS subscriber. 
 
 `impl::Stream<Base>` is a class that derives from the class `Base` that is given as a template parameter. 
 This allows to extend the impl. 
@@ -52,10 +54,10 @@ It is important to call the base class constructor and pass it the context, i.e.
 
 ### Creating the subscriber
 
-In the constructor, we need to create the subscriber. We create ROS entities using the Context, for this you need to call `context.node()` to obtain an `icey::NodeBase` object that abstracts regular Nodes and lifecycle nodes. 
-You can also obtain the underlying `rclcpp::Node` by calling `as_node()` on the `icey::NodeBase` object.
+We create the subscriber inside the constructor of our custom Stream. For creating the subscriber, we need the ROS node, we can obtain it through the `icey::Context`. For this you need to call `context.node_base()`, it gives you a `icey::NodeBase` object that abstracts regular Nodes and lifecycle nodes. 
+To obtain the underlying `rclcpp::Node`, you call `as_node()` on the `icey::NodeBase` object.
 
-Since the `image_transport::create_subscription` needs a `rclcpp::Node *` object as, the code becomes:
+Since the `image_transport::create_subscription` needs a `rclcpp::Node *`, the constructor code becomes:
 
 ```cpp
  ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
@@ -69,10 +71,14 @@ Since the `image_transport::create_subscription` needs a `rclcpp::Node *` object
     
   }
 ```
+In this code, a declaration for `callback` is missing, we will add it in a second. 
+The subscriber is stored with `this->impl()->subscriber` in the impl-object `ImageTransportSubscriberImpl` which we declared previously. You should also store everything inside the impl and never directly in the custom Stream.
 
-> Note: `this->` is important in the following to tell the compiler to look in the base class, otherwise it cannot find the function
 
-To store fields in the Stream, you should always use `this->impl()-><field>`.
+```{note}
+It is important to prefix member functions with `this->` to tell the compiler to look in the base class, otherwise you will get a compile error.
+```
+
 
 ### Putting values in the stream
 
@@ -86,7 +92,7 @@ We create a callback that captures the Stream-impl and puts the message into the
       : Base(context) {
     
     /// The callback captures a weak reference to the Stream impl and puts the message:
-    const auto cb = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
+    const auto callback = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
       impl->put_value(image);
     };
 
