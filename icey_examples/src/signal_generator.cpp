@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         std_msgs::msg::Float32 float_val;
         double period_time_s = 0.1;
         /// We can access the parameter value by implicit conversion (or explicitly using .value())
-        double y = amplitude * std::sin((period_time_s * ticks) * frequency * 2 * M_PI);
+        double y = amplitude * std::sin((2 * M_PI) * frequency * (period_time_s * ticks));
         float_val.data = y;
         RCLCPP_INFO_STREAM(node->get_logger(), "Publishing sine... " << y);
         return float_val;
