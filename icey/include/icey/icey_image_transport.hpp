@@ -24,17 +24,17 @@ void assert_is_not_lifecycle_node(Context &context) {
         "currently support image_transport with lifecycle nodes.");
 }
 
-struct ImageTransportSubscriberImpl {
+struct ImageTransportSubscriptionImpl {
   /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
   image_transport::Subscriber subscription;
 };
 // An stream representing a camera image subscription.
-struct ImageTransportSubscriber
+struct ImageTransportSubscription
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                    image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
+                    image_transport::TransportLoadException, ImageTransportSubscriptionImpl> {
   using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                      image_transport::TransportLoadException, ImageTransportSubscriberImpl>;
-  ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+                      image_transport::TransportLoadException, ImageTransportSubscriptionImpl>;
+  ImageTransportSubscription(Context &context, const std::string &base_topic_name,
                            const std::string &transport, const rclcpp::QoS qos,
                            const rclcpp::SubscriptionOptions &options = {})
       : Base(context) {
@@ -72,19 +72,19 @@ struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPt
 };
 
 // An stream representing a camera subscription.
-struct CameraSubscriberImpl {
+struct CameraSubscriptionImpl {
   /// The image_transport sub/pub use PIMPL, so we can hold them by value.
   image_transport::CameraSubscriber subscription;
 };
 
-struct CameraSubscriber
+struct CameraSubscription
     : public Stream<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
                                sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
-                    image_transport::TransportLoadException, CameraSubscriberImpl> {
+                    image_transport::TransportLoadException, CameraSubscriptionImpl> {
   using Base = Stream<std::tuple<sensor_msgs::msg::Image::ConstSharedPtr,
                                  sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
-                      image_transport::TransportLoadException, CameraSubscriberImpl>;
-  CameraSubscriber(Context &context, const std::string &base_topic_name,
+                      image_transport::TransportLoadException, CameraSubscriptionImpl>;
+  CameraSubscription(Context &context, const std::string &base_topic_name,
                    const std::string &transport, const rclcpp::QoS qos)
       : Base(context) {
     const auto cb = [impl = this->impl()](

@@ -5,7 +5,7 @@ In the following, we will look at how to create publishers and subscriptions.
 ## The Stream concept 
 
 Streams are a fundamental concept upon which ICEY is built. An `icey::Stream` is an asynchronous abstraction that represents a sequence of values, potentially infinitely many. 
-Subscribers, service servers, and timers all model the stream concept. 
+Subscriptions, service servers, and timers all model the stream concept. 
 You can either register a callback on a stream that's invoked when a new value (i.e. ROS message) arrives, or you can asynchronously wait for a new value using `co_await stream`. 
 
 Streams shine when we apply transformations to them -- synchronization, filtering, buffering, we can also just `publish()` a stream. More on this later.
@@ -27,7 +27,7 @@ icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().cr
 ```
 
 Key differences to regular ROS are: 
-  - `create_subscription` returns a `Stream` (you can access the `rclcpp::Subscriber` using `stream.subscription`)
+  - `create_subscription` returns a `Stream` (you can access the `rclcpp::Subscription` using `stream.subscription`)
   - Asynchronous functions, i.e. coroutines, can be used as callbacks
   - The lifetime of the subscription is bound to the lifetime of the node: This means, you don't need to store  the subscription as a member in the node class (i.e. do bookkeeping)
   - The quality of service is optional: If it is not given, the so called *system default* one is used

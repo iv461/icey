@@ -194,7 +194,7 @@ TEST_F(TwoNodesFixture, PubSubTest) {
   EXPECT_EQ(received_cnt, 10);
 }
 
-TEST_F(TwoNodesFixture, TransformSubscriberTest) {
+TEST_F(TwoNodesFixture, TransformSubscriptionTest) {
   auto sub =
       receiver_->icey().create_transform_subscription("icey_test_frame1", "icey_test_frame3");
 

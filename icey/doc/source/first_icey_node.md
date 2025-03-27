@@ -67,4 +67,4 @@ ICEY-nodes can only be used with a single-threaded executor.
 ```
 
 
-In the following, we will look more closely into how Subscribers and Timers follow the `Stream` concept and how this changes the way of asynchronous programming. 
+In the following, we will look more closely into how Subscriptions and Timers follow the `Stream` concept and how this changes the way of asynchronous programming. 

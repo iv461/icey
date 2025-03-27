@@ -26,7 +26,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 // Message filters library: (.h so that this works with humble as well)
-#include <message_filters/subscription.h>
+#include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
 
@@ -2029,7 +2029,7 @@ struct SimpleFilterAdapterImpl : public message_filters::SimpleFilter<Message> {
 /// `Stream` (which is a similar concept).
 /// \note This is essentially the same as what
 /// `message_filters::Subscriber` does:
-/// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscription.h#L349
+/// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
 template <class Message>
 struct SimpleFilterAdapter
     : public Stream<typename Message::SharedPtr, Nothing, SimpleFilterAdapterImpl<Message>> {

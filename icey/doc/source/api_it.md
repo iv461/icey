@@ -1,17 +1,17 @@
 # Support for `image_transport`
 
-```{doxygenstruct} icey::ImageTransportSubscriber
+```{doxygenstruct} icey::ImageTransportSubscription
 ```
-```{doxygenstruct} icey::ImageTransportSubscriberImpl
+```{doxygenstruct} icey::ImageTransportSubscriptionImpl
 ```
 
 ```{doxygenstruct} icey::ImageTransportPublisher
 ```
 
 
-```{doxygenstruct} icey::CameraSubscriber
+```{doxygenstruct} icey::CameraSubscription
 ```
-```{doxygenstruct} icey::CameraSubscriberImpl
+```{doxygenstruct} icey::CameraSubscriptionImpl
 ```
 
 ```{doxygenstruct} icey::CameraPublisher

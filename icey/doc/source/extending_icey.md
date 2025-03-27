@@ -9,7 +9,7 @@ You can always go on and read the API documentation on `Promise`, `Stream`, `imp
 
 We essentially need to wrap the subscription in a custom Stream. Then, each time the subscription callback is called, we put the ROS message into this Stream.
 
-We create a new `ImageTransportSubscriber` class that inherits from `icey::Stream`.
+We create a new `ImageTransportSubscription` class that inherits from `icey::Stream`.
 The class template `icey::Stream<Value, Error, BaseImpl>`
 expects a `Value`, which is the ROS message type `sensor_msgs::Image::ConstSharedPtr `. As an `Error`, we will use `image_transport::TransportLoadException`, more on error handling later. 
 
@@ -21,32 +21,32 @@ The class `impl::Stream<Base>` inherits from the given type `Base`, allowing it 
 
 The `BaseImpl`-class holds everything a custom Stream needs as fields. A class deriving from `Stream` should never contain any fields because they may go out of scope. 
 
-This is why we first need to create a custom impl `ImageTransportSubscriberImpl` that stores the subscription:
+This is why we first need to create a custom impl `ImageTransportSubscriptionImpl` that stores the subscription:
 ```cpp
-struct ImageTransportSubscriberImpl {
+struct ImageTransportSubscriptionImpl {
   image_transport::Subscriber subscription;
 };
 ```
 
-Then we declare the actual custom stream `ImageTransportSubscriber` -- it gets the `ImageTransportSubscriberImpl` as the `BaseImpl`:
+Then we declare the actual custom stream `ImageTransportSubscription` -- it gets the `ImageTransportSubscriptionImpl` as the `BaseImpl`:
 
 ```cpp
-struct ImageTransportSubscriber
+struct ImageTransportSubscription
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                    image_transport::TransportLoadException, ImageTransportSubscriberImpl>
+                    image_transport::TransportLoadException, ImageTransportSubscriptionImpl>
 ```
 
 We can now write the constructor that takes the arguments we need for the subscription -- topic name, QoS etc.
 In addition, each stream constructor takes as its first argument the `icey::Context` corresponding to the ROS node.
 
 ```cpp
-struct ImageTransportSubscriber
+struct ImageTransportSubscription
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                    image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
+                    image_transport::TransportLoadException, ImageTransportSubscriptionImpl> {
 
   using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr,
-                      image_transport::TransportLoadException, ImageTransportSubscriberImpl>;
-  ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+                      image_transport::TransportLoadException, ImageTransportSubscriptionImpl>;
+  ImageTransportSubscription(Context &context, const std::string &base_topic_name,
                            const std::string &transport, const rclcpp::QoS qos,
                            const rclcpp::SubscriptionOptions &options = {})
       : Base(context) {
@@ -62,7 +62,7 @@ To get the underlying `rclcpp::Node`, you call `as_node()` on the `icey::NodeBas
 Since the `image_transport::create_subscription` needs a `rclcpp::Node *`, we create the subscription with:
 
 ```cpp
- ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+ ImageTransportSubscription(Context &context, const std::string &base_topic_name,
                            const std::string &transport, const rclcpp::QoS qos,
                            const rclcpp::SubscriptionOptions &options = {})
       : Base(context) {
@@ -74,7 +74,7 @@ Since the `image_transport::create_subscription` needs a `rclcpp::Node *`, we cr
   }
 ```
 This code is missing a declaration for `callback`, we will add it in a moment.
-The subscription is stored with `this->impl()->subscription` in the impl-object `ImageTransportSubscriberImpl` that we declared previously. You should never store something directly in the Stream but only in the impl.
+The subscription is stored with `this->impl()->subscription` in the impl-object `ImageTransportSubscriptionImpl` that we declared previously. You should never store something directly in the Stream but only in the impl.
 By storing it in the impl, we also achieve that the lifetime of the subscription is bound to the lifetime of the node: The `icey::Context` creates and owns all impls.
 
 
@@ -88,7 +88,7 @@ It is important to prefix member functions with `this->` to tell the compiler to
 Now we implement the subscription callback. It captures the Stream-impl and calls `put_value` for each new message:
 
 ```cpp
- ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+ ImageTransportSubscription(Context &context, const std::string &base_topic_name,
                            const std::string &transport, const rclcpp::QoS qos,
                            const rclcpp::SubscriptionOptions &options = {})
       : Base(context) {
@@ -127,10 +127,10 @@ We can use this mechanism to handle the error that a compression algorithm was r
 
 ## Using the new Stream 
 
-We now have created a custom subscription stream `ImageTransportSubscriber`. To use it, we call `icey::Context::create_stream<T>` with our custom stream as `T` and pass it all arguments that the constructor expects (except the `icey::Context`): 
+We now have created a custom subscription stream `ImageTransportSubscription`. To use it, we call `icey::Context::create_stream<T>` with our custom stream as `T` and pass it all arguments that the constructor expects (except the `icey::Context`): 
 
 ```cpp
-ImageTransportSubscriber image_transport_sub = node->icey().create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
+ImageTransportSubscription image_transport_sub = node->icey().create_stream<ImageTransportSubscription>(topic_name, transport, qos);
 ```
 
 See also the [image transport example](../../icey_examples/src/using_image_transport.cpp)

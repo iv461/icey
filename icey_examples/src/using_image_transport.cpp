@@ -1,5 +1,5 @@
 
-/// Example showing how to use the image_transport Subscribers/Publishers for subscribing
+/// Example showing how to use the image_transport Subscriptions/Publishers for subscribing
 /// simultaneously at the image as well as the CameraInfo message. The CameraInfo message holds
 /// information about the pinhole camera model that is required for computer vision algorithms.
 /// But one of the most
@@ -15,9 +15,9 @@ using namespace std::chrono_literals;
 int main(int argc, char **argv) {
   auto node = icey::create_node(argc, argv, "icey_image_transport_example");
   
-  /// Create an image_transport::CameraSubscriber. The second argument is the transport, i.e. the
+  /// Create an image_transport::CameraSubscription. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
-  auto camera_center_sub = node->icey().create_stream<icey::CameraSubscriber>("camera_center", "raw", rclcpp::SensorDataQoS());
+  auto camera_center_sub = node->icey().create_stream<icey::CameraSubscription>("camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
       .then([&](sensor_msgs::msg::Image::ConstSharedPtr /*image*/,
@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
                             "Could not load plugin, got exception: " << exception.what());
       });
 
-  /// Create a regular image_transport::Subscriber to receive compressed images
-  auto camera_left_sub = node->icey().create_stream<icey::ImageTransportSubscriber>("camera_left", "raw", rclcpp::SensorDataQoS());
+  /// Create a regular image_transport::Subscription to receive compressed images
+  auto camera_left_sub = node->icey().create_stream<icey::ImageTransportSubscription>("camera_left", "raw", rclcpp::SensorDataQoS());
 
   camera_left_sub
       /// We receive here the image after image_transport has decompressed it:
