@@ -4,7 +4,6 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Docs: Async flow article: Rewrite: callback hell as motivation (do not focus on services only), going to CPS, explain promise-mode .then(). Then, unify or remove advanced promise-mode flow chains.
 - [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 
 - [ ] Docs: Explain Result-type for error handling 
@@ -12,15 +11,10 @@ Sorted by decreasing priority.
 
 - [ ] Docs: Polish/sell better services article since it is a big deal: we are the first ROS library to allow for async/await services
 
-- [ ] Docs: Explain timers
-- [ ] Docs: Maybe Group callback based entities: Sub/Parameter/Timer
+- [ ] Bug: If a promise handler is registered after it has a value, we currently do not notify (this is wrong, every promise needs to handle this) This causes the image transport subscriber not being able to handle the error since it is set already in the constructor.
+
 
 - [ ] Docs: Mention how to publish on TF 
-
-- [ ] Docs: Polish parameters article 
-
-
-- [ ] Docs: Up-to-date extension tutorial
 
 - [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
 
@@ -28,6 +22,8 @@ Sorted by decreasing priority.
 - [ ] Test installing in Docker base image regarding dependencies 
 
 - [ ] Filtering example: filter, timeout unwrap_or, any
+
+- [ ] Unit-test timeout filter
 
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
@@ -349,3 +345,9 @@ by ROS entities will never yield something regardless of how long we spin the RO
 
 - [X] Docs: `icey::create_node` and `icey::spin_node`
 - [X] Docs: Explain synchronization approx time 
+
+- [X] Docs: Async flow article: Rewrite: callback hell as motivation (do not focus on services only), going to CPS, explain promise-mode .then(). Then, unify or remove advanced promise-mode flow chains 
+- [X] Docs: Explain timers
+- [X] Docs: Maybe Group callback based entities: Sub/Parameter/Timer -> nope, extra article
+- [X] Docs: Polish parameters article 
+- [X] Docs: Up-to-date extension tutorial
