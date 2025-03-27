@@ -78,12 +78,12 @@ ros2 param dump /icey_parameters_struct_example
 
 ICEY will update the parameter struct object (`params_`) automatically when any parameter changes. 
 
-Whereas with other approaches you would have to manually repeat each parameter declaration, with ICEY it is just a single call to `declare_parameter_struct'. 
+Whereas with other approaches you would have to manually repeat each parameter declaration, with ICEY it is just a single call to `declare_parameter_struct`. 
 
-ICEY uses static reflection for this -- since C++20 it is possible to use static reflection completely transparent to the user, i.e. no annotations of any kind (macros, typing everything twice) are required for a struct to be eligible for reflection.
-
+ICEY uses for this static reflection which became possible only since C++20 (not standartized, but through external libraries). Compared to pre-C++20 reflection libraries, no annotations of any kind (macros, typing everything twice) are required for a struct to be eligible for reflection.
 
 ### Validators 
+
 ICEY allows to constraint parameters to certain values using validators: They can be an arbitrary functions generally.  Some convenient validators are implemented as well: `Set`s, defined explicitly by a list of values, or defined by a minimum and maximum value, i.e. `Interval`s.
 
 Set of values: 
@@ -100,7 +100,7 @@ See also the [signal generator example](../../icey_examples/src/signal_generator
 
 ## Declaring single parameters 
 
-You can also declare single parameters. They are Streams and allow to subscribe for updates:
+You can also declare single parameters. Compared to regular ROS, the API is simplified as requested by some users [1]. Parameters are Streams and allow to subscribe for updates:
 
 ```cpp
 bool is_read_only = false;
@@ -129,4 +129,4 @@ This only works for parameters -- they always have initial values, which is gene
 
 ## References 
 
-- [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
+- [1] A user requesting a simpler ROS API on ROS discourse: [https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272](https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272)

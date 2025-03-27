@@ -1,6 +1,7 @@
-# Synchronizing and filtering Streams
+# Async flow: Synchronizing and filtering Streams
 
-ICEY provides some useful filters on streams: publishing, synchronizing with other streams, removing unwanted values.
+ICEY allows to express asynchronous data-flow very easily by applying transformations on Streams, leading to easy-to-read declarative code. 
+In the following we look at various transformations that we can apply on Streams like  synchronizing with other streams or removing unwanted values.
 
 ## Publish
 
@@ -79,5 +80,18 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
                sensor_msgs::msg::PointCloud2::SharedPtr) {
       });
 ```
+## Control flow: Multiple inputs and multiple outputs
 
+### Single input, multiple output
 
+```cpp 
+    auto [output1, output2] = node->icey().create_subscription<Msg>("topic", 1)
+        .then([](Msg::SharedPtr input) {
+
+            auto output_msg1 = do_computation(input);
+            auto output_msg2 = do_another_computation(input);
+            return std::make_tuple(output_msg1, output_msg2);
+        }).unpack();
+    output1.publish("output_topic1");
+    output2.publish("output_topic2");
+```
