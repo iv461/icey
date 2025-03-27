@@ -99,4 +99,4 @@ The difference between the synchronous callback is that the asynchronous one ret
 - [1] Tutorial on how to use callback groups in rclcpp https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255
 - [2] https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1
 - [3] https://github.com/ijnek/nested_services_rclcpp_demo
-- [4] https://github.com/ros2/ros2_documentation/issues/901
+- [4] Discussion about async/await and proposal by William Woodall: https://github.com/ros2/ros2_documentation/issues/901

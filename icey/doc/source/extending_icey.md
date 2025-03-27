@@ -1,140 +1,111 @@
 # Extending ICEY
 
-This tutorial shows how you can extend ICEY -- add new publishers, subscribers, 
-but also new filters. 
+This tutorial shows how you can extend ICEY by adding a new subscriber.
 
-## The Stream concept
-For this, we first need to understand the concept `Stream` more in detail. 
-An `Stream` is a value with a list of callbacks that get called when this value changes.
-We can set the value of the Stream, this triggers that all the callbacks get called. 
-We can also listen on changes to this value by registering a callback ourselves.
+You can always go on and read the API documentation on `Promise`, `Stream`, `impl::Stream` and `Context` for details.
 
 ## Extending with custom subscribers and publishers: image_transport
 
 In the following, we will extend ICEY to support the subscribers from the `image_transport` package that allows subscribing to compressed camera images.
 
-We already know how to create new subscribers: When we subscribe to a topic in ROS, we pass it a subscriber-callback that gets called every time a new message is received. We will create therefore an Stream that holds as value the ROS-message. We will set the value of the Stream to the new ROS-message each time the subscriber-callback gets called. 
+For this, we essentially need to wrap the subscriber in a new Stream. This Stream holds as value the ROS-message. We then put the ROS-message in the Stream each time the subscriber callback gets called. 
 
-We create a new `ImageTransportSubscriber`-stream by deriving from the class `Stream`.
-The class template `Stream<Value, Error, DerivedImpl>`
+We create a new `ImageTransportSubscriber`-stream by deriving from the class `icey::Stream`.
+The class template `Stream<Value, Error, BaseImpl>`
 is parametrized on the `Value` it holds, for this we use the ROS-message type `sensor_msgs::Image::ConstSharedPtr `.
 
-TODO finish:
+An `icey::Stream` does not to not have any fields except a weak reference to an `icey::impl::Stream` (PIMPL idiom). This allows them to be passed around by value (= clean code) while they actually referring to an unique object like a ROS subscriber. 
 
+`impl::Stream<Base>` is a class that derives from the class `Base` that is given as a template parameter. 
+This allows to extend the impl. 
 
-We first declare the `DerivedImpl`-class that holds everything this stream needs as data fields. The class that actually derives from `Stream` should never contain any fields. 
+The `BaseImpl`-class holds everything a custom Stream needs as fields. A class deriving from `Stream` should never contain any fields because they may go out of scope. 
 
 ```cpp
-struct ImageTransportSubscriberImpl  {
+struct ImageTransportSubscriberImpl {
   /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
   image_transport::Subscriber subscriber;
 };
 
-class ImageTransportSubscriber : Stream< sensor_msgs::msg::Image::ConstSharedPtr,
+struct ImageTransportSubscriber
+    : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
+                    image_transport::TransportLoadException, ImageTransportSubscriberImpl>
+```
+
+We can now write the constructor that takes the arguments we need for the subscriber -- topic name, QoS etc.
+Additionally, every Stream constructor takes as a first argument the `icey::Context` that corresponds to the ROS node.
+
+```cpp
+struct ImageTransportSubscriber
+    : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                     image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
-public:
 
+  using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr,
+                      image_transport::TransportLoadException, ImageTransportSubscriberImpl>;
+  ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+                           const std::string &transport, const rclcpp::QoS qos,
+                           const rclcpp::SubscriptionOptions &options = {})
+      : Base(context) {
 ```
-We can now write the constructor that takes the arguments we need for the subscriber -- topic name, QoS:
 
+It is important to call the base class constructor and pass it the context, i.e. `Base(context)`. 
+
+### Creating the subscriber
+
+In the constructor, we need to create the subscriber. We create ROS entities using the Context, for this you need to call `context.node()` to obtain an `icey::NodeBase` object that abstracts regular Nodes and lifecycle nodes. 
+You can also obtain the underlying `rclcpp::Node` by calling `as_node()` on the `icey::NodeBase` object.
+
+Since the `image_transport::create_subscription` needs a `rclcpp::Node *` object as, the code becomes:
 
 ```cpp
-class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
-public:
-    ImageTransportSubscriber(std::string topic_name, std::string transport, rclcpp::QoS qos) {
+ ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+                           const std::string &transport, const rclcpp::QoS qos,
+                           const rclcpp::SubscriptionOptions &options = {})
+      : Base(context) {
 
-    }
-    image_transport::Subscriber subscriber_;
-};
-```
-we also created the field `subscriber_` to store the subscriber we will create.
-
-### Attaching to the ROS-Node
-Now comes the important part: The *attaching* to the ROS-Node. In ICEY, attaching means actually creating the subscriber/publishers/timers etc in the ROS-node. We do not do this immediately after constructing the Streams, instead we defer this process. It happens when the  method `attach` is called. 
-
-We implement the method attach with a lambda-function, capturing by value (copying inside the lambda) all the parameters required for the subscriber: 
-
-
-```cpp
-class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
-public:
-    ImageTransportSubscriber(const std::string &topic_name, std::string &transport,  rclcpp::QoS qos) {  
-        this->impl()->attach_ = [impl = this->impl(), topic_name, transport, qos](icey::NodeBookkeeping &node) {
-            this->impl()->subscriber = image_transport::create_subscriber(node, transport, qos, subscriber_callback);
-        };
-    }
-};
+    this->impl()->subscriber =
+        image_transport::create_subscription(&context.node_base().as_node(), base_topic_name, callback,
+                                            transport, qos.get_rmw_qos_profile(), options);
+    
+  }
 ```
 
 > Note: `this->` is important in the following to tell the compiler to look in the base class, otherwise it cannot find the function
 
-We now created the subscriber as we normally would in ROS. 
+To store fields in the Stream, you should always use `this->impl()-><field>`.
 
-### Setting the value of the Stream
+### Putting values in the stream
 
-We now make the Stream do something by implementing the subscriber callback to set the value.
-The stream stores a pointer to the actual implementation, the `impl::Stream` that we first get with `impl()` and then call `put_value` inside the callback on it with the message:
+We now make the Stream do something by implementing the subscriber callback.
+We create a callback that captures the Stream-impl and puts the message into the stream:
+
 ```cpp
-class ImageTransportSubscriber : icey::Stream< sensor_msgs::Image::ConstSharedPtr > {
-public:
-    ImageTransportSubscriber(const std::string &topic_name, std::string &transport,  rclcpp::QoS qos) {  
-        auto stream_impl = this->impl(); /// Get the stream implementation
-        /// Now implement the callback to put_value with the message:
-        auto subscriber_callback = [stream_impl](sensor_msgs::Image::ConstSharedPtr message) {
-            stream_impl->put_value(message);
-        };
+ ImageTransportSubscriber(Context &context, const std::string &base_topic_name,
+                           const std::string &transport, const rclcpp::QoS qos,
+                           const rclcpp::SubscriptionOptions &options = {})
+      : Base(context) {
+    
+    /// The callback captures a weak reference to the Stream impl and puts the message:
+    const auto cb = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
+      impl->put_value(image);
+    };
 
-        this->attach_ = [this, topic_name, transport, qos](icey::NodeBookkeeping &node) {
-            subscriber_ = image_transport::create_subscriber(node, transport, qos, 
-                    subscriber_callback);
-        };
-    }
-    image_transport::Subscriber subscriber_;
-};
+    this->impl()->subscriber =
+        image_transport::create_subscription(&context.node_base().as_node(), base_topic_name, callback,
+                                            transport, qos.get_rmw_qos_profile(), options);
+    
+  }
 ```
 
-And that's it already ! We have created a custom subscriber stream. To use it, we use the function `create_stream<T>` with our custom stream: 
+```{warning}
+You should never capture `this` in a lambda because the (outer) Stream-object has no guarantees about it's lifetime, only the impls are stored in the icey::Context.
+You must instead always capture only the impl with `impl = this->impl()`. 
+````
+
+And that's it already ! We have created a custom subscriber stream. To use it, we use the function `icey::Context::create_stream<T>` with our custom stream as `T`: 
 
 ```cpp
-auto image_transport_sub = icey::create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
-```
-or using the class-based API: 
-
-```cpp
-auto image_transport_sub = icey().create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
-```
-
-### Writing a publisher 
-
-Creating a custom publisher is very similar to the subscriber, but this time we react on changes and publish to ROS. We again use `image_transport` as an example: 
-
-```cpp
-class ImageTransportPublisher : icey::Stream< sensor_msgs::Image::SharedPtr > {
-public:
-    ImageTransportPublisher(const std::string &topic_name, rclcpp::QoS qos) {  
-        this->attach_ = [impl = this->impl(), topic_name, qos](icey::NodeBookkeeping &node) {
-            /// Create the publisher
-            auto publisher = image_transport::create_publisher(node, qos);
-        };
-    }
-};
-```
-
-This time however, we listen to changes of the Stream by calling `register_handler` and publish the message: 
-
-```cpp
-class ImageTransportPublisher : icey::Stream< sensor_msgs::Image::SharedPtr > {
-public:
-    ImageTransportPublisher(const std::string &topic_name, rclcpp::QoS qos) {  
-        this->attach_ = [impl = this->impl(), topic_name, qos](icey::NodeBookkeeping &node) {
-            /// Create the publisher
-            auto publisher = image_transport::create_publisher(node, qos);
-            impl->register_handler([publisher](const auto &new_state) {
-                publisher.publish(new_state.value());
-            })
-        };
-    }
-};
+auto image_transport_sub = node->icey().create_stream<ImageTransportSubscriber>(topic_name, transport, qos);
 ```
 
 ### Error handling 
