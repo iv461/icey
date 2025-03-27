@@ -15,7 +15,7 @@ We have already demonstrated that you can publish the contents of a stream using
     })
     .publish("sine_signal");
 ```
-See also the [signal generator example](../../icey_examples/src/signal_generator.cpp):
+See also the [signal generator example](../../../icey_examples/src/signal_generator.cpp):
 
 For this to work, a Stream must hold a ROS-message type. 
 
@@ -54,7 +54,7 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
       });
 ```
 
-See also the [synchronization example](../../icey_examples/src/synchronization.cpp)
+See also the [synchronization example](../../../icey_examples/src/synchronization.cpp)
 
 This method will synchronize both topics by approximately matching their header timestamps. For this, ICEY uses the `message_filters::Synchronizer` with the `ApproxTime` policy. 
 

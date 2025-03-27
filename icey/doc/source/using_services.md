@@ -34,7 +34,7 @@ icey().create_timer(1s)
         co_return;
     })
 ```
-See also the [Service client](../../icey_examples/src/service_client_async_await.cpp) example.
+See also the [Service client](../../../icey_examples/src/service_client_async_await.cpp) example.
 
 You can call services and await the response inside any callback (timer, subscription, service server). You can implement synchronization of operations (*first* call service, *then* do x) while the underlying operations remain asynchronous. 
 
@@ -87,7 +87,7 @@ node->icey().create_service<ExampleService>(
         
       });
 ```
-See also the [Service server](../../icey_examples/src/service_server_async_await.cpp) example.
+See also the [Service server](../../../icey_examples/src/service_server_async_await.cpp) example.
 
 This example calls another service inside the callback: This is an asynchronous operation that is awaited (`co_await`). Once it completes, the server sends the response. 
 The difference between the synchronous callback is that the asynchronous one returns a `icey::Promise<Response>` instead of a `Response`. 

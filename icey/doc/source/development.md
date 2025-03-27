@@ -44,7 +44,7 @@ Since gtest catches the exceptions, we need to catch them earlier.
 
 So type in gdb: `catch throw`.
 
-Then, do not use FastDDS since it uses exceptions as part of it's regular control-flow (that's why it's called *exception* you know, because it occurs regularly smh). CylconeDDS worked for me instead. Therefore, the overall command is: 
+Then, do not use FastDDS since it uses exceptions as part of it's regular (instead of exceptional) control-flow. CylconeDDS worked for me instead. Therefore, the overall command is: 
 
 ```sh 
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp gdb ./build/icey/test_main

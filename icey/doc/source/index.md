@@ -1,10 +1,4 @@
-.. icey documentation master file, created by
-   sphinx-quickstart on Tue Feb 11 00:34:05 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-ICEY documentation
-==================
+# ICEY documentation
 
 ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming using Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
 
@@ -21,27 +15,27 @@ ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
 The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
-Table of Contents
-^^^^^^^^^^^^^^^^^
-.. toctree::    
-   :caption: Basics
-   :maxdepth: 2
-   
-   getting_started
-   first_icey_node
-   publish_subscribe
-   timers
-   parameters
-   async_flow
-   coroutine_basics
-   using_services
-   using_tf
-   lifecycle_nodes
+```{toctree}
+:caption: Basics
+:maxdepth: 2
 
-.. toctree::    
-   :caption: Advanced
-   :maxdepth: 2
-   
-   extending_icey
-   api_reference
-   development 
+getting_started
+first_icey_node
+publish_subscribe
+timers
+parameters
+async_flow
+coroutine_basics
+using_services
+using_tf
+lifecycle_nodes
+```
+
+```{toctree}
+:caption: Advanced
+:maxdepth: 2
+
+extending_icey
+api_reference
+development
+```

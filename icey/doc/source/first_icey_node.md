@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
 }
 ```
 
-See also the [signal generator example](../../icey_examples/src/signal_generator.cpp).
+See also the [signal generator example](../../../icey_examples/src/signal_generator.cpp).
 
 In this simple example, we can already see some interesting features:
 ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over an asynchronous sequence of values. Streams have a method `.then` that registers a callback on each new value and returns a new stream. 

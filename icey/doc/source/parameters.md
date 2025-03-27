@@ -57,7 +57,7 @@ public:
 auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_example");
 ```
 
-See also the [parameter structs example](../../icey_examples/src/parameters_struct.cpp).
+See also the [parameter structs example](../../../icey_examples/src/parameters_struct.cpp).
 
 After examining the parameters of the sample node, you see:
 
@@ -96,7 +96,7 @@ Interval:
 auto frequency = node->icey().declare_parameter<double>("frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
 ```
 
-See also the [signal generator example](../../icey_examples/src/signal_generator.cpp). 
+See also the [signal generator example](../../../icey_examples/src/signal_generator.cpp). 
 
 ## Declaring single parameters 
 

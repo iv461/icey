@@ -29,7 +29,7 @@ node->icey()
 
       });
 ```
-See also the [TF lookup](../../icey_examples/src/tf_lookup_async_await.cpp) example.
+See also the [TF lookup](../../../icey_examples/src/tf_lookup_async_await.cpp) example.
 
 The code that follows `co_await tf_buffer.lookup` will execute only after the transform is available (or a timeout occurs) -- the behavior is therefore the same to the regular `lookupTransform` function that you are used to, no surprises.
 
@@ -102,7 +102,7 @@ node->icey()
       });
 ```
 
-See also the [TF synchronization example](../../icey_examples/src/tf_sychronization_example.cpp).
+See also the [TF synchronization example](../../../icey_examples/src/tf_sychronization.cpp).
 
 This performs the synchronization using the `tf2_ros::MessageFilter`. 
 
@@ -124,4 +124,4 @@ node->icey()
       });
 ```
 
-See also the [TF subscription example](../../icey_examples/src/tf_subscription.cpp).
+See also the [TF subscription example](../../../icey_examples/src/tf_subscription.cpp).

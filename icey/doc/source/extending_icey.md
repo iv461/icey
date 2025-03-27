@@ -133,4 +133,4 @@ We now have created a custom subscription stream `ImageTransportSubscription`. T
 ImageTransportSubscription image_transport_sub = node->icey().create_stream<ImageTransportSubscription>(topic_name, transport, qos);
 ```
 
-See also the [image transport example](../../icey_examples/src/using_image_transport.cpp)
+See also the [image transport example](../../../icey_examples/src/using_image_transport.cpp)

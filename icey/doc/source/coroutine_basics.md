@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 }
 ```
 
-See [coroutine example](../../icey_examples/src/coroutine_example.cpp)
+See [coroutine example](../../../icey_examples/src/coroutine_example.cpp)
 
 The function `a_coroutine` is a coroutine in which we create a timer and await it (that's the asynchronous operation). 
 In which order do you think the statements will be printed ?
