@@ -4,14 +4,14 @@ One of the biggest novelties of ICEY is that it allows to use services with asyn
 ICEY is the first library to provide such an API using the new C++20 coroutine feature.
 
 ICEY also allows for service servers to use asynchronous callback functions,  i.e. coroutines which enables 
- a more powerful behavior like calling other services inside callbacks, something that was previously only difficult and clumsy to achieve with regular ROS [1].
+ a more powerful behavior like calling other services inside callbacks, something that was previously only difficult and clumsy to achieve with regular ROS [2, 3].
 
 ## Client 
 
 Service clients call a service, and this is an inherently asynchronous operation -- we don't know when (or if) we will receive the response. 
 What we want most of the time however is to continue doing other work only *after* we got the response. 
 
-The regular ROS 2 API does not offer a synchronous API for calling services (meaning a function that calls the service and blocks until the response was received) -- instead the user has to manually spin the event loop which is error-prone because it leads to deadlocks when done inside a callback. 
+The regular ROS 2 API does not offer a synchronous API for calling services (meaning a function that calls the service and blocks until the response was received) -- instead the user has to manually spin the event loop which is error-prone because it leads to deadlocks when done inside a callback [1].  
 
 With ICEY, waiting for the response becomes easy thanks to the async/await based API: 
 
@@ -96,4 +96,6 @@ The difference between the synchronous callback is that the asynchronous one ret
 
 # References 
 
-- [1] 
+- [1] Tutorial on how to use callback groups in rclcpp https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255
+- [2] https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1
+- [3] https://github.com/ijnek/nested_services_rclcpp_demo

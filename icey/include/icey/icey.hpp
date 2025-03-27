@@ -1839,8 +1839,6 @@ struct ServiceStreamImpl {
 /// See as a reference:
 /// - https://github.com/ros2/rclcpp/pull/1709
 /// - https://github.com/ros2/rclcpp/issues/1707
-/// - https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1
-/// - https://github.com/ijnek/nested_services_rclcpp_demo
 template <class _ServiceT>
 struct ServiceStream : public Stream<std::tuple<std::shared_ptr<rmw_request_id_t>,
                                                 std::shared_ptr<typename _ServiceT::Request>>,
