@@ -38,7 +38,7 @@ struct NodeParameters {
 };
 ```
 
-Store an instance of this parameter struct as a member (as you are used to) then then simply call `declare_parameter_struct`, ICEY declares automatically every parameter, without any further boilerplate code:
+After having declared a parameter struct, store it as a member of the node class and then simply call `declare_parameter_struct`, ICEY declares automatically every parameter, without any further boilerplate code:
 
 ```cpp
 class MyNode : public icey::Node {
@@ -100,7 +100,7 @@ See also the [signal generator example](../../icey_examples/src/signal_generator
 
 ## Declaring single parameters 
 
-Parameters are are declared in ICEY similar to regular ROS. They model however the Stream concept and allow therefore to subscribe for updates like regular subscribers:
+You can also declare single parameters. They are Streams and allow to subscribe for updates:
 
 ```cpp
 bool is_read_only = false;
@@ -110,16 +110,19 @@ auto offset_param = node->icey().declare_parameter<double>("offset", default_val
 ```
 
 The parameter name and the default value are mandatory, all other arguments are not. 
-We can subscribe to updates of this parameters with `.then`:
+
+You can subscribe to updates of parameters with `.then`:
 
 ```cpp
 offset_param.then([&](const auto &new_value) {
 	RCLCPP_INFO_STREAM(node->get_logger(), "Offset changed: " << new_value);
 });
 ```
-If you instead want to obtain the value, you can call `.value()`:
+
+If you instead want to obtain the value, you call `.value()`:
 
 ```cpp
 RCLCPP_INFO_STREAM(node->get_logger(), "Initial offset: " << offset_param.value());
 ```
-This inly works for parameters -- they always have initial values, which is generally not true for other Streams.
+
+This only works for parameters -- they always have initial values, which is generally not true for other Streams.

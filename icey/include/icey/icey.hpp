@@ -608,6 +608,13 @@ public:
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
+  /// \tparam ParameterT The type of the parameter. ROS actually allows for type changes at runtime but we do not want that.
+  /// \param parameter_name name
+  /// \param default_value Every parameter must be initialized, this value will be used for this.
+  /// \param validator A validator constraints the parameter to certain values if provided
+  /// \param description Optionally, a description of the parameter may be provided 
+  /// \param read_only If set to true, parameter updates at runtime will be rejected
+  /// \param ignore_override See rclcpp::Node::declare_parameter documentation
   /// \sa For more detailed documentation:
   /// [rclcpp::Node::declare_parameter](https://docs.ros.org/en/jazzy/p/rclcpp/generated/classrclcpp_1_1Node.html#_CPPv4I0EN6rclcpp4Node17declare_parameterEDaRKNSt6stringERK10ParameterTRKN14rcl_interfaces3msg19ParameterDescriptorEb)
   template <class ParameterT>
@@ -622,13 +629,13 @@ public:
   /*!
   \brief Declare a given parameter struct to ROS.
   \tparam ParameterStruct the type of the parameter struct. It must be a struct/class with fields of
-  either a primitive type supported by ROS (e.g. `double`) or a `icey::ParameterStream`, or another
+  either a primitive type supported by ROS (e.g. `double`) or a `icey::Parameter`, or another
   (nested) struct with more such fields.
 
-  \param params The instance of the parameter struct where the values will be written to.
-  \param notify_callback The callback that gets called when any field changes
-  \param name_prefix Prefix for each parameter. Used by the recursive call to support nested structs. 
-  \note The passed object `params` must have the same lifetime as the node, best is to
+  \param params The parameter struct object where the values will be written to.
+  \param notify_callback The callback that gets called when any field changes (optional)
+  \param name_prefix Prefix for each parameter (optional). Used by the recursive call to support nested structs. 
+  \note The passed parameter struct object `params` must have the same lifetime as the node, so it's best is to
   store it as a member of the node class.
 
   Example usage:
@@ -1017,16 +1024,18 @@ public:
   auto return_void() { this->put_value(Nothing{}); }
 };
 
-/// An awaiter required to implement operator co_await for Streams. (C++ coroutines)
+/// An awaiter required to implement the operator `co_await` for Streams. It it needed for supporting C++ coroutines.
 template <class S>
 struct Awaiter {
   S &stream;
   Awaiter(S &s) : stream(s) {}
+  /// @return Returns whether this Stream already has a value.
   bool await_ready() const noexcept {
     if (icey_coro_debug_print)
       std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
     return !stream.impl()->has_none();
   }
+  /// @brief Registers the continuation (that's the code that follows the `co_await` statement, in form of a function pointer) as a callback of the stream. This callback then get's called by the ROS executor.  
   void await_suspend(std::coroutine_handle<> continuation) noexcept {
     if (icey_coro_debug_print)
       std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
@@ -1045,7 +1054,8 @@ struct Awaiter {
     }
     stream.impl()->continuation_ = continuation;
   }
-  auto await_resume() const noexcept {
+  /// @brief Returns the current value of the stream. If an exception occurred (but was not handled) previously, here it is re-thrown
+  auto await_resume() const {
     if (icey_coro_debug_print)
       std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
     if (stream.exception_ptr_)  /// [Coroutine support] The coroutines are specified so that the
@@ -1110,8 +1120,6 @@ public:
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
   /// [Coroutine support] Allow this stream to be awaited with `co_await stream` in C++20 coroutines.
-  /// It spins the ROS executor until this Stream has something (value or error) and then resumes
-  /// the coroutine.
   Awaiter<Self> operator co_await() { return Awaiter{*this}; }
 
   /// [Coroutine support] Implementation of the operator co_return(x): It *sets* the value of the
@@ -1126,10 +1134,10 @@ public:
   /// Returns a weak pointer to the implementation.
   Weak<Impl> impl() const { return impl_; }
 
-  /// \brief Calls the given function f every time this stream receives a value.  /// It returns a
+  /// \brief Calls the given function (synchronous or asynchronous) f every time this stream receives a value.  /// It returns a
   /// new stream that receives the values that this function f returns. The returned Stream also
-  /// passes though the errors of this stream so that chaining `then`s with an `except` works. \note
-  /// The given function must be synchronous, no asynchronous functions are supported. \returns A
+  /// passes though the errors of this stream so that chaining `then`s with an `except` works.
+  /// \returns A
   /// new Stream that changes it's value to y every time this stream receives a value x, where y =
   /// f(x). The type of the returned stream is:
   /// - Stream<Nothing, _Error> if F is (X) -> void
@@ -1147,9 +1155,8 @@ public:
     return create_from_impl(impl()->then(std::forward<F>(f)));
   }
 
-  /// \brief Calls the given function f every time this Stream receives an error.
+  /// \brief Calls the given function (synchronous or asynchronous) f every time this Stream receives an error.
   /// It returns a new Stream that receives the values that this function f returns.
-  /// \note The given function must be synchronous, no asynchronous functions are supported.
   /// \returns A new Stream that changes it's value to y every time this
   /// stream receives an error x, where y = f(x).
   /// The type of the returned stream is:
@@ -1537,12 +1544,12 @@ struct ParameterStream : public Stream<_Value> {
 
   /// @brief The standard constructor used when declaring parameters with
   /// Context::declare_parameter.
-  /// @param node
+  /// @param context the ICEY context
   /// @param parameter_name
   /// @param default_value
   /// @param validator the validator implementing constraints
   /// @param description
-  /// @param read_only if yes, the parameter cannot be modified
+  /// @param read_only if set to true, parameter updates will be rejected
   /// @param ignore_override
   ParameterStream(Context &context, const std::string &parameter_name,
                   const Value &default_value, const Validator<Value> &validator = {},
