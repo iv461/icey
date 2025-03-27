@@ -126,3 +126,7 @@ RCLCPP_INFO_STREAM(node->get_logger(), "Initial offset: " << offset_param.value(
 ```
 
 This only works for parameters -- they always have initial values, which is generally not true for other Streams.
+
+## References 
+
+- [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
