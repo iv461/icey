@@ -3,8 +3,8 @@
 Before looking into services and TF, we will need to look into C++ 20 coroutines.
 Coroutines are functions that allow for asynchronous programming using async/await syntax, currently the most popular method of doing asynchronous programming. Async/await is used with other programming languages like JavaScript, Rust and C#.
 
-Coroutines contain any of the keywords `co_await`, `co_yield`, `co_return`. 
-A coroutine is a function that looks like it's returning when it needs to wait for an asynchronous operation with `co_await`, this is called *suspending*. Then, once the asynchronous operation is done, it "jumps" back into the function, this is called *resuming*. It then continues to execute the code after the `co_await` statement.
+Coroutines contain any of the keywords `co_await`, `co_return` (or `co_yield`). 
+A coroutine is a function that __looks like it's returning__ when it needs to wait for an asynchronous operation with `co_await`, this is called *suspending*. Then, once the asynchronous operation is done, it "jumps" back into the function, this is called *resuming*. It then continues to execute the code after the `co_await` statement.
 
 To see what this means, let's look at an example: 
 

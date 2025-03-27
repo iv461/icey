@@ -5,7 +5,7 @@ In the following we look at various transformations that we can apply on Streams
 
 ## Publish
 
-We have already demonstrated that you can publish the contents of a stream using `.publish(<topic>, <qos>, <options>={})`
+We have already demonstrated that you can publish the contents of a stream using `.publish(<topic>, <qos>={}, <options>={})`
 
 ```cpp
   node->icey().create_timer(100ms)
@@ -21,7 +21,7 @@ For this to work, a Stream must hold a ROS-message type.
 
 ## Filter 
 
-You can filter a Stream using a function that returns false if the message should be filtered and true if the message should be passed through: 
+You can filter a Stream by calling `.filter()` using a function that returns false if the message should be filtered and true if the message should be passed through: 
 
 ```cpp
   node->icey().create_subscriber<geometry_msgs::PoseStamped>("ego_pose")
@@ -37,10 +37,6 @@ You can filter a Stream using a function that returns false if the message shoul
 ```
 
 TODO link example 
-
-## Timeout 
-
-A common requirement is to check whether the header stamp of a ROS message is too old, for this we use `.timeout(<duration>)`. 
 
 
 ## Synchronization 
@@ -64,6 +60,8 @@ This method will synchronize both topics by approximately matching their header 
 
 ## Error handling: `unwrap_or`
 
+Before looking into the next transformations, we will have to look into error-handling. 
+
 Streams can yield not only values but also errors: This allows for more advanced error handling. 
 But because streams are statically typed on the error, a stream can only store a single type of error. 
 Stream transformations, however, can produce new, different types of errors. This requires that we first handle possible errors, resulting in an `ErrorFreeStream`. 
@@ -80,9 +78,45 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
                sensor_msgs::msg::PointCloud2::SharedPtr) {
       });
 ```
+
+TODO link example
+
+## Timeout 
+
+You can check whether a message is too old (by it's header stamp) and register a callback when a timeout occurs using `.timeout(<duration>)`:
+
+```cpp
+  node->icey().create_subscriber<geometry_msgs::PoseStamped>("ego_pose")
+    /// Expect that every pose message is at most 200ms old
+    .timeout(100ms)
+    .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
+        auto msg_dt = (current_time - message_timestamp).seconds();
+        RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, fmt::format(
+            "Timeout occured, message is old: {} seconds old, maximum allowed is {} seconds",
+            msg_dt, max_age));
+    }) 
+    .then([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
+      /// Here we receive only NaN-free messages for further processing
+    });
+```
+TODO link example
+
+## Buffer 
+
+You can buffer N values of a Stream, obtaining a new Stream that yields an array of exactly N elements: 
+```cpp 
+.buffer(5)
+      .then([&](std::shared_ptr<std::vector<size_t>> value) { received_values.push_back(*value); });
+``` 
+
+TODO link example
+
 ## Control flow: Multiple inputs and multiple outputs
 
 ### Single input, multiple output
+
+You can return multiple values from a handler, this will yield a Stream with value of type tuple. 
+Such tuple-Streams can be `.unpack()`ed, the result is a tuple of multiple Streams: 
 
 ```cpp 
     auto [output1, output2] = node->icey().create_subscription<Msg>("topic", 1)
@@ -95,3 +129,5 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
     output1.publish("output_topic1");
     output2.publish("output_topic2");
 ```
+
+TODO link example

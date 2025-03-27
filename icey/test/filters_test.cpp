@@ -144,3 +144,27 @@ TEST_F(NodeTest, BufferTest) {
 
   EXPECT_EQ(received_values, target_values);
 }
+
+/*
+TEST_F(NodeTest, TimeoutTest) {
+
+  auto images = node_->icey().create_stream<icey::Stream<sensor_msgs::msg::Image::SharedPtr>>();
+
+  std::vector<std::vector<size_t>> received_values;
+  images
+    .timeout(100ms)
+    .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
+    
+    }) 
+    .then([](sensor_msgs::msg::Image::SharedPtr msg) {
+      /// Here we receive only NaN-free messages for further processing
+    });
+
+  auto img = std::make_shared<sensor_msgs::msg::Image>();
+  img->header.stamp = icey::rclcpp_from_chrono(icey::Time::now());
+  images.impl()->put_value(img);
+
+  spin(50ms);
+  
+}
+*/
