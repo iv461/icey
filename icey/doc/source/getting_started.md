@@ -1,14 +1,14 @@
 # Getting started
 
-ICEY is a a new API for the Robot Operating System (ROS) 2 that incorporates modern asynchronous programming concepts such as Promises and Streams and allows to use C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
+ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming using Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
 
-It is fully compatible to the ROS 2 API and allows for gradual adoption as the `icey::Node` extends a regular ROS-NOde. It supports all major features of ROS: parameters, subscribers, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
+It is fully compatible to the ROS 2 API and allows for gradual adoption since the `icey::Node` extends a regular ROS-Node. It supports all major features of ROS: parameters, subscribers, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
 
-ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the already implemented support for `image_transport` camera subscriber/publishers.
+ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscriber/publishers that is already implemented.
 
 It offers additional goodies such as:
 - Automatic bookkeeping of publishers/subscribers/timers so that you do not have to do it 
-- No callback groups needed for preventing deadlocks -- service calls are always asynchronous
+- No callback groups needed for preventing deadlocks -- async/await allows for synchronously looking code while the service calls remain asynchronous
 - Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
@@ -27,15 +27,12 @@ sudo apt install libboost-dev libfmt-dev
 MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
-In the following, 
-
-
 # Your first ICEY-Node 
 
-In the following, we will assume you are already familiar writing ROS nodes in C++: How to write subscribers, publishers, and using callbacks. 
+In the following, we will assume you are already familiar writing ROS nodes in C++ (See [Official Client library Tutorials](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries.html)).
 
-The ICEY library has two node classes `icey::Node` and an `icey::LifecycleNode`. 
-To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function does simply create a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it
+The ICEY library has two node classes: `icey::Node` and an `icey::LifecycleNode`. 
+To create new nodes, you use the `icey::create_node(argc, argv, <node_name>)` function. This function does simply create a node with `std::make_shared`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
 
 ```cpp
 #include <icey/icey.hpp>
@@ -46,7 +43,13 @@ int main(int argc, char **argv) {
   node->icey().create_timer(100ms)
     .then([](size_t ticks) {
         /// This function gets called each time the timer ticks
-        return std::sin(0.1 * ticks * 2 * M_PI);
+        std_msgs::msg::Float32 float_val;
+        double period_time_s = 0.1;
+        double frequency = 3.;
+        /// We can access the parameter value by implicit conversion (or explicitly using .value())
+        double y = amplitude * std::sin((2 * M_PI) * frequency * (period_time_s * ticks));
+        float_val.data = y;
+        return float_val;
     })
     /// The returned value is published on the topic "sine_signal" after the timer ticked.
     .publish("sine_signal");
@@ -56,32 +59,12 @@ int main(int argc, char **argv) {
 
 See also the [signal generator example](../../icey_examples/src/signal_generator.cpp).
 
-ICEY represents every ROS primitive (sub/pub etc.) as a `Stream`, an abstraction of an asynchronous sequence of values. 
-If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
-
-In this simple example we already see some interesting features: You do not need to create a publisher beforehand, instead you declare that the result should be published on a topic. 
-Also, we do not store a timer object anywhere, ICEY stores it internally so that it does not get out of scope. This holds true for classes as well: In ICEY, you do not have to store 
-subscribers/timers/publisher etc. as members of the class, ICEY does this bookkeeping for you. 
-
-
-## Timers 
-
-Timers are also signals:
-
-```cpp
-auto my_timer = node->icey().create_timer(100ms);
-```
-
-You can think of them as sources similar to subscribers but with no information, publishing periodically. 
-We can easily register a callback and use the timer like you usually would: 
-
-```cpp
-auto my_timer = node->icey().create_timer(100ms);
-
-my_timer.then([](size_t ticks) {
-    /// Do work
-});
-```
+In this simple example, we can already see some interesting features:
+ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over an asynchronous sequence of values. Streams allow for calling `.then` 
+If you are familiar with JavaScript, this is essentially a promise, except that the state transitions are not final.
+Such streams allow calls to `publish', i.e. they can be published directly. 
+You do not need to create a publisher first, you just declare that the result should be published to a topic. 
+Finally, we do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. This is generally true for other entities as well: In ICEY, you do not need to store subscribers/timers/services as members of the class, ICEY does this bookkeeping for you.
 
 ## References 
 

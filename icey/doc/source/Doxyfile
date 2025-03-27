@@ -1,5 +1,5 @@
 PROJECT_NAME           = icey
-INPUT                  = ../include/icey/
+INPUT                  = ../../include/icey/
 RECURSIVE              = YES
 
 GENERATE_HTML          = NO
@@ -15,7 +15,7 @@ QUIET                  = YES
 WARNINGS               = YES
 WARN_IF_UNDOCUMENTED   = NO
 
-EXCLUDE =  ../include/icey/impl/field_reflection.hpp
+EXCLUDE =  ../../include/icey/impl/field_reflection.hpp
 EXCLUDE_SYMBOLS        = detail::*,*::detail::*
 
-EXAMPLE_PATH = ../../icey_examples/src
+EXAMPLE_PATH = ../../../icey_examples/src
