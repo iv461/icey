@@ -33,7 +33,6 @@ Table of Contents
    timers
    parameters
    async_flow
-   filtering
    coroutine_basics
    using_services
    using_tf
