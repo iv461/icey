@@ -47,26 +47,26 @@ publisher.publish(message);
 ```
 
 Key differences to regular ROS are: 
-  - The lifetime of the publisher is bound to the lifetime of the node: You do not have to store the subscriber in the node class, i.e. do bookkeeping, ICEY does this for you
-  - `create_publisher` returns a `stream, but you can access the ROS-publisher using `steam.publisher` 
+  - The lifetime of the publisher is bound to the lifetime of the node: This means, you don’t need to store the publisher as a member in the node class (i.e. do bookkeeping)
+  - `create_publisher` returns a `Stream`, (you can access the `rclcpp::Publisher` using `stream.publisher`)
   - If no quality of service is given, a uses the so called *system default*  
 
 ### Awaiting `publish`
 
 Publishing a message with reliable quality of service involves two steps: sending the message and waiting for an acknowledgment (ACK) from the receiver. The actual sending is a synchronous operation, but the arrival of the ACK is asynchronous: we don't know when (or if) we will receive the ACK from another node. 
-This means that `publish' with reliable quality of service is actually an asynchronous function. 
+This means that `publish` with reliable quality of service is actually an asynchronous function. 
 Calling `publish` is very similar to calling a service in terms of the sequence of operations. 
-ROS treats publishing a message as a fire-and-forget task: The `publish` call sends the message, but does not wait for the ACK to be received, and returns immediately after the message is sent.
+ROS treats publishing a message as a fire-and-forget task: A call to `publish` sends the message, but it does not wait for the ACK to be received, and instead returns immediately after the message was sent.
 
-What we want therefore is a publish function that returns a promise and allows to be awaited. By calling `co_await publish(<message>)`, we suspend execution until the has ACK arrived.
-This also allows to have the old behavior: We simply do not need to `co_await` if it is undesired. 
+What we want therefore is a publish function that returns a promise, allowing the ACK to be awaited via `co_await publish`.
+This would also allow to have the old behavior: We do not actually need to `co_await` the `publish`-call, but we *can*
 This is how many other message passing libraries implement a `publish` function [1, 2, 3, 4].
 
-__Unfortunately, ROS does not provide an asynchronous API for waiting on the ACK, only a synchronous one (`rclcpp::PublisherBase::wait_for_all_acked`). This is a fundamental limitation of ROS 2 (at the RMW API layer), and for this reason ICEY cannot provide an awaitable `publish' function.__
+Unfortunately, ROS does not provide an asynchronous API for waiting on the ACK, only a synchronous one (`rclcpp::PublisherBase::wait_for_all_acked`). This is a fundamental limitation of ROS 2 (at the RMW API layer), and __for this reason ICEY cannot provide an awaitable `publish` function.__
 
 It would be required to add an asynchronous `async_wait_for_all_acked` to the RMW API so that an  an awaitable `publish` function can be implemented.
 
-# References 
+## References 
 
 - [1] `await writer.WriteAsync` [using channels in C#](https://learn.microsoft.com/en-us/dotnet/core/extensions/channels)
 - [2] `send(...).await` using [Tokio channels in Rust](https://tokio.rs/tokio/tutorial/channels)

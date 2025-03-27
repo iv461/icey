@@ -76,7 +76,7 @@ ros2 param dump /icey_parameters_struct_example
     use_sim_time: false
 ```
 
-ICEY will update the parameter struct automatically when any parameter changes. 
+ICEY will update the parameter struct object (`params_`) automatically when any parameter changes. 
 
 Whereas with other approaches you would have to manually repeat each parameter declaration, with ICEY it is just a single call to `declare_parameter_struct'. 
 
