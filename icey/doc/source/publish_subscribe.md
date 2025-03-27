@@ -4,7 +4,7 @@ In the following, we will look at how to create publishers and subscriptions.
 
 ## The Stream concept 
 
-Streams are a fundamental concept upon which ICEY is built. An `icey::stream` is an asynchronous abstraction that represents a sequence of values, potentially infinitely many. 
+Streams are a fundamental concept upon which ICEY is built. An `icey::Stream` is an asynchronous abstraction that represents a sequence of values, potentially infinitely many. 
 Subscribers, service servers, and timers all model the stream concept. 
 You can either register a callback on a stream that's invoked when a new value (i.e. ROS message) arrives, or you can asynchronously wait for a new value using `co_await stream`. 
 

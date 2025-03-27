@@ -8,6 +8,8 @@ To create new nodes, you use the `icey::create_node<NodeType>(argc, argv, <node_
 
 ## Signal generator example
 
+The signal generator example implements a sine signal generator. 
+
 ```cpp
 #include <icey/icey.hpp>
 
@@ -34,8 +36,10 @@ int main(int argc, char **argv) {
 See also the [signal generator example](../../icey_examples/src/signal_generator.cpp).
 
 In this simple example, we can already see some interesting features:
-ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over an asynchronous sequence of values. Streams allow for calling `.then` 
+ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over an asynchronous sequence of values. Streams have a method `.then` that registers a callback on each new value and returns a new stream. 
+
 If you are familiar with JavaScript, this is essentially a promise, except that the state transitions are not final.
+
 Such streams allow calls to `publish', i.e. they can be published directly. 
 You do not need to create a publisher first, you just declare that the result should be published to a topic. 
 Finally, we do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. This is generally true for other entities as well: In ICEY, you do not need to store subscribers/timers/services as members of the class, ICEY does this bookkeeping for you.
@@ -62,17 +66,5 @@ This means, you do not have to use the `icey::spin_node(<node>)` function, you c
 ICEY-nodes can only be used with a single-threaded executor.
 ```
 
-ICEY represents ROS primitives (sub/pub etc.) as a `Stream`, an asynchronous programming abstraction for a sequence of values. Such `Stream`s can be used with async/await syntax, i.e. `co_await`ed to obtain a new message from a subscriber for example. 
-
-If you are familiar with JavaScript, this is essentially a Promise, only that the state transitions are not final.
 
 In the following, we will look more closely into how Subscribers and Timers follow the `Stream` concept and how this changes the way of asynchronous programming. 
-
-## References: 
-
-- [1] https://discourse.ros.org/t/simplifying-how-to-declare-parameters-in-ros-2/33272
-- [2] Promise proposal by William Woodall and async/await discussion: https://github.com/ros2/ros2_documentation/issues/901
-- [3] Mozilla Promise implementation: https://firefox-source-docs.mozilla.org/xpcom/mozpromise.html
-- [4] std::future lacks continuation, current (2024) state of the art: https://ikriv.com/blog/?p=4916
-- [5] https://engineering.fb.com/2015/06/19/developer-tools/futures-for-c-11-at-facebook/
-- [1] Tutorial on how to use callback groups in rclcpp https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255
