@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
   node->icey()
       .create_transform_subscription("map", "base_link")
       .unwrap_or([&](std::string error) {
-        RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << error);
+        RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscription failed: " << error);
       })
       .then([&](const geometry_msgs::msg::TransformStamped &new_transform) {
         Eigen::Matrix4d tf_mat = tf2::transformToEigen(new_transform.transform).matrix();

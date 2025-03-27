@@ -5,7 +5,7 @@ ICEY provides several ways to retrieve transforms: The usual `lookup` function (
 
 ## Looking up transforms: 
 
-To lookup a transform at a given time, you first create an`icey::TransformBuffer`: This is the usual combination of a subscriber on `/tf`/`/tf_static` and a buffer bundled into a single object. 
+To lookup a transform at a given time, you first create an`icey::TransformBuffer`: This is the usual combination of a subscription on `/tf`/`/tf_static` and a buffer bundled into a single object. 
 
 You can then call `lookup` and await it: 
 
@@ -13,7 +13,7 @@ You can then call `lookup` and await it:
 icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
 node->icey()
-      // Use a coroutine (an asynchronous function) as a callback for the subscriber:
+      // Use a coroutine (an asynchronous function) as a callback for the subscription:
       .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", 
         [&tf_buffer, &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
 
@@ -116,7 +116,7 @@ When working with transforms between coordinate systems, you don't always need t
 node->icey()
       .create_transform_subscription("map", "base_link")
       .unwrap_or([&](std::string error) {
-        RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscriber failed: " << error);
+        RCLCPP_INFO_STREAM(node->get_logger(), "Transform subscription failed: " << error);
       })
       .then([&](const geometry_msgs::msg::TransformStamped &new_transform) {
         Eigen::Matrix4d tf_mat = tf2::transformToEigen(new_transform.transform).matrix();

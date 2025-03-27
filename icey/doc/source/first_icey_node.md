@@ -42,7 +42,7 @@ If you are familiar with JavaScript, this is essentially a promise, except that 
 
 Such streams allow calls to `publish', i.e. they can be published directly. 
 You do not need to create a publisher first, you just declare that the result should be published to a topic. 
-Finally, we do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. This is generally true for other entities as well: In ICEY, you do not need to store subscribers/timers/services as members of the class, ICEY does this bookkeeping for you.
+Finally, we do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. This is generally true for other entities as well: In ICEY, you do not need to store subscriptions/timers/services as members of the class, ICEY does this bookkeeping for you.
 
 ## The ICEY-node 
 

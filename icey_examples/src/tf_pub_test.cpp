@@ -1,4 +1,4 @@
-/// Driver for the tf_subscriber test: It publishes a point cloud with a synchronized transform.
+/// Driver for the tf_subscription test: It publishes a point cloud with a synchronized transform.
 #include <icey/icey.hpp>
 
 #include "sensor_msgs/msg/image.hpp"

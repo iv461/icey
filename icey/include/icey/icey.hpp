@@ -26,7 +26,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 // Message filters library: (.h so that this works with humble as well)
-#include <message_filters/subscriber.h>
+#include <message_filters/subscription.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
 
@@ -214,7 +214,7 @@ struct Weak {
   std::weak_ptr<T> p_;
 };
 
-/// A subscriber + buffer for transforms that allows for asynchronous lookups and to subscribe on a
+/// A subscription + buffer for transforms that allows for asynchronous lookups and to subscribe on a
 /// single transform between two coordinate systems. It is otherwise implemented similarly to the
 /// tf2_ros::TransformListener but offering a well-developed asynchronous API. 
 //  It works like this: Every time a new message is received on /tf, we check whether a
@@ -569,7 +569,7 @@ struct TransformPublisherStream;
 
 /// The context is what is returned when calling `node->icey()` (NodeWithIceyContext::icey). 
 /// It provides an new node-like API for creating ROS entities, these entities are however streams. 
-//  It also provides bookkeeping i.e. holding the shared pointers to subscribers/timers/publishers etc., so that you do not have to do it.
+//  It also provides bookkeeping i.e. holding the shared pointers to subscriptions/timers/publishers etc., so that you do not have to do it.
 class Context : public NodeBase,
                 public std::enable_shared_from_this<Context>,
                 private boost::noncopyable {
@@ -692,7 +692,7 @@ public:
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
 
-  /// Create a subscriber that subscribes to a single transform between two frames.
+  /// Create a subscription that subscribes to a single transform between two frames.
   /// This stream will emit a value every time the transform between these two frames changes, i.e.
   /// it is a stream. If you need to lookup transforms at a specific point in time, look instead at
   /// `Context::create_transform_buffer`.
@@ -753,11 +753,11 @@ public:
     add_parameter_validator_if_needed();
     auto param = node_parameters_->declare_parameter(name, rclcpp::ParameterValue(default_value),
                                                      parameter_descriptor, ignore_override);
-    auto param_subscriber =
+    auto param_subscription =
         std::make_shared<rclcpp::ParameterEventHandler>(static_cast<NodeBase &>(*this));
     auto cb_handle =
-        param_subscriber->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
-    parameters_.emplace(name, std::make_pair(param_subscriber, cb_handle));
+        param_subscription->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
+    parameters_.emplace(name, std::make_pair(param_subscription, cb_handle));
     return param;
   }
 
@@ -1637,9 +1637,9 @@ struct ValueOrParameter {
 
 template <class _Message>
 struct SubscriptionStreamImpl {
-  std::shared_ptr<rclcpp::Subscription<_Message>> subscriber;
+  std::shared_ptr<rclcpp::Subscription<_Message>> subscription;
 };
-/// A stream that represents a regular ROS subscriber. It stores as its value always a shared
+/// A stream that represents a regular ROS subscription. It stores as its value always a shared
 /// pointer to the message.
 template <class _Message>
 struct SubscriptionStream
@@ -1652,7 +1652,7 @@ struct SubscriptionStream
   SubscriptionStream(Context &context, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
       : Base(context) {
-    this->impl()->subscriber = context.node_base().create_subscription<_Message>(
+    this->impl()->subscription = context.node_base().create_subscription<_Message>(
         topic_name,
         [impl = this->impl()](typename _Message::SharedPtr new_value) {
           impl->put_value(new_value);
@@ -2029,7 +2029,7 @@ struct SimpleFilterAdapterImpl : public message_filters::SimpleFilter<Message> {
 /// `Stream` (which is a similar concept).
 /// \note This is essentially the same as what
 /// `message_filters::Subscriber` does:
-/// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscriber.h#L349
+/// https://github.com/ros2/message_filters/blob/humble/include/message_filters/subscription.h#L349
 template <class Message>
 struct SimpleFilterAdapter
     : public Stream<typename Message::SharedPtr, Nothing, SimpleFilterAdapterImpl<Message>> {

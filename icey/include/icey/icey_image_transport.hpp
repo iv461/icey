@@ -1,4 +1,4 @@
-/// Support for the image_transport subscribers and publishers.
+/// Support for the image_transport subscriptions and publishers.
 /// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport and
 /// https://github.com/ros-perception/image_common/blob/humble/image_transport for API docs.
 /// Note that we do not create a image_transport::ImageTransport object to avoid circular
@@ -26,9 +26,9 @@ void assert_is_not_lifecycle_node(Context &context) {
 
 struct ImageTransportSubscriberImpl {
   /// The image_transport subs/pubs use PIMPL, so we can hold them by value.
-  image_transport::Subscriber subscriber;
+  image_transport::Subscriber subscription;
 };
-// An stream representing a camera image subscriber.
+// An stream representing a camera image subscription.
 struct ImageTransportSubscriber
     : public Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                     image_transport::TransportLoadException, ImageTransportSubscriberImpl> {
@@ -45,7 +45,7 @@ struct ImageTransportSubscriber
       impl->put_value(image);
     };
     try {
-      this->impl()->subscriber =
+      this->impl()->subscription =
           image_transport::create_subscription(&context.node_base().as_node(), base_topic_name, cb,
                                                transport, qos.get_rmw_qos_profile(), options);
     } catch (const image_transport::TransportLoadException &exception) {
@@ -71,10 +71,10 @@ struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPt
   }
 };
 
-// An stream representing a camera subscriber.
+// An stream representing a camera subscription.
 struct CameraSubscriberImpl {
   /// The image_transport sub/pub use PIMPL, so we can hold them by value.
-  image_transport::CameraSubscriber subscriber;
+  image_transport::CameraSubscriber subscription;
 };
 
 struct CameraSubscriber
@@ -96,7 +96,7 @@ struct CameraSubscriber
         context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
                 /// lifecycle nodes, so we can only assert this at runtime
     try {
-      this->impl()->subscriber = image_transport::create_camera_subscription(
+      this->impl()->subscription = image_transport::create_camera_subscription(
           &context.node_base().as_node(), base_topic_name, cb, transport, qos.get_rmw_qos_profile());
     } catch (const image_transport::TransportLoadException &exception) {
       this->impl()->put_error(exception);

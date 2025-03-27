@@ -1,6 +1,6 @@
 # Timers 
 
-Timers are Streams as well, they behave similarly to subscribers. 
+Timers are Streams as well, they behave similarly to subscriptions. 
 
 To create a timer:
 ```cpp

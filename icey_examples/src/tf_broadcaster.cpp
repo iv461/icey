@@ -1,7 +1,7 @@
 #include <icey/icey.hpp>
 using namespace std::chrono_literals;
 
-/// You can put the creation of times/subscribers/publishers etc. into a separate function, you do
+/// You can put the creation of times/subscriptions/publishers etc. into a separate function, you do
 /// not have to store them in variables explicitly:
 auto create_yaw_rotation(icey::Node &node,
                          const icey::ParameterStream<std::string> &base_frame_param) {

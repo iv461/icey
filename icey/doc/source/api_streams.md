@@ -1,6 +1,6 @@
 # Entities 
 
-All the ROS entities such as subscribers, publishers/timers etc., most of them follow the `Stream` concept.
+All the ROS entities such as subscriptions, publishers/timers etc., most of them follow the `Stream` concept.
 
 ## Asynchronous primitives 
 

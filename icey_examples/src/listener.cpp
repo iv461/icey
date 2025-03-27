@@ -1,4 +1,4 @@
-/// This example shows how to write a simple subscriber.
+/// This example shows how to write a simple subscription.
 /// It receives messages from the talker example.
 #include <icey/icey.hpp>
 #include "std_msgs/msg/string.hpp"

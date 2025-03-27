@@ -14,7 +14,7 @@ This is because the underlying `icey::Context`-type is the same.
 This means that if you want to create functions that are generic and work for both regular nodes and lifecycle nodes, you can take as `icey::Context` as an argument:
 
 ```cpp
-  void create_subscribers(icey::Context &context) {
+  void create_subscriptions(icey::Context &context) {
     context.create_subscription<sensor_msgs::msg::Image>("camera")
         .then(...);
     context.create_transform_subscription("map", "base_link")

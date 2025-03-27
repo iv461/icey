@@ -24,7 +24,7 @@ For this to work, a Stream must hold a ROS-message type.
 You can filter a Stream by calling `.filter()` using a function that returns false if the message should be filtered and true if the message should be passed through: 
 
 ```cpp
-  node->icey().create_subscriber<geometry_msgs::PoseStamped>("ego_pose")
+  node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
     /// Filter (i.e. remove) messages that contain NaNs:
     .filter([](geometry_msgs::PoseStamped::SharedPtr pose_msg) -> bool {
         return !(std::isnan(pose_msg->pose.x) 
@@ -86,7 +86,7 @@ TODO link example
 You can check whether a message is too old (by it's header stamp) and register a callback when a timeout occurs using `.timeout(<duration>)`:
 
 ```cpp
-  node->icey().create_subscriber<geometry_msgs::PoseStamped>("ego_pose")
+  node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
     /// Expect that every pose message is at most 200ms old
     .timeout(100ms)
     .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {

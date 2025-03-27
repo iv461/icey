@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
   icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
   node->icey()
-      // Use a coroutine (an asynchronous function) as a callback for the subscriber:
+      // Use a coroutine (an asynchronous function) as a callback for the subscription:
       .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", [&tf_buffer,
              &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
         icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =

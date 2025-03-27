@@ -36,7 +36,7 @@ icey().create_timer(1s)
 ```
 See also the [Service client](../../icey_examples/src/service_client_async_await.cpp) example.
 
-You can call services and await the response inside any callback (timer, subscriber, service server). You can implement synchronization of operations (*first* call service, *then* do x) while the underlying operations remain asynchronous. 
+You can call services and await the response inside any callback (timer, subscription, service server). You can implement synchronization of operations (*first* call service, *then* do x) while the underlying operations remain asynchronous. 
 
 All of this is possible thanks to coroutines which allow to write __single-threaded__ asynchronous code. 
 
