@@ -6,20 +6,20 @@
 ICEY documentation
 ==================
 
-ICEY is a a new API for the Robot Operating System (ROS) 2 that uses modern asynchronous programming with Streams and async/await syntax. It makes the asynchronous data-flow clearly visible and simplifies application code. It enables fast prototyping with less boilerplate code.
+ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming using Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
 
-It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: parameters, subscribers, publishers, timers, services, clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
+It is fully compatible to the ROS 2 API and allows for gradual adoption since the `icey::Node` extends a regular ROS-Node. It supports all major features of ROS: parameters, subscribers, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
 
-ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
+ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscriber/publishers that is already implemented.
 
 It offers additional goodies such as:
-   - Automatic bookeeping of publishers/subscribers/timers so that you do not have to do it 
-   - No callback groups needed for preventing deadlocks -- service calls are always asynchronous
-   - Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
+- Automatic bookkeeping of publishers/subscribers/timers so that you do not have to do it 
+- No callback groups needed for preventing deadlocks -- async/await allows for synchronously looking code while the service calls remain asynchronous
+- Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
-The [icey_examples](../../icey_examples) package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
+The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
 Table of Contents
 ^^^^^^^^^^^^^^^^^
