@@ -49,36 +49,39 @@ With the declarative style you can essentially say *"I need this point cloud tra
 
 ### Motivation 
 
-To see why this is useful, we will analyze some common usage patterns of `lookupTransform'. 
+To see why this is useful, let's look at how the `lookupTransform` function is typically used:
 
 1: Get the transform at the time of the measurement:
 
 ```cpp
 void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {
+    /// The time this point cloud message was measured:
     auto measurement_time = point_cloud_msg->header.stamp;
     /// Get the pose of the LiDAR with respect to the map at the time this point cloud was measured:
-    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, map_frame_, tf2_ros::fromMsg(measurement_time), 200ms);
+    auto lidar_to_map_transform = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, "map", tf2_ros::fromMsg(measurement_time), 200ms);
 }
 ```
 
 Other variants of this pattern (which are rather anti-patterns) are:
 
-2: Ignore the header timestamp and just take the last transformation in the buffer to avoid waiting:
+2: Ignore the header timestamp and just take the latest transform in the buffer to avoid waiting:
 
 ```cpp
 void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {        
-    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, map_frame_, tf2::TimePointZero, 200ms);
+    ///  "tf2::TimePointZero" is a special value that indicates "get the latest transform in the buffer"
+    auto lidar_to_map_transform = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, "map", tf2::TimePointZero, 200ms);
 }
 ```
 
-This assumes that the last transformation in the buffer is approximately at the same time as the message header time, an assumption that is generally unjustified.
+This assumes that the latest transform in the buffer is approximately at the same time as the message header time, an assumption that is generally unjustified.
 
 3: Looking up at the current time in the callback: This is the time the message was *received* in callback, not the time the measurement *taken* (which may have been several milliseconds earlier):
 
 ```cpp
 void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {     
     /// Get the current time as this code (i.e. the callback) is executed:
-    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, map_frame_, this->get_clock().now(), 200ms);
+    auto current_time = this->get_clock().now();
+    auto lidar_to_map = tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, "map", current_time, 200ms);
 }
 ```
 
@@ -106,7 +109,7 @@ See also the [TF synchronization example](../../../icey_examples/src/tf_sychroni
 
 This performs the synchronization using the `tf2_ros::MessageFilter`. 
 
-You will have to do however the actual transformation of the data (i.e. rigid transformation of the point cloud) yourself (PR are welcome to improve this!)
+You will have to do the actual transformation of the point cloud yourself (PR are welcome to make this automatic in a generic way !)
 
 ## Subscribing to transforms 
 
@@ -125,3 +128,31 @@ node->icey()
 ```
 
 See also the [TF subscription example](../../../icey_examples/src/tf_subscription.cpp).
+
+
+## Publishing transforms 
+
+You can publish transforms in a similar declarative style using the `.publish_transform()` member function of the Stream: 
+
+```cpp 
+node->icey().create_timer(1s)
+  /// Create a geometry_msgs::msg::TransformStamped message on each timer tick:
+  .then([&](size_t ticks) {
+    geometry_msgs::msg::TransformStamped t;
+    t.header.stamp = node.get_clock()->now();
+    t.header.frame_id = "map";
+    t.child_frame_id = base_frame_param.value();  /// Get the current value of the parameter
+    t.transform.translation.x = ticks * .1;
+    t.transform.translation.y = ticks * -1.;
+    t.transform.translation.z = 0.0;
+    t.transform.rotation.x = 0.;
+    t.transform.rotation.y = 0.;
+    t.transform.rotation.z = std::sin(ticks * .1);
+    t.transform.rotation.w = std::cos(ticks * .1);
+    return t;
+  })
+  .publish_transform();;
+
+```
+
+See also the [TF broadcaster example](../../../icey_examples/src/tf_broadcaster.cpp).

@@ -1,4 +1,4 @@
-# Extending ICEY
+# Extending ICEY: support for `image_transport`
 
 This tutorial shows how you can extend ICEY by adding a new subscription.
 In the following, we will add the subscription from the `image_transport` package which allows for subscribing to compressed camera images. Note that everything this tutorial explains is already implemented in the `icey_image_transport.hpp` header.
