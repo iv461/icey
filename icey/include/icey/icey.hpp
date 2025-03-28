@@ -218,9 +218,9 @@ struct Weak {
 /// single transform between two coordinate systems. It is otherwise implemented similarly to the
 /// tf2_ros::TransformListener but offering a well-developed asynchronous API. 
 //  It works like this: Every time a new message is received on /tf, we check whether a
-/// relevant transforms (i.e. ones we subscribed or ones we need to look up) was received. If yes, we notify via a callback. 
+/// It subscribes on the topic /tf and listens for relevant transforms (i.e. ones we subscribed to or the ones we requested a lookup). If any relevant transform was received, it notifies via a callback. 
 /// It is therefore an asynchronous interface to TF, similar to the tf2_ros::AsyncBuffer. However, we do not use the
-/// tf2_ros::AsyncBuffer::waitFroTransform because it has a bug that we cannot make another lookup
+/// tf2_ros::AsyncBuffer::waitFroTransform because it has a bug: We cannot make another lookup
 /// in the callback of a lookup (it holds a mutex locked while calling the user callback, which is simply a wrong thing to do)  
 /// This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
 struct TFListener {

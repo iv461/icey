@@ -303,8 +303,8 @@ public:
   }
 
 protected:
-  /// Returns a function that calls the passed user callback and then writes the result in the
-  /// passed output Stream (that is captured by value)
+  /// Calls the given user callback f and then writes the result in the
+  /// given output
   template <class Output, class F>
   static void call_depending_on_signature(const auto &x, Output output, F &f) {
     using ReturnType = decltype(unpack_if_tuple(f, x));
