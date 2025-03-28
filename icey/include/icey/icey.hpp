@@ -1078,7 +1078,7 @@ struct Awaiter {
 /// \note This class does not have any fields except a weak pointer to the actual
 /// implementation (i.e. it uses the PIMPL idiom). You should not add any fields when inheriting form this class.
 /// Instead, put the additional fields that you need in a separate struct
-/// `MyStreamImpl` and pass it as the `ImplBase` template parameter. These fields become
+/// and pass it as the `ImplBase` template parameter. These fields become
 /// available through `impl().<my_field>`, (i.e. the Impl-class will derive from ImplBase).
 template <class _Value, class _Error = Nothing, class ImplBase = Nothing>
 class Stream : public StreamTag {
