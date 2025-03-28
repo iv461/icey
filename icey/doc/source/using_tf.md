@@ -89,15 +89,12 @@ However, all of these patterns have in common that we are interested in getting 
 
 ### Usage with ICEY:
 
-To synchronize a message (that has a header timestamp) with a transform in ICEY, you do:
+To synchronize a message (that has a header) with a transform in ICEY, you call `.synchronize_with_transform(<target-frame>, <timeout>)`:
 
 ```cpp 
 node->icey()
-      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl")
+      .create_subscription<sensor_msgs::msg::PointCloud2>("/point_cloud")
       .synchronize_with_transform("map", 200ms)
-      .unwrap_or([&](std::string error) {
-        RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error: " << error);
-      })
       .then([](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg,
                const geometry_msgs::msg::TransformStamped &transform_to_map) {
             /// This callback gets called once the transform (target_frame="map", source_frame=point_cloud_msg->header.frame, time=point_cloud_msg->header.stamp) becomes available, the transform_to_map is this transform.
@@ -107,9 +104,12 @@ node->icey()
 
 See also the [TF synchronization example](../../../icey_examples/src/tf_sychronization.cpp).
 
-This performs the synchronization using the `tf2_ros::MessageFilter`. 
+This code will call `tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, "map", tf2_ros::fromMsg(point_cloud_msg->header.stamp), 200ms)` for every message that the subscriber delivers and then start waiting for 200 milliseconds. If in the meantime another message arrives but we are still waiting for the transform, this message will be enqueued. If we have waiter for 200 milliseconds and the transform is still not available (i.e. a timeout occurs), the message is removed from the queue. 
+Otherwise, the get the message and the corresponding transform in the callback that is registered with `.then()`.
 
-You will have to do the actual transformation of the point cloud yourself (PR are welcome to make this automatic in a generic way !)
+You will have to do the actual transformation of the point cloud yourself however ! (PR are welcome to make this automatic in a generic way !)
+
+Currently, this synchronization is done using the `tf2_ros::MessageFilter`, but this is an implementation detail and may change in the future. 
 
 ## Subscribing to transforms 
 
