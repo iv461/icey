@@ -1,9 +1,19 @@
 # Lifecycle nodes
 
-ICEY supports lifecylce nodes, for this you simply need to: 
+ICEY supports lifecycle nodes, for this you simply need to derive from a `icey::LifecycleNode`:  
 
 ```cpp
-auto lifecycle_node = icey::create_node<icey::LifecycleNode>(argc, argv, "planner_node");
+class ExampleLifecycleNode : public icey::LifecycleNode {
+public:
+  using Base = icey::LifecycleNode;
+
+  ExampleLifecycleNode(std::string name) : Base(name) { timer_ = icey().create_timer(100ms); }
+
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_activate(
+      const rclcpp_lifecycle::State &state) {
+    RCLCPP_INFO(get_logger(), "on_activate() was called");
+  }
+};
 ```
 
 See also the [lifecycle node example](../../../icey_examples/src/lifecycle_nodes.cpp). 

@@ -4,17 +4,16 @@
 
 Sorted by decreasing priority. 
 
-- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
 
 - [ ] Docs: Polish/sell better services article since it is a big deal: we are the first ROS library to allow for async/await services
+- [ ] Docs: Mention how to publish on TF 
 
 - [ ] Bug: If a promise handler is registered after it has a value, we currently do not notify (this is wrong, every promise needs to handle this) This causes the image transport subscriber not being able to handle the error since it is set already in the constructor.
 
-
-- [ ] Docs: Mention how to publish on TF 
+- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 
 - [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
 
@@ -27,8 +26,7 @@ Sorted by decreasing priority.
 
 - [ ] Add static asserts for the any filter that all the streams have the same value
 - [ ] Add static asserts for the unpack transform that the stream holds a tuple
-
-- [ ] Manage one-off timers in the Context to compensate for the missing API: When we create a one-off timer, we also have to do the book-keeping ! This means that ICEY-API users cannot create many one-off-timers because this will consume more and more memory ! 
+! 
 
 ## Error-handling
 
@@ -37,6 +35,8 @@ Sorted by decreasing priority.
 - [ ] Port a small autoware (or nav2) node as a proof that everything can be written using ICEY and to find out how many line of code we save
 
 ## Other nice-to-have features, not for 0.1
+
+- [ ] Manage one-off timers in the Context to compensate for the missing API: When we create a one-off timer, we also have to do the book-keeping ! This means that ICEY-API users cannot create many one-off-timers because this will consume more and more memory 
 
 - [ ] Add sync wait to wait for a promise or stream 
 
