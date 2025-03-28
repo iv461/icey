@@ -3,7 +3,8 @@
 One of the biggest novelties of ICEY is that it allows to use services with async/await syntax.
 ICEY is the first library to provide such an API using the new C++20 coroutine feature.
 
-ICEY also allows for service servers to use asynchronous callback functions,  i.e. coroutines which enables 
+Service clients return a Promise and you can `co_await` service calls, including providing a timeout. 
+Service servers can use asynchronous callback functions,  i.e. coroutines, which enables 
  a more powerful behavior like calling other services inside callbacks, something that was previously only difficult and clumsy to achieve with regular ROS [2, 3].
 
 ## Client 
@@ -39,6 +40,12 @@ See also the [Service client](../../../icey_examples/src/service_client_async_aw
 You can call services and await the response inside any callback (timer, subscription, service server). You can implement synchronization of operations (*first* call service, *then* do x) while the underlying operations remain asynchronous. 
 
 All of this is possible thanks to coroutines which allow to write __single-threaded__ asynchronous code. 
+
+### Every service call has a timeout 
+
+Another improvement is that you must specify a timeout for each service call. The regular ROS API does not provide a way to specify timeouts, and as a result cannot automatically clean up requests that were never answered. Instead, the user must manually clean up requests when a timeout occurs, or else a memory leak will occur -- a rather unidiomatic API that does not adhere to RAII.
+
+With ICEY you never need to do any kind of manual cleanup -- pending requests are cleaned up automatically if a timeout occurs.
 
 ## Server 
 
