@@ -44,7 +44,7 @@ All of this is possible thanks to coroutines which allow to write __single-threa
 
 To create a service server, you use your usual `create_service` function and pass it a callback that receives the request and returns the response: 
 
-### With synchronous callback
+### Using synchronous callbacks
 ```cpp
 node->icey().create_service<ExampleService>(
       "set_bool_service", [&](auto request) -> Response {
@@ -56,7 +56,7 @@ node->icey().create_service<ExampleService>(
 
 This example uses a synchronous callback, meaning it returns the response immediately.
 
-### With asynchronous callback
+### Using asynchronous callbacks
 
 The novelty of ICEY is that we can also use *asynchronous* callbacks (i.e. coroutines) as service callbacks:
 
