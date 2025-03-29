@@ -1653,8 +1653,8 @@ struct SubscriptionStream
       : Base(context) {
     this->impl()->subscription = context.node_base().create_subscription<_Message>(
         topic_name,
-        [impl = this->impl()](typename _Message::SharedPtr new_value) {
-          impl->put_value(new_value);
+        [impl = this->impl()](typename _Message::SharedPtr msg) {
+          impl->put_value(msg);
         },
         qos, options);
   }

@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     std::cout << "1. Before calling coroutine " << std::endl;
     a_coroutine(node->icey());
     std::cout << "5. After calling coroutine " << std::endl;
-    icey::spin(node);
+    rclcpp::spin(node);
     std::cout << "6. After sync_wait " << std::endl;
 }
 ```
@@ -47,10 +47,28 @@ It is actually:
 4. After awaiting timer
 ```
 
-As you see, the function progresses as usual, there are no surprises up until `3. Before awaiting timer`. After printing this, the coroutine hits a `co_await` and suspends, which looks like it is returning -- `5. After calling coroutine` is printed. This allows it to reach the call to `icey::spin` that spins the ROS executor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine. This is the interesting part -- the control seemingly "jumps" again inside the coroutine *after* it initially returned (`5. After calling coroutine` was printed).
+As you see, the function progresses as usual, there are no surprises up until `3. Before awaiting timer`. After printing this, the coroutine hits a `co_await` and suspends, which looks like it is returning -- `5. After calling coroutine` is printed. This allows it to reach the call to `rclcpp::spin` that spins the ROS executor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine. This is the interesting part -- the control seemingly "jumps" again inside the coroutine *after* it initially returned (`5. After calling coroutine` was printed).
 
-This is a very powerful behavior that allows for asynchronous programming in a single thread, i.e. without concurrency, as we will see in the following.
+## Why are coroutines a good fit for ROS ?
 
-It enables synchronously-looking calls to services inside callbacks -- something that was previously not possible in ROS.
+Coroutines are perfectly suited to make the callback-based API of ROS more readable which is a typical event queue application. They allow for asynchronous programming in a single thread, i.e. without concurrency. 
+Coroutines enable synchronously-looking service calls (among other asynchronous operations) inside callbacks -- something that was previously not possible with regular ROS.
+
+Coroutines are essentially syntactic sugar to nested callbacks -- the compiler transforms everything that follows a `co_await` statement into a callback.
+
+Here is a semantically equivalent code that is obtained after the compiler transforms the `co_await` statement:
+
+```cpp
+void a_coroutine(icey::Context &ctx) {
+    std::cout << "2. Before create_timer " << std::endl;
+    auto timer = ctx.create_timer(1s, true);
+    std::cout << "3. Before awaiting timer  " << std::endl;
+    timer.then([timer]() {
+        std::cout << "4. After awaiting timer  " << std::endl;
+    });
+}
+```
+
+
 
 

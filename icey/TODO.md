@@ -5,15 +5,14 @@
 Sorted by decreasing priority. 
 
 
+- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 - [ ] Docs: Explain Result-type for error handling 
 - [ ] Docs: Explain that Result-type does not catch C++ - exceptions by default 
 
 - [ ] Docs: Polish/sell better services article since it is a big deal: we are the first ROS library to allow for async/await services
-- [ ] Docs: Mention how to publish on TF 
+- [X] Docs: Mention how to publish on TF 
 
 - [ ] Bug: If a promise handler is registered after it has a value, we currently do not notify (this is wrong, every promise needs to handle this) This causes the image transport subscriber not being able to handle the error since it is set already in the constructor.
-
-- [ ] Docs: Promise basics: Chaining, transforming, maybe error-handling
 
 - [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
 

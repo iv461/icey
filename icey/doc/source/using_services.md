@@ -3,9 +3,9 @@
 One of the biggest novelties of ICEY is that it allows to use services with async/await syntax.
 ICEY is the first library to provide such an API using the new C++20 coroutine feature.
 
-Service clients return a Promise and you can `co_await` service calls, including providing a timeout. 
-Service servers can use asynchronous callback functions,  i.e. coroutines, which enables 
- a more powerful behavior like calling other services inside callbacks, something that was previously only difficult and clumsy to achieve with regular ROS [2, 3].
+When you call a service client, it returns a `Promise` that you can `co_await`, you also can provide a timeout. 
+Service servers can use asynchronous callback functions (i.e. coroutines) which allows them to even call other services in their callback: This powerful behavior was previously only difficult and clumsy to achieve with regular ROS [2, 3].
+Using async/await, you don't have to deal with callback groups anymore to avoid deadlocks [1].
 
 ## Client 
 
@@ -103,7 +103,7 @@ The difference between the synchronous callback is that the asynchronous one ret
 
 # References 
 
-- [1] [Tutorial on how to use callback groups in rclcpp](https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255)
+- [1] [Tutorial on how to use callback groups in rclpy to avoid deadlocks when calling services](https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255)
 - [2] [Asynchronous response example](https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1)
 - [3] [Nested services demo](https://github.com/ijnek/nested_services_rclcpp_demo)
-- [4] Discussion about async/await and proposal by William Woodall: [https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904](https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904)
+- [4] Discussion about async/await and API proposal by William Woodall: [https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904](https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904)

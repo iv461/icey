@@ -36,9 +36,6 @@ You can filter a Stream by calling `.filter()` using a function that returns fal
     });
 ```
 
-TODO link example 
-
-
 ## Synchronization 
 
 ICEY provides an easy way to use the synchronizers from the `message_filters` package: For example, using approximate time synchronization to synchronize a camera and a LiDAR point cloud is as simple as
@@ -69,17 +66,20 @@ Stream transformations, however, can produce new, different types of errors. Thi
 This is what `unwrap_or` does. These error-free streams can then be fed into transformations that require an `ErrorFreeStream`. For example, the `icey::synchronize_approx_time` transformation we used earlier requires such a stream that satisfies the concept of an `ErrorFreeStream`.
 
 ```cpp
-auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
-auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
+  icey::Stream<size_t, std::string> fallible_stream = node->icey().create_timer(100ms)
+    .then([](size_t ticks) -> icey::Result<size_t, std::string> {
+        if(ticks % 10) {
+          return icey::Result<size_t, std::string>::Ok(ticks);
+        } else {
+          return icey::Result<size_t, std::string>::Err("Our regular error occurred");
+        }
+    });
 
-  /// Synchronize by approximately matching the header time stamps (queue_size=100):
-  icey::synchronize_approx_time(100, camera_image, point_cloud)
-      .then([](sensor_msgs::msg::Image::SharedPtr,
-               sensor_msgs::msg::PointCloud2::SharedPtr) {
-      });
+  icey::Stream<size_t> infallible_stream = fallible_stream
+    .unwrap_or([](std::string error) {
+
+    });
 ```
-
-TODO link example
 
 ## Timeout 
 
@@ -99,17 +99,17 @@ You can check whether a message is too old (by it's header stamp) and register a
       /// Here we receive only NaN-free messages for further processing
     });
 ```
-TODO link example
 
 ## Buffer 
 
-You can buffer N values of a Stream, obtaining a new Stream that yields an array of exactly N elements: 
+You can buffer `N` values of a Stream, obtaining a new Stream that yields an array of exactly `N` elements using `.buffer(<N>)`: 
 ```cpp 
-.buffer(5)
-      .then([&](std::shared_ptr<std::vector<size_t>> value) { received_values.push_back(*value); });
+  node->icey().create_subscription<std_msgs::msg::String>("/messages")
+    .buffer(5)
+    .then([&](std::shared_ptr<std::vector<std_msgs::msg::String>> messages) { 
+      RCLCPP_INFO_STREAM(node->get_logger(), "Received 5 messages: " << fmt::format());
+    });
 ``` 
-
-TODO link example
 
 ## Control flow: Multiple inputs and multiple outputs
 
@@ -129,5 +129,3 @@ Such tuple-Streams can be `.unpack()`ed, the result is a tuple of multiple Strea
     output1.publish("output_topic1");
     output2.publish("output_topic2");
 ```
-
-TODO link example

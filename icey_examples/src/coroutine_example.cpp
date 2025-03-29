@@ -16,6 +16,6 @@ int main(int argc, char **argv) {
   std::cout << "1. Before calling coroutine " << std::endl;
   a_coroutine(node->icey());
   std::cout << "5. After calling coroutine " << std::endl;
-  icey::spin(node);
+  rclcpp::spin(node);
   std::cout << "6. After sync_wait " << std::endl;
 }

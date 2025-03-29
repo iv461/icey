@@ -87,7 +87,7 @@ void on_point_cloud(sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg) {
 
 However, all of these patterns have in common that we are interested in getting the transform for a time from another topic: We are *synchronizing* the transform with the messages of another topic.
 
-### Usage with ICEY:
+### How to do it
 
 To synchronize a message (that has a header) with a transform in ICEY, you call `.synchronize_with_transform(<target-frame>, <timeout>)`:
 
@@ -97,7 +97,8 @@ node->icey()
       .synchronize_with_transform("map", 200ms)
       .then([](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud_msg,
                const geometry_msgs::msg::TransformStamped &transform_to_map) {
-            /// This callback gets called once the transform (target_frame="map", source_frame=point_cloud_msg->header.frame, time=point_cloud_msg->header.stamp) becomes available, the transform_to_map is this transform.
+            /// This callback gets called once the transform (target_frame="map", source_frame=point_cloud_msg->header.frame, time=point_cloud_msg->header.stamp) becomes available, 
+            /// the transform_to_map is this transform.
             
       });
 ```
