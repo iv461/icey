@@ -232,7 +232,7 @@ TEST_F(TwoNodesFixture, TransformSubscriptionTest) {
       .publish_transform();
 
   std::size_t received_cnt = 0;
-  sub.then([&](const geometry_msgs::msg::TransformStamped& msg) { received_cnt++; });
+  sub.then([&](const geometry_msgs::msg::TransformStamped&) { received_cnt++; });
 
   spin(1500ms);
   EXPECT_EQ(received_cnt, 20);

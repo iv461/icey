@@ -15,8 +15,9 @@ TEST_F(NodeTest, SyncApproxTimeTest) {
 
   size_t num_message_sets_received = 0;
   auto synched = icey::synchronize_approx_time(5, images, point_clouds)
-                     .then([&](sensor_msgs::msg::Image::SharedPtr img,
-                               sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) {
+                     .then([&](sensor_msgs::msg::Image::SharedPtr,
+                               sensor_msgs::msg::PointCloud2::SharedPtr) {
+                                /// TODO test that the stamps are indeed the expected ones
                        num_message_sets_received++;
                      });
 
