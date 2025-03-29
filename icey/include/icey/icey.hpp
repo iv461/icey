@@ -2387,7 +2387,7 @@ static void spin(NodeType node) {
   rclcpp::shutdown();
 }
 
-static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
+[[maybe_unused]] static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
   rclcpp::executors::SingleThreadedExecutor executor;
   /// This is how nodes should be composed according to ROS guru wjwwood:
   /// https://robotics.stackexchange.com/a/89767. He references
