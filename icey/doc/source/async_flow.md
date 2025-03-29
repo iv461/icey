@@ -5,7 +5,7 @@ In the following we look at various transformations that we can apply on Streams
 
 ## Publish
 
-We have already demonstrated that you can publish the contents of a stream using `.publish(<topic>, <qos>={}, <options>={})`
+You can publish the values of every Stream using `.publish(<topic>, <qos>={}, <options>={})`
 
 ```cpp
   node->icey().create_timer(100ms)
@@ -38,10 +38,10 @@ You can filter a Stream by calling `.filter()` using a function that returns fal
 
 ## Synchronization 
 
-ICEY provides an easy way to use the synchronizers from the `message_filters` package: For example, using approximate time synchronization to synchronize a camera and a LiDAR point cloud is as simple as
+ICEY provides an easy way to use the synchronizers from the `message_filters` package: For example, using approximate time synchronization to synchronize a camera and a LiDAR point cloud is as simple as:
 
 ```cpp
- auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
+auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
 auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 
   /// Synchronize by approximately matching the header time stamps (queue_size=100):
