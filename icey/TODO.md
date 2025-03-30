@@ -15,7 +15,6 @@ Sorted by decreasing priority.
 - [ ] Docs: Mention the C++ trap/footgun that lambdas are stored by reference in the coroutine and therefore by-value captures of a lambda are destroyed on coroutine suspension (Ref: core guidelines/old new thing) 
 
 - [ ] Benchmark perf and measure overhead compared to plain ROS to avoid surprises
-- [ ] Test installing in Docker base image regarding dependencies 
 
 - [ ] Unit-test timeout filter
 
@@ -350,3 +349,5 @@ by ROS entities will never yield something regardless of how long we spin the RO
 - [X] Docs: Mention how to publish on TF 
 - [X] Docs: Explain Result-type for error handling 
 - [X] Filtering example: filter, timeout unwrap_or, any
+
+- [X] Test installing in Docker base image regarding dependencies (Jazzy and Humble), run unit-tests
