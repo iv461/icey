@@ -39,6 +39,7 @@ ICEY, on the other hand, allows you to write *synchronous-looking* code using as
 
 This difference is rather subtle, and shouldn't be too relevant if you're just a TF user.
 
+It rather shows how the underlying implementation becomes simpler by using coroutines instead having to create a separate executor and dealing with synchronization between these two executors. 
 
 ## Synchronizing with a transform
 
