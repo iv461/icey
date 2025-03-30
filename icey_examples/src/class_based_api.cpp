@@ -13,21 +13,15 @@ using namespace std::chrono_literals;
 class MyNode : public icey::Node {
 public:
   explicit MyNode(const std::string& name) : icey::Node(name) {
-    auto timer_signal = icey().create_timer(500ms);
+    auto timer_signal = icey().create_timer(500ms, [this](size_t ticks) { on_tick(ticks); });
+  }
 
-    timer_signal.then(
-        [this](size_t ticks) { RCLCPP_INFO_STREAM(get_logger(), "Timer ticked: " << ticks); });
-
-    timer_signal
-        .then([](size_t ticks) {
-          std_msgs::msg::Float32 float_val;
-          float_val.data = std::sin(ticks / 10.);
-          return float_val;
-        })
-        .publish("sine_generator");
+  void on_tick(size_t ticks) {
+    RCLCPP_INFO_STREAM(get_logger(), "Timer ticked: " << ticks);
   }
 };
 
 int main(int argc, char** argv) {
   icey::spin(icey::create_node<MyNode>(argc, argv, "icey_class_based_node_example"));
+  return 0;
 }
