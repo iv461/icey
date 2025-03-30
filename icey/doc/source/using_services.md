@@ -24,8 +24,10 @@ icey().create_timer(1s)
         /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
-        
+
+        /// Call the service (asynchronously) and await the response with 1 second timeout:
         icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+        
         if (result.has_error()) {
             /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
             RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
