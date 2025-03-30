@@ -1284,8 +1284,7 @@ public:
     });
   }
 
-  /// Buffers N elements. Each time N elements were accumulated, this Stream will yield a value of
-  /// type std::vector<Value> with exactly N elements.
+  /// Buffers N elements. Each time N elements were accumulated, the returned Stream will yield an array of exactly N elements.
   Buffer<Value> buffer(std::size_t N) const {
     return this->template create_stream<Buffer<Value>>(N, *this);
   }
