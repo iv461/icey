@@ -3,9 +3,11 @@
 ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming using Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
 
 Problems ICEY solves: 
+  - No danger of deadlocks since there is no need to manually spin the ROS executor (event loop)
+  - No possibility possibility of memory leaks when services do not respond -- every service call has a timeout
   - Modern async/await syntax: All callbacks can be asynchronous (i.e. coroutines), you can `co_await` other asynchronous operations like service calls inside 
-  - No danger of deadlocks since no manual spinning of the event loop is needed anymore
-  - Consistend awaiting of asynchronous operations: service call, TF lookup  
+  - Consistent awaiting of asynchronous operations: service call, TF lookup
+  - Easily accessible synchronization of topics
 
 It is fully compatible to the ROS 2 API and allows for gradual adoption since the `icey::Node` extends a regular ROS-Node. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
 
@@ -21,27 +23,12 @@ ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
 
-## Examples
-
-The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
-
-[Signal generator example](icey_examples/src_signal_generator.cpp)
-```cpp
-#include <icey/icey.hpp>
-int main(int argc, char **argv) {
-    auto node = icey::create_node(argc, argv, "signal_generator_example");
-    node->icey().create_timer(100ms)
-        .then([&](size_t ticks) {
-            /// We can access parameters in callbacks using .value() because parameters are always initialized first.
-            double y = std::sin(0.1 * ticks * 2 * M_PI);
-            return y;
-        })
-        .publish("sine_generator");
-    icey::spin(node);
-}
-```
+## Features
 
 ### Awaiting service calls
+
+Every service call can be awaited and has a timeout after which pending requests will be cleaned up automatically: 
+
 ```cpp
 auto service = node->icey().create_client<ExampleService>("set_bool_service");
 
@@ -52,7 +39,7 @@ icey().create_timer(1s)
         request->data = true;
 
         /// Call the service (asynchronously) and await the response with 1 second timeout:
-        icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+        auto result = co_await service.call(request, 1s);
         
         if (result.has_error()) {
             /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
@@ -67,7 +54,7 @@ See also the [Service client](../../../icey_examples/src/service_client_async_aw
 
 ### Asynchronous service server callbacks: 
 
-The novelty of ICEY is that we can also use *asynchronous* callbacks (i.e. coroutines) as service callbacks:
+With ICEY you can use *asynchronous* functions (i.e. coroutines) as service callbacks:
 
 ```cpp
 /// Create a service client for an upstream service that is actually capable of answering the
@@ -81,7 +68,7 @@ node->icey().create_service<ExampleService>(
         [&](auto request) -> icey::Promise<Response> {
 
         /// Call the upstream service with 1s timeout asynchronously:
-        icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
+        auto upstream_result = co_await upstream_service_client.call(request, 1s);
 
         if (upstream_result.has_error()) {
           RCLCPP_INFO_STREAM(node->get_logger(),
@@ -134,6 +121,68 @@ public:
   NodeParameters params_;
 };
 ```
+
+The declared parameters will be: 
+```sh 
+ros2 param dump /icey_parameters_struct_example
+
+/icey_parameters_struct_example:
+  ros__parameters:
+    amplitude: 3.0
+    frequency: 10.0
+    mode: single
+    others:
+      cov: []
+      max_amp: 6.0
+      [...]
+```
+
+## Async Flow:
+
+Easy synchronization of two topics: 
+
+```cpp
+auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
+auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
+
+  /// Synchronize by approximately matching the header time stamps (queue_size=100):
+  icey::synchronize_approx_time(100, camera_image, point_cloud)
+      .then([](sensor_msgs::msg::Image::SharedPtr,
+               sensor_msgs::msg::PointCloud2::SharedPtr) {
+      });
+```
+
+Detecting timeouts on topics: 
+```cpp
+  node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
+    /// Expect that every pose message is at most 200ms old
+    .timeout(200ms)
+    .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
+        auto msg_dt = (current_time - message_timestamp).seconds();
+        RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, fmt::format(
+            "Timeout occured, message is old: {} seconds old, maximum allowed is {} seconds",
+            msg_dt, max_age));
+    }) 
+    .then([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
+      /// Here we receive only NaN-free messages for further processing
+    });
+```
+
+Filtering messages that contain NaNs: 
+
+```cpp
+node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
+    /// Filter (i.e. remove) messages that contain NaNs:
+    .filter([](geometry_msgs::PoseStamped::SharedPtr pose_msg) -> bool {
+        return !(std::isnan(pose_msg->pose.x) 
+                  ||std::isnan(pose_msg->pose.y) 
+                  || std::isnan(pose_msg->pose.z));
+    })
+    .then([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
+      /// Here we receive only NaN-free messages for further processing
+    });
+```
+
 # Dependencies: 
 
 - C++20 
@@ -170,16 +219,7 @@ We just want to prevent your first experience with ICEY from being "it freezes y
 
 The documentation can be found here: TODO link 
 
-# Performance: 
-
-TODO summarize 
-
-The Streams implemented are generally very fast, they have a small (non-zero), but in practice neglible overhead compared to plain callbacks. 
-To demonstrate this, we translated a typical node from the Autoware project with multiple subscribers/publishers and measured the performance with perf. 
-The evaluation showed an overall latency increase of only X.X % and no significant increase of the latency variance (jitter). 
-See the [Evaluation]-section for more details. 
-
-# (small) limitations
+# Limitations
 
 We generally aim with ICEY to support everything that ROS also supports. 
 Still, there are some small limitations: 
