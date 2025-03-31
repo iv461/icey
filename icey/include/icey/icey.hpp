@@ -715,11 +715,18 @@ public:
   /// [tf2_ros::TransformBroadcaster].
   TransformPublisherStream create_transform_publisher();
 
-  /// Create a timer stream. It yields as a value the total number of ticks.
+  /// Create a timer stream. The Stream yields as a value the total number of ticks.
   /// \param period the period time
   /// \param is_one_off_timer if set to true, this timer will execute only once.
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   TimerStream create_timer(const Duration &period, bool is_one_off_timer = false);
+
+  /// Create a timer and register a callback.
+  /// \param period the period time
+  /// \param is_one_off_timer if set to true, this timer will execute only once.
+  /// Works otherwise the same as [rclcpp::Node::create_timer].
+  template<class Callback>
+  TimerStream create_timer(const Duration &period, Callback cb, bool is_one_off_timer = false);
 
   /// Create a service server stream. One a request is received, the provided callback will be
   /// called. The callback can be either synchronous (a regular function) or asynchronous, i.e. a
@@ -2319,6 +2326,14 @@ inline TransformPublisherStream Context::create_transform_publisher() {
 
 inline TimerStream Context::create_timer(const Duration &period, bool is_one_off_timer) {
   return create_stream<TimerStream>(period, is_one_off_timer);
+
+}
+
+template<class Callback>
+TimerStream Context::create_timer(const Duration &period, Callback cb, bool is_one_off_timer) {
+  auto timer_stream = create_stream<TimerStream>(period, is_one_off_timer);
+  timer_stream.then(cb);
+  return timer_stream;
 }
 
 template <class ServiceT, class Callback>

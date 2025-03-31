@@ -1,23 +1,27 @@
 # ICEY 
 
-ICEY is a a new API for the Robot Operating System (ROS) 2 that uses modern asynchronous programming with Streams and async/await syntax. It makes the asynchronous data-flow clearly visible and simplifies application code. It enables fast prototyping with less boilerplate code.
+ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming using Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
 
-It is fully compatible to the ROS 2 API, it does not reinvent anything and supports all major features: parameters, subscribers, publishers, timers, services, clients, TF pub/sub. It supports not only regular nodes but also lifecyle nodes with a single API. 
+Problems ICEY solves: 
+  - Modern async/await syntax: All callbacks can be asynchronous (i.e. coroutines), you can `co_await` other asynchronous operations like service calls inside 
+  - No danger of deadlocks since no manual spinning of the event loop is needed anymore
+  - Consistend awaiting of asynchronous operations: service call, TF lookup  
 
-ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extention, demonstated by the already implemented support for `image_transport` camera subscriber/publishers.
+It is fully compatible to the ROS 2 API and allows for gradual adoption since the `icey::Node` extends a regular ROS-Node. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
+
+ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscription/publishers that is already implemented.
 
 It offers additional goodies such as:
-- Automatic bookeeping of publishers/subscribers/timers so that you do not have to do it 
-- No callback groups needed for preventing deadlocks -- service calls are always asynchronous
+- Automatic bookkeeping of publishers/subscriptions/timers so that you do not have to do it 
+- No callback groups needed for preventing deadlocks -- async/await allows for synchronously looking code while the service calls remain asynchronous
 - Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
-Currently support only C++, Python-support is coming soon. 
+The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
-The [icey_examples](icey_examples) package contains over one dozen of different example nodes, demonstrating the capabilites of ICEY.
 
-# Features 
+## Examples
 
 The real power in ICEY is that you can declare computations, that will  be published automatically when the input changes: 
 
@@ -37,71 +41,107 @@ int main(int argc, char **argv) {
 }
 ```
 
-Using Streams (promises), you can build your own data-driven pipeline of computations, for example sequencing service calls: 
-[Service call example](icey_examples/src/service_client_async_await.cpp)
+### Awaiting service calls
 ```cpp
-node->icey().create_timer(1s)
-    /// Build a request when the timer ticks
-    .then([](size_t) {
+auto service = node->icey().create_client<ExampleService>("set_bool_service");
+
+icey().create_timer(1s)
+    .then([this](size_t) -> icey::Promise<void> {
+        /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;
-        return request;
-    })
-    /// Now call the service with the request build
-    .call_service<ExampleService>("set_bool_service1", 1s)
-    .then([](ExampleService::Response::SharedPtr response) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Got response1: " << response->success);
-        auto request = std::make_shared<ExampleService::Request>();
-        request->data = false;
-        return request;
-    })
-    .call_service<ExampleService>("set_bool_service2", 1s)
-    .then([](ExampleService::Response::SharedPtr response) {
-        ...
-    })
-    /// Here we catch timeout errors as well as unavailability of the service:
-    .except([](const std::string& error_code) {
-        RCLCPP_INFO_STREAM(icey::node->get_logger(), "Service got error: " << error_code);
-    });
-```     
-This programming model is fully asynchronous and therefore there is danger of deadlocks when chaining multiple callbacks. 
 
-## Parameter declaration: 
+        /// Call the service (asynchronously) and await the response with 1 second timeout:
+        icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+        
+        if (result.has_error()) {
+            /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
+            RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
+        } else {
+            RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
+        }
+        co_return;
+    })
+```
+See also the [Service client](../../../icey_examples/src/service_client_async_await.cpp) example.
+
+### Asynchronous service server callbacks: 
+
+The novelty of ICEY is that we can also use *asynchronous* callbacks (i.e. coroutines) as service callbacks:
+
+```cpp
+/// Create a service client for an upstream service that is actually capable of answering the
+/// request.
+auto upstream_service_client =
+      node->icey().create_client<ExampleService>("set_bool_service_upstream");
+
+node->icey().create_service<ExampleService>(
+      "set_bool_service", 
+        /// An asynchronous callback (coroutine) returns a Promise<Response>:
+        [&](auto request) -> icey::Promise<Response> {
+
+        /// Call the upstream service with 1s timeout asynchronously:
+        icey::Result<Response, std::string> upstream_result = co_await upstream_service_client.call(request, 1s);
+
+        if (upstream_result.has_error()) {
+          RCLCPP_INFO_STREAM(node->get_logger(),
+                             "Upstream service returned error: " << upstream_result.error());
+          /// Return nothing: This will simply not respond to the client, leading to a timeout
+          co_return nullptr;
+        } else {
+          Response upstream_response = upstream_result.value();
+          /// Respond to the client with the upstream server's response:
+          co_return upstream_response;
+        }
+        
+      });
+```
+See also the [Service server](../../../icey_examples/src/service_server_async_await.cpp) example.
+
+
+### Parameter declaration: 
 ICEY also simplifies the declaration of many parameters: (very similar to the `dynamic_reconfigure`-package from ROS 1):
 
 [Parameter struct example](icey_examples/src/parameters_struct.cpp)
 ```cpp
 /// Here you declare in a single struct all parameters of the node:
 struct NodeParameters {
-  /// We can have regular fields :
+  /// We can have regular fields:
   double amplitude{3};
 
   /// And as well parameters with constraints and a description:
   icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
-                                       std::string("The frequency of the sine")};
-  /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+                                    std::string("The frequency of the sine")};
+  /// We can even have nested structs with more parameters, they will be named others.max_amp,
+  /// others.cov:
   struct OtherParams {
     double max_amp = 6.;
     std::vector<double> cov;
   } others;
+
 };
 
-auto node = icey::create_node<icey::Node>(argc, argv, "parameters_struct_example");
-  /// Now create an object of the node-parameters that will be updated:
-NodeParameters params;
-node->icey().declare_parameter_struct(params, [&](const std::string &changed_parameter) {
-    RCLCPP_INFO_STREAM(node->get_logger(),
-                        "Parameter " << changed_parameter << " changed");
+class MyNode : public icey::Node {
+public: 
+  MyNode(std::string name) : icey::Node(name) {
+    /// Now simply declare the parameter struct and a callback that is called when any field updates:
+    icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
+      RCLCPP_INFO_STREAM(this->get_logger(), "Parameter " << changed_parameter << " changed");
     });
+  }
+
+  /// Store the parameters as a class member: 
+  NodeParameters params_;
+};
 ```
 # Dependencies: 
 
 - C++20 
 - ROS 2 Humble or Jazzy
-- Boost (Hana)
+- Boost (Hana, typeinfo)
 - FMT
 
-Note that ROS 2 Humble supports building with C++20 (`-std=c++20`) only recently (around mid-2024): Many fixes have been merged and then backported to Humble. The information you will find online that ROS 2 does not support C++20 is outdated. 
+Note that ROS 2 Humble is as of now (April 2025) already forward compatible with C++20 (compiling ROS-headers with `-std=c++20`): Information you will find online stating the contrary is simply outdated.
 
 # Install 
 
@@ -144,7 +184,7 @@ See the [Evaluation]-section for more details.
 We generally aim with ICEY to support everything that ROS also supports. 
 Still, there are some small limitations: 
 
-- Only the SingleThreadedExecutor is supported currently
+- Not thread-safe: only the `SingleThreadedExecutor` is supported currently
 - Memory strategy is not implemented
 - Sub-nodes are not supported
 
