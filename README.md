@@ -20,7 +20,7 @@ It offers additional goodies such as:
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
-The [icey_examples](../../icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
+The [icey_examples](icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
 
 ## Features
@@ -139,7 +139,7 @@ ros2 param dump /icey_parameters_struct_example
 
 ## Async Flow:
 
-Easy synchronization of two topics: 
+Easy synchronization of an arbitrary amount of topics (using approximate time policy): 
 
 ```cpp
 auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
