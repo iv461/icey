@@ -1,3 +1,9 @@
+
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example demonstrates how to use the class-based API of ICEY
 /// It essentially works the same as the plain ROS API, but we use an icey::Node instead of a
 /// rclcpp::Node. It also shows that we do not need to store the ROS entities in the class

@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows how to lookup transforms on TF asynchronously.
 /// We look for each message that we get the transform and await it.
 /// This example is therefore equivalent to the synchronize_with_transform() filter (except that the

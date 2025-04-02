@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// Tests whether all functions accepting callbacks copy the callback so that it lives for as long
 /// as the stream lives. The callbacks should be copied regardless of whether they are lvalues or
 /// rvalues, so both cases are tested. We also assert that the callback is copied exactly once and

@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows that ICEY supports lifecycle nodes:
 /// It is similar to this example:
 /// https://github.com/ros2/demos/blob/rolling/lifecycle/src/lifecycle_talker.cpp

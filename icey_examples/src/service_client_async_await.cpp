@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows how to use service clients in ICEY: You make an asynchronous call and
 /// co_await the response. By using async/await syntax (i.e. C++20 coroutines) we achieve a
 /// synchronously-looking service calls. Under the hood, everything is asynchronous, ICEY actually

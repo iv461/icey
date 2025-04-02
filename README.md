@@ -233,6 +233,10 @@ Still, there are some small limitations:
 - Python support 
 - Actions 
 
+# License 
+
+ This software is licensed under the Apache License, Version 2.0.
+ 
 # Related effords
 
 - Autoware's `autoware::component_interface_utils::NodeAdaptor` simplifies the ROS-API as well 

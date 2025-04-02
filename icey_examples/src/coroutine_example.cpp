@@ -1,3 +1,9 @@
+
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example demonstrates the fundamentals of coroutines:
 #include <icey/icey.hpp>
 using namespace std::chrono_literals;

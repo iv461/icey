@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// Support for the image_transport subscriptions and publishers.
 /// See https://docs.ros.org/en/ros2_packages/jazzy/api/image_transport and
 /// https://github.com/ros-perception/image_common/blob/humble/image_transport for API docs.

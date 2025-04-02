@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows how to create an asynchronously responding service server.
 /// After it receives a request, it calls asynchronously another upstream service
 /// that is actually capable of answering the request. Once it receives the result, it responds.

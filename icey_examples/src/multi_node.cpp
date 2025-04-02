@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows how multiple nodes can be created and launched in a single process in
 /// (promise style).
 #include <icey/icey.hpp>

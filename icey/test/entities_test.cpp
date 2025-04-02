@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 #include "node_fixture.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_srvs/srv/set_bool.hpp"

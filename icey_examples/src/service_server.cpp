@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows how to use service servers with a synchronous callback:
 /// Meaning, on request the service returns a response.
 /// This is how a regular ROS service works more or less.

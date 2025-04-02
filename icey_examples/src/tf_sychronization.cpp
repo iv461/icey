@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// This example shows another way to obtain transfroms in ICEY:
 /// Synchronizing a topic with a transform, which is equivalent to looking it up with the header
 /// stamp and header frame_id as a source_frame.

@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 /// Tests whether all Streams work correctly using async/await syntax, i.e. coroutines.
 #include "node_fixture.hpp"
 #include "std_msgs/msg/float32.hpp"

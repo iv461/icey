@@ -1,3 +1,7 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
 
 /// Example showing how to use the image_transport Subscriptions/Publishers for subscribing
 /// simultaneously at the image as well as the CameraInfo message. The CameraInfo message holds
