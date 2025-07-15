@@ -55,7 +55,7 @@ See also the [Service client](../../../icey_examples/src/service_client_async_aw
 
 ### Asynchronous service server callbacks: 
 
-With ICEY you can use *asynchronous* functions (i.e. coroutines) as service callbacks, for example to call another upstream service:
+With ICEY you can use *asynchronous* functions (i.e. coroutines) as callbacks (for both subscribers and services), for example to call another upstream service:
 
 ```cpp
 /// Here using icey::Node that contains an icey::Context
@@ -85,6 +85,29 @@ node->icey().create_service<ExampleService>(
 ```
 See also the [Service server](../../../icey_examples/src/service_server_async_await.cpp) example.
 
+## TF lookup using async/await
+
+```cpp
+  icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
+
+  node->icey()
+      // Use a coroutine (an asynchronous function) as a callback for the subscription:
+      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", [&tf_buffer,
+             &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
+        icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
+            co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
+                                      icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+
+        if (tf_result.has_value()) {
+          geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
+          RCLCPP_INFO(node->get_logger(), "Got transform %f",
+                      transform_to_map.transform.rotation.w);
+        } else {
+          RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
+        }
+        co_return;
+      });
+```
 
 ## Async Flow:
 
@@ -98,6 +121,15 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
   icey::synchronize_approx_time(100, camera_image, point_cloud)
       .then([](sensor_msgs::msg::Image::SharedPtr,
                sensor_msgs::msg::PointCloud2::SharedPtr) {
+      });
+```
+
+Synchronizer topics with a transform:
+
+```cpp
+  camera_image.synchronize_with_transform("map", 100ms)
+      .then([](sensor_msgs::msg::Image::SharedPtr image,
+               const geometry_msgs::msg::TransformStamped &transform_to_map) {
       });
 ```
 
