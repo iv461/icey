@@ -140,6 +140,8 @@ node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
 - Boost (Hana, typeinfo)
 - FMT
 
+Install with: `sudo apt install libfmt-dev libboost-dev`.
+
 Note that ROS 2 Humble is as of now (April 2025) already forward compatible with C++20 (compiling ROS-headers with `-std=c++20`): Information you will find online stating the contrary is simply outdated.
 
 # Install 
