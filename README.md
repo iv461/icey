@@ -1,6 +1,7 @@
 # ICEY 
 
-ICEY is a a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming using Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. This enables fast prototyping with less boilerplate code.
+ICEY is a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming. It offers Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. 
+This enables fast prototyping with less boilerplate code.
 
 Problems ICEY solves: 
   - No danger of deadlocks since there is no need to manually spin the ROS executor (event loop)
@@ -9,14 +10,13 @@ Problems ICEY solves:
   - Consistent awaiting of asynchronous operations: service call, TF lookup
   - Easily accessible synchronization of topics
 
-It is fully compatible to the ROS 2 API and allows for gradual adoption since the `icey::Node` extends a regular ROS-Node. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
+It is fully compatible to the ROS 2 API and allows for gradual adoption. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
 
 ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscription/publishers that is already implemented.
 
 It offers additional goodies such as:
 - Automatic bookkeeping of publishers/subscriptions/timers so that you do not have to do it 
 - No callback groups needed for preventing deadlocks -- async/await allows for synchronously looking code while the service calls remain asynchronous
-- Handle many parameters easily with a single parameter struct that is registered automatically using static reflection, so that you do not need to repeat yourself
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
@@ -85,57 +85,6 @@ node->icey().create_service<ExampleService>(
 ```
 See also the [Service server](../../../icey_examples/src/service_server_async_await.cpp) example.
 
-
-### Parameter declaration: 
-ICEY also simplifies the declaration of many parameters: (very similar to the `dynamic_reconfigure`-package from ROS 1):
-
-[Parameter struct example](icey_examples/src/parameters_struct.cpp)
-```cpp
-/// Here you declare in a single struct all parameters of the node:
-struct NodeParameters {
-  /// We can have regular fields:
-  double amplitude{3};
-
-  /// And as well parameters with constraints and a description:
-  icey::Parameter<double> frequency{10., icey::Interval(0., 25.),
-                                    std::string("The frequency of the sine")};
-  /// We can even have nested structs with more parameters, they will be named others.max_amp,
-  /// others.cov:
-  struct OtherParams {
-    double max_amp = 6.;
-    std::vector<double> cov;
-  } others;
-
-};
-
-class MyNode : public icey::Node {
-public: 
-  MyNode(std::string name) : icey::Node(name) {
-    /// Now simply declare the parameter struct and a callback that is called when any field updates:
-    icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
-      RCLCPP_INFO_STREAM(this->get_logger(), "Parameter " << changed_parameter << " changed");
-    });
-  }
-
-  /// Store the parameters as a class member: 
-  NodeParameters params_;
-};
-```
-
-The declared parameters will be: 
-```sh 
-ros2 param dump /icey_parameters_struct_example
-
-/icey_parameters_struct_example:
-  ros__parameters:
-    amplitude: 3.0
-    frequency: 10.0
-    mode: single
-    others:
-      cov: []
-      max_amp: 6.0
-      [...]
-```
 
 ## Async Flow:
 
@@ -217,31 +166,24 @@ We just want to prevent your first experience with ICEY from being "it freezes y
 
 # Documentation 
 
-The documentation can be found here: TODO link 
+The documentation can be found here:
 
 # Limitations
 
-We generally aim with ICEY to support everything that ROS also supports. 
-Still, there are some small limitations: 
+Our goal with ICEY is to support everything that ROS supports.
+However, there are a few minor limitations:
 
 - Not thread-safe: only the `SingleThreadedExecutor` is supported currently
 - Memory strategy is not implemented
 - Sub-nodes are not supported
 
-# Features coming soon:
-
-- Python support 
-- Actions 
-
 # License 
-
  This software is licensed under the Apache License, Version 2.0.
- 
-# Related effords
 
-- Autoware's `autoware::component_interface_utils::NodeAdaptor` simplifies the ROS-API as well 
-- [SMACC](https://github.com/robosoft-ai/SMACC) Proof on concept for reactive programming
-- [RXROS](https://github.com/rosin-project/rxros2) Proof on concept for reactive programming
-- [fuse](https://github.com/locusrobotics/fuse) Allows to model data flows, but it is focused on one application: sensor fusion. ICEY on the other hand is general 
-- [r2r](https://github.com/m-dahl/r2r_minimal_node/blob/master/r2r_minimal_node/src/main.rs) Rust wrapper for ROS 2, at parts surprisingly similar since it uses tokio (an asynchronous programming library for Rust)
+# Acknowledgements
 
+[![alt text](Gefoerdert_BMWE_Logo.png)]
+![alt text](EN_Funded_by_the_European_Union_RGB_POS.png)
+
+This project has received funding from  the German Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
+grant number 19A21051K.
