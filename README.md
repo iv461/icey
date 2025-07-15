@@ -110,7 +110,7 @@ Detecting timeouts on topics:
     .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
         auto msg_dt = (current_time - message_timestamp).seconds();
         RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, fmt::format(
-            "Timeout occured, message is old: {} seconds old, maximum allowed is {} seconds",
+            "Timeout occured, message is {} seconds old, maximum allowed is {} seconds",
             msg_dt, max_age));
     }) 
     .then([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
@@ -118,18 +118,18 @@ Detecting timeouts on topics:
     });
 ```
 
-Filtering messages that contain NaNs: 
+Filter messages based on a predicate:
 
 ```cpp
 node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
-    /// Filter (i.e. remove) messages that contain NaNs:
+    /// Filter messages containing NaNs:
     .filter([](geometry_msgs::PoseStamped::SharedPtr pose_msg) -> bool {
         return !(std::isnan(pose_msg->pose.x) 
                   ||std::isnan(pose_msg->pose.y) 
                   || std::isnan(pose_msg->pose.z));
     })
     .then([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
-      /// Here we receive only NaN-free messages for further processing
+      /// All messages received here are NaN-free
     });
 ```
 
@@ -164,6 +164,10 @@ By passing the option `MAKEFLAGS="-j4"`, only four jobs will be used, i.e. only 
 Of course (and after you read this far) you can set it to whatever value you like.
 We just want to prevent your first experience with ICEY from being "it freezes your system and you have to reboot", which would be very unpleasant.
 </details>
+
+To depend on ICEY in your ROS package, simply add 
+`<depend>icey</depend>` to your package.xml 
+and include `icey/icey.hpp` in your node.
 
 # Documentation 
 
