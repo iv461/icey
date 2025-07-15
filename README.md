@@ -127,6 +127,7 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
 Synchronizer topics with a transform:
 
 ```cpp
+  auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
   camera_image.synchronize_with_transform("map", 100ms)
       .then([](sensor_msgs::msg::Image::SharedPtr image,
                const geometry_msgs::msg::TransformStamped &transform_to_map) {
