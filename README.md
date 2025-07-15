@@ -58,8 +58,7 @@ See also the [Service client](../../../icey_examples/src/service_client_async_aw
 With ICEY you can use *asynchronous* functions (i.e. coroutines) as service callbacks, for example to call another upstream service:
 
 ```cpp
-/// Create a service client for an upstream service that is actually capable of answering the
-/// request.
+/// Here using icey::Node that contains an icey::Context
 auto upstream_service_client =
       node->icey().create_client<ExampleService>("set_bool_service_upstream");
 
