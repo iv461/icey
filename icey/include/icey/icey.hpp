@@ -580,6 +580,9 @@ public:
   ///
   template <class V>
   using GetValue = std::function<V()>;
+  
+  template<class NodeT>
+  explicit Context(NodeT *node) : NodeBase(node) {}
 
   /// Constructs a Context from NodeBase so that both a rclcpp::Node as well as a
   /// lifecycle node are supported.

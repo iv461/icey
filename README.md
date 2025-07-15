@@ -30,9 +30,10 @@ The [icey_examples](icey_examples) package contains many different example nodes
 Service calls can be awaited, a timeout has to be specified (no manual cleanup of pending requests required!): 
 
 ```cpp
-auto service = node->icey().create_client<ExampleService>("set_bool_service");
+icey::Context ctx(*node);
+auto service = ctx.create_client<ExampleService>("set_bool_service");
 
-icey().create_timer(1s)
+ctx.create_timer(1s)
     .then([this](size_t) -> icey::Promise<void> {
         /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
@@ -188,7 +189,7 @@ However, there are a few minor limitations:
 # Acknowledgements
 
 <img src="img/Gefoerdert_BMWE_Logo.png" width="200">
-<img src="img/EN_Funded_by_the_European_Union_RGB_POS.png" width="400">
+<img src="img/EN_Funded_by_the_European_Union_RGB_POS.png" width="350">
 
 
 This project has received funding from  the german Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
