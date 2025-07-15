@@ -30,7 +30,7 @@ The [icey_examples](icey_examples) package contains many different example nodes
 Service calls can be awaited, a timeout has to be specified (no manual cleanup of pending requests required!): 
 
 ```cpp
-icey::Context ctx(*node);
+icey::Context ctx(node.get());
 auto service = ctx.create_client<ExampleService>("set_bool_service");
 
 ctx.create_timer(1s)
