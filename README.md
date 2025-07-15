@@ -25,9 +25,9 @@ The [icey_examples](icey_examples) package contains many different example nodes
 
 ## Features
 
-### Awaiting service calls
+### Service calls using async/await
 
-Every service call can be awaited and has a timeout after which pending requests will be cleaned up automatically: 
+Service calls can be awaited, a timeout has to be specified (no manual cleanup of pending requests required!): 
 
 ```cpp
 auto service = node->icey().create_client<ExampleService>("set_bool_service");
@@ -54,7 +54,7 @@ See also the [Service client](../../../icey_examples/src/service_client_async_aw
 
 ### Asynchronous service server callbacks: 
 
-With ICEY you can use *asynchronous* functions (i.e. coroutines) as service callbacks:
+With ICEY you can use *asynchronous* functions (i.e. coroutines) as service callbacks, for example to call another upstream service:
 
 ```cpp
 /// Create a service client for an upstream service that is actually capable of answering the
@@ -106,6 +106,7 @@ Detecting timeouts on topics:
   node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
     /// Expect that every pose message is at most 200ms old
     .timeout(200ms)
+    /// "unwrap_or" handles calls the provided callback in case of error
     .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
         auto msg_dt = (current_time - message_timestamp).seconds();
         RCLCPP_ERROR_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 1000, fmt::format(
@@ -113,7 +114,7 @@ Detecting timeouts on topics:
             msg_dt, max_age));
     }) 
     .then([](geometry_msgs::PoseStamped::SharedPtr pose_msg) {
-      /// Here we receive only NaN-free messages for further processing
+      /// All message received here are at most 200ms old
     });
 ```
 
