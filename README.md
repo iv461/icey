@@ -182,8 +182,9 @@ However, there are a few minor limitations:
 
 # Acknowledgements
 
-[![alt text](Gefoerdert_BMWE_Logo.png)]
-![alt text](EN_Funded_by_the_European_Union_RGB_POS.png)
+<img src="img/Gefoerdert_BMWE_Logo.png" width="200">
+<img src="img/EN_Funded_by_the_European_Union_RGB_POS.png" width="400">
 
-This project has received funding from  the German Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
+
+This project has received funding from  the german Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
 grant number 19A21051K.
