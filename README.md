@@ -226,5 +226,5 @@ However, there are a few minor limitations:
 <img src="img/EN_Funded_by_the_European_Union_RGB_POS.png" width="350">
 
 
-This project has received funding from  the german Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
+This project has received research funding from the Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
 grant number 19A21051K.

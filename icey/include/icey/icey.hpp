@@ -1,3 +1,8 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// All rights reserved. 
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 #pragma once
 #include <any>
 #include <boost/hana.hpp>
@@ -470,17 +475,6 @@ struct ServiceClientImpl {
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
     // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock occurs is currently an unspecified behavior, and therefore likely to change in the future.)
     cancelled_timers_.clear();
-    /// TODO we cannot wait for the service synchronously because this will call the callback and
-    /// therefore the coroutine continuation directly (i.e. synchronously) instead in the event
-    /// loop, eventually leading to a stack overflow
-    /*if(!client->wait_for_service(timeout)) {
-      if (!rclcpp::ok()) {
-        future.put_error("INTERRUPTED");
-      } else {
-        future.put_error("SERVICE_UNAVAILABLE");
-      }
-      return Cancel{};
-    } else {*/
     auto req_id = std::make_shared<RequestID>();
     auto future_and_req_id =
           client->async_send_request(request, [this, on_response, on_error, req_id](typename Client::SharedFuture result) {
