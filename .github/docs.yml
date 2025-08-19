@@ -1,0 +1,55 @@
+name: Build and Deploy Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/docs.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
+      - name: Install apt packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen  # replace with your package
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd icey/doc
+          pip install -r requirements.txt
+
+      - name: Build docs with Makefile
+        run: |
+          cd icey/doc
+          make html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: icey/doc/_build/html
