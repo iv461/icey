@@ -13,29 +13,27 @@ jobs:
 
     strategy:
       matrix:
-        ros_distro: [humble, jazzy]
+        include:
+          - ros_distro: humble
+            docker_image: osrf/ros:humble-desktop
+          - ros_distro: jazzy
+            docker_image: osrf/ros:jazzy-desktop
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup ROS ${{ matrix.ros_distro }}
-        uses: ros-tooling/setup-ros@v0.7
+      - name: Build in ROS ${{ matrix.ros_distro }} container
+        uses: addnab/docker-run-action@v3
         with:
-          required-ros-distributions: ${{ matrix.ros_distro }}
-
-      - name: Install dependencies
-        run: |
-          rosdep update
-          rosdep install --from-paths src --ignore-src -r -y
-
-      - name: Build with colcon
-        run: |
-          source /opt/ros/${{ matrix.ros_distro }}/setup.sh
-          colcon build --event-handlers console_direct+ --symlink-install --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
-
-      - name: Run tests
-        run: |
-          source /opt/ros/${{ matrix.ros_distro }}/setup.sh
-          colcon test
-          colcon test-result --verbose
+          image: ${{ matrix.docker_image }}
+          options: -v ${{ github.workspace }}:/workspace
+          run: |
+            set -e
+            cd /workspace
+            source /opt/ros/${{ matrix.ros_distro }}/setup.sh
+            apt-get update && apt-get install -y python3-rosdep
+            rosdep init || true
+            rosdep update
+            rosdep install --from-paths src --ignore-src -r -y
+            colcon build --symlink-install --event-handlers console_direct+
