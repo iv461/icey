@@ -1,0 +1,41 @@
+name: ROS 2 Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        ros_distro: [humble, jazzy]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup ROS ${{ matrix.ros_distro }}
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: ${{ matrix.ros_distro }}
+
+      - name: Install dependencies
+        run: |
+          rosdep update
+          rosdep install --from-paths src --ignore-src -r -y
+
+      - name: Build with colcon
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.sh
+          colcon build --event-handlers console_direct+ --symlink-install --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+      - name: Run tests
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.sh
+          colcon test
+          colcon test-result --verbose
