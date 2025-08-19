@@ -10,28 +10,31 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        include:
-          - ros_distro: humble
-            docker_image: osrf/ros:humble-desktop
-          - ros_distro: jazzy
-            docker_image: osrf/ros:jazzy-desktop
+        ros_distro:
+          - humble
+          - jazzy
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build in ROS ${{ matrix.ros_distro }} container
-        uses: addnab/docker-run-action@v3
+      # Docker image caching
+      - name: Cache Docker image
+        uses: actions/cache@v4
         with:
-          image: ${{ matrix.docker_image }}
-          options: -v ${{ github.workspace }}:/workspace
+          path: /tmp/.docker-cache-${{ matrix.ros_distro }}
+          key: docker-${{ matrix.ros_distro }}-${{ github.sha }}
+          restore-keys: |
+            docker-${{ matrix.ros_distro }}-
+
+      - name: Run ROS 2 in Docker
+        uses: ika-rwth-aachen/docker-ros@v1.8.1
+        with:
+          base-image: rwthika/ros2:${{ matrix.ros_distro }}
           run: |
-            set -e
-            cd /workspace
-            source /opt/ros/${{ matrix.ros_distro }}/setup.sh
+            cd /github/workspace
             apt-get update && apt-get install -y python3-rosdep
             rosdep init || true
             rosdep update
