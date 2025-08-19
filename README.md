@@ -52,7 +52,7 @@ ctx.create_timer(1s)
         co_return;
     })
 ```
-See also the [Service client](../../../icey_examples/src/service_client_async_await.cpp) example.
+See also the [Service client](icey_examples/src/service_client_async_await.cpp) example.
 
 ### Asynchronous service server callbacks: 
 
@@ -84,7 +84,7 @@ node->icey().create_service<ExampleService>(
         
       });
 ```
-See also the [Service server](../../../icey_examples/src/service_server_async_await.cpp) example.
+See also the [Service server](icey_examples/src/service_server_async_await.cpp) example.
 
 ## TF lookup using async/await
 
@@ -109,6 +109,7 @@ See also the [Service server](../../../icey_examples/src/service_server_async_aw
         co_return;
       });
 ```
+See also the [TF Async/await example](icey_examples/src/tf_lookup_async_await.cpp) example.
 
 ## Async Flow:
 
@@ -124,6 +125,7 @@ auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud
                sensor_msgs::msg::PointCloud2::SharedPtr) {
       });
 ```
+See also the [Synchronization](icey_examples/src/synchronization.cpp) example.
 
 Synchronizer topics with a transform:
 
@@ -134,6 +136,8 @@ Synchronizer topics with a transform:
                const geometry_msgs::msg::TransformStamped &transform_to_map) {
       });
 ```
+See also the [TF Synchronization](icey_examples/src/tf_sychronization.cpp) example.
+
 
 Detecting timeouts on topics: 
 ```cpp
