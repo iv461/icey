@@ -1,18 +1,19 @@
 # ICEY 
 
-ICEY is a new API for the Robot Operating System (ROS) 2 that allows for modern asynchronous programming. It offers Streams, Promises and C++20 coroutines with async/await syntax. This simplifies application code and makes the asynchronous data-flow clearly visible. 
-This enables fast prototyping with less boilerplate code.
+![alt text](img/icey_logo.png)
 
-Problems ICEY solves: 
-  - No danger of deadlocks since there is no need to manually spin the ROS executor (event loop)
-  - No possibility possibility of memory leaks when services do not respond -- every service call has a timeout
-  - Modern async/await syntax: All callbacks can be asynchronous (i.e. coroutines), you can `co_await` other asynchronous operations like service calls inside 
-  - Consistent awaiting of asynchronous operations: service call, TF lookup
-  - Easily accessible synchronization of topics
+ICEY is a new client API for the Robot Operating System (ROS) 2 for modern asynchronous programming. It offers using C++ 20 coroutines with async/await syntax for service calls and TF lookup. It also offers modeling data flows based on Streams and Promises. This simplifies application code and makes the asynchronous data-flow clearly visible. 
 
-It is fully compatible to the ROS 2 API and allows for gradual adoption. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients, TF. It supports not only regular nodes but also lifecycle nodes with a single API. 
+### Problems ICEY solves: 
+  - No deadlocks possible since there is no need to manually spin the ROS executor (event loop) inside callbacks
+  - No memory leaks possible during service calls -- every request is cleaned up automatically after the specified timeout
+  - All callbacks can be asynchronous functions (i.e. coroutines), making it possible to call and `co_await` other asynchronous operations inside callbacks
+  - Consistent asynchronous API for all asynchronous operations: service calls and TF lookup
+  - Synchronization of topics without any boilerplate code
 
-ICEY operates smoothly together with the  `message_filters` package, and it uses it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscription/publishers that is already implemented.
+It is fully compatible to the ROS 2 API (it build on top of `rclcpp`) and allows for gradual adoption. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients and TF. It supports not only regular nodes but also lifecycle nodes using a single API. 
+
+ICEY operates smoothly together with the  `message_filters` package, using it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscription/publishers that is already implemented.
 
 It offers additional goodies such as:
 - Automatic bookkeeping of publishers/subscriptions/timers so that you do not have to do it 
