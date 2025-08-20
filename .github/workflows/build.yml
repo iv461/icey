@@ -8,17 +8,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_and_test_ros2:
+  build_and_test_ros2_jazzy:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        ros_distro: [humble, jazzy]
-
     container:
       image: rostooling/setup-ros-docker:ubuntu-noble-latest
     steps:
-      - name: Build and run tests
+      - name: Build and run tests ROS 2 Jazzy
         uses: ros-tooling/action-ros-ci@v0.4
         with:
           package-name: icey
-          target-ros2-distro: ${{ matrix.ros_distro }}
+          target-ros2-distro: jazzy 
+
+  build_and_test_ros2_humble:
+    runs-on: ubuntu-latest
+    container:
+      image: rostooling/setup-ros-docker:ubuntu-jammy-latest
+    steps:
+      - name: Build and run tests ROS 2 Humble
+        uses: ros-tooling/action-ros-ci@v0.4
+        with:
+          package-name: icey icey_examples
+          target-ros2-distro: humble
