@@ -1,20 +1,21 @@
 # Services using async/await
 
-One of the biggest novelties of ICEY is that it allows to use services with async/await syntax.
-ICEY is the first library to provide such an API using the new C++20 coroutine feature.
+One of ICEY's most notable features is its ability to use services with  async/await syntax.
+ICEY is the first library to provide this type of API using the new C++20 coroutine feature.
 
-When you call a service client, it returns a `Promise` that you can `co_await`, you also can provide a timeout. 
-Service servers can use asynchronous callback functions (i.e. coroutines) which allows them to even call other services in their callback: This powerful behavior was previously only difficult and clumsy to achieve with regular ROS [2, 3].
-Using async/await, you don't have to deal with callback groups anymore to avoid deadlocks [1].
+Calling a service returns a `Promise` that you can `co_await`. Additionally, every service call requires a timeout.
+For service servers, ICEY allows to use asynchronous callback functions (i.e. coroutines) which enables call other services for example: This behavior was previously only achievable in a rather clumsy way [2, 3], so ICEY is more powerful in this regard.
+
+With async/await, you also don't have to deal with callback groups to prevent deadlocks [1].
 
 ## Client 
 
-Service clients call a service, and this is an inherently asynchronous operation -- we don't know when (or if) we will receive the response. 
-What we want most of the time however is to continue doing other work only *after* we got the response. 
+Calling a service is an inherently asynchronous operation.
+Most of the time we want to synchronize the call however, i.e. to continue doing other work only *after* we receive the response. 
 
-The regular ROS 2 API does not offer a synchronous API for calling services (meaning a function that calls the service and blocks until the response was received) -- instead the user has to manually spin the event loop which is error-prone because it leads to deadlocks when done inside a callback [1].  
+The regular ROS 2 API does not offer a synchronous API for calling services -- instead the user must manually spin the event loop. This is error-prone since it leads to deadlocks when done inside a callback [1].  
 
-With ICEY, waiting for the response becomes easy thanks to the async/await based API: 
+With ICEY, waiting for the response becomes easy thanks to the async/await API: 
 
 ```cpp
 auto service = node->icey().create_client<ExampleService>("set_bool_service");
@@ -39,13 +40,9 @@ icey().create_timer(1s)
 ```
 See also the [Service client](../../../icey_examples/src/service_client_async_await.cpp) example.
 
-You can call services and await the response inside any callback (timer, subscription, service server). You can implement synchronization of operations (*first* call service, *then* do x) while the underlying operations remain asynchronous. 
-
-All of this is possible thanks to coroutines which allow to write __single-threaded__ asynchronous code. 
-
 ### Every service call has a timeout 
 
-Another improvement is that you must specify a timeout for each service call. The regular ROS API does not provide a way to specify timeouts, and as a result cannot automatically clean up requests that were never answered. Instead, the user must manually clean up requests when a timeout occurs, or else a memory leak will occur -- a rather unidiomatic API that does not adhere to RAII.
+Another advantage of ICEY is that it requires you to specify a timeout for each service call. The regular ROS API does not provide this option, so it cannot automatically clean up requests that were never answered. Instead, users must manually clean up requests when a timeout occurs. Otherwise, a memory leak will occur.
 
 With ICEY you never need to do any kind of manual cleanup -- pending requests are cleaned up automatically if a timeout occurs.
 
@@ -57,8 +54,9 @@ To create a service server, you use your usual `create_service` function and pas
 ```cpp
 node->icey().create_service<ExampleService>(
       "set_bool_service", [&](auto request) -> Response {
-        /// Build response 
+       
         auto response = std::make_shared<ExampleService::Response>();
+        /// Build here the response
         return response;
       });
 ```
@@ -101,11 +99,12 @@ See also the [Service server](../../../icey_examples/src/service_server_async_aw
 This example calls another service inside the callback: This is an asynchronous operation that is awaited (`co_await`). Once it completes, the server sends the response. 
 The difference between the synchronous callback is that the asynchronous one returns a `icey::Promise<Response>` instead of a `Response`. 
 
-
+Generally, you can call services and await the response inside the callback of any ROS entity: timers, subscriptions, service servers.
+For this, the callback must be asynchronous, i.e. must return an  `icey::Promise`.
 
 # References 
 
-- [1] [Tutorial on how to use callback groups in rclpy to avoid deadlocks when calling services](https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255)
+- [1] [How to use callback groups in ROS2](https://discourse.ros.org/t/how-to-use-callback-groups-in-ros2/25255)
 - [2] [Asynchronous response example](https://github.com/tgroechel/lifecycle_prac/blob/main/src/async_srv.cpp#L10-L69C1)
 - [3] [Nested services demo](https://github.com/ijnek/nested_services_rclcpp_demo)
 - [4] Discussion about async/await and API proposal by William Woodall: [https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904](https://github.com/ros2/ros2_documentation/issues/901#issuecomment-754167904)
