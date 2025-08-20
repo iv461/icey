@@ -63,19 +63,19 @@ Streams can yield not only values but also errors.
 For some transformations, it is mandatory to handle an error first. We can handle possible errors by calling `unwrap_or` and providing a function that receives the potential error. This results in an error-free stream.
 
 ```cpp
-  icey::Stream<size_t, std::string> fallible_stream = node->icey().create_timer(100ms)
-    .then([](size_t ticks) -> icey::Result<size_t, std::string> {
-        if(ticks % 10) {
-          return icey::Result<size_t, std::string>::Ok(ticks);
-        } else {
-          return icey::Result<size_t, std::string>::Err("An error occurred");
-        }
-    });
+icey::Stream<size_t, std::string> fallible_stream = node->icey().create_timer(100ms)
+  .then([](size_t ticks) -> icey::Result<size_t, std::string> {
+      if(ticks % 10) {
+        return icey::Result<size_t, std::string>::Ok(ticks);
+      } else {
+        return icey::Result<size_t, std::string>::Err("An error occurred");
+      }
+  });
 
-  icey::Stream<size_t> error_free_stream = fallible_stream
-    .unwrap_or([](std::string error) {
+icey::Stream<size_t> error_free_stream = fallible_stream
+  .unwrap_or([](std::string error) {
 
-    });
+  });
 ```
 
 One example of a transformation that requires error handling is the `icey::synchronize_approx_time` transformation that we used earlier.
