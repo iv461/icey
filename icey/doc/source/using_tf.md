@@ -99,8 +99,8 @@ node->icey()
 
 See also the [TF synchronization example](../../../icey_examples/src/tf_sychronization.cpp).
 
-This code will call `tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, "map", tf2_ros::fromMsg(point_cloud_msg->header.stamp), 200ms)` for every message that the subscriber delivers and then start waiting for 200 milliseconds. If in the meantime another message arrives but we are still waiting for the transform, this message will be enqueued. If we have waiter for 200 milliseconds and the transform is still not available (i.e. a timeout occurs), the message is removed from the queue. 
-Otherwise, the get the message and the corresponding transform in the callback that is registered with `.then()`.
+This code will call `tf_buffer_->lookupTransform(point_cloud_msg->header.frame_id, "map", tf2_ros::fromMsg(point_cloud_msg->header.stamp), 200ms)` for every message that the subscriber delivers and then start waiting for 200 milliseconds. If in the meantime another message arrives but we are still waiting for the transform, this message will be enqueued. If we have waited for 200 milliseconds and the transform is still not available (i.e. a timeout occurs), the message is removed from the queue. 
+Otherwise, we receive the message and the corresponding transform in the callback that was registered with `.then()`.
 
 You will have to do the actual transformation of the point cloud yourself however ! (PR are welcome to make this automatic in a generic way !)
 
@@ -146,7 +146,7 @@ node->icey().create_timer(1s)
     t.transform.rotation.w = std::cos(ticks * .1);
     return t;
   })
-  .publish_transform();;
+  .publish_transform();
 
 ```
 
