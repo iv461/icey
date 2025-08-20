@@ -9,7 +9,7 @@
  <version>0.1.0</version>
  <description>ICEY</description>
  <maintainer email="ivo.ivanov@tha.de">Ivo Ivanov</maintainer>
- <license>MIT</license>
+ <license>Apache-2</license>
 
  <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
