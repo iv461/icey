@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/icey_logo.png" alt="Project Logo" width="1000rem"/>
+  <img src="icey/doc/source/_static/icey_logo.png" alt="Project Logo" width="1000rem"/>
 </p>
 
 ---
@@ -15,7 +15,7 @@ ICEY is a new client API for modern asynchronous programming in the Robot Operat
  - Deadlocks are impossible since there is no need to manually spin the ROS executor (event loop) inside callbacks.
  - There are no memory leaks during service calls — every request is cleaned up automatically after the specified timeout.
  - All callbacks can be asynchronous functions (i.e., coroutines), which makes it possible to call and co_await other asynchronous operations inside callbacks.
- - A consistent asynchronous API for all asynchronous operations, including service calls and TF lookup.
+ - A consistent async/await-based API for all asynchronous operations, including service calls and TF lookup.
  - Topic synchronization without boilerplate code
 
 ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, and TF. Additionally, ICEY supports lifecycle nodes using a single API.

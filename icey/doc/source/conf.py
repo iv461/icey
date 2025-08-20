@@ -29,7 +29,8 @@ html_title = "ICEY Documentation"
 html_theme = 'sphinx_book_theme'
 html_static_path = ['_static']
 html_css_files = ["icey.css", "book_custom.css"]
-html_context = {"default_mode": "light"}
+html_context = {"default_mode": "dark"}
+html_logo = "_static/icey_logo.png"
 
 html_theme_options = {
    "pygments_light_style": "tango",
