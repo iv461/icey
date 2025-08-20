@@ -16,7 +16,7 @@ jobs:
       - name: Build and run tests ROS 2 Jazzy
         uses: ros-tooling/action-ros-ci@v0.4
         with:
-          package-name: icey
+          package-name: icey icey_examples
           target-ros2-distro: jazzy 
 
   build_and_test_ros2_humble:

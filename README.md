@@ -4,10 +4,9 @@
 
 ---
 
-<p align="center">
-  <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_jazzy:
-%20(jazzy)&label=ROS%202%20Jazzy&style=for-the-badge" alt="ROS 2 Jazzy Build Status" height="30rem"/>
-  <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_humble%20(humble)&label=ROS%202%20Humble&style=for-the-badge" alt="ROS 2 Humble Build Status" height="30rem"/>
+<p align="center" height="30rem">
+  <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_jazzy%20(jazzy)&label=ROS%202%20Jazzy&style=for-the-badge" alt="ROS 2 Jazzy Build Status"/>
+  <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_humble%20(humble)&label=ROS%202%20Humble&style=for-the-badge" alt="ROS 2 Humble Build Status" />
 </p>
 
 ICEY is a new client API for modern asynchronous programming in the Robot Operating System (ROS) 2. It uses C++20 coroutines with async/await syntax for service calls and TF lookups. ICEY allows you to model data flows based on streams and promises. These features simplify application code and make asynchronous data flows clearly visible.
