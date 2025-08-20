@@ -10,6 +10,10 @@ on:
 jobs:
   build_and_test_ros2:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ros_distro: [humble, jazzy]
+
     container:
       image: rostooling/setup-ros-docker:ubuntu-noble-latest
     steps:
@@ -17,4 +21,4 @@ jobs:
         uses: ros-tooling/action-ros-ci@v0.4
         with:
           package-name: icey
-          target-ros2-distro: jazzy
+          target-ros2-distro: ${{ matrix.ros_distro }}
