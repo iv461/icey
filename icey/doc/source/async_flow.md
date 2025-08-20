@@ -11,7 +11,9 @@ You can publish the values of every Stream using `.publish(<topic>, <qos>={}, <o
   node->icey().create_timer(100ms)
     .then([](size_t ticks) {
         /// This function gets called each time the timer ticks
-        return std::sin(0.1 * ticks * 2 * M_PI);
+        std_msgs::msg::Float32 msg;
+        msg.data = std::sin(0.1 * ticks * 2 * M_PI);
+        return msg;
     })
     .publish("sine_signal");
 ```
@@ -38,32 +40,27 @@ You can filter a Stream by calling `.filter()` using a function that returns fal
 
 ## Synchronization 
 
-ICEY provides an easy way to use the synchronizers from the `message_filters` package: For example, using approximate time synchronization to synchronize a camera and a LiDAR point cloud is as simple as:
+ICEY provides an easy way to use the synchronizers from the `message_filters` package: For example, synchronizing a camera and a LiDAR point cloud is as simple as:
 
 ```cpp
 auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
 auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 
-  /// Synchronize by approximately matching the header time stamps (queue_size=100):
-  icey::synchronize_approx_time(100, camera_image, point_cloud)
-      .then([](sensor_msgs::msg::Image::SharedPtr,
-               sensor_msgs::msg::PointCloud2::SharedPtr) {
-      });
+/// Synchronize by approximately matching the header time stamps (queue_size=100):
+icey::synchronize_approx_time(100, camera_image, point_cloud)
+    .then([](sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::PointCloud2::SharedPtr) {
+
+    });
 ```
 
 See also the [synchronization example](../../../icey_examples/src/synchronization.cpp)
 
-This method will synchronize both topics by approximately matching their header timestamps. For this, ICEY uses the `message_filters::Synchronizer` with the `ApproxTime` policy. 
+This method approximately matches the header timestamps using the `message_filters::Synchronizer` with the `ApproxTime` policy. 
 
 ## Error handling: `unwrap_or`
 
-Before looking into the next transformations, we will have to look into error-handling. 
-
-Streams can yield not only values but also errors: This allows for more advanced error handling. 
-But because streams are statically typed on the error, a stream can only store a single type of error. 
-Stream transformations, however, can produce new, different types of errors. This requires that we first handle possible errors, resulting in an `ErrorFreeStream`. 
-
-This is what `unwrap_or` does. These error-free streams can then be fed into transformations that require an `ErrorFreeStream`. For example, the `icey::synchronize_approx_time` transformation we used earlier requires such a stream that satisfies the concept of an `ErrorFreeStream`.
+Streams can yield not only values but also errors. 
+For some transformations, it is mandatory to handle an error first. We can handle possible errors by calling `unwrap_or` and providing a function that receives the potential error. This results in an error-free stream.
 
 ```cpp
   icey::Stream<size_t, std::string> fallible_stream = node->icey().create_timer(100ms)
@@ -71,15 +68,19 @@ This is what `unwrap_or` does. These error-free streams can then be fed into tra
         if(ticks % 10) {
           return icey::Result<size_t, std::string>::Ok(ticks);
         } else {
-          return icey::Result<size_t, std::string>::Err("Our regular error occurred");
+          return icey::Result<size_t, std::string>::Err("An error occurred");
         }
     });
 
-  icey::Stream<size_t> infallible_stream = fallible_stream
+  icey::Stream<size_t> error_free_stream = fallible_stream
     .unwrap_or([](std::string error) {
 
     });
 ```
+
+One example of a transformation that requires error handling is the `icey::synchronize_approx_time` transformation that we used earlier.
+Error handling is mandatory here because such transformations may yield new errors.
+However, streams are statically typed on the error. This means a stream can only store one type of error.
 
 ## Timeout 
 
