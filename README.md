@@ -1,34 +1,30 @@
-# ICEY 
-
 ![alt text](img/icey_logo.png)
 
-ICEY is a new client API for the Robot Operating System (ROS) 2 for modern asynchronous programming. It offers using C++ 20 coroutines with async/await syntax for service calls and TF lookup. It also offers modeling data flows based on Streams and Promises. This simplifies application code and makes the asynchronous data-flow clearly visible. 
+ICEY is a new client API for modern asynchronous programming in the Robot Operating System (ROS) 2. It uses C++20 coroutines with async/await syntax for service calls and TF lookups. ICEY allows you to model data flows based on streams and promises. These features simplify application code and make asynchronous data flows clearly visible.
 
-### Problems ICEY solves: 
-  - No deadlocks possible since there is no need to manually spin the ROS executor (event loop) inside callbacks
-  - No memory leaks possible during service calls -- every request is cleaned up automatically after the specified timeout
-  - All callbacks can be asynchronous functions (i.e. coroutines), making it possible to call and `co_await` other asynchronous operations inside callbacks
-  - Consistent asynchronous API for all asynchronous operations: service calls and TF lookup
-  - Synchronization of topics without any boilerplate code
+### Problems ICEY solves:
+ - Deadlocks are impossible since there is no need to manually spin the ROS executor (event loop) inside callbacks.
+ - There are no memory leaks during service calls — every request is cleaned up automatically after the specified timeout.
+ All callbacks can be asynchronous functions (i.e., coroutines), which makes it possible to call and co_await other asynchronous operations inside callbacks.
+ - A consistent asynchronous API for all asynchronous operations, including service calls and TF lookup.
+ - Topic synchronization without boilerplate code
 
-It is fully compatible to the ROS 2 API (it build on top of `rclcpp`) and allows for gradual adoption. It supports all major features of ROS: parameters, subscriptions, publishers, timers, services, clients and TF. It supports not only regular nodes but also lifecycle nodes using a single API. 
-
-ICEY operates smoothly together with the  `message_filters` package, using it for synchronization. ICEY also allows for extension, demonstrated by the the support for `image_transport` camera subscription/publishers that is already implemented.
-
-It offers additional goodies such as:
-- Automatic bookkeeping of publishers/subscriptions/timers so that you do not have to do it 
-- No callback groups needed for preventing deadlocks -- async/await allows for synchronously looking code while the service calls remain asynchronous
+ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, and TF. Additionally, ICEY supports lifecycle nodes using a single API.
+ICEY operates smoothly with the message_filters package, using it for synchronization. ICEY is also extensible, as demonstrated by its support for image transport camera subscription/publishers.
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
 
 The [icey_examples](icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
+## Documentation 
+
+[iv461.github.io/icey](iv461.github.io/icey) 
 
 ## Features
 
 ### Service calls using async/await
 
-Service calls can be awaited, a timeout has to be specified (no manual cleanup of pending requests required!): 
+Service calls can be awaited, a timeout has to be specified (no manual cleanup of pending requests required): 
 
 ```cpp
 icey::Context ctx(node.get());
@@ -56,7 +52,7 @@ See also the [Service client](icey_examples/src/service_client_async_await.cpp) 
 
 ### Asynchronous service server callbacks: 
 
-With ICEY you can use *asynchronous* functions (i.e. coroutines) as callbacks (for both subscribers and services), for example to call another upstream service:
+With ICEY, you can use *asynchronous* functions, i.e., coroutines, as callbacks for both subscribers and services. For example, you can use them to call another upstream service.
 
 ```cpp
 /// Here using icey::Node that contains an icey::Context
@@ -113,7 +109,7 @@ See also the [TF Async/await example](icey_examples/src/tf_lookup_async_await.cp
 
 ## Async Flow:
 
-Easy synchronization of an arbitrary amount of topics (using approximate time policy): 
+Synchronize an arbitrary number of topics easily (using the approximate time policy):
 
 ```cpp
 auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
@@ -208,10 +204,6 @@ We just want to prevent your first experience with ICEY from being "it freezes y
 To depend on ICEY in your ROS package, simply add 
 `<depend>icey</depend>` to your package.xml 
 and include `icey/icey.hpp` in your node.
-
-# Documentation 
-
-The documentation can be found here:
 
 # Limitations
 
