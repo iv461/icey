@@ -14,7 +14,7 @@ ICEY is a new client API for modern asynchronous programming in the Robot Operat
 ### Problems ICEY solves:
  - Deadlocks are impossible since there is no need to manually spin the ROS executor (event loop) inside callbacks.
  - There are no memory leaks during service calls — every request is cleaned up automatically after the specified timeout.
- All callbacks can be asynchronous functions (i.e., coroutines), which makes it possible to call and co_await other asynchronous operations inside callbacks.
+ - All callbacks can be asynchronous functions (i.e., coroutines), which makes it possible to call and co_await other asynchronous operations inside callbacks.
  - A consistent asynchronous API for all asynchronous operations, including service calls and TF lookup.
  - Topic synchronization without boilerplate code
 

@@ -53,18 +53,16 @@ Key differences to regular ROS are:
 
 ### Awaiting `publish`
 
-Publishing a message with reliable quality of service involves two steps: sending the message and waiting for an acknowledgment (ACK) from the receiver. The actual sending is a synchronous operation, but the arrival of the ACK is asynchronous: we don't know when (or if) we will receive the ACK from another node. 
-This means that `publish` with reliable quality of service is actually an asynchronous function. 
-Calling `publish` is very similar to calling a service in terms of the sequence of operations. 
-ROS treats publishing a message as a fire-and-forget task: A call to `publish` sends the message, but it does not wait for the ACK to be received, and instead returns immediately after the message was sent.
+Currently, due to a ROS limitation, it is not possible to await a call to publish.
 
-What we want therefore is a publish function that returns a promise, allowing the ACK to be awaited via `co_await publish`.
-This would also allow to have the old behavior: We do not actually need to `co_await` the `publish`-call, but we *can*
-This is how many other message passing libraries implement a `publish` function [1, 2, 3, 4].
+Explanation:
+Publishing a message with reliable quality of service involves two steps: (1) sending the message, and (2) waiting for an acknowledgment (ACK) from the receiver. Since we don't know when (or if) we will receive the ACK from another node, waiting for the ACK is an inherently asynchronous operation.
+Therefore, calling publish is overall an asynchronous operation when using reliable quality of service.
 
-Unfortunately, ROS does not provide an asynchronous API for waiting on the ACK, only a synchronous one (`rclcpp::PublisherBase::wait_for_all_acked`). This is a fundamental limitation of ROS 2 (at the RMW API layer), and __for this reason ICEY cannot provide an awaitable `publish` function.__
+In ROS however, publishing a message is treated as a fire-and-forget task. The message is sent, and no waiting is done for the ACK.
+This differs from how other message-passing libraries implement a publish function [1, 2, 3, 4].
 
-It would be required to add an asynchronous `async_wait_for_all_acked` to the RMW API so that an  an awaitable `publish` function can be implemented.
+ROS provides an API for waiting on the ACK but only a synchronous one, `rclcpp::PublisherBase::wait_for_all_acked`. There is no asynchronous API (this is a limitation at the RMW-API layer). For this reason, ICEY cannot provide an awaitable publish function.
 
 ## References 
 
