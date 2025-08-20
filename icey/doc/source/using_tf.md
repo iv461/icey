@@ -1,34 +1,27 @@
 # Using transforms (TF)
 
-Coordinate system transforms are communicated in ROS via the `/tf` and `/tf_static` topics, so receiving them is inherently an asynchronous operation.
-ICEY provides several ways to retrieve transforms: The usual `lookup` function (with async/await API), but also synchronizing a topic like a point cloud with a transform. ICEY even allows you to *subscribe* to a transform: A callback will be called every time a transform changes between two coordinate systems.
+Coordinate system transforms are communicated in ROS via the `/tf` and `/tf_static` topics, so receiving them is an inherently asynchronous operation.
+ICEY provides several ways to receive transforms: The usual `lookup` function (with async/await API), but also synchronizing a topic like a point cloud with a transform. ICEY even allows you to *subscribe* to a transform: A callback is called every time the transform between two coordinate systems changes.
 
 ## Looking up transforms: 
 
-To lookup a transform at a given time, you first create an`icey::TransformBuffer`: This is the usual combination of a subscription on `/tf`/`/tf_static` and a buffer bundled into a single object. 
-
-You can then call `lookup` and await it: 
+Looking up transforms is very similar to regular ROS, except that ICEY provides an async/await API, calls to `lookup` need to be awaited: 
 
 ```cpp 
 icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
-node->icey()
-      // Use a coroutine (an asynchronous function) as a callback for the subscription:
-      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", 
-        [&tf_buffer, &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
+auto tf_result = co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
+                              icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
 
-        auto tf_result = co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
-                                      icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
-
-        if (tf_result.has_value()) {
-          geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
-          /// Continue transforming the point cloud here ..
-        } else {
-          RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
-        }
-
-      });
+if (tf_result.has_value()) {
+  geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
+  /// Continue transforming the point cloud here ..
+} else {
+  RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
+}
 ```
+The `icey::TransformBuffer` is the usual combination of a subscription on `/tf`/`/tf_static` and a buffer bundled into a single object.
+
 See also the [TF lookup](../../../icey_examples/src/tf_lookup_async_await.cpp) example.
 
 The code that follows `co_await tf_buffer.lookup` will execute only after the transform is available (or a timeout occurs) -- the behavior is therefore the same to the regular `lookupTransform` function that you are used to, no surprises.
@@ -39,7 +32,7 @@ ICEY, on the other hand, allows you to write *synchronous-looking* code using as
 
 This difference is rather subtle, and shouldn't be too relevant if you're just a TF user.
 
-It rather shows how the underlying implementation becomes simpler by using coroutines instead having to create a separate executor and dealing with synchronization between these two executors. 
+Under the hood, the `icey::TransformBuffer` is simply a subscription on the TF topics: no extra executors or even nodes are spawned.
 
 ## Synchronizing with a transform
 
