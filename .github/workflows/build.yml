@@ -8,29 +8,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build_and_test_ros2:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        include:
-          - ros_distro: humble
-            docker_image: osrf/ros:humble-desktop
-          - ros_distro: jazzy
-            docker_image: osrf/ros:jazzy-desktop
-
+    container:
+      image: rostooling/setup-ros-docker:ubuntu-noble-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Build in ROS ${{ matrix.ros_distro }} container
-        uses: addnab/docker-run-action@v3
+      - name: Build and run tests
+        uses: ros-tooling/action-ros-ci@v0.4
         with:
-          image: ${{ matrix.docker_image }}
-          options: -v ${{ github.workspace }}:/workspace
-          run: |
-            set -e
-            cd /workspace
-            source /opt/ros/${{ matrix.ros_distro }}/setup.sh
-            apt install libboost-dev libfmt-dev
-            colcon build --symlink-install --event-handlers console_direct+
+          package-name: icey
+          target-ros2-distro: jazzy
