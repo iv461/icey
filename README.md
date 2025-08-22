@@ -31,13 +31,28 @@ The [icey_examples](icey_examples) package contains many different example nodes
 
 ## Features
 
+### Using ICEY 
+
+To use ICEY in an existing Node class, you simply add an `icey::Context` to it and initialize it in the constructor: 
+
+```cpp
+#include <icey/icey.hpp>
+
+class MyNode: public rclcpp::Node {
+
+  MyNode() : rclcpp::Node("my_node") {
+    icey_context_ = std::make_shared<icey::Context>(this);
+  }
+
+  std::shared_ptr<icey::Context> icey_context_;  
+};
+```
 ### Service calls using async/await
 
 Service calls can be awaited, a timeout has to be specified (no manual cleanup of pending requests required): 
 
 ```cpp
-icey::Context ctx(node.get());
-auto service = ctx.create_client<ExampleService>("set_bool_service");
+auto service = icey_context_->create_client<ExampleService>("set_bool_service");
 
 ctx.create_timer(1s)
     .then([this](size_t) -> icey::Promise<void> {
@@ -66,9 +81,9 @@ With ICEY, you can use *asynchronous* functions, i.e., coroutines, as callbacks 
 ```cpp
 /// Here using icey::Node that contains an icey::Context
 auto upstream_service_client =
-      node->icey().create_client<ExampleService>("set_bool_service_upstream");
+      icey_context_->create_client<ExampleService>("set_bool_service_upstream");
 
-node->icey().create_service<ExampleService>(
+icey_context_->create_service<ExampleService>(
       "set_bool_service", 
         /// An asynchronous callback (coroutine) returns a Promise<Response>:
         [&](auto request) -> icey::Promise<Response> {
@@ -94,9 +109,9 @@ See also the [Service server](icey_examples/src/service_server_async_await.cpp) 
 ## TF lookup using async/await
 
 ```cpp
-  icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
+  icey::TransformBuffer tf_buffer = icey_context_->create_transform_buffer();
 
-  node->icey()
+  icey_context_->
       // Use a coroutine (an asynchronous function) as a callback for the subscription:
       .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", [&tf_buffer,
              &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
@@ -121,8 +136,8 @@ See also the [TF Async/await example](icey_examples/src/tf_lookup_async_await.cp
 Synchronize an arbitrary number of topics easily (using the approximate time policy):
 
 ```cpp
-auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
-auto point_cloud = node->icey().create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
+auto camera_image = icey_context_->create_subscription<sensor_msgs::msg::Image>("camera");
+auto point_cloud = icey_context_->create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud");
 
   /// Synchronize by approximately matching the header time stamps (queue_size=100):
   icey::synchronize_approx_time(100, camera_image, point_cloud)
@@ -135,7 +150,7 @@ See also the [Synchronization](icey_examples/src/synchronization.cpp) example.
 Synchronizer topics with a transform:
 
 ```cpp
-  auto camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera");
+  auto camera_image = icey_context_->create_subscription<sensor_msgs::msg::Image>("camera");
   camera_image.synchronize_with_transform("map", 100ms)
       .then([](sensor_msgs::msg::Image::SharedPtr image,
                const geometry_msgs::msg::TransformStamped &transform_to_map) {
@@ -146,7 +161,7 @@ See also the [TF Synchronization](icey_examples/src/tf_sychronization.cpp) examp
 
 Detecting timeouts on topics: 
 ```cpp
-  node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
+  icey_context_->create_subscription<geometry_msgs::PoseStamped>("ego_pose")
     /// Expect that every pose message is at most 200ms old
     .timeout(200ms)
     /// "unwrap_or" handles calls the provided callback in case of error
@@ -164,7 +179,7 @@ Detecting timeouts on topics:
 Filter messages based on a predicate:
 
 ```cpp
-node->icey().create_subscription<geometry_msgs::PoseStamped>("ego_pose")
+icey_context_->create_subscription<geometry_msgs::PoseStamped>("ego_pose")
     /// Filter messages containing NaNs:
     .filter([](geometry_msgs::PoseStamped::SharedPtr pose_msg) -> bool {
         return !(std::isnan(pose_msg->pose.x) 
