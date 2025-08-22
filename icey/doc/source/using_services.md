@@ -44,7 +44,7 @@ See also the [Service client](../../../icey_examples/src/service_client_async_aw
 
 Another advantage of ICEY is that it requires you to specify a timeout for each service call. The regular ROS API does not provide this option, so it cannot automatically clean up requests that were never answered. Instead, users must manually clean up requests when a timeout occurs. Otherwise, a memory leak will occur.
 
-With ICEY you never need to do any kind of manual cleanup -- pending requests are cleaned up automatically if a timeout occurs.
+With ICEY you never need to do any kind of manual cleanup -- pending requests are cleaned up automatically if a timeout occurs. This implementation is similar to the one discussed in [4].
 
 ## Server 
 

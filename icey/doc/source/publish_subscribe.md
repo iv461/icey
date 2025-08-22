@@ -26,7 +26,7 @@ icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().cr
   rclcpp::SensorDataQoS());
 ```
 
-Key differences to regular ROS are: 
+### Key differences to regular ROS are: 
   - `create_subscription` returns a `Stream` (you can access the `rclcpp::Subscription` using `stream.subscription`)
   - Asynchronous functions, i.e. coroutines, can be used as callbacks
   - The lifetime of the subscription is bound to the lifetime of the node: This means, you don't need to store  the subscription as a member in the node class (i.e. do bookkeeping)
@@ -46,7 +46,7 @@ icey::PublisherStream<sensor_msgs::msg::Image> publisher = node->icey().create_p
 publisher.publish(message);
 ```
 
-Key differences to regular ROS are: 
+### Key differences to regular ROS are: 
   - The lifetime of the publisher is bound to the lifetime of the node: This means, you don’t need to store the publisher as a member in the node class (i.e. do bookkeeping)
   - `create_publisher` returns a `Stream`, (you can access the `rclcpp::Publisher` using `stream.publisher`)
   - If no quality of service is given, a uses the so called *system default*  

@@ -19,7 +19,6 @@ The [icey_examples](../../icey_examples) package contains many different example
 :caption: Basics
 :maxdepth: 2
 
-getting_started
 first_icey_node
 publish_subscribe
 timers
