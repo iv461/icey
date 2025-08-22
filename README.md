@@ -27,7 +27,7 @@ The [icey_examples](icey_examples) package contains many different example nodes
 
 ## Documentation 
 
-[iv461.github.io/icey](iv461.github.io/icey) 
+[https://iv461.github.io/icey](https://iv461.github.io/icey) 
 
 ## Features
 
