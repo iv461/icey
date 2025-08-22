@@ -222,12 +222,15 @@ struct Weak {
 /// A subscription + buffer for transforms that allows for asynchronous lookups and to subscribe on a
 /// single transform between two coordinate systems. It is otherwise implemented similarly to the
 /// tf2_ros::TransformListener but offering a well-developed asynchronous API. 
-//  It works like this: Every time a new message is received on /tf, we check whether a
+///  It works like this: Every time a new message is received on /tf, we check whether a
 /// It subscribes on the topic /tf and listens for relevant transforms (i.e. ones we subscribed to or the ones we requested a lookup). If any relevant transform was received, it notifies via a callback. 
-/// It is therefore an asynchronous interface to TF, similar to the tf2_ros::AsyncBuffer. However, we do not use the
-/// tf2_ros::AsyncBuffer::waitFroTransform because it has a bug: We cannot make another lookup
-/// in the callback of a lookup (it holds a mutex locked while calling the user callback, which is simply a wrong thing to do)  
-/// This class is used to implement the TransformSubscriptionStream and the TransformBuffer.
+/// It is therefore an asynchronous interface to TF.
+/// 
+/// Why not using `tf2_ros::AsyncBuffer` ? Due to multiple issues with it. (1) It uses 
+/// the `std::future/std::promise` primitives that are effectively useless. (2) tf2_ros::AsyncBuffer::waitFroTransform has a bug: We cannot make another lookup
+/// in the callback of a lookup (it holds a (non-reentrant) mutex locked while calling the user callback), making it impossible to chain asynchronous operations.   
+///
+/// @sa This class is used to implement the `TransformSubscriptionStream` and the `TransformBuffer`.
 struct TFListener {
   using TransformMsg = geometry_msgs::msg::TransformStamped;
   using TransformsMsg = tf2_msgs::msg::TFMessage::ConstSharedPtr;
@@ -263,9 +266,10 @@ struct TFListener {
 
   explicit TFListener(NodeBase &node) : node_(node) { init(); }
 
-  /// @brief Subscribe to a single transform between two coordinate systems target_frame and source_frame: Every time a message arrives on /tf or /tf_static, either the 
-  /// the on_transform or on_error callback is called, depending on whether the lookup succeeds. 
-  // The on_transform callback is called only if the transform between these two coordinate systems changed.
+  /// @brief Subscribe to a single transform between two coordinate systems. Every time this transform 
+  /// changes, the `on_transform` callback function is called. More precisely, every time a message arrives on the `/tf` or `/tf_static` topic, 
+  /// a lookup is attempted. If the lookup fails, `on_error` is called. If the lookup succeeds and if the looked up transform is 
+  // different to the previously emitted one, the `on_transform` callback is called.
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
     requests_.emplace(
@@ -300,7 +304,7 @@ struct TFListener {
   /// @param timeout
   /// @param on_transform The callback that is called with the requested transform after it becomes available
   /// @param on_error The callback that is called if a timeout occurs.
-  /// @return The "handle", identifying this request. You can use this handle to call `cancel_request` if you do not want that the given callbacks are called anymore.
+  /// @return The "handle", identifying this request. You can use this handle to call `cancel_request` if you want to cancel the request.
   /// @warning Currently the timeout is measured with wall-time, i.e. does not consider sim-time due to the limitation of ROS 2 Humble only offering wall-timers
   RequestHandle async_lookup(const std::string &target_frame, const std::string &source_frame,
                              Time time, const Duration &timeout, OnTransform on_transform,
@@ -1694,8 +1698,7 @@ struct TransformSubscriptionStream : public Stream<geometry_msgs::msg::Transform
 };
 
 /// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given
-/// point in time. It is similar to the tf2_ros::AsyncBufferInterface, but returns awaitable
-/// futures.
+/// point in time.
 struct TransformBuffer {
   TransformBuffer() = default;
   TransformBuffer(Context &context) : tf_listener(context.add_tf_listener_if_needed()) {}
@@ -1936,9 +1939,11 @@ struct ServiceStream : public Stream<std::tuple<std::shared_ptr<rmw_request_id_t
   }
 };
 
-/// A service client. It can we called asynchronously and then it returns a Promise that can be
-/// awaited. It is not tracked by the context but instead the service client is unregistered from
-/// ROS class goes out of scope.
+/*! A service client offering an async/await API. Service calls happen asynchronously and return a promise that can be
+awaited using co_await. This allows synchronization with other operations, enabling you to effectively perform synchronous service calls.
+We do not offer a function to wait until the service is available for two reasons: (1) there is no asynchronous function available at the rclcpp layer (re-implementation using asynchronous graph change notification would be required), and (2) ROS does not seem to optimize RPC calls by keeping connections open; therefore, it does not seem beneficial to differentiate whether the server is available or not.
+Note that ServiceClient objects are not bookkept; you must store them inside your node class. Service clients do not perform any background tasks, so storing them is unnecessary.
+*/  
 template <class ServiceT>
 struct ServiceClient : public ServiceClientImpl<ServiceT> {
   using Base = ServiceClientImpl<ServiceT>;
@@ -1961,7 +1966,7 @@ struct ServiceClient : public ServiceClientImpl<ServiceT> {
   Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
   \param request the request
   \param timeout The timeout for the service call, both for service discovery and the actual call.
-  \returns A future that can be awaited to obtain the response or an error. Possible errors are "TIMEOUT", "SERVICE_UNAVAILABLE" or "INTERRUPTED".
+  \returns A promise that can be awaited to obtain the response or an error. Possible errors are "TIMEOUT", "SERVICE_UNAVAILABLE" or "INTERRUPTED".
   \note The 
   Example usage:
   \verbatim
@@ -2045,11 +2050,12 @@ struct SimpleFilterAdapter
     : public Stream<typename Message::SharedPtr, Nothing, SimpleFilterAdapterImpl<Message>> {
   using Base = Stream<typename Message::SharedPtr, Nothing, SimpleFilterAdapterImpl<Message>>;
   /// Constructs a new instance and connects this Stream to the `message_filters::SimpleFilter` so
-  /// that `signalMessage` is called once a value is received.
+  /// that `signalMessage` is called every time this `icey::Stream` receives a value.
   SimpleFilterAdapter(Context &context) : Base(context) {
     this->impl()->register_handler([impl = this->impl()](const auto &new_state) {
       using Event = message_filters::MessageEvent<const Message>;
-      impl->signalMessage(Event(new_state.value()));
+      if(new_state.has_value())
+        impl->signalMessage(Event(new_state.value()));
     });
   }
 };

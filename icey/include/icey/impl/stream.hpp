@@ -22,7 +22,8 @@ struct Nothing {};
 /// will generally use in the following to recognize (unspecialized) class templates.
 struct ResultTag {};
 /// A Result-type is a sum type that can either hold Value or Error, or, different
-/// to Rust, none. It is used as the state for the Stream
+/// to Rust, none. It is used as the state for the Stream.
+/// Note that this Result type is  API-compatible with `std::expected` (C++23), so a change is easily possible once we target C++23.
 template <class _Value, class _Error>
 struct Result : private std::variant<std::monostate, _Value, _Error>, public ResultTag {
   using Value = _Value;
