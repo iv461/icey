@@ -28,6 +28,7 @@ public:
 };
 
 int main(int argc, char** argv) {
-  icey::spin(icey::create_node<MyNode>(argc, argv, "icey_class_based_node_example"));
-  return 0;
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<MyNode>("icey_class_based_node_example");
+  rclcpp::spin(node);
 }

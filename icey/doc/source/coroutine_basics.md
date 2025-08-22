@@ -23,7 +23,8 @@ icey::Promise<void> a_coroutine(icey::Context &ctx) {
 }
 
 int main(int argc, char **argv) {
-    auto node = icey::create_node(argc, argv, "icey_coroutine_example");
+    rclcpp::init(argc, arv);
+    auto node = std::make_shared<icey::Node>("icey_coroutine_example");
     std::cout << "1. Before calling the coroutine" << std::endl;
     a_coroutine(node->icey());
     std::cout << "5. After calling the coroutine" << std::endl;

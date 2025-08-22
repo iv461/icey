@@ -38,6 +38,7 @@ public:
 };
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_example");
-  icey::spin(node);
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<MyNode>("icey_parameters_struct_example");
+  rclcpp::spin(node);
 }

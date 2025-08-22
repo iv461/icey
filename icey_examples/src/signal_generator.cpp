@@ -10,7 +10,8 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_signal_generator_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_signal_generator_example");
 
   auto frequency = node->icey().declare_parameter<double>("frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2., icey::Interval(0., 10.));
@@ -43,5 +44,5 @@ int main(int argc, char **argv) {
       })
       .publish("sine_signal");
 
-  icey::spin(node);
+  rclcpp::spin(node);
 }

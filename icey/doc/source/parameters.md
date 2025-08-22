@@ -54,7 +54,8 @@ public:
   NodeParameters params_;
 };
 
-auto node = icey::create_node<MyNode>(argc, argv, "icey_parameters_struct_example");
+rclcpp::init(argc, argv);
+auto node = std::make_shared<MyNode>("icey_parameters_struct_example");
 ```
 
 See also the [parameter structs example](../../../icey_examples/src/parameters_struct.cpp).

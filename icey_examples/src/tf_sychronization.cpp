@@ -17,7 +17,8 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_tf_synchronization_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_tf_synchronization_example");
 
   /// Synchronize with a transform: This will yield the message and the transform from the
   /// child_frame_id of the header message and the given target_frame ("map") at the time of the
@@ -40,5 +41,5 @@ int main(int argc, char **argv) {
                   << "\nTransform matrix is:\n" << tf_mat);
       });
 
-  icey::spin(node);
+  rclcpp::spin(node);
 }

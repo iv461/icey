@@ -1725,12 +1725,20 @@ struct TransformBuffer {
     });
   }
 
-  /// Overload for different time types.
-  /*Promise<geometry_msgs::msg::TransformStamped, std::string>
-  lookup(const std::string &target_frame, const std::string &source_frame, const auto &time,
-    const Duration &timeout) { return lookup(target_frame, source_frame,
-  icey::rclcpp_to_chrono(time), timeout); }
-  */
+  /// @brief Same as `lookup`, but accepts a ROS time point
+  ///
+  /// @param target_frame
+  /// @param source_frame
+  /// @param time At which time to get the transform
+  /// @param timeout How long to wait for the transform
+  /// @return A future that resolves with the transform or with an error if a timeout occurs
+  Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame, 
+                                                                    const std::string &source_frame, 
+                                                                    const rclcpp::Time &time,
+                                                                    const Duration &timeout) { 
+      return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout); 
+  }
+  
   Weak<TFListener> tf_listener;
 };
 
@@ -2386,38 +2394,5 @@ using LifecycleNode = NodeWithIceyContext<rclcpp_lifecycle::LifecycleNode>;
 /// likely to change in the future
 template <class Value>
 using Parameter = ParameterStream<Value>;
-
-/// Start spinning either a Node or a LifeCycleNode. Calls `rclcpp::shutdown()` at the end so you do
-/// not have to do it.
-template <class NodeType>
-static void spin(NodeType node) {
-  /// We use single-threaded executor because the MT one can starve due to a bug
-  rclcpp::executors::SingleThreadedExecutor executor;
-  executor.add_node(node->get_node_base_interface());
-  executor.spin();
-  rclcpp::shutdown();
-}
-
-[[maybe_unused]] static void spin_nodes(const std::vector<std::shared_ptr<Node>> &nodes) {
-  rclcpp::executors::SingleThreadedExecutor executor;
-  /// This is how nodes should be composed according to ROS guru wjwwood:
-  /// https://robotics.stackexchange.com/a/89767. He references
-  /// https://github.com/ros2/demos/blob/master/composition/src/manual_composition.cpp
-  for (auto &node : nodes) {
-    executor.add_node(node->get_node_base_interface());
-  }
-  executor.spin();
-  rclcpp::shutdown();
-}
-
-/// Creates a node by simply calling `std::make_shared`, but it additionally calls `rclcpp::init` if
-/// not done already, so that you don't have to do it.
-template <class NodeType = Node>
-static auto create_node(int argc, char **argv, const std::string &node_name) {
-  if (!rclcpp::contexts::get_global_default_context()
-           ->is_valid())  /// Create a context if it is the first spawn
-    rclcpp::init(argc, argv);
-  return std::make_shared<NodeType>(node_name);
-}
 
 }  // namespace icey

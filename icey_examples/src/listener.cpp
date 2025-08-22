@@ -9,11 +9,12 @@
 #include "std_msgs/msg/string.hpp"
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_listener_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_listener_example");
   
   node->icey().create_subscription<std_msgs::msg::String>("my_string", 
     [&](std_msgs::msg::String::SharedPtr msg) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got value: " << msg->data);
      });
-  icey::spin(node);
+  rclcpp::spin(node);
 }

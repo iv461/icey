@@ -44,7 +44,11 @@ icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
 }
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_tf_pub_example");
+  rclcpp::init(argc, argv);
+
+  auto node = std::make_shared<icey::Node>("icey_tf_pub_example");
   run(node);
-  icey::spin(node);
+
+  rclcpp::spin(node);
+
 }

@@ -17,7 +17,8 @@
 using namespace std::chrono_literals;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_image_transport_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_image_transport_example");
   
   /// Create an image_transport::CameraSubscription. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
@@ -48,5 +49,5 @@ int main(int argc, char **argv) {
       /// And now publish again using image_transport, creating an image_transport::Publisher:
       .publish<icey::ImageTransportPublisher>("camera_left_painted", rclcpp::SensorDataQoS());
 
-  icey::spin(node);
+  rclcpp::spin(node);
 }

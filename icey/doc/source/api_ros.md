@@ -8,11 +8,6 @@ The ICEY context becomes available by calling `node->icey()` and is your new Nod
 ```{doxygentypedef} icey::LifecycleNode
 ```
 
-```{doxygenfunction} icey::create_node
-```
-
-```{doxygenfunction} icey::spin
-```
 
 ```{doxygenclass} icey::NodeWithIceyContext
 ```

@@ -13,7 +13,8 @@
 using ExampleService = std_srvs::srv::SetBool;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_service_server_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_service_server_example");
   auto service_name =
       node->icey().declare_parameter<std::string>("service_name", "set_bool_service1");
 
@@ -34,5 +35,5 @@ int main(int argc, char **argv) {
   node->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Started services " << service_name.value());
-  icey::spin(node);
+  rclcpp::spin(node);
 }

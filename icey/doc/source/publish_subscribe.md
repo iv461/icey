@@ -18,7 +18,7 @@ Subscriptions are created using `node->icey().create_subscription<Message>(<topi
 Example: 
 
 ```cpp
-auto node = icey::create_node(argc, argv, "yolo_node");
+auto node = std::make_shared<icey::Node>("yolo_node");
 icey::SubscriptionStream<sensor_msgs::msg::Image> camera_image = node->icey().create_subscription<sensor_msgs::msg::Image>("camera", 
   [](sensor_msgs::msg::Image::SharedPtr msg) {
       /// Consume camera message here ..
@@ -40,7 +40,7 @@ Publishers are created using `node->icey().create_publisher<Message>(<topic-name
 Example: 
 
 ```cpp
-auto node = icey::create_node(argc, argv, "yolo_node");
+auto node = std::make_shared<icey::Node>("yolo_node");
 icey::PublisherStream<sensor_msgs::msg::Image> publisher = node->icey().create_publisher<sensor_msgs::msg::Image>("camera", rclcpp::SensorDataQoS());
 
 publisher.publish(message);

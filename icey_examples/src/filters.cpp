@@ -27,7 +27,8 @@ auto timer_signal = icey.create_timer(period_time);
           #include "std_msgs/msg/int32.hpp"
           
           int main(int argc, char **argv) {
-            auto node = icey::create_node(argc, argv, "signal_generator");
+            rclcpp::init(argc, argv);
+            auto node = std::make_shared<icey::Node>("signal_generator");
             auto &icey = node->icey();
           
             auto map_base_link_tf = icey.create_transform_subscription("map", "base_link");
@@ -60,5 +61,5 @@ auto timer_signal = icey.create_timer(period_time);
             /// And directly publish this signal:
             map_base_link_tf.publish("map_to_base_link_transform");
           
-            icey::spin(node);  
+            rclcpp::spin(node);  
           }

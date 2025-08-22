@@ -9,7 +9,8 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_tf_subscription_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_tf_subscription_example");
 
   node->icey()
       .create_transform_subscription("map", "base_link")
@@ -21,5 +22,5 @@ int main(int argc, char **argv) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Received a new transform:\n" << tf_mat);
       });
 
-  icey::spin(node);
+  rclcpp::spin(node);
 }

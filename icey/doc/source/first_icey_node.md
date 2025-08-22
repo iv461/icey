@@ -3,8 +3,16 @@
 
 In the following, we will assume you are already familiar writing ROS nodes in C++ (See [Official Client library Tutorials](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries.html)).
 
+## Using ICEY in an existing node (gradual adoption)
+
+TODO 
+
+
+## Convenience classes: `icey::Node` and `icey::LifecycleNode`
+
+TODO rewrite ! 
+
 The ICEY library has two node classes: `icey::Node` and an `icey::LifecycleNode`. 
-To create new nodes, you use the `icey::create_node<NodeType>(argc, argv, <node_name>)` function (default `NodeType` is `icey::Node`). This function simply creates a node with `std::make_shared<NodeType>`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
 
 ## Signal generator example
 
@@ -14,7 +22,8 @@ The signal generator example implements a sine signal generator.
 #include <icey/icey.hpp>
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "sine_generator");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("sine_generator");
 
   node->icey().create_timer(100ms)
     .then([](size_t ticks) {
@@ -29,7 +38,7 @@ int main(int argc, char **argv) {
     })
     /// The returned value is published on the topic "sine_signal" after the timer ticked.
     .publish("sine_signal");
-    icey::spin(node);
+    rclcpp::spin(node);
 }
 ```
 
@@ -50,20 +59,8 @@ The ICEY library has two node classes: `icey::Node` and `icey::LifecycleNode`.
 The `icey::Node` is a subclass of an `rclcpp::Node`, so that you can drop-in replace you existing Node and gradually adopt ICEY's features.
 ICEY offers all it's features through the `icey::Context` interface, accessed through `node->icey()`.
 
-### Creating ICEY-nodes 
-
-To create new ICEY-nodes, you use the `icey::create_node<NodeType>(argc, argv, <node_name>)` function (default `NodeType` is `icey::Node`). This function simply creates a node with `std::make_shared<NodeType>`, but calls `rclcpp::init` beforehand if needed, so that you don't have to do it.
-This means, you do not have to use the `icey::create_node` function, you can instead create a node like you would create a regular `rclcpp::Node`.
-
-Since the ICEY-nodes are just subclasses of regular nodes, you can also build them into shared libraries and load them at runtime, i.e. use them as *components* with the `RCLCPP_COMPONENTS_REGISTER_NODE`-macro.
-
-### Spinning ICEY-nodes 
-
-To spin ICEY-nodes, you use the `icey::spin_node(<node>)` function. This function simply spins the node in a `rclcpp::SingleThreadedExecutor`, but additionally calls `rclcpp::shutdown` at the end, so that you don't have to do it. 
-This means, you do not have to use the `icey::spin_node(<node>)` function, you can instead spin it manually. 
-
 ```{warning}
-ICEY-nodes can only be used with a single-threaded executor.
+ICEY-nodes can currently only be used with a single-threaded executor.
 ```
 
 

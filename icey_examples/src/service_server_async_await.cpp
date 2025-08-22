@@ -16,7 +16,8 @@ using Request = ExampleService::Request::SharedPtr;
 using Response = ExampleService::Response::SharedPtr;
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node(argc, argv, "icey_service_service_async_await_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<icey::Node>("icey_service_service_async_await_example");
 
   /// Create a service client for an upstream service that is actually capable of answering the
   /// request.
@@ -49,5 +50,5 @@ int main(int argc, char **argv) {
       });
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Created service server, waiting for requests ... ");
-  icey::spin(node);
+  rclcpp::spin(node);
 }

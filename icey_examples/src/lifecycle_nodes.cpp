@@ -53,8 +53,9 @@ public:
 };
 
 int main(int argc, char **argv) {
-  auto node = icey::create_node<ExampleLifecycleNode>(argc, argv, "icey_lifecycle_node_example");
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<ExampleLifecycleNode>("icey_lifecycle_node_example");
   node->run();
-  icey::spin(node);
+  //rclcpp::spin(node);
   return 0;
 }

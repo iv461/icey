@@ -46,7 +46,6 @@ ament_auto_add_executable(coroutine_example src/coroutine_example.cpp)
 
 
 ament_auto_add_executable(listener_example src/listener.cpp)
-ament_auto_add_executable(multi_node_example src/multi_node.cpp)
 ament_auto_add_executable(synchronization_example src/synchronization.cpp)
 
 
