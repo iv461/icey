@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -16,11 +16,11 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-/// Here we initially the icey::Context manually. Alternatively, you can use the icey::Node that is like a regular rclcpp::Node 
-/// but initializes the icey::Context for you.
+/// Here we initially the icey::Context manually. Alternatively, you can use the icey::Node that is
+/// like a regular rclcpp::Node but initializes the icey::Context for you.
 class MyNode : public rclcpp::Node {
 public:
-  explicit MyNode(const std::string& name) : rclcpp::Node(name) {
+  explicit MyNode(const std::string &name) : rclcpp::Node(name) {
     this->icey_context_ = std::make_shared<icey::Context>(this);
   }
 
@@ -31,7 +31,7 @@ public:
     /// Create the service client beforehand
     auto service = icey().create_client<ExampleService>("set_bool_service");
     auto timer = icey().create_timer(1s);
-    
+
     /// Main spinning loop
     while (true) {
       /// First, await until it's time to make the request:
@@ -61,7 +61,7 @@ public:
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<MyNode>("icey_service_client_async_await_exampl");
-  
+
   node->run();
   rclcpp::spin(node);
   rclcpp::shutdown();

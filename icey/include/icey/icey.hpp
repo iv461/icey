@@ -603,7 +603,7 @@ public:
 
   /// Constructs the Context from the given node pointer. Supports both rclcpp::Node as well as a
   /// lifecycle node.
-  /// @param node the node 
+  /// @param node the node
   /// @tparam NodeT rclcpp::Node or rclcpp_lifecycle::LifecycleNode
   template <class NodeT>
   explicit Context(NodeT *node) : NodeBase(node) {}
@@ -684,8 +684,8 @@ public:
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
 
-  /// Create a subscription stream and registers the given callback. The callback can be either synchronous or asynchronous.
-  /// Works otherwise the same as [rclcpp::Node::create_subscription].
+  /// Create a subscription stream and registers the given callback. The callback can be either
+  /// synchronous or asynchronous. Works otherwise the same as [rclcpp::Node::create_subscription].
   template <class MessageT, class Callback>
   SubscriptionStream<MessageT> create_subscription(
       const std::string &name, Callback &&cb, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
@@ -728,10 +728,10 @@ public:
   TimerStream create_timer(const Duration &period, Callback &&cb, bool is_one_off_timer = false);
 
   /// Create a service server stream. One a request is received, the provided callback will be
-  /// called. This callback receives the request and returns a shared pointer to the response. If it returns a nullptr, then no response is made. 
-  /// The callback can be either synchronous (a regular function) or asynchronous, i.e. a
-  /// coroutine. The callbacks returns the response. Works otherwise the same as
-  /// [rclcpp::Node::create_service].
+  /// called. This callback receives the request and returns a shared pointer to the response. If it
+  /// returns a nullptr, then no response is made. The callback can be either synchronous (a regular
+  /// function) or asynchronous, i.e. a coroutine. The callbacks returns the response. Works
+  /// otherwise the same as [rclcpp::Node::create_service].
   template <class ServiceT, class Callback>
   ServiceStream<ServiceT> create_service(const std::string &service_name, Callback &&callback,
                                          const rclcpp::QoS &qos = rclcpp::ServicesQoS());
@@ -931,8 +931,8 @@ public:
     cancel_ = h(*this);
   }
 
-  PromiseBase(const PromiseBase&) = delete;
-  PromiseBase(PromiseBase&&) = delete;
+  PromiseBase(const PromiseBase &) = delete;
+  PromiseBase(PromiseBase &&) = delete;
   PromiseBase &operator=(const Self &) = delete;
   PromiseBase &operator=(Self &&) = delete;
 
@@ -978,7 +978,7 @@ public:
     };
     return Awaiter{*this};
   }
-  
+
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }
   bool has_error() const { return state_.has_error(); }
@@ -2387,7 +2387,8 @@ TimerStream Context::create_timer(const Duration &period, Callback &&cb, bool is
 template <class ServiceT, class Callback>
 ServiceStream<ServiceT> Context::create_service(const std::string &service_name,
                                                 Callback &&callback, const rclcpp::QoS &qos) {
-  return create_stream<ServiceStream<ServiceT>>(service_name, std::forward<Callback>(callback), qos);
+  return create_stream<ServiceStream<ServiceT>>(service_name, std::forward<Callback>(callback),
+                                                qos);
 }
 
 template <class ServiceT>

@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -23,7 +23,8 @@ struct Nothing {};
 struct ResultTag {};
 /// A Result-type is a sum type that can either hold Value or Error, or, different
 /// to Rust, none. It is used as the state for the Stream.
-/// Note that this Result type is  API-compatible with `std::expected` (C++23), so a change is easily possible once we target C++23.
+/// Note that this Result type is  API-compatible with `std::expected` (C++23), so a change is
+/// easily possible once we target C++23.
 template <class _Value, class _Error>
 struct Result : private std::variant<std::monostate, _Value, _Error>, public ResultTag {
   using Value = _Value;

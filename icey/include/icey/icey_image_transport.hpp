@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -40,12 +40,12 @@ struct ImageTransportSubscription
   using Base = Stream<sensor_msgs::msg::Image::ConstSharedPtr,
                       image_transport::TransportLoadException, ImageTransportSubscriptionImpl>;
   ImageTransportSubscription(Context &context, const std::string &base_topic_name,
-                           const std::string &transport, const rclcpp::QoS qos,
-                           const rclcpp::SubscriptionOptions &options = {})
+                             const std::string &transport, const rclcpp::QoS qos,
+                             const rclcpp::SubscriptionOptions &options = {})
       : Base(context) {
     assert_is_not_lifecycle_node(
-        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
-                /// lifecycle nodes, so we can only assert this at runtime
+        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes
+                   /// and lifecycle nodes, so we can only assert this at runtime
     const auto cb = [impl = this->impl()](sensor_msgs::msg::Image::ConstSharedPtr image) {
       impl->put_value(image);
     };
@@ -62,12 +62,11 @@ struct ImageTransportSubscription
 struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPtr> {
   using Base = Stream<sensor_msgs::msg::Image::SharedPtr>;
   ImageTransportPublisher(Context &context, const std::string &base_topic_name,
-                          const rclcpp::QoS qos,
-                          const rclcpp::PublisherOptions & /*options*/ = {})
+                          const rclcpp::QoS qos, const rclcpp::PublisherOptions & /*options*/ = {})
       : Base(context) {
     assert_is_not_lifecycle_node(
-        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
-                /// lifecycle nodes, so we can only assert this at runtime
+        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes
+                   /// and lifecycle nodes, so we can only assert this at runtime
     image_transport::Publisher publisher = image_transport::create_publisher(
         &context.node_base().as_node(), base_topic_name, qos.get_rmw_qos_profile());
     this->impl()->register_handler([publisher](const auto &new_state) {
@@ -90,7 +89,7 @@ struct CameraSubscription
                                  sensor_msgs::msg::CameraInfo::ConstSharedPtr>,
                       image_transport::TransportLoadException, CameraSubscriptionImpl>;
   CameraSubscription(Context &context, const std::string &base_topic_name,
-                   const std::string &transport, const rclcpp::QoS qos)
+                     const std::string &transport, const rclcpp::QoS qos)
       : Base(context) {
     const auto cb = [impl = this->impl()](
                         sensor_msgs::msg::Image::ConstSharedPtr image,
@@ -98,11 +97,12 @@ struct CameraSubscription
       impl->put_value(std::make_tuple(image, camera_info));
     };
     assert_is_not_lifecycle_node(
-        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
-                /// lifecycle nodes, so we can only assert this at runtime
+        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes
+                   /// and lifecycle nodes, so we can only assert this at runtime
     try {
       this->impl()->subscription = image_transport::create_camera_subscription(
-          &context.node_base().as_node(), base_topic_name, cb, transport, qos.get_rmw_qos_profile());
+          &context.node_base().as_node(), base_topic_name, cb, transport,
+          qos.get_rmw_qos_profile());
     } catch (const image_transport::TransportLoadException &exception) {
       this->impl()->put_error(exception);
     }
@@ -117,8 +117,8 @@ struct CameraPublisher
   CameraPublisher(Context &context, const std::string &base_topic_name, const rclcpp::QoS qos)
       : Base(context) {
     assert_is_not_lifecycle_node(
-        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes and
-                /// lifecycle nodes, so we can only assert this at runtime
+        context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes
+                   /// and lifecycle nodes, so we can only assert this at runtime
     image_transport::CameraPublisher publisher = image_transport::create_camera_publisher(
         &context.node_base().as_node(), base_topic_name, qos.get_rmw_qos_profile());
     this->impl()->register_handler([publisher](const auto &new_state) {

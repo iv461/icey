@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -27,7 +27,7 @@ icey::Promise<void> talk(std::shared_ptr<icey::Node> &node) {
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<icey::Node>("icey_talker_async_await_example");
-  
+
   talk(node);
 
   rclcpp::spin(node);

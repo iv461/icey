@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -35,6 +35,6 @@ int main(int argc, char **argv) {
   /// We can simply pass here the parameter so that the frame_id of the published message
   // gets updated dynamically when the parameter changes.
   create_yaw_rotation(*node, base_frame_param).publish_transform();
-  
+
   rclcpp::spin(node);
 }

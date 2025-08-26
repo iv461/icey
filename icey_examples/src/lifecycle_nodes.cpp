@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -12,15 +12,16 @@
 
 using namespace std::chrono_literals;
 
-/// This example shows how the icey::Context can be initialized using an rclcpp_lifecycle::LifecycleNode as well. 
-/// You can also use the convenience class icey::LifecycleNode.
+/// This example shows how the icey::Context can be initialized using an
+/// rclcpp_lifecycle::LifecycleNode as well. You can also use the convenience class
+/// icey::LifecycleNode.
 class ExampleLifecycleNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   using Base = rclcpp_lifecycle::LifecycleNode;
 
-  ExampleLifecycleNode(std::string name) : Base(name) { 
+  ExampleLifecycleNode(std::string name) : Base(name) {
     icey_context_ = std::make_shared<icey::Context>(this);
-    timer_ = icey_context_->create_timer(100ms); 
+    timer_ = icey_context_->create_timer(100ms);
   }
 
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_activate(
