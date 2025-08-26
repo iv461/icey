@@ -46,8 +46,8 @@ struct Result : private std::variant<std::monostate, _Value, _Error>, public Res
   const Value &value() const { return std::get<1>(*this); }
   const Error &error() const { return std::get<2>(*this); }
   void set_none() { this->template emplace<0>(std::monostate{}); }
-  void set_ok(const Value &x) { this->template emplace<1>(x); }
-  void set_err(const Error &x) { this->template emplace<2>(x); }
+  void set_value(const Value &x) { this->template emplace<1>(x); }
+  void set_error(const Error &x) { this->template emplace<2>(x); }
 
   auto get() const {
     if constexpr (std::is_same_v<Error, Nothing>) {
@@ -239,10 +239,10 @@ public:
   void set_none() { state_.set_none(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
-  void set_value(const Value &x) { state_.set_ok(x); }
+  void set_value(const Value &x) { state_.set_value(x); }
 
   /// Sets the state to hold an error, but does not notify about this state change.
-  void set_error(const Error &x) { state_.set_err(x); }
+  void set_error(const Error &x) { state_.set_error(x); }
   void set_state(const State &x) { state_ = x; }
 
   /// Returns the current state and sets it to none.

@@ -113,11 +113,11 @@ See also the [Service server](icey_examples/src/service_server_async_await.cpp) 
 
   icey_context_->
       // Use a coroutine (an asynchronous function) as a callback for the subscription:
-      .create_subscription<sensor_msgs::msg::PointCloud2>("/icey/test_pcl", [&tf_buffer,
+      .create_subscription<sensor_msgs::msg::PointCloud2>("point_cloud", [&tf_buffer,
              &node](sensor_msgs::msg::PointCloud2::SharedPtr point_cloud) -> icey::Promise<void> {
         icey::Result<geometry_msgs::msg::TransformStamped, std::string> tf_result =
             co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
-                                      icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+                                      point_cloud->header.stamp, 200ms);
 
         if (tf_result.has_value()) {
           geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
@@ -207,7 +207,6 @@ Note that ROS 2 Humble is as of now (April 2025) already forward compatible with
 Just clone this repository to your workspace, install dependencies and compile: 
 
 ```sh
-git clone https://github.com/DriverlessMobility/icey.git
 sudo apt install libboost-dev libfmt-dev
 MAKEFLAGS="-j4" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
@@ -247,5 +246,5 @@ However, there are a few minor limitations:
 <img src="img/EN_Funded_by_the_European_Union_RGB_POS.png" width="350">
 
 
-This project has received research funding from the Bundesministerium für Wirtschaft und Energie, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
+This project has received research funding from the german *Bundesministerium für Wirtschaft und Energie*, during the project *RDV - Real Drive Validation - Erweiterung der Überprüfbarkeit von Continuous Software Integration in Kommunikation mit Fahrzeugen im Feld, Teilvorhaben Sicherheitsnachweis im Entwicklungszyklus für hochautomatisierte Fahrzeuge*, 
 grant number 19A21051K.

@@ -12,11 +12,16 @@
 
 using namespace std::chrono_literals;
 
-class ExampleLifecycleNode : public icey::LifecycleNode {
+/// This example shows how the icey::Context can be initialized using an rclcpp_lifecycle::LifecycleNode as well. 
+/// You can also use the convenience class icey::LifecycleNode.
+class ExampleLifecycleNode : public rclcpp_lifecycle::LifecycleNode {
 public:
-  using Base = icey::LifecycleNode;
+  using Base = rclcpp_lifecycle::LifecycleNode;
 
-  ExampleLifecycleNode(std::string name) : Base(name) { timer_ = icey().create_timer(100ms); }
+  ExampleLifecycleNode(std::string name) : Base(name) { 
+    icey_context_ = std::make_shared<icey::Context>(this);
+    timer_ = icey_context_->create_timer(100ms); 
+  }
 
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn on_activate(
       const rclcpp_lifecycle::State &state) {
@@ -50,12 +55,12 @@ public:
 
   /// We store the timer here only to be able to cancel it
   icey::TimerStream timer_;
+  std::shared_ptr<icey::Context> icey_context_;
 };
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<ExampleLifecycleNode>("icey_lifecycle_node_example");
   node->run();
-  //rclcpp::spin(node);
   return 0;
 }
