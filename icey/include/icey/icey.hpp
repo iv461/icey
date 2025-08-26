@@ -1020,16 +1020,21 @@ public:
   /// and thus simply be called in the destructor.
   Cancel cancel_;
 
-  std::coroutine_handle<> continuation_;
+  std::coroutine_handle<> continuation_{nullptr};
   std::exception_ptr exception_ptr_{nullptr};
 };
 
-/// The whole point of this PromiseBase and Promise is the design of the operator co_return that
-/// requires two differently named operators, depending on whether a Promise holds a value or not
-/// (is the void-version) first one is called return_value, second one is called return_void: But
-/// choosing between return_value and return_void does not work with SFINAE (Reference:
-/// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019) So this is the non-void
-/// version:
+/// A Promise is used in ICEY for async/await. It is returned from asynchronous operations such as a
+/// service calls or TF lookups. By calling co_await on a Promise, an icey::Result is returned.
+///
+/// Dev doc: The whole point of this PromiseBase and Promise is the weird design of the promise
+/// interface that is required for C++20 coroutines: The operator co_return that isn't actually
+/// called operator co_return consists of two differently named functions, return_value and
+/// return_void. Only one of these two functions must be declared, depending on whether a Promise
+/// holds a value or not, i.e. is the void-version. If you now think "can't I just choose between
+/// return_value and return_void using SFINAE?", nope this does not work (Reference:
+/// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019) So we need to use different
+/// classes and partial specialization.
 template <class _Value, class _Error = Nothing>
 class Promise : public PromiseBase<_Value, _Error> {
 public:
@@ -1055,7 +1060,8 @@ public:
   }
 };
 
-/// And this is the void version:
+/// Specialization so that Promise<void> works. (Nothing interesting here, just C++ 20 coroutine
+/// specification being weird)
 template <>
 class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
