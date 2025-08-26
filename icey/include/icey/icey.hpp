@@ -601,34 +601,12 @@ public:
   template <class V>
   using GetValue = std::function<V()>;
 
+  /// Constructs the Context from the given node pointer. Supports both rclcpp::Node as well as a
+  /// lifecycle node.
+  /// @param node the node 
+  /// @tparam NodeT rclcpp::Node or rclcpp_lifecycle::LifecycleNode
   template <class NodeT>
   explicit Context(NodeT *node) : NodeBase(node) {}
-
-  /// Constructs a Context from NodeBase so that both a rclcpp::Node as well as a
-  /// lifecycle node are supported.
-  explicit Context(const NodeBase &node_base) : NodeBase(node_base) {}
-
-  /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
-  /// list of streams so that it does not go out of scope. It also sets the context.
-  template <AnyStream S, class... Args>
-  S create_stream(Args &&...args) {
-    S stream(*this, std::forward<Args>(args)...);
-    /// Track (i.e. reference) the Stream impl so that it does not go out of scope.
-    stream.impl()->context = this->shared_from_this();
-    return stream;
-  }
-
-  /// Creates a new stream impl and adds it to the list of stream impls so that it does not go out
-  /// of scope.
-  template <class StreamImpl>
-  Weak<StreamImpl> create_stream_impl() {
-    auto impl = impl::create_stream<StreamImpl>();
-    stream_impls_.push_back(impl);
-    return impl;
-  }
-
-  /// Get the NodeBase, i.e. the ROS node using which this Context was created.
-  NodeBase &node_base() { return static_cast<NodeBase &>(*this); }
 
   /// Declares a single parameter to ROS and register for updates. The ParameterDescriptor is
   /// created automatically matching the given Validator.
@@ -699,18 +677,18 @@ public:
       ParameterStruct &params, const std::function<void(const std::string &)> &notify_callback = {},
       std::string name_prefix = "");
 
-  /// Create a subscription stream without giving it a callback.
+  /// Create a subscription stream.
   /// Works otherwise the same as [rclcpp::Node::create_subscription].
   template <class MessageT>
   SubscriptionStream<MessageT> create_subscription(
       const std::string &name, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
 
-  /// Create a subscription stream and registers the given (synchronous) callback via .then().
+  /// Create a subscription stream and registers the given callback. The callback can be either synchronous or asynchronous.
   /// Works otherwise the same as [rclcpp::Node::create_subscription].
   template <class MessageT, class Callback>
   SubscriptionStream<MessageT> create_subscription(
-      const std::string &name, Callback cb, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
+      const std::string &name, Callback &&cb, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
 
   /// Create a subscription that subscribes to a single transform between two frames.
@@ -747,10 +725,11 @@ public:
   /// \param is_one_off_timer if set to true, this timer will execute only once.
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
-  TimerStream create_timer(const Duration &period, Callback cb, bool is_one_off_timer = false);
+  TimerStream create_timer(const Duration &period, Callback &&cb, bool is_one_off_timer = false);
 
   /// Create a service server stream. One a request is received, the provided callback will be
-  /// called. The callback can be either synchronous (a regular function) or asynchronous, i.e. a
+  /// called. This callback receives the request and returns a shared pointer to the response. If it returns a nullptr, then no response is made. 
+  /// The callback can be either synchronous (a regular function) or asynchronous, i.e. a
   /// coroutine. The callbacks returns the response. Works otherwise the same as
   /// [rclcpp::Node::create_service].
   template <class ServiceT, class Callback>
@@ -813,6 +792,28 @@ public:
     return tf2_listener_;
   }
 
+  /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
+  /// list of streams so that it does not go out of scope. It also sets the context.
+  template <AnyStream S, class... Args>
+  S create_stream(Args &&...args) {
+    S stream(*this, std::forward<Args>(args)...);
+    /// Track (i.e. reference) the Stream impl so that it does not go out of scope.
+    stream.impl()->context = this->shared_from_this();
+    return stream;
+  }
+
+  /// Creates a new stream impl and adds it to the list of stream impls so that it does not go out
+  /// of scope.
+  template <class StreamImpl>
+  Weak<StreamImpl> create_stream_impl() {
+    auto impl = impl::create_stream<StreamImpl>();
+    stream_impls_.push_back(impl);
+    return impl;
+  }
+
+  /// Get the NodeBase, i.e. the ROS node using which this Context was created.
+  NodeBase &node_base() { return static_cast<NodeBase &>(*this); }
+
 protected:
   /// Installs the validator callback
   void add_parameter_validator_if_needed() {
@@ -860,10 +861,7 @@ public:
   StreamImplDefault() {}
   /// A weak reference to the Context, it is needed so that Streams can create more streams that
   /// need access to the ROS node, i.e. via `.publish`.
-  std::weak_ptr<Context> context;
-  /// Timeout is useful when using co_await since we can implement Stream timeouts without an extra
-  /// timer.
-  std::optional<Duration> timeout{};
+  Weak<Context> context;
 
   /// The coroutine that will be called once after this stream has a value
   std::coroutine_handle<> continuation_;
@@ -1787,6 +1785,7 @@ struct TimerImpl {
 };
 
 /// A Stream representing a ROS-Timer. It saves the number of ticks as it's value.
+/// TODO use this TimerInfo thingy, it actually exists in ROS 2 as well.
 struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   using Base = Stream<size_t, Nothing, TimerImpl>;
   TimerStream() = default;
@@ -1884,7 +1883,7 @@ struct ServiceStreamImpl {
   std::shared_ptr<rclcpp::Service<ServiceT>> service;
 };
 
-/// A Stream representing a ROS service (server). It stores as its value the RequestID and the the
+/// A Stream representing a ROS service server. It stores as its value the RequestID and the the
 /// Request itself. It supports synchronous as well as asynchronous responding.
 ///
 /// See as a reference:
@@ -1937,7 +1936,8 @@ struct ServiceStream : public Stream<std::tuple<std::shared_ptr<rmw_request_id_t
     this->impl()->register_handler([impl = this->impl(), sync_callback](auto new_state) {
       const auto [request_id, request] = new_state.value();
       auto response = sync_callback(request);
-      impl->service->send_response(*request_id, *response);
+      if (response)  /// If we got nullptr, this means we do not respond.
+        impl->service->send_response(*request_id, *response);
     });
   }
 
@@ -2346,10 +2346,10 @@ SubscriptionStream<MessageT> Context::create_subscription(
 
 template <class MessageT, class Callback>
 SubscriptionStream<MessageT> Context::create_subscription(
-    const std::string &name, Callback cb, const rclcpp::QoS &qos,
+    const std::string &name, Callback &&cb, const rclcpp::QoS &qos,
     const rclcpp::SubscriptionOptions &options) {
   auto sub = create_stream<SubscriptionStream<MessageT>>(name, qos, options);
-  sub.then(cb);
+  sub.then(std::forward<Callback>(cb));
   return sub;
 }
 
@@ -2378,16 +2378,16 @@ inline TimerStream Context::create_timer(const Duration &period, bool is_one_off
 }
 
 template <class Callback>
-TimerStream Context::create_timer(const Duration &period, Callback cb, bool is_one_off_timer) {
+TimerStream Context::create_timer(const Duration &period, Callback &&cb, bool is_one_off_timer) {
   auto timer_stream = create_stream<TimerStream>(period, is_one_off_timer);
-  timer_stream.then(cb);
+  timer_stream.then(std::forward<Callback>(cb));
   return timer_stream;
 }
 
 template <class ServiceT, class Callback>
 ServiceStream<ServiceT> Context::create_service(const std::string &service_name,
                                                 Callback &&callback, const rclcpp::QoS &qos) {
-  return create_stream<ServiceStream<ServiceT>>(service_name, callback, qos);
+  return create_stream<ServiceStream<ServiceT>>(service_name, std::forward<Callback>(callback), qos);
 }
 
 template <class ServiceT>
@@ -2413,7 +2413,7 @@ public:
       : NodeType(node_name, node_options) {
     /// Note that here we cannot call shared_from_this() since it requires the object to be already
     /// constructed.
-    this->icey_context_ = std::make_shared<Context>(NodeBase(this));
+    this->icey_context_ = std::make_shared<Context>(this);
   }
 
   /// Returns the ICEY context
