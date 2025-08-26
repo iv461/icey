@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -22,7 +22,9 @@ struct Nothing {};
 /// will generally use in the following to recognize (unspecialized) class templates.
 struct ResultTag {};
 /// A Result-type is a sum type that can either hold Value or Error, or, different
-/// to Rust, none. It is used as the state for the Stream
+/// to Rust, none. It is used as the state for the Stream.
+/// Note that this Result type is  API-compatible with `std::expected` (C++23), so a change is
+/// easily possible once we target C++23.
 template <class _Value, class _Error>
 struct Result : private std::variant<std::monostate, _Value, _Error>, public ResultTag {
   using Value = _Value;
@@ -45,8 +47,8 @@ struct Result : private std::variant<std::monostate, _Value, _Error>, public Res
   const Value &value() const { return std::get<1>(*this); }
   const Error &error() const { return std::get<2>(*this); }
   void set_none() { this->template emplace<0>(std::monostate{}); }
-  void set_ok(const Value &x) { this->template emplace<1>(x); }
-  void set_err(const Error &x) { this->template emplace<2>(x); }
+  void set_value(const Value &x) { this->template emplace<1>(x); }
+  void set_error(const Error &x) { this->template emplace<2>(x); }
 
   auto get() const {
     if constexpr (std::is_same_v<Error, Nothing>) {
@@ -238,10 +240,10 @@ public:
   void set_none() { state_.set_none(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
-  void set_value(const Value &x) { state_.set_ok(x); }
+  void set_value(const Value &x) { state_.set_value(x); }
 
   /// Sets the state to hold an error, but does not notify about this state change.
-  void set_error(const Error &x) { state_.set_err(x); }
+  void set_error(const Error &x) { state_.set_error(x); }
   void set_state(const State &x) { state_ = x; }
 
   /// Returns the current state and sets it to none.

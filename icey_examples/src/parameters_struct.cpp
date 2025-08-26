@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -25,15 +25,16 @@ struct NodeParameters {
 };
 
 class MyNode : public icey::Node {
-public: 
+public:
   MyNode(std::string name) : icey::Node(name) {
-    /// Now simply declare the parameter struct and a callback that is called when any field updates:
+    /// Now simply declare the parameter struct and a callback that is called when any field
+    /// updates:
     icey().declare_parameter_struct(params_, [this](const std::string &changed_parameter) {
       RCLCPP_INFO_STREAM(this->get_logger(), "Parameter " << changed_parameter << " changed");
     });
   }
 
-  /// Store the parameters as a class member: 
+  /// Store the parameters as a class member:
   NodeParameters params_;
 };
 

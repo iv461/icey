@@ -1,10 +1,10 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
 /// This example shows how to use subscriptions with async/await syntax:
-/// Instead of a callback, we call co_await on the subscription stream. 
+/// Instead of a callback, we call co_await on the subscription stream.
 /// we also must introduce a spinning loop so that we receive values continuously.
 #include <icey/icey.hpp>
 
