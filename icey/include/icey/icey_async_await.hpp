@@ -590,11 +590,11 @@ public:
     return node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback());
       if constexpr (has_promise_type_v<ReturnType>) {
-        const auto continuation = [](auto &&callback) -> Promise<void> {
+        const auto continuation = [](const auto &callback) -> Promise<void> {
           co_await callback();
           co_return;
         };
-        continuation(std::forward<Callback>(callback));
+        continuation(callback);
       } else {
         callback();
       }
