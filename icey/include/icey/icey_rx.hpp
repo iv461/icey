@@ -23,8 +23,7 @@
 
 /// TF2 support:
 #include "tf2_ros/message_filter.h"
-//#include "tf2_ros/transform_broadcaster.h"
-//#include "tf2_ros/transform_listener.h"
+
 // Message filters library: (.h so that this works with humble as well)
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>

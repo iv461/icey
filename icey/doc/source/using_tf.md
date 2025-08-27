@@ -11,7 +11,7 @@ Looking up transforms is very similar to regular ROS, except that ICEY provides 
 icey::TransformBuffer tf_buffer = node->icey().create_transform_buffer();
 
 auto tf_result = co_await tf_buffer.lookup("map", point_cloud->header.frame_id,
-                              icey::rclcpp_to_chrono(point_cloud->header.stamp), 200ms);
+                              point_cloud->header.stamp, 200ms);
 
 if (tf_result.has_value()) {
   geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();

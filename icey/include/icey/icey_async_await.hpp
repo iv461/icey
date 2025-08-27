@@ -667,7 +667,6 @@ public:
       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     using Request = std::shared_ptr<typename ServiceT::Request>;
     using RequestID = std::shared_ptr<rmw_request_id_t>;
-    using Response = std::shared_ptr<typename ServiceT::Response>;
     /// The type of the user callback that can response synchronously (i.e. immediately): It
     /// receives the request and returns the response.
     /// For devs: For "documentation", see
