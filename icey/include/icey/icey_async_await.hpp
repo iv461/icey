@@ -504,9 +504,9 @@ struct ServiceClient {
 
   /// Constructs the service client. A node has to be provided because it is needed to create
   /// timeout timers for every service call.
-  ServiceClient(Weak<NodeBase> node, const std::string &service_name,
+  ServiceClient(NodeBase &node, const std::string &service_name,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : node_(node), client(node->create_client<ServiceT>(service_name, qos)) {}
+      : node_(node), client(node.create_client<ServiceT>(service_name, qos)) {}
 
   /*! Make an asynchronous call to the service with a timeout. Two callbacks may be provided: One
   for the response and one in case of error (timeout or service unavailable).  Requests can never
@@ -539,7 +539,7 @@ struct ServiceClient {
 
     active_timers_.emplace(
         future_and_req_id.request_id,
-        node_->create_wall_timer(timeout,
+        node_.create_wall_timer(timeout,
                                  [this, on_error, request_id = future_and_req_id.request_id] {
                                    client->remove_pending_request(request_id);
                                    active_timers_.at(request_id)->cancel();
@@ -582,7 +582,7 @@ struct ServiceClient {
   }
 
 protected:
-  Weak<NodeBase> node_;
+  NodeBase &node_;
   /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
   /// the timeout timers for pending requests.
   std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
@@ -595,7 +595,7 @@ public:
 };
 
 /// The context providing an Node-like API but with async/await compatible entities.
-class ContextAsyncAwait : public NodeBase, public std::enable_shared_from_this<ContextAsyncAwait> {
+class ContextAsyncAwait : public NodeBase {
 public:
   /// Constructs the Context from the given node pointer. Supports both rclcpp::Node as well as a
   /// lifecycle node.
@@ -704,7 +704,7 @@ public:
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return ServiceClient<ServiceT>(std::dynamic_pointer_cast<NodeBase>(this->shared_from_this()),
+    return ServiceClient<ServiceT>(node_base(),
                                    service_name, qos);
   }
 
