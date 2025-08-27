@@ -674,7 +674,7 @@ public:
     /// - https://github.com/ros2/rclcpp/issues/1707
     /// -
     /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
-    return node_base().create_service<ServiceT>(
+    auto service = node_base().create_service<ServiceT>(
         service_name,
         [callback](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
                    Request request) {
@@ -695,6 +695,8 @@ public:
           }
         },
         qos);
+    services_.push_back(std::dynamic_pointer_cast<rclcpp::ServiceBase>(service));
+    return service;
   }
 
   /// Create a service client that supports async/await.
@@ -725,6 +727,9 @@ public:
 
   /// The TF async interface impl
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
+  /// We need bookkeeping for the service servers. 
+protected:
+  std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
 };
 
 }  // namespace icey
