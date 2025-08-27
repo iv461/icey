@@ -54,8 +54,7 @@ Service calls can be awaited, a timeout has to be specified (no manual cleanup o
 ```cpp
 auto service = icey_context_->create_client<ExampleService>("set_bool_service");
 
-ctx.create_timer(1s)
-    .then([this](size_t) -> icey::Promise<void> {
+ctx.create_timer(1s, [&]() -> icey::Promise<void> {
         /// Build a request each time the timer ticks
         auto request = std::make_shared<ExampleService::Request>();
         request->data = true;

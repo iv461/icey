@@ -22,8 +22,7 @@ int main(int argc, char **argv) {
 
   /// Create a service client for an upstream service that is actually capable of answering the
   /// request.
-  auto upstream_service_client =
-      ctx->create_client<ExampleService>("set_bool_service_upstream");
+  auto upstream_service_client = ctx->create_client<ExampleService>("set_bool_service_upstream");
 
   /// Create the service server and give it a asynchronous callback (containing keyword co_await)
   ctx->create_service<ExampleService>(

@@ -457,7 +457,7 @@ struct ServiceClient {
   /// timeout timers for every service call.
   ServiceClient(Weak<NodeBase> node, const std::string &service_name,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : node_(node), client(node_->create_client<ServiceT>(service_name, qos)) {}
+      : node_(node), client(node->create_client<ServiceT>(service_name, qos)) {}
 
   // clang-format off
   /*! Make an asynchronous call to the service with a timeout. Two callbacks may be provided: One for the response and one in case of error (timeout or service unavailable).  Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
@@ -531,9 +531,6 @@ struct ServiceClient {
     return active_timers_.erase(request_id);
   }
 
-  /// The underlying rclcpp service client
-  std::shared_ptr<rclcpp::Client<ServiceT>> client;
-
 protected:
   Weak<NodeBase> node_;
   /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
@@ -541,6 +538,10 @@ protected:
   std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
   /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+
+public:
+  /// The underlying rclcpp service client
+  std::shared_ptr<rclcpp::Client<ServiceT>> client;
 };
 
 /// The context providing an Node-like API but with async/await compatible entities.
@@ -586,7 +587,7 @@ public:
   /// \note A callback signature that accepts a TimerInfo argument is not implemented yet
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
-  std::shared_ptr<rclcpp::TimerBase> create_timer(const Duration &period, Callback &&callback) {
+  std::shared_ptr<rclcpp::TimerBase> create_timer(const Duration &period, Callback callback) {
     return node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback());
       if constexpr (has_promise_type_v<ReturnType>) {
@@ -608,7 +609,7 @@ public:
   /// callbacks returns the response. Works otherwise the same as [rclcpp::Node::create_service].
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
-      const std::string &service_name, Callback &&callback,
+      const std::string &service_name, Callback callback,
       const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     using Request = std::shared_ptr<typename ServiceT::Request>;
     using RequestID = std::shared_ptr<rmw_request_id_t>;
@@ -641,7 +642,7 @@ public:
               co_return;
             };
             continuation(server, callback, request_id, request);
-          } // TODO more strict type checking 
+          }  // TODO more strict type checking
           /*else {
             static_assert(std::is_array_v<int>,
                           "Service server callbacks must have either the signature "
