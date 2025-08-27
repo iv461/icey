@@ -6,14 +6,13 @@
 #pragma once
 
 #include <functional>
+#include <icey/impl/promise.hpp>  /// Needed for has_promise_type
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <tuple>
 #include <type_traits>
 #include <unordered_set>
-
-#include <icey/impl/promise.hpp> /// Needed for has_promise_type 
 
 namespace icey {
 /// Some pattern matching for type recognition
@@ -73,7 +72,6 @@ constexpr bool is_pair_v = is_pair<T>::value;
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 
-
 /// The error type of the given Stream type
 template <class T>
 using ValueOf = typename remove_shared_ptr_t<T>::Value;
@@ -107,7 +105,7 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   return stream;
 }
 
-/// Calls the function with the given argument arg but unpacks it if it is a tuple.
+/// Calls the given function f with the given argument arg but unpacks it first if it's a tuple.
 template <class F, class Arg>
 inline auto unpack_if_tuple(F &&f, Arg &&arg) {
   if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
@@ -211,7 +209,7 @@ public:
   /// we have an error or value. If the state is none, it does not notify. If the state is an error
   /// and the `Error` is an exception type (a subclass of `std::runtime_error`) and also no
   /// handlers were registered, the exception is re-thrown.
-  /// TODO We should take the value if this is a Stream, but currently Promise also uses this Base
+  /// TODO We should take the value of this stream after notifying
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, Error>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the

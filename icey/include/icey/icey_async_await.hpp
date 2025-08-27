@@ -5,7 +5,7 @@
 
 /// This header defines an async/await-based interface for services and TF.
 /// If you only want async/await and nothing else (i.e. no reactive programming using streams), you
-/// can include this header only.
+/// can include this header only and get faster compile times.
 #pragma once
 
 #include <coroutine>
@@ -440,7 +440,8 @@ protected:
 /// point in time.
 struct TransformBuffer {
   TransformBuffer() = default;
-  TransformBuffer(std::shared_ptr<TransformBufferImpl> tf_buffer_impl) : tf_buffer_impl_(tf_buffer_impl) {}
+  TransformBuffer(std::shared_ptr<TransformBufferImpl> tf_buffer_impl)
+      : tf_buffer_impl_(tf_buffer_impl) {}
 
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
@@ -540,13 +541,13 @@ struct ServiceClient {
     active_timers_.emplace(
         future_and_req_id.request_id,
         node_.create_wall_timer(timeout,
-                                 [this, on_error, request_id = future_and_req_id.request_id] {
-                                   client->remove_pending_request(request_id);
-                                   active_timers_.at(request_id)->cancel();
-                                   cancelled_timers_.emplace(active_timers_.at(request_id));
-                                   active_timers_.erase(request_id);
-                                   on_error("TIMEOUT");
-                                 }));
+                                [this, on_error, request_id = future_and_req_id.request_id] {
+                                  client->remove_pending_request(request_id);
+                                  active_timers_.at(request_id)->cancel();
+                                  cancelled_timers_.emplace(active_timers_.at(request_id));
+                                  active_timers_.erase(request_id);
+                                  on_error("TIMEOUT");
+                                }));
     return future_and_req_id.request_id;
   }
 
@@ -594,7 +595,7 @@ public:
   std::shared_ptr<rclcpp::Client<ServiceT>> client;
 };
 
-/// The context providing an Node-like API but with async/await compatible entities.
+/// A context that provides only async/await related entities.
 class ContextAsyncAwait : public NodeBase {
 public:
   /// Constructs the Context from the given node pointer. Supports both rclcpp::Node as well as a
@@ -642,12 +643,12 @@ public:
       using ReturnType = decltype(callback());
       if constexpr (has_promise_type_v<ReturnType>) {
         const auto continuation = [](const auto &callback) -> Promise<void> {
-          co_await callback();
+          co_await callback(std::size_t{});
           co_return;
         };
         continuation(callback);
       } else {
-        callback();
+        callback(std::size_t{});
       }
     });
   }
@@ -656,11 +657,12 @@ public:
   /// received, the provided callback will be called. This callback receives the request and returns
   /// a shared pointer to the response. If it returns a nullptr, then no response is made. The
   /// callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The
-  /// callbacks returns the response. Works otherwise the same as [rclcpp::Node::create_service].
-  /// \param
-  /// \param 
-  /// \tparam Callback Either (std::shared_ptr<ServiceT::Request>) -> std::shared_ptr<ServiceT::Response>
-  /// or (std::shared_ptr<ServiceT::Request>) -> icey::Promise<std::shared_ptr<ServiceT::Response>>
+  /// callbacks returns the response. The context additionally provdes bookkeeping for this service,
+  /// this means you do not have to store service in the node class. Works otherwise the same as
+  /// [rclcpp::Node::create_service]. \param service_name the name of the service \param callback
+  /// the callback \param qos quality of service \tparam Callback Either
+  /// (std::shared_ptr<ServiceT::Request>) -> std::shared_ptr<ServiceT::Response> or
+  /// (std::shared_ptr<ServiceT::Request>) -> icey::Promise<std::shared_ptr<ServiceT::Response>>
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
       const std::string &service_name, Callback callback,
@@ -704,8 +706,7 @@ public:
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return ServiceClient<ServiceT>(node_base(),
-                                   service_name, qos);
+    return ServiceClient<ServiceT>(node_base(), service_name, qos);
   }
 
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
@@ -727,7 +728,7 @@ public:
 
   /// The TF async interface impl
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
-  /// We need bookkeeping for the service servers. 
+  /// We need bookkeeping for the service servers.
 protected:
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
 };

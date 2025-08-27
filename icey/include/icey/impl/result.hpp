@@ -52,4 +52,4 @@ struct Result : private std::variant<std::monostate, _Value, _Error>, public Res
     }
   }
 };
-}
+}  // namespace icey

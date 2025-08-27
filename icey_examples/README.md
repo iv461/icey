@@ -74,7 +74,6 @@ And now the the service client prints:
 
 # Run asynchronous service server example: 
 
-
 Start the asynchronous server: 
 
 ```sh

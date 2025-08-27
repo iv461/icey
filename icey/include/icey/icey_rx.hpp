@@ -3,6 +3,9 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
+/// This header contains more features of ICEY related to reactive programming: Subscribers and timers modeled with the  
+/// Stream concept, synchronization and other transformations on streams like buffering, filtering. Support for message_fiters and TF synchronization.
+/// If you only need async/await, you do not need this header.
 #pragma once
 
 #include <boost/hana.hpp>
