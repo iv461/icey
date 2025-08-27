@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -13,7 +13,8 @@ int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<icey::Node>("icey_signal_generator_example");
 
-  auto frequency = node->icey().declare_parameter<double>("frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
+  auto frequency = node->icey().declare_parameter<double>(
+      "frequency", 10., icey::Interval(0., 100.));  // Hz, i.e. 1/s
   auto amplitude = node->icey().declare_parameter<double>("amplitude", 2., icey::Interval(0., 10.));
 
   auto period_time = 100ms;

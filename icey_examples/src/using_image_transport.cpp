@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -19,10 +19,11 @@ using namespace std::chrono_literals;
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<icey::Node>("icey_image_transport_example");
-  
+
   /// Create an image_transport::CameraSubscription. The second argument is the transport, i.e. the
   /// compression algorithm to use. Common ones are "raw", "theora" etc.
-  auto camera_center_sub = node->icey().create_stream<icey::CameraSubscription>("camera_center", "raw", rclcpp::SensorDataQoS());
+  auto camera_center_sub = node->icey().create_stream<icey::CameraSubscription>(
+      "camera_center", "raw", rclcpp::SensorDataQoS());
 
   camera_center_sub
       .then([&](sensor_msgs::msg::Image::ConstSharedPtr /*image*/,
@@ -37,7 +38,8 @@ int main(int argc, char **argv) {
       });
 
   /// Create a regular image_transport::Subscription to receive compressed images
-  auto camera_left_sub = node->icey().create_stream<icey::ImageTransportSubscription>("camera_left", "raw", rclcpp::SensorDataQoS());
+  auto camera_left_sub = node->icey().create_stream<icey::ImageTransportSubscription>(
+      "camera_left", "raw", rclcpp::SensorDataQoS());
 
   camera_left_sub
       /// We receive here the image after image_transport has decompressed it:

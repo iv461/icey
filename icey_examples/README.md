@@ -1,23 +1,20 @@
 # ICEY Examples
 
-ROS Package that shows how to consume the ICEY library. 
+Examples on how to use the ICEY library. 
 
-We demonstrate how to: 
+They demonstrate:
 
-- Write simple publisher/subscriptions, demonstrating Streams
-- Using C++20 coroutines to achieve synchronous-looking, async/await-style code 
+- Using the icey::Context for both regular and lifecycle Nodes
+- Synchronous-looking service calls using async/await 
+
+- Simple publisher/subscriptions, demonstrating Streams
 - Automatic synchronization between multiple topics 
-- Subscribing single transforms and looking them transforms by synchronizing with other topics 
-- Parameter structs, greatly simplifying declaration and managing of multiple parameters
-- Simple functional API for launching quickly multiple nodes using a single cpp-file 
-- Service server and clients including chaining service calls without callback hell or risk of deadlocks
-- Using lifecycle nodes by only changing the base class
+- Looking up transforms using async/await
+- Subscribing single transforms
+- Synchronizing topics with transforms 
+- Using parameter structs, greatly simplifying declaration of many parameters
 - Transform broadcasting
 - Using image transport subscriptions/publishers
-- Interoperability with the message_filters library
-
-
-
 
 # Run service example 
 
@@ -45,7 +42,7 @@ It should start printing:
 Then, in another terminal, run the service server:
 
 ```sh 
-ros2 run icey_examples service_server_example
+ros2 run icey_examples service_server_example --ros-args -p service_name:=set_bool_service
 ```
 
 Which should print:
@@ -77,7 +74,6 @@ And now the the service client prints:
 
 # Run asynchronous service server example: 
 
-
 Start the asynchronous server: 
 
 ```sh
@@ -97,6 +93,46 @@ ros2 run icey_examples service_client_async_await_example
 ```
 
 You should now receive responses and see how both servers receive requests.
+
+# TF lookup using async/await 
+
+Start the subscription: 
+
+```sh
+ros2 run icey_examples tf_lookup_async_await_example 
+```
+
+And now the driver:
+
+```sh
+ros2 run icey_examples tf_pub_test_example 
+```
+
+The subscription should print regularly on every lookup.
+ 
+# TF subscription example  
+
+Start the TF broadcaster: 
+
+```sh
+ros2 run icey_examples tf_broadcaster_example 
+```
+
+Now the TF subscriber: 
+
+```sh
+ros2 run icey_examples tf_subscription_example 
+```
+
+It should print on every transform the transformation matrix: 
+
+```
+[INFO 1756324909.237720717] [icey_tf_subscription_example]: Received a new transform:
+-0.446485 -0.894791         0       7.3
+ 0.894791 -0.446485         0       -73
+        0         0         1         0
+        0         0         0         1
+``` 
 
 # Run parameter struct example 
 
