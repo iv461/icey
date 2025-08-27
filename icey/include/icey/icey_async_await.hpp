@@ -18,12 +18,12 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 /// TF2 support:
+#include <icey/impl/promise.hpp>
+
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
-
-#include <icey/impl/promise.hpp>
 
 namespace icey {
 
@@ -519,8 +519,8 @@ struct ServiceClient {
     using Cancel = typename Promise<Response, std::string>::Cancel;
     return Promise<Response, std::string>{[this, request, timeout](auto &promise) {
       auto request_id = this->call(
-          request, timeout, [&](const auto &x) { promise.put_value(x); },
-          [&](const auto &x) { promise.put_error(x); });
+          request, timeout, [&](const auto &x) { promise.resolve(x); },
+          [&](const auto &x) { promise.reject(x); });
       return Cancel{[this, request_id](auto &) { cancel_request(request_id); }};
     }};
   }
@@ -601,11 +601,11 @@ public:
     });
   }
 
-  /// Create a service server supporting asynchronous callbacks (i.e. coroutines). One a request is received, the provided callback will be
-  /// called. This callback receives the request and returns a shared pointer to the response. If it
-  /// returns a nullptr, then no response is made. The callback can be either synchronous (a regular
-  /// function) or asynchronous, i.e. a coroutine. The callbacks returns the response. Works
-  /// otherwise the same as [rclcpp::Node::create_service].
+  /// Create a service server supporting asynchronous callbacks (i.e. coroutines). One a request is
+  /// received, the provided callback will be called. This callback receives the request and returns
+  /// a shared pointer to the response. If it returns a nullptr, then no response is made. The
+  /// callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The
+  /// callbacks returns the response. Works otherwise the same as [rclcpp::Node::create_service].
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
       const std::string &service_name, Callback &&callback,
@@ -621,16 +621,18 @@ public:
     /// For devs: For "documentation", see
     /// - https://github.com/ros2/rclcpp/pull/1709
     /// - https://github.com/ros2/rclcpp/issues/1707
-    /// - [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
+    /// -
+    /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
     return node_base().create_service<ServiceT>(
         service_name,
-        [](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
-           Request request) {
-          if constexpr (std::is_same_v<Callback, SyncCallback>) {
+        [callback](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
+                   Request request) {
+          using ReturnType = decltype(callback(std::declval<Request>()));
+          if constexpr (!has_promise_type_v<ReturnType>) {
             auto response = callback(request);
             if (response)  /// If we got nullptr, this means we do not respond.
               server->send_response(*request_id, *response);
-          } else if constexpr (std::is_same_v<Callback, AsyncCallback>) {
+          } else {
             const auto continuation = [](auto server, const auto &async_callback,
                                          RequestID request_id, Request request) -> Promise<void> {
               auto response = co_await async_callback(request);
@@ -639,13 +641,14 @@ public:
               co_return;
             };
             continuation(server, callback, request_id, request);
-          } else {
+          } // TODO more strict type checking 
+          /*else {
             static_assert(std::is_array_v<int>,
                           "Service server callbacks must have either the signature "
                           "(std::shared_ptr<Request>) -> std::shared_ptr<Response> (synchronous "
                           "callback) or (std::shared_ptr<Request>) -> "
                           "icey::Promise<std::shared_ptr<Response>> (asynchronous callback).");
-          }
+          }*/
         },
         qos);
   }
@@ -655,7 +658,8 @@ public:
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name,
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return ServiceClient<ServiceT>(this->shared_from_this(), service_name, qo);
+    return ServiceClient<ServiceT>(std::dynamic_pointer_cast<NodeBase>(this->shared_from_this()),
+                                   service_name, qos);
   }
 
   /// Get the NodeBase, i.e. the ROS node using which this Context was created.

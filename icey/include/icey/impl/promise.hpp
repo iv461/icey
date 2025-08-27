@@ -10,7 +10,7 @@
 #include <icey/impl/result.hpp>
 #include <iostream>
 
-/// This header defines a promise type supporting async/await (C++ 20 coroutines) only. 
+/// This header defines a promise type supporting async/await (C++ 20 coroutines) only.
 /// Not thread-safe.
 namespace icey {
 
@@ -42,18 +42,12 @@ public:
   using promise_type = Self;
   using Cancel = std::function<void(Self &)>;
 
-  PromiseBase() {
-    if (icey_coro_debug_print)
-      std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
-  }
+  PromiseBase() = default;
   /// Construct using a handler: This handler is called immediately in the constructor with the
   /// address to this Promise so that it can store it and write to this promise later. This handler
   /// returns a cancellation function that gets called when this Promise is destructed. This
   /// constructor is useful for wrapping an existing callback-based API.
-  explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
-    if (icey_coro_debug_print) std::cout << "Promise(h) @  " << get_type(*this) << std::endl;
-    cancel_ = h(*this);
-  }
+  explicit PromiseBase(std::function<Cancel(Self &)> &&h) { cancel_ = h(*this); }
 
   PromiseBase(const PromiseBase &) = delete;
   PromiseBase(PromiseBase &&) = delete;
@@ -61,8 +55,6 @@ public:
   PromiseBase &operator=(Self &&) = delete;
 
   ~PromiseBase() {
-    if (icey_coro_debug_print)
-      std::cout << "Promise was destructed: " << get_type(*this) << std::endl;
     if (cancel_) cancel_(*this);
   }
 
@@ -78,24 +70,15 @@ public:
     struct Awaiter {
       Self &promise_;
       Awaiter(Self &promise) : promise_(promise) {}
-      bool await_ready() const noexcept {
-        if (icey_coro_debug_print)
-          std::cout << "Await ready on Promise " << get_type(promise_) << " called" << std::endl;
-        return !promise_.has_none();
-      }
+      bool await_ready() const noexcept { return !promise_.has_none(); }
       void await_suspend(std::coroutine_handle<> continuation) noexcept {
         /// Resume the coroutine when this promise is done
-        if (icey_coro_debug_print)
-          std::cout << "Await suspend was called, held Promise: " << get_type(promise_)
-                    << std::endl;
         //// TODO
         // if(promise_.continuation_) throw std::logic_error("Illegal!");
         promise_.continuation_ = continuation;
       }
 
       auto await_resume() const noexcept {
-        if (icey_coro_debug_print)
-          std::cout << "Await resume was called, held Promise: " << get_type(promise_) << std::endl;
         if (promise_.exception_ptr_) std::rethrow_exception(promise_.exception_ptr_);
         return promise_.get_state().get();
       }
@@ -119,12 +102,12 @@ public:
   void set_error(const Error &x) { state_.set_error(x); }
   void set_state(const State &x) { state_ = x; }
 
-  void put_value(const Value &value) {
+  void resolve(const Value &value) {
     set_value(value);
     notify();
   }
 
-  void put_error(const Error &error) {
+  void reject(const Error &error) {
     set_error(error);
     notify();
   }
@@ -172,16 +155,10 @@ public:
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
-  void return_value(const _Value &x) {
-    if (icey_coro_debug_print) std::cout << get_type(*this) << " setting value " << std::endl;
-    this->put_value(x);
-  }
+  void return_value(const _Value &x) { this->resolve(x); }
 
   /// Sets the state to the given one:
-  void return_value(const State &x) {
-    if (icey_coro_debug_print) std::cout << get_type(*this) << " setting state " << std::endl;
-    this->put_state(x);
-  }
+  void return_value(const State &x) { this->put_state(x); }
 };
 
 /// Specialization so that Promise<void> works. (Nothing interesting here, just C++ 20 coroutine
@@ -192,7 +169,7 @@ public:
   using PromiseBase<Nothing, Nothing>::PromiseBase;
   using promise_type = Promise<void, Nothing>;
   promise_type get_return_object() { return {}; }
-  auto return_void() { this->put_value(Nothing{}); }
+  auto return_void() { this->resolve(Nothing{}); }
 };
 
 }  // namespace icey
