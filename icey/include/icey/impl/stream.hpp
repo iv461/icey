@@ -13,7 +13,7 @@
 #include <type_traits>
 #include <unordered_set>
 
-#include <icey/impl/result.hpp>
+#include <icey/impl/promise.hpp> /// Needed for has_promise_type 
 
 namespace icey {
 /// Some pattern matching for type recognition
@@ -73,14 +73,6 @@ constexpr bool is_pair_v = is_pair<T>::value;
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 
-template <typename, typename = std::void_t<>>
-struct has_promise_type : std::false_type {};
-
-template <typename T>
-struct has_promise_type<T, std::void_t<typename T::promise_type>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 
 /// The error type of the given Stream type
 template <class T>
