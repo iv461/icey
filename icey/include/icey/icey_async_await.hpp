@@ -657,6 +657,10 @@ public:
   /// a shared pointer to the response. If it returns a nullptr, then no response is made. The
   /// callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The
   /// callbacks returns the response. Works otherwise the same as [rclcpp::Node::create_service].
+  /// \param
+  /// \param 
+  /// \tparam Callback Either (std::shared_ptr<ServiceT::Request>) -> std::shared_ptr<ServiceT::Response>
+  /// or (std::shared_ptr<ServiceT::Request>) -> icey::Promise<std::shared_ptr<ServiceT::Response>>
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
       const std::string &service_name, Callback callback,
@@ -666,9 +670,6 @@ public:
     using Response = std::shared_ptr<typename ServiceT::Response>;
     /// The type of the user callback that can response synchronously (i.e. immediately): It
     /// receives the request and returns the response.
-    using SyncCallback = std::function<Response(Request)>;
-    /// The type of the user callback that responds asynchronously, i.e. is a coroutine.
-    using AsyncCallback = std::function<Promise<Response>(Request)>;
     /// For devs: For "documentation", see
     /// - https://github.com/ros2/rclcpp/pull/1709
     /// - https://github.com/ros2/rclcpp/issues/1707
@@ -714,7 +715,6 @@ public:
   /// Get the NodeBase, i.e. the ROS node using which this Context was created.
   NodeBase &node_base() { return static_cast<NodeBase &>(*this); }
 
-protected:
   std::shared_ptr<TransformBufferImpl> add_tf_listener_if_needed() {
     if (!tf_buffer_impl_) {
       /// We need only one subscription on /tf, but we can have multiple transforms on which we
@@ -723,6 +723,8 @@ protected:
     }
     return tf_buffer_impl_;
   }
+
+  /// The TF async interface impl
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
 };
 

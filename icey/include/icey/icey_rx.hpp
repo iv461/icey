@@ -53,8 +53,6 @@ concept AnyOf = (std::is_convertible_v<T, Ts> || ...);
 
 namespace hana = boost::hana;
 
-inline bool icey_debug_print = false;
-
 /// Returns a string that represents the type of the given value: i.e. "icey::Stream<int>"
 template <class T>
 static std::string get_type(T &t) {
@@ -109,7 +107,8 @@ struct TransformPublisherStream;
 //  It also provides bookkeeping i.e. holding the shared pointers to subscriptions/timers/publishers
 //  etc., so that you do not have to do it.
 class Context : public ContextAsyncAwait,
-                  private boost::noncopyable {
+                public std::enable_shared_from_this<Context>,
+                private boost::noncopyable {
 public:
   /// The parameter validation function that allows the parameter update if the returned error
   /// string is empty (i.e. "") and rejects it otherwise with this non-empty error string.
@@ -208,6 +207,19 @@ public:
       const std::string &name, Callback &&cb, const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions());
 
+  /// Create a timer stream. The Stream yields as a value the total number of ticks.
+  /// \param period the period time
+  /// \param is_one_off_timer if set to true, this timer will execute only once.
+  /// Works otherwise the same as [rclcpp::Node::create_timer].
+  TimerStream create_timer(const Duration &period, bool is_one_off_timer = false);
+
+  /// Create a timer and register a callback.
+  /// \param period the period time
+  /// \param is_one_off_timer if set to true, this timer will execute only once.
+  /// Works otherwise the same as [rclcpp::Node::create_timer].
+  template <class Callback>
+  TimerStream create_timer(const Duration &period, Callback cb, bool is_one_off_timer = false);
+
   /// Create a subscription that subscribes to a single transform between two frames.
   /// This stream will emit a value every time the transform between these two frames changes, i.e.
   /// it is a stream. If you need to lookup transforms at a specific point in time, look instead at
@@ -247,11 +259,10 @@ public:
 
   /// Subscribe to a transform on tf between two frames
   template <class OnTransform, class OnError>
-  auto add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
+  void add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
                            OnTransform &&on_transform, OnError &&on_error) {
-    add_tf_listener_if_needed();
-    tf2_listener_->add_subscription(target_frame, source_frame, on_transform, on_error);
-    return tf2_listener_;
+    this->add_tf_listener_if_needed();
+    tf_buffer_impl_->add_subscription(target_frame, source_frame, on_transform, on_error);
   }
 
   auto add_tf_broadcaster_if_needed() {
@@ -260,22 +271,13 @@ public:
     return tf_broadcaster_;
   }
 
-  std::shared_ptr<TFListener> add_tf_listener_if_needed() {
-    if (!tf2_listener_) {
-      /// We need only one subscription on /tf, but we can have multiple transforms on which we
-      /// listen to
-      tf2_listener_ = std::make_shared<TFListener>(node_base());
-    }
-    return tf2_listener_;
-  }
-
   /// Creates a new stream of type S by passing the args to the constructor. It adds the impl to the
   /// list of streams so that it does not go out of scope. It also sets the context.
   template <AnyStream S, class... Args>
   S create_stream(Args &&...args) {
     S stream(*this, std::forward<Args>(args)...);
     /// Track (i.e. reference) the Stream impl so that it does not go out of scope.
-    stream.impl()->context = this->shared_from_this();
+    stream.impl()->context = std::enable_shared_from_this<Context>::shared_from_this();
     return stream;
   }
 
@@ -321,8 +323,7 @@ protected:
 
   /// Callback for validating a list of parameter.
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr validate_param_cb_;
-  /// TF Support
-  std::shared_ptr<TFListener> tf2_listener_;
+
   /// This is a simple wrapper around a publisher that publishes on /tf. There is really nothing
   /// interesting under the hood of tf2_ros::TransformBroadcaster
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
@@ -1016,8 +1017,6 @@ struct SubscriptionStream
 struct TransformSubscriptionStreamImpl {
   ValueOrParameter<std::string> source_frame;
   ValueOrParameter<std::string> target_frame;
-  /// We do not own the listener, the Book owns it
-  Weak<TFListener> tf2_listener;
 };
 
 /// A Stream that represents a subscription between two coordinate systems. (See TFListener)
@@ -1034,7 +1033,7 @@ struct TransformSubscriptionStream : public Stream<geometry_msgs::msg::Transform
       : Base(context) {
     this->impl()->target_frame = target_frame;
     this->impl()->source_frame = source_frame;
-    this->impl()->tf2_listener = context.add_tf_subscription(
+    context.add_tf_subscription(
         target_frame.get, source_frame.get,
         [impl = this->impl()](const geometry_msgs::msg::TransformStamped &new_value) {
           impl->put_value(new_value);
@@ -1300,7 +1299,7 @@ template <class Message>
 struct TransformSynchronizerImpl {
   using Self = TransformSynchronizerImpl<Message>;
   /// The book owns it.
-  Weak<TFListener> tf_listener;
+  Weak<TransformBufferImpl> tf_listener;
   std::string target_frame;
   std::shared_ptr<SimpleFilterAdapter<Message>> input_filter;
   std::shared_ptr<tf2_ros::MessageFilter<Message>> synchronizer;
@@ -1419,7 +1418,8 @@ void Context::declare_parameter_struct(
     if constexpr (is_stream<Field>) {
       field_value.impl_ = this->create_stream_impl<typename Field::Impl>();
       field_value.impl()->context =
-          this->shared_from_this();  /// First, give it the missing context
+          std::enable_shared_from_this<Context>::shared_from_this();  /// First, give it the missing
+                                                                      /// context
       field_value.parameter_name = field_name_r;
       if (notify_callback) {
         field_value.impl()->register_handler(
@@ -1463,6 +1463,17 @@ SubscriptionStream<MessageT> Context::create_subscription(
   auto sub = create_stream<SubscriptionStream<MessageT>>(name, qos, options);
   sub.then(std::forward<Callback>(cb));
   return sub;
+}
+
+inline TimerStream Context::create_timer(const Duration &period, bool is_one_off_timer) {
+  return create_stream<TimerStream>(period, is_one_off_timer);
+}
+
+template <class Callback>
+TimerStream Context::create_timer(const Duration &period, Callback cb, bool is_one_off_timer) {
+  auto timer_stream = create_stream<TimerStream>(period, is_one_off_timer);
+  timer_stream.then(cb);
+  return timer_stream;
 }
 
 inline TransformSubscriptionStream Context::create_transform_subscription(
