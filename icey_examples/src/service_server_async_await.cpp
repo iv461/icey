@@ -6,7 +6,7 @@
 /// This example shows how to create an asynchronously responding service server.
 /// After it receives a request, it calls asynchronously another upstream service
 /// that is actually capable of answering the request. Once it receives the result, it responds.
-#include <icey/icey.hpp>
+#include <icey/icey_async_await.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
 
@@ -17,15 +17,16 @@ using Response = ExampleService::Response::SharedPtr;
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<icey::Node>("icey_service_service_async_await_example");
+  auto node = std::make_shared<rclcpp::Node>("icey_service_service_async_await_example");
+  auto ctx = std::make_shared<icey::Context>(node.get());
 
   /// Create a service client for an upstream service that is actually capable of answering the
   /// request.
   auto upstream_service_client =
-      node->icey().create_client<ExampleService>("set_bool_service_upstream");
+      ctx->create_client<ExampleService>("set_bool_service_upstream");
 
   /// Create the service server and give it a asynchronous callback (containing keyword co_await)
-  node->icey().create_service<ExampleService>(
+  ctx->create_service<ExampleService>(
       "set_bool_service", [&](auto request) -> icey::Promise<Response> {
         RCLCPP_INFO_STREAM(
             node->get_logger(),
