@@ -6,7 +6,7 @@
 
 <package format="3">
  <name>icey_examples</name>
- <version>0.1.0</version>
+ <version>0.2.0</version>
  <description>ICEY</description>
  <maintainer email="ivo.ivanov@tha.de">Ivo Ivanov</maintainer>
  <license>Apache-2</license>
