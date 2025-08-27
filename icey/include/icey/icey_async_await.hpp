@@ -23,12 +23,11 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 
-#include <icey/impl/result.hpp>
+#include <icey/impl/promise.hpp>
 
 namespace icey {
 
 inline bool icey_debug_print = false;
-inline bool icey_coro_debug_print = false;
 
 using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
@@ -519,10 +518,10 @@ struct ServiceClient {
   Promise<Response, std::string> call(Request request, const Duration &timeout) {
     using Cancel = typename Promise<Response, std::string>::Cancel;
     return Promise<Response, std::string>{[this, request, timeout](auto &promise) {
-      auto request_id = Base::call(
+      auto request_id = this->call(
           request, timeout, [&](const auto &x) { promise.put_value(x); },
           [&](const auto &x) { promise.put_error(x); });
-      return Cancel{[this, request_id](auto &) { Base::cancel_request(request_id); }};
+      return Cancel{[this, request_id](auto &) { cancel_request(request_id); }};
     }};
   }
 
@@ -563,7 +562,7 @@ public:
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
     auto subscription = node_base().create_subscription<MessageT>(
         topic_name,
-        [](typename MessageT::SharedPtr msg) {
+        [callback](typename MessageT::SharedPtr msg) {
           using ReturnType = decltype(callback(msg));
           if constexpr (has_promise_type_v<ReturnType>) {
             const auto continuation = [](auto msg, auto &&callback) -> Promise<void> {
@@ -583,20 +582,21 @@ public:
   /// \param period the period time
   /// \param callback the callback, may be synchronous or asynchronous
   /// \tparam Callback () -> void or () -> Promise<void>
+  /// \note This function creates a wall-clock timer.
   /// \note A callback signature that accepts a TimerInfo argument is not implemented yet
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer(const Duration &period, Callback &&callback) {
-    return node_base().create_timer(period, []() {
-      using ReturnType = decltype(callback(msg));
+    return node_base().create_wall_timer(period, [callback]() {
+      using ReturnType = decltype(callback());
       if constexpr (has_promise_type_v<ReturnType>) {
-        const auto continuation = [](auto msg, auto &&callback) -> Promise<void> {
-          co_await callback(msg);
+        const auto continuation = [](auto &&callback) -> Promise<void> {
+          co_await callback();
           co_return;
         };
-        continuation(msg, std::forward<Callback>(callback));
+        continuation(std::forward<Callback>(callback));
       } else {
-        callback(msg);
+        callback();
       }
     });
   }
