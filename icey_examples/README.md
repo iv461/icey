@@ -94,6 +94,46 @@ ros2 run icey_examples service_client_async_await_example
 
 You should now receive responses and see how both servers receive requests.
 
+# TF lookup using async/await 
+
+Start the subscription: 
+
+```sh
+ros2 run icey_examples tf_lookup_async_await_example 
+```
+
+And now the driver:
+
+```sh
+ros2 run icey_examples tf_pub_test_example 
+```
+
+The subscription should print regularly on every lookup.
+ 
+# TF subscription example  
+
+Start the TF broadcaster: 
+
+```sh
+ros2 run icey_examples tf_broadcaster_example 
+```
+
+Now the TF subscriber: 
+
+```sh
+ros2 run icey_examples tf_subscription_example 
+```
+
+It should print on every transform the transformation matrix: 
+
+```
+[INFO 1756324909.237720717] [icey_tf_subscription_example]: Received a new transform:
+-0.446485 -0.894791         0       7.3
+ 0.894791 -0.446485         0       -73
+        0         0         1         0
+        0         0         0         1
+``` 
+
 # Run parameter struct example 
 
 The parameter struct example shows how you can declare a lot of parameters without boilerplate code.
