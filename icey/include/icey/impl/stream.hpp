@@ -6,59 +6,15 @@
 #pragma once
 
 #include <functional>
+#include <icey/impl/promise.hpp>  /// Needed for has_promise_type
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <tuple>
 #include <type_traits>
 #include <unordered_set>
-#include <variant>
 
 namespace icey {
-/// A special type that indicates that there is no value. (Using `void` for this would cause many
-/// problems, so defining an extra struct is easier.)
-struct Nothing {};
-/// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we
-/// will generally use in the following to recognize (unspecialized) class templates.
-struct ResultTag {};
-/// A Result-type is a sum type that can either hold Value or Error, or, different
-/// to Rust, none. It is used as the state for the Stream.
-/// Note that this Result type is  API-compatible with `std::expected` (C++23), so a change is
-/// easily possible once we target C++23.
-template <class _Value, class _Error>
-struct Result : private std::variant<std::monostate, _Value, _Error>, public ResultTag {
-  using Value = _Value;
-  using Error = _Error;
-  using Self = Result<_Value, _Error>;
-  static Self None() { return Result<_Value, _Error>{}; }
-  static Self Ok(const _Value &x) {
-    Self ret;
-    ret.template emplace<1>(x);
-    return ret;
-  }
-  static Self Err(const _Error &x) {
-    Self ret;
-    ret.template emplace<2>(x);
-    return ret;
-  }
-  bool has_none() const { return this->index() == 0; }
-  bool has_value() const { return this->index() == 1; }
-  bool has_error() const { return this->index() == 2; }
-  const Value &value() const { return std::get<1>(*this); }
-  const Error &error() const { return std::get<2>(*this); }
-  void set_none() { this->template emplace<0>(std::monostate{}); }
-  void set_value(const Value &x) { this->template emplace<1>(x); }
-  void set_error(const Error &x) { this->template emplace<2>(x); }
-
-  auto get() const {
-    if constexpr (std::is_same_v<Error, Nothing>) {
-      return this->value();
-    } else {
-      return *this;
-    }
-  }
-};
-
 /// Some pattern matching for type recognition
 template <class T>
 struct remove_optional {
@@ -116,15 +72,6 @@ constexpr bool is_pair_v = is_pair<T>::value;
 template <class T>
 constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
 
-template <typename, typename = std::void_t<>>
-struct has_promise_type : std::false_type {};
-
-template <typename T>
-struct has_promise_type<T, std::void_t<typename T::promise_type>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
-
 /// The error type of the given Stream type
 template <class T>
 using ValueOf = typename remove_shared_ptr_t<T>::Value;
@@ -158,7 +105,7 @@ static std::shared_ptr<O> create_stream(Args &&...args) {
   return stream;
 }
 
-/// Calls the function with the given argument arg but unpacks it if it is a tuple.
+/// Calls the given function f with the given argument arg but unpacks it first if it's a tuple.
 template <class F, class Arg>
 inline auto unpack_if_tuple(F &&f, Arg &&arg) {
   if constexpr (is_tuple_v<std::decay_t<Arg>> || is_pair_v<std::decay_t<Arg>>) {
@@ -262,7 +209,7 @@ public:
   /// we have an error or value. If the state is none, it does not notify. If the state is an error
   /// and the `Error` is an exception type (a subclass of `std::runtime_error`) and also no
   /// handlers were registered, the exception is re-thrown.
-  /// TODO We should take the value if this is a Stream, but currently Promise also uses this Base
+  /// TODO We should take the value of this stream after notifying
   void notify() {
     if constexpr (std::is_base_of_v<std::runtime_error, Error>) {
       // If we have an error and the chain stops, we re-throw the error so that we do not leave the

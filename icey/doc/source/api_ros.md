@@ -1,6 +1,16 @@
 # The ICEY Context 
 
-The ICEY context becomes available by calling `node->icey()` and is your new Node-API that you use instead of `rclcpp::Node`. 
+The ICEY context is initialized by providing a node and provides a Node-like API 
+
+```{doxygenclass} icey::Context
+```
+
+If you only want async/await: 
+
+```{doxygenclass} icey::ContextAsyncAwait
+```
+
+Convenience node wrappers containing the Icey context
 
 ```{doxygentypedef} icey::Node
 ```
@@ -8,14 +18,10 @@ The ICEY context becomes available by calling `node->icey()` and is your new Nod
 ```{doxygentypedef} icey::LifecycleNode
 ```
 
-
 ```{doxygenclass} icey::NodeWithIceyContext
 ```
 
-```{doxygenclass} icey::Context
-```
-
-```{doxygenstruct} icey::TFListener
+```{doxygenstruct} icey::TransformBufferImpl
 ```
 
 ```{doxygenstruct} icey::NodeBase

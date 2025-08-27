@@ -20,12 +20,12 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 ## Add examples 
+ament_auto_add_executable(service_server_example src/service_server.cpp)
 ament_auto_add_executable(signal_generator_example src/signal_generator.cpp)
 ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
 ament_auto_add_executable(tf_subscription_example src/tf_subscription.cpp)
 ament_auto_add_executable(tf_broadcaster_example src/tf_broadcaster.cpp)
 ament_auto_add_executable(using_icey_context_example src/using_icey_context.cpp)
-ament_auto_add_executable(service_server_example src/service_server.cpp)
 
 ament_auto_add_executable(signal_generator_async_await_example src/signal_generator_async_await.cpp)
 
@@ -48,18 +48,7 @@ ament_auto_add_executable(coroutine_example src/coroutine_example.cpp)
 ament_auto_add_executable(listener_example src/listener.cpp)
 ament_auto_add_executable(synchronization_example src/synchronization.cpp)
 
-
 ament_auto_add_executable(lifecycle_node_example src/lifecycle_nodes.cpp)
-
-# ament_auto_add_library(icey_autoware_gyro_odometer SHARED
-#  autoware_gyro_odometer/gyro_odometer_core.cpp
-# )
-
-# rclcpp_components_register_node(icey_autoware_gyro_odometer
-#  PLUGIN "autoware::gyro_odometer::GyroOdometerNode"
-#  EXECUTABLE icey_autoware_gyro_odometer_node
-#  EXECUTOR SingleThreadedExecutor
-# )
 
 ament_auto_package(
   INSTALL_TO_SHARE

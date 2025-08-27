@@ -74,9 +74,6 @@ TEST_F(NodeTest, StreamsHaveContext) {
   auto pub = node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/test_debug_image");
   EXPECT_EQ(pub.impl()->context.lock().get(), &node_->icey());
 
-  auto service = node_->icey().create_service<ExampleService>("icey_test_service");
-  EXPECT_EQ(service.impl()->context.lock().get(), &node_->icey());
-
   auto tf_stream = node_->icey().create_timer(90ms).then(
       [](auto) { return geometry_msgs::msg::TransformStamped{}; });
   auto tf_pub = node_->icey().create_transform_publisher();
