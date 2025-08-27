@@ -627,6 +627,7 @@ public:
           }
         },
         qos, options);
+    subscriptions_.push_back(std::dynamic_pointer_cast<rclcpp::SubscriptionBase>(subscription));
     return subscription;
   }
 
@@ -639,7 +640,7 @@ public:
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
-    return node_base().create_wall_timer(period, [callback]() {
+    auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback());
       if constexpr (has_promise_type_v<ReturnType>) {
         const auto continuation = [](const auto &callback) -> Promise<void> {
@@ -651,6 +652,8 @@ public:
         callback(std::size_t{});
       }
     });
+    timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
+    return timer;
   }
 
   /// Create a service server supporting asynchronous callbacks (i.e. coroutines). One a request is
@@ -730,7 +733,9 @@ public:
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
   /// We need bookkeeping for the service servers.
 protected:
+  std::vector<std::shared_ptr<rclcpp::TimerBase>> timers_;
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
+  std::vector<std::shared_ptr<rclcpp::SubscriptionBase>> subscriptions_;
 };
 
 }  // namespace icey
