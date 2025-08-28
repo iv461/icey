@@ -217,7 +217,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     EXPECT_TRUE(result1.has_error());
     EXPECT_EQ(result1.error(), "TIMEOUT");
     /// Expect there are no pending requests in case of timeout: A call to prune must return 0
-    EXPECT_EQ(client1.client->prune_pending_requests(), 0);
+    EXPECT_EQ(client1.client()->prune_pending_requests(), 0);
 
     /// Send the first request but do not await it
     icey::Promise<Response, std::string> response_future1 = client1.call(request, 40ms);
@@ -228,7 +228,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     EXPECT_TRUE((co_await response_future2).has_value());
     EXPECT_TRUE((co_await response_future1).has_value());
 
-    EXPECT_EQ(client1.client->prune_pending_requests(), 0);
+    EXPECT_EQ(client1.client()->prune_pending_requests(), 0);
 
     async_completed = true;
     co_return 0;
