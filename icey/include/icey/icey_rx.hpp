@@ -3,9 +3,10 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// This header contains more features of ICEY related to reactive programming: Subscribers and timers modeled with the  
-/// Stream concept, synchronization and other transformations on streams like buffering, filtering. Support for message_fiters and TF synchronization.
-/// If you only need async/await, you do not need this header.
+/// This header contains more features of ICEY related to reactive programming: Subscribers and
+/// timers modeled with the Stream concept, synchronization and other transformations on streams
+/// like buffering, filtering. Support for message_fiters and TF synchronization. If you only need
+/// async/await, you do not need this header.
 #pragma once
 
 #include <boost/hana.hpp>
@@ -26,6 +27,7 @@
 
 /// TF2 support:
 #include "tf2_ros/message_filter.h"
+#include "tf2_ros/transform_broadcaster.h"
 
 // Message filters library: (.h so that this works with humble as well)
 #include <message_filters/subscriber.h>
@@ -41,6 +43,8 @@ extern std::unordered_set<std::thread::id> g_used_thread_ids;
 #define ICEY_DEGUG_TRACE_THIS_THREAD_ID
 #endif
 
+inline bool icey_debug_print = false;
+
 template <class T>
 struct t_is_shared_ptr : std::false_type {};
 
@@ -54,6 +58,28 @@ template <typename T, typename... Ts>
 concept AnyOf = (std::is_convertible_v<T, Ts> || ...);
 
 namespace hana = boost::hana;
+
+/// A weak pointer that supports operator-> and allows construction from a shared_ptr
+/// TODO this was just to ease refactoring, remove it
+template <class T>
+struct Weak {
+  Weak() = default;
+  Weak(std::shared_ptr<T> p) : p_(p) {}
+  T *operator->() const {
+    if (!p_.lock()) throw std::bad_weak_ptr();
+    return p_.lock().get();
+  }
+  T &operator*() const {
+    if (!p_.lock()) throw std::bad_weak_ptr();
+    return *p_.lock().get();
+  }
+  T *get() const {
+    if (!p_.lock()) throw std::bad_weak_ptr();
+    return p_.lock().get();
+  }
+  auto lock() const { return p_.lock(); }
+  std::weak_ptr<T> p_;
+};
 
 /// Returns a string that represents the type of the given value: i.e. "icey::Stream<int>"
 template <class T>
@@ -92,8 +118,6 @@ struct SubscriptionStream;
 struct TimerStream;
 template <class V>
 struct PublisherStream;
-template <class V>
-struct ServiceStream;
 template <class V>
 struct TimeoutFilter;
 struct TransformBuffer;

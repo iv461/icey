@@ -14,9 +14,6 @@ All the ROS entities (subscriptions, publishers, timers etc.) are wrapped so tha
 ```{doxygenstruct} icey::PublisherStream
 ```
 
-```{doxygenstruct} icey::ServiceStream
-```
-
 ```{doxygenstruct} icey::ServiceClient
 ```
 
