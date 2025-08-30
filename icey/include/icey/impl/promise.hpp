@@ -10,6 +10,16 @@
 #include <icey/impl/result.hpp>
 #include <iostream>
 
+#ifdef ICEY_CORO_DEBUG_PRINT
+#include <boost/type_index.hpp>
+#include <fmt/format.h>
+/// Returns a string that represents the type of the given value
+template <class T>
+static std::string get_type(T &t) {
+  return fmt::format("[{} @ 0x{:x}]", boost::typeindex::type_id_runtime(t).pretty_name(), std::size_t(&t));
+}
+#endif
+
 /// This header defines a promise type supporting async/await (C++ 20 coroutines) only.
 /// Not thread-safe.
 namespace icey {
@@ -42,12 +52,24 @@ public:
   using promise_type = Self;
   using Cancel = std::function<void(Self &)>;
 
-  PromiseBase() = default;
+  PromiseBase() {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
+#endif
+  }
   /// Construct using a handler: This handler is called immediately in the constructor with the
   /// address to this Promise so that it can store it and write to this promise later. This handler
   /// returns a cancellation function that gets called when this Promise is destructed. This
   /// constructor is useful for wrapping an existing callback-based API.
-  explicit PromiseBase(std::function<Cancel(Self &)> &&h) { cancel_ = h(*this); }
+  explicit PromiseBase(std::function<Cancel(Self &)> &&h) {
+    cancel_ = h(*this);
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Promise was handle-constructed: " << get_type(*this) << std::endl;
+#endif
+    was_handle_ctored_ = true;
+  }
+
+  bool was_handle_ctored_{false};
 
   PromiseBase(const PromiseBase &) = delete;
   PromiseBase(PromiseBase &&) = delete;
@@ -55,6 +77,9 @@ public:
   PromiseBase &operator=(Self &&) = delete;
 
   ~PromiseBase() {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Promise was destructed: " << get_type(*this) << std::endl;
+#endif
     if (cancel_) cancel_(*this);
   }
 
@@ -70,17 +95,37 @@ public:
     struct Awaiter {
       Self &promise_;
       Awaiter(Self &promise) : promise_(promise) {}
-      bool await_ready() const noexcept { return !promise_.has_none(); }
-      void await_suspend(std::coroutine_handle<> continuation) noexcept {
-        /// Resume the coroutine when this promise is done
-        //// TODO
-        // if(promise_.continuation_) throw std::logic_error("Illegal!");
+      bool await_ready() const noexcept {
+        if constexpr(std::is_same_v<Value, Nothing>)
+          return true; /// void routines are always ready 
+        return !promise_.has_none(); 
+      }
+      bool await_suspend(std::coroutine_handle<> continuation) noexcept {
+/// Resume the coroutine when this promise is done
+//// TODO
+// if(promise_.continuation_) throw std::logic_error("Illegal!");
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << "Promise await_suspend was called on promise: " << get_type(promise_)
+                  << std::endl;
+#endif
         promise_.continuation_ = continuation;
+        return promise_.was_handle_ctored_;
       }
 
       auto await_resume() const noexcept {
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << "Promise await_resume was called on promise: " << get_type(promise_)
+                  << std::endl;
+#endif
         if (promise_.exception_ptr_) std::rethrow_exception(promise_.exception_ptr_);
-        return promise_.get_state().get();
+        if constexpr(std::is_same_v<Value, Nothing>)
+          return;
+        else { 
+          if(promise_.has_none()) {
+            throw std::invalid_argument("Promise has nothing, called resume too early.");
+          }
+          return promise_.get_state().get();
+        }
       }
     };
     return Awaiter{*this};
@@ -109,6 +154,11 @@ public:
 
   void reject(const Error &error) {
     set_error(error);
+    notify();
+  }
+
+  void put_state(const State &error) {
+    set_state(error);
     notify();
   }
 
@@ -149,7 +199,13 @@ public:
   using State = Base::State;
   using Base::Base;
   using promise_type = Promise<_Value, _Error>;
-  promise_type get_return_object() { return {}; }
+  promise_type get_return_object() {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Promise<Value> get_return_object was called on promise: " << get_type(*this)
+              << std::endl;
+#endif
+    return {};
+  }
 
   auto return_value() { return this->value(); }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
@@ -168,7 +224,13 @@ class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
   using PromiseBase<Nothing, Nothing>::PromiseBase;
   using promise_type = Promise<void, Nothing>;
-  promise_type get_return_object() { return {}; }
+  promise_type get_return_object() {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Promise<void> get_return_object was called on promise: " << get_type(*this)
+              << std::endl;
+#endif
+    return {};
+  }
   auto return_void() { this->resolve(Nothing{}); }
 };
 

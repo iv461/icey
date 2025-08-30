@@ -8,7 +8,11 @@
 /// synchronously-looking code. Under the hood, everything is asynchronous, ICEY actually
 /// calls client->async_send_request. ICEY gives you a clean and simple service API: no manual
 /// spinning of the event-loop, no threads, no manual cleanups needed.
-#include <icey/icey.hpp>
+
+#define ICEY_CORO_DEBUG_PRINT
+
+
+#include <icey/icey_async_await.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
 
@@ -16,23 +20,34 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
+icey::Promise<Response, std::string> 
+//icey::Result<Response, std::string> 
+handle_srv_call(icey::ServiceClient<ExampleService> client, auto request) {
+  std::cout << "B4 call" << std::endl;
+  icey::Result<Response, std::string> result = co_await client.call(request, 1s);
+  std::cout << "After RPC call" << std::endl;
+  co_return result;
+}
+
+
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("icey_service_client_async_await_example");
-  auto ctx = std::make_shared<icey::Context>(node.get());
+  auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
   /// Create the service client beforehand
   auto service = ctx->create_client<ExampleService>("set_bool_service");
 
-  auto timer = ctx->create_timer(1s, [&](std::size_t) -> icey::Promise<void> {
+  auto timer = ctx->create_timer_async(1s, [&](std::size_t) -> icey::Promise<void> {
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked, sending request: " << request->data);
 
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await service.call(request, 1s);
-
+    icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);//co_await service.call(request, 1s);
+    
+    std::cout << "After handle srv call" << std::endl;
     if (result.has_error()) {
       /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
       RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());

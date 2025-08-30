@@ -15,6 +15,7 @@
 
  <depend>icey</depend>
  <depend>rclcpp</depend>
+ <depend>rclc</depend>
  <depend>rclcpp_components</depend>
  <depend>rclcpp_lifecycle</depend>
 

@@ -626,7 +626,8 @@ struct ServiceClient {
   for the response and one in case of error (timeout or service unavailable).  Requests can never
   hang forever but will eventually time out. Also you don't need to clean up pending requests --
   they will be cleaned up automatically. So this function will never cause any memory leaks. \param
-  request the request \param timeout The timeout for the service call, both for service discovery
+  request the request.
+  \param timeout The timeout for the service call, both for service discovery
   and the actual call. \returns The request id using which this request can be cancelled.
   */
   RequestID call(Request request, const Duration &timeout,
@@ -718,7 +719,7 @@ public:
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
     auto timer = node_base().create_wall_timer(period, [callback]() {
-      using ReturnType = decltype(callback());
+      using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
         const auto continuation = [](const auto &callback) -> Promise<void> {
           co_await callback(std::size_t{});
