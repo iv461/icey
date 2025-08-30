@@ -21,9 +21,10 @@ struct promise_base {
     auto await_suspend(std::coroutine_handle<promise_type> coroutine) noexcept
         -> std::coroutine_handle<> {
       auto& promise = coroutine.promise();
-      std::cout << "promise_base await_resume was called on promise: " << get_type(promise)
+#ifdef ICEY_CORO_DEBUG_PRINT
+      std::cout << "promise_base await_suspend was called on promise: " << get_type(promise)
                 << std::endl;
-
+#endif
       // If there is a continuation call it, otherwise this is the end of the line.
       if (promise.m_continuation != nullptr) {
         return promise.m_continuation;
@@ -89,19 +90,6 @@ public:
 
   auto get_return_object() noexcept -> task_type;
 
-  template <typename value_type>
-  requires(return_type_is_reference and std::is_constructible_v<return_type, value_type&&>) or
-      (not return_type_is_reference and
-       std::is_constructible_v<stored_type, value_type&&>) auto return_value(value_type&& value)
-          -> void {
-    if constexpr (return_type_is_reference) {
-      return_type ref = static_cast<value_type&&>(value);
-      m_storage.template emplace<stored_type>(std::addressof(ref));
-    } else {
-      m_storage.template emplace<stored_type>(std::forward<value_type>(value));
-    }
-  }
-
   auto return_value(const stored_type& value) -> void requires(not return_type_is_reference) {
     m_storage.template emplace<stored_type>(value);
   }
@@ -113,7 +101,7 @@ public:
 #endif
   }
 
-  auto resolve(const stored_type &value) {
+  auto resolve(const stored_type& value) {
     return_value(value);
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << "resolved, continuing ... " << get_type(*this) << std::endl;
@@ -217,7 +205,11 @@ public:
 
     auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept
         -> std::coroutine_handle<> {
-      m_coroutine.promise().continuation(awaiting_coroutine);
+      auto& p = m_coroutine.promise();
+#ifdef ICEY_CORO_DEBUG_PRINT
+      std::cout << "task await_suspend called on promise: " << get_type(p) << std::endl;
+#endif
+      p.continuation(awaiting_coroutine);
       return m_coroutine;
     }
 
@@ -231,6 +223,10 @@ public:
   task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
 
   ~task() {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    auto& p = m_coroutine.promise();
+    std::cout << "~task destroying promise: " << get_type(p) << std::endl;
+#endif
     if (m_coroutine != nullptr) {
       m_coroutine.destroy();
     }

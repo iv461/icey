@@ -575,9 +575,15 @@ struct ServiceClientImpl {
     //using Cancel = typename Promise<Response, std::string>::Cancel;
     
     co_return [this, request, timeout](auto &promise) {
+      std::cout << "Dispatching call .. " << std::endl;
       auto request_id = this->call(
-          request, timeout, [&](const auto &x) { promise.resolve(x); },
-          [&](const auto &x) { //promise.reject(x); 
+          request, timeout, [&](const auto &x) { 
+            std::cout << "Resolving promise .. " << std::endl;
+            promise.resolve(x); 
+          },
+          [&](const auto &x) {
+            std::cout << "Rejecting promise .. " << std::endl; 
+            //promise.reject(x); 
           });
      // return Cancel{[this, request_id](auto &) { cancel_request(request_id); }};
     };
