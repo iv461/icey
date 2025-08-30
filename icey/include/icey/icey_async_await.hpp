@@ -19,6 +19,7 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/qos.hpp"
+#include <icey/impl/task.hpp>
 
 namespace icey {
 
@@ -178,7 +179,6 @@ struct TransformBufferImpl {
   TransformBufferImpl(TransformBufferImpl &&) = delete;
   TransformBufferImpl &operator=(const TransformBufferImpl &) = delete;
   TransformBufferImpl &operator=(TransformBufferImpl &&) = delete;
-#
 
   /// A transform request stores a request for looking up a transform between two coordinate
   /// systems. Either (1) at a particular time with a timeout, or (2) as a subscription. When
@@ -293,7 +293,7 @@ struct TransformBufferImpl {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+  /*Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
                                                                     const std::string &source_frame,
                                                                     const Time &time,
                                                                     const Duration &timeout) {
@@ -309,7 +309,7 @@ struct TransformBufferImpl {
         }
       }};
     });
-  }
+  }*/
 
   /// @brief Same as `lookup`, but accepts a ROS time point
   ///
@@ -318,12 +318,12 @@ struct TransformBufferImpl {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+  /*Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
                                                                     const std::string &source_frame,
                                                                     const rclcpp::Time &time,
                                                                     const Duration &timeout) {
     return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout);
-  }
+  }*/
 
   /// Cancel a transform request: This means that the registered callbacks will no longer be called.
   /// If the given request does not exist, this function does nothing.
@@ -494,7 +494,7 @@ struct TransformBuffer {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+  /*Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
                                                                     const std::string &source_frame,
                                                                     const Time &time,
                                                                     const Duration &timeout) {
@@ -513,7 +513,7 @@ struct TransformBuffer {
                                                                     const rclcpp::Time &time,
                                                                     const Duration &timeout) {
     return impl_.lock()->lookup(target_frame, source_frame, time, timeout);
-  }
+  }*/
 
 private:
   std::weak_ptr<TransformBufferImpl> impl_;
@@ -571,14 +571,16 @@ struct ServiceClientImpl {
     return future_and_req_id.request_id;
   }
 
-  Promise<Response, std::string> call(Request request, const Duration &timeout) {
-    using Cancel = typename Promise<Response, std::string>::Cancel;
-    return Promise<Response, std::string>{[this, request, timeout](auto &promise) {
+  task<Response> call(Request request, const Duration &timeout) {
+    //using Cancel = typename Promise<Response, std::string>::Cancel;
+    
+    co_return [this, request, timeout](auto &promise) {
       auto request_id = this->call(
           request, timeout, [&](const auto &x) { promise.resolve(x); },
-          [&](const auto &x) { promise.reject(x); });
-      return Cancel{[this, request_id](auto &) { cancel_request(request_id); }};
-    }};
+          [&](const auto &x) { //promise.reject(x); 
+          });
+     // return Cancel{[this, request_id](auto &) { cancel_request(request_id); }};
+    };
   }
 
   /// Cancel the request so that callbacks will not be called anymore.
@@ -651,7 +653,7 @@ struct ServiceClient {
   \endverbatim
   */
   // clang-format on
-  Promise<Response, std::string> call(Request request, const Duration &timeout) {
+  task<Response> call(Request request, const Duration &timeout) {
     return impl_->call(request, timeout);
   }
 
