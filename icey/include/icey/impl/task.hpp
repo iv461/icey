@@ -53,11 +53,6 @@ struct promise_base {
 
   auto final_suspend() noexcept { return final_awaitable{}; }
 
-  auto continuation(std::coroutine_handle<> continuation) noexcept -> void {
-    m_continuation = continuation;
-  }
-
-protected:
   std::coroutine_handle<> m_continuation{nullptr};
 };
 
@@ -104,9 +99,12 @@ public:
   auto resolve(const stored_type& value) {
     return_value(value);
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << "resolved, continuing ... " << get_type(*this) << std::endl;
+    std::cout << "resolved promise " << get_type(*this) << std::endl;
 #endif
-    coroutine_handle::from_promise(*this).resume();
+    if(m_continuation) 
+        m_continuation.resume();
+
+    //coroutine_handle::from_promise(*this).resume();
   }
 
   auto unhandled_exception() noexcept -> void {
@@ -207,9 +205,9 @@ public:
         -> std::coroutine_handle<> {
       auto& p = m_coroutine.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << "task await_suspend called on promise: " << get_type(p) << std::endl;
+      std::cout << "task await_suspend called on promise, setting continuation: " << get_type(p) << std::endl;
 #endif
-      p.continuation(awaiting_coroutine);
+      p.m_continuation = awaiting_coroutine;
       return m_coroutine;
     }
 
@@ -222,7 +220,8 @@ public:
   task(const task&) = delete;
   task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
 
-  ~task() {
+  /*~task() {
+    
 #ifdef ICEY_CORO_DEBUG_PRINT
     auto& p = m_coroutine.promise();
     std::cout << "~task destroying promise: " << get_type(p) << std::endl;
@@ -230,7 +229,7 @@ public:
     if (m_coroutine != nullptr) {
       m_coroutine.destroy();
     }
-  }
+  }*/
 
   auto operator=(const task&) -> task& = delete;
 
