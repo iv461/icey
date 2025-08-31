@@ -54,7 +54,13 @@ public:
   using Error = _Error;
   using State = Result<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
+
   using Cancel = std::function<void(Self &)>;
+  /// This is a function that launches the asynchronous operation. It is used to wrap a
+  /// callback-based API. This promise stores this function so that it can be called on
+  /// await_suspend. The callback-based API receives this promise and will write the result into
+  /// this promise (first argument Self&). It also sets Cancel function (second argument)
+  using LaunchAsync = std::function<void(Self &, Cancel &)>;
 
   PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -152,18 +158,43 @@ public:
     if (continuation_) continuation_.resume();
   }
 
-  bool was_handle_ctored_{false};
+  /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
+  auto get() {
+    if (exception_ptr_) {
+      std::rethrow_exception(exception_ptr_);
+    }
+    if constexpr (std::is_same_v<Value, Nothing>)
+      return;
+    else {
+      if (has_none()) {
+        throw std::invalid_argument("Promise has nothing, called resume too early.");
+      }
+      return get_state().get();
+    }
+  }
+
+  /// Launches the asynchronous operation that was stored previously (if any). Sets the given
+  /// continuation.
+  void launch_async(std::coroutine_handle<> continuation) {
+    continuation_ = continuation;
+    if (launch_async_) launch_async_(*this, this->cancel_);
+  }
 
   /// State of the promise: May be nothing, value or error.
   State state_;
+
+  /// Function that starts an asynchronous ROS operation like a service call. Must be asynchronous,
+  /// i.e. run in the event-loop, no synchronous operations are allowed (even if the result is
+  /// already available).
+  LaunchAsync launch_async_;
 
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback
   /// captures the Promises object by reference since it needs to write the result to it. But if we
   /// would destruct the Promise and after that this ROS callback gets called, we get an
   /// use-after-free bug. The promise must therefore cancel the ROS callback in the destructor.
-  /// Since we have no concurrency, this cancellation function can always be a synchronous function
-  /// and thus simply be called in the destructor.
+  /// Everything that we have in ROS can be cancelled synchronously, so a synchronous cancellation
+  /// function called in the destructor is sufficient.
   Cancel cancel_;
 
   /// The continuation that is registered when co_awaiting this promise
@@ -187,24 +218,22 @@ template <class _Value, class _Error = Nothing>
 class Promise : public PromiseBase<_Value, _Error> {
 public:
   using Base = PromiseBase<_Value, _Error>;
+  using LaunchAsync = Base::LaunchAsync;
   using Cancel = Base::Cancel;
   using State = Base::State;
   using Base::Base;
 
   task<_Value, _Error> get_return_object();
 
-  // auto return_value() { return this->value(); }
-
-  /// Construct using a handler: This handler is called immediately in the constructor with the
-  /// address to this Promise so that it can store it and write to this promise later. This handler
-  /// returns a cancellation function that gets called when this Promise is destructed. This
+  /// Sets a function that launches the asynchronous operation: This handler is called in the with
+  /// the address to this Promise so that it can store it and write to this promise later. This
+  /// handler returns a cancellation function that gets called when this Promise is destructed. This
   /// constructor is useful for wrapping an existing callback-based API.
-  auto return_value(std::function<void(Base &, Cancel &)> &&h) {
-    h(*this, this->cancel_);
+  auto return_value(LaunchAsync &&h) {
+    this->launch_async_ = h;
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " return_value(handle)-" << std::endl;
+    std::cout << get_type(*this) << " return_value(launch_async)-" << std::endl;
 #endif
-    this->was_handle_ctored_ = true;
   }
 
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
@@ -225,7 +254,6 @@ public:
   using Cancel = Base::Cancel;
 
   task<void, Nothing> get_return_object();
-
   auto return_void() { this->resolve(Nothing{}); }
 };
 
@@ -258,27 +286,19 @@ public:
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
 #endif
-      p.continuation_ = awaiting_coroutine;
-      fmt::print("m_coroutine is: 0x{:x}, continuation_ is: 0x{:x}\n", std::size_t(m_coroutine.address()), 
-          std::size_t(p.continuation_.address()));
+      p.launch_async(awaiting_coroutine);
+      fmt::print("m_coroutine is: 0x{:x}, continuation_ is: 0x{:x}\n",
+                 std::size_t(m_coroutine.address()), std::size_t(p.continuation_.address()));
       return true;
       // return m_coroutine;
-      //      return promise_.was_handle_ctored_;
     }
+
     auto await_resume() {
       auto &promise = this->m_coroutine.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(promise) << " await_resume()" << std::endl;
 #endif
-      if (promise.exception_ptr_) std::rethrow_exception(promise.exception_ptr_);
-      if constexpr (std::is_same_v<Value, Nothing>)
-        return;
-      else {
-        if (promise.has_none()) {
-          throw std::invalid_argument("Promise has nothing, called resume too early.");
-        }
-        return promise.get_state().get();
-      }
+      return promise.get();
     }
 
     std::coroutine_handle<promise_type> m_coroutine{nullptr};
@@ -295,6 +315,7 @@ public:
     std::cout << get_type(*this) << " Constructor(handle) (get_return_object)" << std::endl;
 #endif
   }
+
   task(const task &) = delete;
   task(task &&other) = delete;
   task &operator=(const task &) = delete;
@@ -302,47 +323,18 @@ public:
 
   ~task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-
-    std::cout << get_type(*this) << " Destructor(), m_coroutine.done(): " << m_coroutine.done() << std::endl;
+    std::cout << get_type(*this) << " Destructor(), m_coroutine.done(): " << m_coroutine.done()
+              << std::endl;
 #endif
     if (m_coroutine && m_coroutine.done()) {
       m_coroutine.destroy();
       m_coroutine = nullptr;
     }
-    /*
-    #ifdef ICEY_CORO_DEBUG_PRINT
-        auto& p = m_coroutine.promise();
-        std::cout << "~task destroying promise: " << get_type(p) << std::endl;
-    #endif
-        if (m_coroutine != nullptr) {
-          m_coroutine.destroy();
-        }*/
   }
-
-  /*auto resume() -> bool {
-    if (!m_coroutine.done()) {
-      m_coroutine.resume();
-    }
-    return !m_coroutine.done();
-  }
-
-  auto destroy() -> bool {
-    if (m_coroutine != nullptr) {
-      m_coroutine.destroy();
-      m_coroutine = nullptr;
-      return true;
-    }
-
-    return false;
-  }*/
-
   auto operator co_await() const &noexcept { return awaitable_base{m_coroutine}; }
 
-  auto promise() & -> promise_type & { return m_coroutine.promise(); }
-  auto promise() const & -> const promise_type & { return m_coroutine.promise(); }
-  auto promise() && -> promise_type && { return std::move(m_coroutine.promise()); }
-
-  auto handle() -> coroutine_handle { return m_coroutine; }
+  promise_type &promise() { return m_coroutine.promise(); }
+  const promise_type &promise() const { return m_coroutine.promise(); }
 
 private:
   coroutine_handle m_coroutine{nullptr};
