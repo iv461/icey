@@ -246,15 +246,25 @@ public:
 
   /// Destroys the coroutine if it is done.
   ~Task() {
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Destructor(), coroutine_.done(): " << coroutine_.done()
+    /// We always destroy the coroutine for void-tasks since they are the top-level
+    if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
+      #ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " destroying ..  " << coroutine_.done()
               << std::endl;
 #endif
-    bool is_void = std::is_same_v<Value, Nothing>;
-    if (coroutine_ && (coroutine_.done() || is_void)) {
-      coroutine_.destroy();
-      coroutine_ = nullptr;
+       coroutine_.destroy();
+    coroutine_ = nullptr;
+    } else {
+            #ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " NOT destroying ! " << coroutine_.done()
+              << std::endl;
+#endif
     }
+  }
+
+  /// Call this function on the top-level coroutine that you are not awaiting to prevent memory leaks. 
+  void force_destruction() {
+    shall_destroy_ = true;
   }
 
   auto operator co_await() const &noexcept {
@@ -292,6 +302,7 @@ public:
   const promise_type &promise() const { return coroutine_.promise(); }
 
 private:
+  bool shall_destroy_{false};
   coroutine_handle coroutine_{nullptr};
 };
 

@@ -16,7 +16,14 @@ struct EventLoop {
   std::vector<std::function<void()>> events;
 };
 
-icey::Task<int> obtain_the_number_async(EventLoop &event_loop) { co_return 42; }
+icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
+  co_return [&](auto &promise, auto &) {
+    event_loop.dispatch([&]() {
+      std::this_thread::sleep_for(10ms);
+      promise.resolve(42);
+    });
+  };
+}
 
 icey::Task<void> do_async_stuff(EventLoop &event_loop) {
   std::cout << "Before obtain_the_number_async" << std::endl;
@@ -28,8 +35,7 @@ icey::Task<void> do_async_stuff(EventLoop &event_loop) {
       co_return;
     };
     for (size_t i = 0; i < 1000; i++) {
-      std::this_thread::sleep_for(10ms);
-      f();
+      f().force_destruction();
     }
   });
   co_return;
