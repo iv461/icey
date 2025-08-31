@@ -9,41 +9,20 @@
 using namespace std::chrono_literals;
 struct EventLoop {
   void dispatch(auto &&event) { events.push_back(event); }
-  void create_timer(auto &&f, auto duration) {
-    dispatch([f, duration]() {
-      const auto continuation = [](auto cb) -> icey::Task<void> {
-        co_await cb();
-        co_return;
-      };
-      for (size_t i = 0; i < 1000; i++) {
-        std::this_thread::sleep_for(duration);
-        continuation(f);
-      }
-    });
-  }
+
   void spin() {
     for (auto ev : events) ev();
   }
   std::vector<std::function<void()>> events;
 };
 
-icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
-  co_return 42;
-  /*
-  co_return [&](auto &promise, auto &) {
-      event_loop.dispatch([&promise]() {
-          std::cout << "Starting doing hard work to obtain the number .. " << std::endl;
-          std::this_thread::sleep_for(10ms);
-          promise.resolve(42);
-      });
-  };
-  */
-}
+icey::Task<int> obtain_the_number_async(EventLoop &event_loop) { co_return 42; }
 
 icey::Task<void> do_async_stuff(EventLoop &event_loop) {
   std::cout << "Before obtain_the_number_async" << std::endl;
   event_loop.dispatch([&]() {
     const auto f = [&]() -> icey::Task<void> {
+      std::cout << "Before obtain_the_number_async" << std::endl;
       int the_number = co_await obtain_the_number_async(event_loop);
       std::cout << "Obtained number: " << the_number << std::endl;
       co_return;
