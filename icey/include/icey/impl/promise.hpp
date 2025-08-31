@@ -293,16 +293,20 @@ public:
   task(const task &) = delete;
   task(task &&other) = delete;
 
-  /*~task() {
-
+  ~task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    auto& p = m_coroutine.promise();
-    std::cout << "~task destroying promise: " << get_type(p) << std::endl;
+
+    std::cout << "~task  " << get_type(*this) << std::endl;
 #endif
-    if (m_coroutine != nullptr) {
-      m_coroutine.destroy();
-    }
-  }*/
+    /*
+    #ifdef ICEY_CORO_DEBUG_PRINT
+        auto& p = m_coroutine.promise();
+        std::cout << "~task destroying promise: " << get_type(p) << std::endl;
+    #endif
+        if (m_coroutine != nullptr) {
+          m_coroutine.destroy();
+        }*/
+  }
 
   task &operator=(const task &) = delete;
   task &operator=(task &&other) = delete;
