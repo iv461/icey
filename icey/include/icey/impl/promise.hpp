@@ -122,7 +122,6 @@ public:
   /// Calls the continuation coroutine
   void notify() {
     if (continuation_) continuation_.resume();
-   
   }
 
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
@@ -251,7 +250,8 @@ public:
     std::cout << get_type(*this) << " Destructor(), coroutine_.done(): " << coroutine_.done()
               << std::endl;
 #endif
-    if (coroutine_ && coroutine_.done()) {
+    bool is_void = std::is_same_v<Value, Nothing>;
+    if (coroutine_ && (coroutine_.done() || is_void)) {
       coroutine_.destroy();
       coroutine_ = nullptr;
     }

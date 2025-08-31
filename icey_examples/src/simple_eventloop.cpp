@@ -39,13 +39,17 @@ icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
 
 icey::Task<void> do_async_stuff(EventLoop &event_loop) {
   std::cout << "Before obtain_the_number_async" << std::endl;
-  event_loop.create_timer(
-      [&]() -> icey::Task<void> {
-        int the_number = co_await obtain_the_number_async(event_loop);
-        std::cout << "Obtained number: " << the_number << std::endl;
-        co_return;
-      },
-      10ms);
+  event_loop.dispatch([&]() {
+    const auto f = [&]() -> icey::Task<void> {
+      int the_number = co_await obtain_the_number_async(event_loop);
+      std::cout << "Obtained number: " << the_number << std::endl;
+      co_return;
+    };
+    for (size_t i = 0; i < 1000; i++) {
+      std::this_thread::sleep_for(10ms);
+      f();
+    }
+  });
   co_return;
 }
 
