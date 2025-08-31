@@ -79,7 +79,6 @@ public:
 #endif
     if (cancel_) cancel_(*this);
   }
-
   friend struct final_awaitable;
   struct final_awaitable {
     auto await_ready() const noexcept -> bool { return false; }
@@ -90,7 +89,8 @@ public:
       auto &promise = coroutine.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout
-          << get_type(promise) << " await_suspend(), transfering to continuation ..." << std::endl;
+          << "promise_base await_suspend was called on promise, transfering to continuation ..: "
+          << get_type(promise) << std::endl;
 #endif
       // If there is a continuation call it, otherwise this is the end of the line.
       if (promise.continuation_ != nullptr) {
@@ -106,17 +106,17 @@ public:
   };
 
   auto initial_suspend() {
-    return std::suspend_always{};
-    //return std::suspend_never{};
+    return std::suspend_never{};
     /*
     if constexpr (std::is_same_v<Value, Nothing>)
     return std::suspend_never{};
     else
+    return std::suspend_always{};
     */
   }
   auto final_suspend() const noexcept {
-    //return std::suspend_always{};
-    return final_awaitable{};
+    return std::suspend_always{};
+    // return final_awaitable{};
   }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
@@ -277,7 +277,7 @@ public:
       std::cout << "task await_ready called on promise: " << get_type(p) << "is ready: " << is_ready
                 << std::endl;
 #endif
-      //return false;
+      return false;
       return is_ready;
     }
 
@@ -289,8 +289,8 @@ public:
       p.launch_async(awaiting_coroutine);
       fmt::print("m_coroutine is: 0x{:x}, continuation_ is: 0x{:x}\n",
                  std::size_t(m_coroutine.address()), std::size_t(p.continuation_.address()));
-      //return true;
-      return m_coroutine;
+      return true;
+      // return m_coroutine;
     }
 
     auto await_resume() {

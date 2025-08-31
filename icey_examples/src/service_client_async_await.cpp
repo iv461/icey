@@ -11,6 +11,7 @@
 
 #define ICEY_CORO_DEBUG_PRINT
 
+
 #include <icey/icey_async_await.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -19,27 +20,14 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-struct CopyTrack {
-  CopyTrack() {
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Ctor()" << std::endl;
-#endif
-  }
-  ~CopyTrack() {
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " ~Ctor()" << std::endl;
-#endif
-  }
-};
-
-icey::task<Response, std::string> handle_srv_call(icey::ServiceClient<ExampleService> client,
-                                                  auto request) {
+icey::task<Response, std::string>  
+handle_srv_call(icey::ServiceClient<ExampleService> client, auto request) {
   std::cout << "B4 call" << std::endl;
-  CopyTrack my_thing;
   icey::Result<Response, std::string> result = co_await client.call(request, 1s);
   std::cout << "After RPC call" << std::endl;
   co_return result;
 }
+
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
@@ -56,17 +44,19 @@ int main(int argc, char **argv) {
 
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
-
+    icey::Result<Response, std::string> result= co_await handle_srv_call(service, request);
+    //icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+    
     std::cout << "After handle srv call" << std::endl;
-
+    //RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << response->success);
+    
     if (result.has_error()) {
       /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
       RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
     } else {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
-    }
-
+  }
+  
     co_return;
   });
   rclcpp::spin(node);
