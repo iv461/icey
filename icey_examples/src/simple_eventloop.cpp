@@ -28,13 +28,16 @@ struct EventLoop {
 };
 
 icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
+  co_return 42;
+  /*
   co_return [&](auto &promise, auto &) {
-    event_loop.dispatch([&promise]() {
-      std::cout << "Starting doing hard work to obtain the number .. " << std::endl;
-      std::this_thread::sleep_for(10ms);
-      promise.resolve(42);
-    });
+      event_loop.dispatch([&promise]() {
+          std::cout << "Starting doing hard work to obtain the number .. " << std::endl;
+          std::this_thread::sleep_for(10ms);
+          promise.resolve(42);
+      });
   };
+  */
 }
 
 icey::Task<void> do_async_stuff(EventLoop &event_loop) {
