@@ -19,7 +19,7 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/qos.hpp"
-#include <icey/impl/task.hpp>
+//#include <icey/impl/task.hpp>
 
 namespace icey {
 
@@ -571,10 +571,10 @@ struct ServiceClientImpl {
     return future_and_req_id.request_id;
   }
 
-  task<Response> call(Request request, const Duration &timeout) {
+  task<Response, std::string> call(Request request, const Duration &timeout) {
     //using Cancel = typename Promise<Response, std::string>::Cancel;
     
-    co_return [this, request, timeout](auto &promise) {
+    co_return [this, request, timeout](auto &promise, auto &cancel) {
       std::cout << "Dispatching call .. " << std::endl;
       auto request_id = this->call(
           request, timeout, [&](const auto &x) { 
@@ -583,9 +583,9 @@ struct ServiceClientImpl {
           },
           [&](const auto &x) {
             std::cout << "Rejecting promise .. " << std::endl; 
-            //promise.reject(x); 
+            promise.reject(x); 
           });
-     // return Cancel{[this, request_id](auto &) { cancel_request(request_id); }};
+     cancel = [this, request_id](auto &) { cancel_request(request_id); };
     };
   }
 
@@ -659,7 +659,7 @@ struct ServiceClient {
   \endverbatim
   */
   // clang-format on
-  task<Response> call(Request request, const Duration &timeout) {
+  task<Response, std::string> call(Request request, const Duration &timeout) {
     return impl_->call(request, timeout);
   }
 
@@ -703,7 +703,7 @@ public:
         [callback](typename MessageT::SharedPtr msg) {
           using ReturnType = decltype(callback(msg));
           if constexpr (has_promise_type_v<ReturnType>) {
-            const auto continuation = [](auto msg, auto &&callback) -> Promise<void> {
+            const auto continuation = [](auto msg, auto &&callback) -> task<void> {
               co_await callback(msg);
               co_return;
             };
@@ -720,7 +720,7 @@ public:
   /// Create a timer that accepts asynchronous callbacks (i.e. coroutines)
   /// \param period the period time
   /// \param callback the callback, may be synchronous or asynchronous
-  /// \tparam Callback () -> void or () -> Promise<void>
+  /// \tparam Callback () -> void or () -> task<void>
   /// \note This function creates a wall-clock timer.
   /// \note A callback signature that accepts a TimerInfo argument is not implemented yet
   /// Works otherwise the same as [rclcpp::Node::create_timer].
@@ -729,7 +729,7 @@ public:
     auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
-        const auto continuation = [](const auto &callback) -> Promise<void> {
+        const auto continuation = [](const auto &callback) -> task<void> {
           co_await callback(std::size_t{});
           co_return;
         };
@@ -776,7 +776,7 @@ public:
               server->send_response(*request_id, *response);
           } else {
             const auto continuation = [](auto server, const auto &async_callback,
-                                         RequestID request_id, Request request) -> Promise<void> {
+                                         RequestID request_id, Request request) -> task<void> {
               auto response = co_await async_callback(request);
               if (response)  /// If we got nullptr, this means we do not respond.
                 server->send_response(*request_id, *response);

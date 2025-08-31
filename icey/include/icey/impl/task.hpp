@@ -49,9 +49,9 @@ struct promise_base {
 #endif
   }
 
-  auto initial_suspend() noexcept { return std::suspend_always{}; }
+  std::suspend_never initial_suspend() noexcept { return {}; }
 
-  auto final_suspend() noexcept { return final_awaitable{}; }
+  std::suspend_always final_suspend() noexcept { return {}; }
 
   std::coroutine_handle<> m_continuation{nullptr};
 };
@@ -59,22 +59,10 @@ struct promise_base {
 template <typename return_type>
 struct promise final : public promise_base {
 private:
-  struct unset_return_value {
-    unset_return_value() {}
-    unset_return_value(unset_return_value&&) = delete;
-    unset_return_value(const unset_return_value&) = delete;
-    auto operator=(unset_return_value&&) = delete;
-    auto operator=(const unset_return_value&) = delete;
-  };
 
 public:
   using task_type = task<return_type>;
   using coroutine_handle = std::coroutine_handle<promise<return_type>>;
-  static constexpr bool return_type_is_reference = std::is_reference_v<return_type>;
-  using stored_type =
-      std::conditional_t<return_type_is_reference, std::remove_reference_t<return_type>*,
-                         std::remove_const_t<return_type>>;
-  using variant_type = std::variant<unset_return_value, stored_type, std::exception_ptr>;
 
   promise() noexcept {}
   promise(const promise&) = delete;
@@ -85,9 +73,14 @@ public:
 
   auto get_return_object() noexcept -> task_type;
 
-  auto return_value(const stored_type& value) -> void requires(not return_type_is_reference) {
-    m_storage.template emplace<stored_type>(value);
-  }
+  //auto return_value() { return this->value(); }
+  /// return_value (aka. operator co_return) *sets* the value if called with an argument,
+  /// very confusing, I know
+  /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
+  void return_value(const _Value &x) { this->resolve(x); }
+
+  /// Sets the state to the given one:
+  void return_value(const State &x) { this->put_state(x); }
 
   auto return_value(std::function<void(promise<return_type>&)>&& h) {
     h(*this);
@@ -101,14 +94,12 @@ public:
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << "resolved promise " << get_type(*this) << std::endl;
 #endif
-    if(m_continuation) 
-        m_continuation.resume();
+    if (m_continuation)
+      m_continuation.resume();
+    else
+      std::cout << "This promise has no continuation !" << std::endl;
 
-    //coroutine_handle::from_promise(*this).resume();
-  }
-
-  auto unhandled_exception() noexcept -> void {
-    new (&m_storage) variant_type(std::current_exception());
+    // coroutine_handle::from_promise(*this).resume();
   }
 
   auto result() & -> decltype(auto) {
@@ -156,7 +147,7 @@ public:
   }
 
 private:
-  variant_type m_storage{};
+ 
 };
 
 template <>
@@ -199,17 +190,23 @@ public:
   struct awaitable_base {
     awaitable_base(coroutine_handle coroutine) noexcept : m_coroutine(coroutine) {}
 
-    auto await_ready() const noexcept -> bool { return !m_coroutine || m_coroutine.done(); }
+    auto await_ready() const noexcept -> bool {
+      return false;
+      return !m_coroutine || m_coroutine.done();
+    }
 
-    auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept
-        -> std::coroutine_handle<> {
+    auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
       auto& p = m_coroutine.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << "task await_suspend called on promise, setting continuation: " << get_type(p) << std::endl;
+      std::cout << "task await_suspend called on promise, setting continuation: " << get_type(p)
+                << std::endl;
 #endif
       p.m_continuation = awaiting_coroutine;
-      return m_coroutine;
+      std::cout << "m_coroutine is: " << std::size_t(m_coroutine.address()) << std::endl;
+      // return m_coroutine;
+      return false;
     }
+    auto await_resume() { return this->m_coroutine.promise().result(); }
 
     std::coroutine_handle<promise_type> m_coroutine{nullptr};
   };
@@ -218,10 +215,10 @@ public:
 
   explicit task(coroutine_handle handle) : m_coroutine(handle) {}
   task(const task&) = delete;
-  task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
+  task(task&& other) = delete;
 
   /*~task() {
-    
+
 #ifdef ICEY_CORO_DEBUG_PRINT
     auto& p = m_coroutine.promise();
     std::cout << "~task destroying promise: " << get_type(p) << std::endl;
@@ -231,24 +228,9 @@ public:
     }
   }*/
 
-  auto operator=(const task&) -> task& = delete;
+  task& operator=(const task&) = delete;
+  task& operator=(task&& other)= delete;
 
-  auto operator=(task&& other) noexcept -> task& {
-    if (std::addressof(other) != this) {
-      if (m_coroutine != nullptr) {
-        m_coroutine.destroy();
-      }
-
-      m_coroutine = std::exchange(other.m_coroutine, nullptr);
-    }
-
-    return *this;
-  }
-
-  /**
-   * @return True if the task is in its final suspend or if the task has been destroyed.
-   */
-  auto is_ready() const noexcept -> bool { return m_coroutine == nullptr || m_coroutine.done(); }
 
   auto resume() -> bool {
     if (!m_coroutine.done()) {
@@ -267,23 +249,7 @@ public:
     return false;
   }
 
-  auto operator co_await() const& noexcept {
-    struct awaitable : public awaitable_base {
-      auto await_resume() -> decltype(auto) { return this->m_coroutine.promise().result(); }
-    };
-
-    return awaitable{m_coroutine};
-  }
-
-  auto operator co_await() const&& noexcept {
-    struct awaitable : public awaitable_base {
-      auto await_resume() -> decltype(auto) {
-        return std::move(this->m_coroutine.promise()).result();
-      }
-    };
-
-    return awaitable{m_coroutine};
-  }
+  auto operator co_await() const& noexcept { return awaitable_base{m_coroutine}; }
 
   auto promise() & -> promise_type& { return m_coroutine.promise(); }
   auto promise() const& -> const promise_type& { return m_coroutine.promise(); }
