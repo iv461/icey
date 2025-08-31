@@ -303,8 +303,12 @@ public:
   ~task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
 
-    std::cout << get_type(*this) << " Destructor()" << std::endl;
+    std::cout << get_type(*this) << " Destructor(), m_coroutine.done(): " << m_coroutine.done() << std::endl;
 #endif
+    if (m_coroutine && m_coroutine.done()) {
+      m_coroutine.destroy();
+      m_coroutine = nullptr;
+    }
     /*
     #ifdef ICEY_CORO_DEBUG_PRINT
         auto& p = m_coroutine.promise();
