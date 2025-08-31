@@ -122,6 +122,7 @@ public:
   /// Calls the continuation coroutine
   void notify() {
     if (continuation_) continuation_.resume();
+   
   }
 
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
