@@ -19,7 +19,6 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/create_timer_ros.h"
 #include "tf2_ros/qos.hpp"
-//#include <icey/impl/task.hpp>
 
 namespace icey {
 
@@ -293,23 +292,22 @@ struct TransformBufferImpl {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  /*Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
-                                                                    const std::string &source_frame,
-                                                                    const Time &time,
-                                                                    const Duration &timeout) {
-    using P = Promise<geometry_msgs::msg::TransformStamped, std::string>;
-    return P([this, target_frame, source_frame, time, timeout](auto &promise) {
+  Task<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+                                                                 const std::string &source_frame,
+                                                                 const Time &time,
+                                                                 const Duration &timeout) {
+    co_return [this, target_frame, source_frame, time, timeout](auto &promise, auto &cancel) {
       auto request_handle = this->lookup(
           target_frame, source_frame, time, timeout,
           [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
           [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
-      return typename P::Cancel{[this, request_handle](auto &promise) {
+      return cancel = [this, request_handle](auto &promise) {
         if (promise.has_none()) {
           this->cancel_request(request_handle);
         }
-      }};
-    });
-  }*/
+      };
+    };
+  }
 
   /// @brief Same as `lookup`, but accepts a ROS time point
   ///
@@ -318,12 +316,12 @@ struct TransformBufferImpl {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  /*Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
-                                                                    const std::string &source_frame,
-                                                                    const rclcpp::Time &time,
-                                                                    const Duration &timeout) {
+  Task<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+                                                                 const std::string &source_frame,
+                                                                 const rclcpp::Time &time,
+                                                                 const Duration &timeout) {
     return lookup(target_frame, source_frame, icey::rclcpp_to_chrono(time), timeout);
-  }*/
+  }
 
   /// Cancel a transform request: This means that the registered callbacks will no longer be called.
   /// If the given request does not exist, this function does nothing.
@@ -494,10 +492,10 @@ struct TransformBuffer {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  /*Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
-                                                                    const std::string &source_frame,
-                                                                    const Time &time,
-                                                                    const Duration &timeout) {
+  Task<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+                                                                 const std::string &source_frame,
+                                                                 const Time &time,
+                                                                 const Duration &timeout) {
     return impl_.lock()->lookup(target_frame, source_frame, time, timeout);
   }
 
@@ -508,12 +506,12 @@ struct TransformBuffer {
   /// @param time At which time to get the transform
   /// @param timeout How long to wait for the transform
   /// @return A future that resolves with the transform or with an error if a timeout occurs
-  Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
-                                                                    const std::string &source_frame,
-                                                                    const rclcpp::Time &time,
-                                                                    const Duration &timeout) {
+  Task<geometry_msgs::msg::TransformStamped, std::string> lookup(const std::string &target_frame,
+                                                                 const std::string &source_frame,
+                                                                 const rclcpp::Time &time,
+                                                                 const Duration &timeout) {
     return impl_.lock()->lookup(target_frame, source_frame, time, timeout);
-  }*/
+  }
 
 private:
   std::weak_ptr<TransformBufferImpl> impl_;
@@ -571,21 +569,12 @@ struct ServiceClientImpl {
     return future_and_req_id.request_id;
   }
 
-  task<Response, std::string> call(Request request, const Duration &timeout) {
-    //using Cancel = typename Promise<Response, std::string>::Cancel;
-    
+  Task<Response, std::string> call(Request request, const Duration &timeout) {
     co_return [this, request, timeout](auto &promise, auto &cancel) {
-      std::cout << "Dispatching call .. " << std::endl;
       auto request_id = this->call(
-          request, timeout, [&](const auto &x) { 
-            std::cout << "Resolving promise .. " << std::endl;
-            promise.resolve(x); 
-          },
-          [&](const auto &x) {
-            std::cout << "Rejecting promise .. " << std::endl; 
-            promise.reject(x); 
-          });
-     cancel = [this, request_id](auto &) { cancel_request(request_id); };
+          request, timeout, [&](const auto &x) { promise.resolve(x); },
+          [&](const auto &x) { promise.reject(x); });
+      cancel = [this, request_id](auto &) { cancel_request(request_id); };
     };
   }
 
@@ -659,7 +648,7 @@ struct ServiceClient {
   \endverbatim
   */
   // clang-format on
-  task<Response, std::string> call(Request request, const Duration &timeout) {
+  Task<Response, std::string> call(Request request, const Duration &timeout) {
     return impl_->call(request, timeout);
   }
 
@@ -703,7 +692,7 @@ public:
         [callback](typename MessageT::SharedPtr msg) {
           using ReturnType = decltype(callback(msg));
           if constexpr (has_promise_type_v<ReturnType>) {
-            const auto continuation = [](auto msg, auto &&callback) -> task<void> {
+            const auto continuation = [](auto msg, auto &&callback) -> Task<void> {
               co_await callback(msg);
               co_return;
             };
@@ -720,7 +709,7 @@ public:
   /// Create a timer that accepts asynchronous callbacks (i.e. coroutines)
   /// \param period the period time
   /// \param callback the callback, may be synchronous or asynchronous
-  /// \tparam Callback () -> void or () -> task<void>
+  /// \tparam Callback () -> void or () -> Task<void>
   /// \note This function creates a wall-clock timer.
   /// \note A callback signature that accepts a TimerInfo argument is not implemented yet
   /// Works otherwise the same as [rclcpp::Node::create_timer].
@@ -729,10 +718,10 @@ public:
     auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
-        const auto continuation = [](const auto &callback) -> task<void> {
-          std::cout << "Before co_wait timer callback" <<std::endl;
+        const auto continuation = [](const auto &callback) -> Task<void> {
+          std::cout << "Before co_wait timer callback" << std::endl;
           co_await callback(std::size_t{});
-          std::cout << "After co_wait timer callback" <<std::endl;
+          std::cout << "After co_wait timer callback" << std::endl;
           co_return;
         };
         continuation(callback);
@@ -778,7 +767,7 @@ public:
               server->send_response(*request_id, *response);
           } else {
             const auto continuation = [](auto server, const auto &async_callback,
-                                         RequestID request_id, Request request) -> task<void> {
+                                         RequestID request_id, Request request) -> Task<void> {
               auto response = co_await async_callback(request);
               if (response)  /// If we got nullptr, this means we do not respond.
                 server->send_response(*request_id, *response);

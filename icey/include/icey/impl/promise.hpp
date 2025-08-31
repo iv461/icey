@@ -38,7 +38,7 @@ inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 inline bool icey_coro_debug_print = false;
 
 template <class Value, class Error>
-class task;
+class Task;
 struct PromiseTag {};
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
@@ -189,7 +189,7 @@ public:
   using State = Base::State;
   using Base::Base;
 
-  task<_Value, _Error> get_return_object();
+  Task<_Value, _Error> get_return_object();
 
   /// Sets a function that launches the asynchronous operation: This handler is called in the with
   /// the address to this Promise so that it can store it and write to this promise later. This
@@ -219,33 +219,33 @@ public:
   using Base = PromiseBase<Nothing, Nothing>;
   using Cancel = Base::Cancel;
 
-  task<void, Nothing> get_return_object();
+  Task<void, Nothing> get_return_object();
   auto return_void() { this->resolve(Nothing{}); }
 };
 
 template <class _Value, class _Error = Nothing>
-class [[nodiscard]] task {
+class [[nodiscard]] Task {
 public:
-  using Self = task<_Value, _Error>;
+  using Self = Task<_Value, _Error>;
   using Value = _Value;
   using Error = _Error;
   using promise_type = Promise<_Value, _Error>;
 
   using coroutine_handle = std::coroutine_handle<promise_type>;
 
-  explicit task(coroutine_handle handle) : coroutine_(handle) {
+  explicit Task(coroutine_handle handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " Constructor(handle) (get_return_object)" << std::endl;
 #endif
   }
 
-  task(const task &) = delete;
-  task(task &&other) = delete;
-  task &operator=(const task &) = delete;
-  task &operator=(task &&other) = delete;
+  Task(const Task &) = delete;
+  Task(Task &&other) = delete;
+  Task &operator=(const Task &) = delete;
+  Task &operator=(Task &&other) = delete;
 
   /// Destroys the coroutine if it is done.
-  ~task() {
+  ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " Destructor(), coroutine_.done(): " << coroutine_.done()
               << std::endl;
@@ -264,10 +264,10 @@ public:
         bool is_ready = !coroutine_ || coroutine_.done();
         auto &p = coroutine_.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << "task await_ready called on promise: " << get_type(p)
+        std::cout << "Task await_ready called on promise: " << get_type(p)
                   << "is ready: " << is_ready << std::endl;
 #endif
-        return is_ready;
+        return false;
       }
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
@@ -303,18 +303,18 @@ private:
 };
 
 template <class Value, class Error>
-inline task<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
+inline Task<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
   std::cout << get_type(*this) << " get_return_object() " << std::endl;
 #endif
-  return task<Value, Error>{std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
+  return Task<Value, Error>{std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
 }
 
-inline task<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
+inline Task<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
   std::cout << get_type(*this) << " get_return_object() " << std::endl;
 #endif
-  return task<void, Nothing>{std::coroutine_handle<Promise<void, Nothing>>::from_promise(*this)};
+  return Task<void, Nothing>{std::coroutine_handle<Promise<void, Nothing>>::from_promise(*this)};
 }
 
 }  // namespace icey

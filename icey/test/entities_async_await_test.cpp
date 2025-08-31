@@ -220,10 +220,10 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     EXPECT_EQ(client1.client()->prune_pending_requests(), 0);
 
     /// Send the first request but do not await it
-    icey::Promise<Response, std::string> response_future1 = client1.call(request, 40ms);
+    icey::Task<Response, std::string> response_future1 = client1.call(request, 40ms);
 
     /// Then, send another one:
-    icey::Promise<Response, std::string> response_future2 = client1.call(request, 40ms);
+    icey::Task<Response, std::string> response_future2 = client1.call(request, 40ms);
 
     EXPECT_TRUE((co_await response_future2).has_value());
     EXPECT_TRUE((co_await response_future1).has_value());
