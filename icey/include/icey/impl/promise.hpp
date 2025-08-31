@@ -73,54 +73,49 @@ public:
 #endif
     if (cancel_) cancel_(*this);
   }
+  friend struct final_awaitable;
+  struct final_awaitable {
+    auto await_ready() const noexcept -> bool { return false; }
 
-  std::suspend_never initial_suspend() { return {}; }
-  std::suspend_always final_suspend() const noexcept { return {}; }
+    template <typename promise_type>
+    auto await_suspend(std::coroutine_handle<promise_type> coroutine) noexcept
+        -> std::coroutine_handle<> {
+      auto &promise = coroutine.promise();
+#ifdef ICEY_CORO_DEBUG_PRINT
+      std::cout
+          << "promise_base await_suspend was called on promise, transfering to continuation ..: "
+          << get_type(promise) << std::endl;
+#endif
+      // If there is a continuation call it, otherwise this is the end of the line.
+      if (promise.continuation_ != nullptr) {
+        return promise.continuation_;
+      } else {
+        return std::noop_coroutine();
+      }
+    }
+
+    auto await_resume() noexcept -> void {
+      // no-op
+    }
+  };
+
+  auto initial_suspend() {
+    return std::suspend_never{};
+    /*
+    if constexpr (std::is_same_v<Value, Nothing>)
+    return std::suspend_never{};
+    else
+    return std::suspend_always{};
+    */
+  }
+  auto final_suspend() const noexcept {
+    return std::suspend_always{};
+    // return final_awaitable{};
+  }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
-
-  /// Await the promise
-  /*auto operator co_await() {
-    struct Awaiter {
-      Self &promise_;
-      Awaiter(Self &promise) : promise_(promise) {}
-      bool await_ready() const noexcept {
-        if constexpr(std::is_same_v<Value, Nothing>)
-          return true; /// void routines are always ready
-        return !promise_.has_none();
-      }
-      bool await_suspend(std::coroutine_handle<> continuation) noexcept {
-/// Resume the coroutine when this promise is done
-//// TODO
-// if(promise_.continuation_) throw std::logic_error("Illegal!");
-#ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << "Promise await_suspend was called on promise: " << get_type(promise_)
-                  << std::endl;
-#endif
-        promise_.continuation_ = continuation;
-        return promise_.was_handle_ctored_;
-      }
-
-      auto await_resume() const noexcept {
-#ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << "Promise await_resume was called on promise: " << get_type(promise_)
-                  << std::endl;
-#endif
-        if (promise_.exception_ptr_) std::rethrow_exception(promise_.exception_ptr_);
-        if constexpr(std::is_same_v<Value, Nothing>)
-          return;
-        else {
-          if(promise_.has_none()) {
-            throw std::invalid_argument("Promise has nothing, called resume too early.");
-          }
-          return promise_.get_state().get();
-        }
-      }
-    };
-    return Awaiter{*this};
-  }*/
 
   bool has_none() const { return state_.has_none(); }
   bool has_value() const { return state_.has_value(); }
@@ -247,27 +242,32 @@ public:
   struct awaitable_base {
     awaitable_base(coroutine_handle coroutine) noexcept : m_coroutine(coroutine) {}
 
-    auto await_ready() const noexcept -> bool {
+    bool await_ready() const noexcept {
+      bool is_ready = !m_coroutine || m_coroutine.done();
+      auto &p = m_coroutine.promise();
+#ifdef ICEY_CORO_DEBUG_PRINT
+      std::cout << "task await_ready called on promise: " << get_type(p) << "is ready: " << is_ready
+                << std::endl;
+#endif
       return false;
-      return !m_coroutine || m_coroutine.done();
+      return is_ready;
     }
 
     auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
       auto &p = m_coroutine.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << "task await_suspend called on promise, setting continuation: " << get_type(p)
-                << std::endl;
+      std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
 #endif
       p.continuation_ = awaiting_coroutine;
       std::cout << "m_coroutine is: " << std::size_t(m_coroutine.address()) << std::endl;
-      // return m_coroutine;
-      //     return promise_.was_handle_ctored_;
       return false;
+      // return m_coroutine;
+      //      return promise_.was_handle_ctored_;
     }
     auto await_resume() {
       auto &promise = this->m_coroutine.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << "Promise await_resume was called on promise: " << get_type(promise) << std::endl;
+      std::cout << get_type(promise) << " await_resume()" << std::endl;
 #endif
       if (promise.exception_ptr_) std::rethrow_exception(promise.exception_ptr_);
       if constexpr (std::is_same_v<Value, Nothing>)
@@ -285,18 +285,22 @@ public:
 
   task() noexcept : m_coroutine(nullptr) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << "task was default constructed: " << get_type(*this) << std::endl;
+    std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
 
-  explicit task(coroutine_handle handle) : m_coroutine(handle) {}
+  explicit task(coroutine_handle handle) : m_coroutine(handle) {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " Constructor(handle) (get_return_object)" << std::endl;
+#endif
+  }
   task(const task &) = delete;
   task(task &&other) = delete;
 
   ~task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
 
-    std::cout << "~task  " << get_type(*this) << std::endl;
+    std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     /*
     #ifdef ICEY_CORO_DEBUG_PRINT
@@ -342,10 +346,16 @@ private:
 
 template <class Value, class Error>
 inline task<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
+#ifdef ICEY_CORO_DEBUG_PRINT
+  std::cout << get_type(*this) << " get_return_object() " << std::endl;
+#endif
   return task<Value, Error>{std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
 }
 
 inline task<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
+#ifdef ICEY_CORO_DEBUG_PRINT
+  std::cout << get_type(*this) << " get_return_object() " << std::endl;
+#endif
   return task<void, Nothing>{std::coroutine_handle<Promise<void, Nothing>>::from_promise(*this)};
 }
 

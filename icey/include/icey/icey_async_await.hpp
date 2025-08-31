@@ -730,7 +730,9 @@ public:
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
         const auto continuation = [](const auto &callback) -> task<void> {
+          std::cout << "Before co_wait timer callback" <<std::endl;
           co_await callback(std::size_t{});
+          std::cout << "After co_wait timer callback" <<std::endl;
           co_return;
         };
         continuation(callback);
