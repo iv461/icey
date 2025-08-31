@@ -260,15 +260,7 @@ public:
     struct Awaiter {
       Awaiter(coroutine_handle coroutine) noexcept : coroutine_(coroutine) {}
 
-      bool await_ready() const noexcept {
-        bool is_ready = !coroutine_ || coroutine_.done();
-        auto &p = coroutine_.promise();
-#ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << "Task await_ready called on promise: " << get_type(p)
-                  << "is ready: " << is_ready << std::endl;
-#endif
-        return false;
-      }
+      bool await_ready() const noexcept { return false; }
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
         auto &p = coroutine_.promise();
