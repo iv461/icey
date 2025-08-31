@@ -122,6 +122,11 @@ public:
   /// Calls the continuation coroutine
   void notify() {
     if (continuation_) continuation_.resume();
+    if(continuation_ && continuation_.done()) {
+     // std::cout << "DESTROIY IN NOTIFY()" << std::endl;
+      //continuation_.destroy();
+      continuation_ = nullptr;
+    }
   }
 
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
@@ -248,7 +253,9 @@ public:
   ~Task() {
     if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << get_type(*this) << " destroying ..  " << coroutine_.done() << std::endl;
+      std::cout << get_type(*this);
+      if(shall_destroy_) std::cout << " FORCED ";
+       std::cout << " destroying ..  " << coroutine_.done() << std::endl;
 #endif
       coroutine_.destroy();
       coroutine_ = nullptr;
@@ -261,7 +268,9 @@ public:
 
   /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
   /// leaks.
-  void force_destruction() { shall_destroy_ = true; }
+  void force_destruction() { 
+   // shall_destroy_ = true; 
+  }
 
   auto operator co_await() const &noexcept {
     struct Awaiter {

@@ -43,10 +43,10 @@ int main(int argc, char **argv) {
   auto node = std::make_shared<rclcpp::Node>("icey_service_client_async_await_example");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
+  
   /// Create the service client beforehand
   auto service = ctx->create_client<ExampleService>("set_bool_service");
-
-  auto timer = ctx->create_timer_async(1s, [&](std::size_t) -> icey::Task<void> {
+  auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Task<void> {
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked, sending request: " << request->data);
