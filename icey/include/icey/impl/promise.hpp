@@ -58,7 +58,7 @@ public:
 
   PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << "Promise was default-constructed: " << get_type(*this) << std::endl;
+    std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
 
@@ -69,7 +69,7 @@ public:
 
   ~PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << "Promise was destructed: " << get_type(*this) << std::endl;
+    std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     if (cancel_) cancel_(*this);
   }
@@ -202,7 +202,7 @@ public:
   auto return_value(std::function<void(Base &, Cancel &)> &&h) {
     h(*this, this->cancel_);
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << "return_value handle-constructed: " << get_type(*this) << std::endl;
+    std::cout << get_type(*this) << " return_value(handle)-" << std::endl;
 #endif
     this->was_handle_ctored_ = true;
   }
@@ -259,8 +259,9 @@ public:
       std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
 #endif
       p.continuation_ = awaiting_coroutine;
-      std::cout << "m_coroutine is: " << std::size_t(m_coroutine.address()) << std::endl;
-      return false;
+      fmt::print("m_coroutine is: 0x{:x}, continuation_ is: 0x{:x}\n", std::size_t(m_coroutine.address()), 
+          std::size_t(p.continuation_.address()));
+      return true;
       // return m_coroutine;
       //      return promise_.was_handle_ctored_;
     }
@@ -296,6 +297,8 @@ public:
   }
   task(const task &) = delete;
   task(task &&other) = delete;
+  task &operator=(const task &) = delete;
+  task &operator=(task &&other) = delete;
 
   ~task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -312,10 +315,7 @@ public:
         }*/
   }
 
-  task &operator=(const task &) = delete;
-  task &operator=(task &&other) = delete;
-
-  auto resume() -> bool {
+  /*auto resume() -> bool {
     if (!m_coroutine.done()) {
       m_coroutine.resume();
     }
@@ -330,7 +330,7 @@ public:
     }
 
     return false;
-  }
+  }*/
 
   auto operator co_await() const &noexcept { return awaitable_base{m_coroutine}; }
 
