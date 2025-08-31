@@ -73,51 +73,16 @@ public:
   PromiseBase &operator=(const Self &) = delete;
   PromiseBase &operator=(Self &&) = delete;
 
+  /// calls the cancel function if it was set
   ~PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     if (cancel_) cancel_(*this);
   }
-  friend struct final_awaitable;
-  struct final_awaitable {
-    auto await_ready() const noexcept -> bool { return false; }
 
-    template <typename promise_type>
-    auto await_suspend(std::coroutine_handle<promise_type> coroutine) noexcept
-        -> std::coroutine_handle<> {
-      auto &promise = coroutine.promise();
-#ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout
-          << "promise_base await_suspend was called on promise, transfering to continuation ..: "
-          << get_type(promise) << std::endl;
-#endif
-      // If there is a continuation call it, otherwise this is the end of the line.
-      if (promise.continuation_ != nullptr) {
-        return promise.continuation_;
-      } else {
-        return std::noop_coroutine();
-      }
-    }
-
-    auto await_resume() noexcept -> void {
-      // no-op
-    }
-  };
-
-  auto initial_suspend() {
-    return std::suspend_never{};
-    /*
-    if constexpr (std::is_same_v<Value, Nothing>)
-    return std::suspend_never{};
-    else
-    return std::suspend_always{};
-    */
-  }
-  auto final_suspend() const noexcept {
-    return std::suspend_always{};
-    // return final_awaitable{};
-  }
+  std::suspend_never initial_suspend() const noexcept { return {}; }
+  std::suspend_always final_suspend() const noexcept { return {}; }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
@@ -154,6 +119,7 @@ public:
     notify();
   }
 
+  /// Calls the continuation coroutine
   void notify() {
     if (continuation_) continuation_.resume();
   }
@@ -267,50 +233,7 @@ public:
 
   using coroutine_handle = std::coroutine_handle<promise_type>;
 
-  struct awaitable_base {
-    awaitable_base(coroutine_handle coroutine) noexcept : m_coroutine(coroutine) {}
-
-    bool await_ready() const noexcept {
-      bool is_ready = !m_coroutine || m_coroutine.done();
-      auto &p = m_coroutine.promise();
-#ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << "task await_ready called on promise: " << get_type(p) << "is ready: " << is_ready
-                << std::endl;
-#endif
-      return false;
-      return is_ready;
-    }
-
-    auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-      auto &p = m_coroutine.promise();
-#ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
-#endif
-      p.launch_async(awaiting_coroutine);
-      fmt::print("m_coroutine is: 0x{:x}, continuation_ is: 0x{:x}\n",
-                 std::size_t(m_coroutine.address()), std::size_t(p.continuation_.address()));
-      return true;
-      // return m_coroutine;
-    }
-
-    auto await_resume() {
-      auto &promise = this->m_coroutine.promise();
-#ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << get_type(promise) << " await_resume()" << std::endl;
-#endif
-      return promise.get();
-    }
-
-    std::coroutine_handle<promise_type> m_coroutine{nullptr};
-  };
-
-  task() noexcept : m_coroutine(nullptr) {
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Constructor()" << std::endl;
-#endif
-  }
-
-  explicit task(coroutine_handle handle) : m_coroutine(handle) {
+  explicit task(coroutine_handle handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " Constructor(handle) (get_return_object)" << std::endl;
 #endif
@@ -321,23 +244,62 @@ public:
   task &operator=(const task &) = delete;
   task &operator=(task &&other) = delete;
 
+  /// Destroys the coroutine if it is done.
   ~task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Destructor(), m_coroutine.done(): " << m_coroutine.done()
+    std::cout << get_type(*this) << " Destructor(), coroutine_.done(): " << coroutine_.done()
               << std::endl;
 #endif
-    if (m_coroutine && m_coroutine.done()) {
-      m_coroutine.destroy();
-      m_coroutine = nullptr;
+    if (coroutine_ && coroutine_.done()) {
+      coroutine_.destroy();
+      coroutine_ = nullptr;
     }
   }
-  auto operator co_await() const &noexcept { return awaitable_base{m_coroutine}; }
 
-  promise_type &promise() { return m_coroutine.promise(); }
-  const promise_type &promise() const { return m_coroutine.promise(); }
+  auto operator co_await() const &noexcept {
+    struct Awaiter {
+      Awaiter(coroutine_handle coroutine) noexcept : coroutine_(coroutine) {}
+
+      bool await_ready() const noexcept {
+        bool is_ready = !coroutine_ || coroutine_.done();
+        auto &p = coroutine_.promise();
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << "task await_ready called on promise: " << get_type(p)
+                  << "is ready: " << is_ready << std::endl;
+#endif
+        return is_ready;
+      }
+
+      auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
+        auto &p = coroutine_.promise();
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
+#endif
+        p.launch_async(awaiting_coroutine);
+        fmt::print("coroutine_ is: 0x{:x}, continuation_ is: 0x{:x}\n",
+                   std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()));
+        return true;
+        // return coroutine_;
+      }
+
+      auto await_resume() {
+        auto &promise = this->coroutine_.promise();
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << get_type(promise) << " await_resume()" << std::endl;
+#endif
+        return promise.get();
+      }
+
+      std::coroutine_handle<promise_type> coroutine_{nullptr};
+    };
+    return Awaiter{coroutine_};
+  }
+
+  promise_type &promise() { return coroutine_.promise(); }
+  const promise_type &promise() const { return coroutine_.promise(); }
 
 private:
-  coroutine_handle m_coroutine{nullptr};
+  coroutine_handle coroutine_{nullptr};
 };
 
 template <class Value, class Error>
