@@ -244,28 +244,24 @@ public:
   Task &operator=(const Task &) = delete;
   Task &operator=(Task &&other) = delete;
 
-  /// Destroys the coroutine if it is done.
+  /// Destroys the coroutine if it is done or if force_destruction() was called before.
   ~Task() {
-    /// We always destroy the coroutine for void-tasks since they are the top-level
     if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
-      #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " destroying ..  " << coroutine_.done()
-              << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+      std::cout << get_type(*this) << " destroying ..  " << coroutine_.done() << std::endl;
 #endif
-       coroutine_.destroy();
-    coroutine_ = nullptr;
+      coroutine_.destroy();
+      coroutine_ = nullptr;
     } else {
-            #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " NOT destroying ! " << coroutine_.done()
-              << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+      std::cout << get_type(*this) << " NOT destroying ! " << coroutine_.done() << std::endl;
 #endif
     }
   }
 
-  /// Call this function on the top-level coroutine that you are not awaiting to prevent memory leaks. 
-  void force_destruction() {
-    shall_destroy_ = true;
-  }
+  /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
+  /// leaks.
+  void force_destruction() { shall_destroy_ = true; }
 
   auto operator co_await() const &noexcept {
     struct Awaiter {
@@ -282,7 +278,6 @@ public:
                    std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()));
 #endif
         return true;
-        // return coroutine_;
       }
 
       auto await_resume() {

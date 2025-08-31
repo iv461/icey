@@ -696,7 +696,7 @@ public:
               co_await callback(msg);
               co_return;
             };
-            continuation(msg, std::forward<Callback>(callback));
+            continuation(msg, std::forward<Callback>(callback)).force_destruction();
           } else {
             callback(msg);
           }
@@ -724,7 +724,7 @@ public:
           std::cout << "After co_wait timer callback" << std::endl;
           co_return;
         };
-        continuation(callback);
+        continuation(callback).force_destruction();
       } else {
         callback(std::size_t{});
       }
@@ -773,7 +773,7 @@ public:
                 server->send_response(*request_id, *response);
               co_return;
             };
-            continuation(server, callback, request_id, request);
+            continuation(server, callback, request_id, request).force_destruction();
           }
         },
         qos);
