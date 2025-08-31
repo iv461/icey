@@ -264,12 +264,12 @@ public:
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
         auto &p = coroutine_.promise();
+        p.launch_async(awaiting_coroutine);
 #ifdef ICEY_CORO_DEBUG_PRINT
         std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
-#endif
-        p.launch_async(awaiting_coroutine);
         fmt::print("coroutine_ is: 0x{:x}, continuation_ is: 0x{:x}\n",
                    std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()));
+#endif
         return true;
         // return coroutine_;
       }
