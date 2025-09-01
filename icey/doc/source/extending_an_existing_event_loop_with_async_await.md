@@ -1,4 +1,4 @@
-# How to use C++ 20 coroutines to add an async/await API to an existing event loop with a callback-based API
+# [Draft] How to use C++ 20 coroutines to add an async/await API to an existing event loop with a callback-based API
 
 # Background on the origins of async/await syntax
 
@@ -290,7 +290,7 @@ int do_async_coroutine_resume(CoroFrame1 *frame) {
             ....
 ```
 
-Now since we implement the `Task`-type ourselves, we can simply implement the `await_suspend` function so that it resumes the coroutine:
+Now since we implement the `Task`-type ourselves, we can simply implement the `await_suspend` function so that it launches the asynchronous task and resumes the coroutine in the callback:
 
 ```cpp
 struct MyTask {
@@ -301,14 +301,14 @@ struct MyTask {
 
     /// ...
         void await_suspend(CoroFrame *frame) {
-            launch_async_([frame]() { frame.resume(); };);
+            launch_async_([frame]() { frame->resume(); };);
         }
     /// ...
     LaunchAsync launch_async_;
 };
 ```
 
-For this, we added a member function `continuation_` that is called from the callback-based API. Creating task is therefore: 
+For this, we added a member function `launch_async_` that calls the callback-based API. Creating the task is therefore simply: 
 
 ```cpp
 MyTask get_number_of_participants_from_db_coro(EventLoop &event_loop, DBConnection db_connection) {
@@ -316,6 +316,27 @@ MyTask get_number_of_participants_from_db_coro(EventLoop &event_loop, DBConnecti
         get_number_of_participants_from_db(event_loop, db_connection, callback);
     }};
 }
+```
+
+### How resuming is implemented 
+The question is, how does `CoroFrame1::resume()` work ? It is actually very simple. Coroutine frames are generated for every coroutine, so there is a one-to-one correspondence between coroutine and it's frame. The frame has an additional member where it stores a pointer to the coroutine:
+
+```cpp
+struct CoroFrame1 {
+    void *resume;
+    /// ....
+};
+```
+
+when the frame is created, the compiler simply assigns the resume function to the corresponding coroutine_resume function: 
+```cpp
+void do_async_coroutine() {
+    CoroFrame *coro_frame = new CoroFrame1();
+    coro_frame->resume = do_async_coroutine_resume;
+    do_async_coroutine_resume(frame);
+}
+```
+This way, coroutine frames can call the corresponding coroutine.
 
 # References
 
