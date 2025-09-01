@@ -19,7 +19,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Task<Response, std::string> handle_srv_call(rclcpp::Node::SharedPtr node, icey::ServiceClient<ExampleService> client,
+icey::Task<Response, std::string> handle_srv_call(icey::ServiceClient<ExampleService> &client,
                                                   auto request) {
   std::cout << "B4 call" << std::endl;
   icey::Result<Response, std::string> result = co_await client.call(request, 1s);
@@ -38,13 +38,13 @@ int main(int argc, char **argv) {
   auto service = ctx->create_client<ExampleService>("set_bool_service");
   auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Task<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
-    
 
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await handle_srv_call(node, service, request);
+    //icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
+    icey::Result<Response, std::string> result = co_await service.call(request, 1s);
     std::cout << "After handle srv call" << std::endl;
 
      if (result.has_error()) {
@@ -54,7 +54,6 @@ int main(int argc, char **argv) {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
     }
 
-    //icey::Result<Response, std::string> result = co_await service.call(request, 1s);
     
     // RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << response->success);
     co_return;

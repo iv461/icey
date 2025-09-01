@@ -26,14 +26,10 @@ icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
 }
 
 
-/*icey::Task<int> wrapper1(EventLoop &event_loop) {
-  co_return [&](auto &promise, auto &) {
-    event_loop.dispatch([&]() {
-      std::this_thread::sleep_for(10ms);
-      promise.resolve(42);
-    });
-  };
-}*/
+icey::Task<int> wrapper1(EventLoop &event_loop) {
+  int res = co_await obtain_the_number_async(event_loop);
+  co_return res;
+}
 
 
 icey::Task<void> do_async_stuff(EventLoop &event_loop) {
@@ -41,7 +37,7 @@ icey::Task<void> do_async_stuff(EventLoop &event_loop) {
   event_loop.dispatch([&]() {
     const auto f = [&]() -> icey::Task<void> {
       std::cout << "Before obtain_the_number_async" << std::endl;
-      int the_number = co_await obtain_the_number_async(event_loop);
+      int the_number = co_await wrapper1(event_loop);//co_await obtain_the_number_async(event_loop);
       std::cout << "Obtained number: " << the_number << std::endl;
       co_return;
     };

@@ -120,7 +120,21 @@ public:
 
   /// Calls the continuation coroutine
   void notify() {
-    if (continuation_) continuation_.resume();
+    if (continuation_) {
+      /// If a coro handle is done, the function ptr is nullptr, so we get a crash on resume
+      if (!continuation_.done()) {
+#ifdef ICEY_CORO_DEBUG_PRINT
+        fmt::print("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address()));
+#endif
+        continuation_.resume();
+      } else {
+#ifdef ICEY_CORO_DEBUG_PRINT
+        fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
+                   size_t(continuation_.address()));
+
+#endif
+      }
+    }
   }
 
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
@@ -210,7 +224,7 @@ public:
       }
       void await_resume() const noexcept {}
     };
-    //return Awaiter{};
+    // return Awaiter{};
     return std::suspend_always{};
   }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
@@ -240,7 +254,7 @@ public:
       }
       void await_resume() const noexcept {}
     };
-    //return Awaiter{};
+    // return Awaiter{};
     return std::suspend_always{};
   }
 
@@ -260,7 +274,7 @@ public:
 
   explicit Task(coroutine_handle handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Constructor(handle) (get_return_object)" << std::endl;
+  fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this), std::size_t(handle.address()));
 #endif
   }
 
@@ -275,7 +289,9 @@ public:
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(*this);
       if (shall_destroy_) std::cout << " FORCED ";
-      std::cout << " destroying ..  " << coroutine_.done() << std::endl;
+      std::cout << " destroying task "
+                << fmt::format("coroutine_ is: 0x{:x}", std::size_t(coroutine_.address()))
+                << std::endl;
 #endif
       coroutine_.destroy();
       coroutine_ = nullptr;
@@ -288,9 +304,7 @@ public:
 
   /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
   /// leaks.
-  void force_destruction() {
-    shall_destroy_ = true;
-  }
+  void force_destruction() { shall_destroy_ = true; }
 
   auto operator co_await() const &noexcept {
     struct Awaiter {
@@ -333,14 +347,14 @@ private:
 template <class Value, class Error>
 inline Task<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  std::cout << get_type(*this) << " get_return_object() " << std::endl;
+  //std::cout << get_type(*this) << " get_return_object() " << std::endl;
 #endif
   return Task<Value, Error>{std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
 }
 
 inline Task<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  std::cout << get_type(*this) << " get_return_object() " << std::endl;
+  //std::cout << get_type(*this) << " get_return_object() " << std::endl;
 #endif
   return Task<void, Nothing>{std::coroutine_handle<Promise<void, Nothing>>::from_promise(*this)};
 }

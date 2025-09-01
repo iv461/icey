@@ -572,7 +572,11 @@ struct ServiceClientImpl {
   Task<Response, std::string> call(Request request, const Duration &timeout) {
     co_return [this, request, timeout](auto &promise, auto &cancel) {
       auto request_id = this->call(
-          request, timeout, [&](const auto &x) { promise.resolve(x); },
+          request, timeout,
+          [&](const auto &x) {
+            std::cout << "resolving RPC " << std::endl;
+            promise.resolve(x);
+          },
           [&](const auto &x) { promise.reject(x); });
       cancel = [this, request_id](auto &) { cancel_request(request_id); };
     };
