@@ -289,7 +289,7 @@ public:
   /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
   /// leaks.
   void force_destruction() {
-    // shall_destroy_ = true;
+    shall_destroy_ = true;
   }
 
   auto operator co_await() const &noexcept {
