@@ -718,13 +718,7 @@ public:
     auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
-        const auto continuation = [](const auto &callback) -> Task<void> {
-          std::cout << "Before co_wait timer callback" << std::endl;
-          co_await callback(std::size_t{});
-          std::cout << "After co_wait timer callback" << std::endl;
-          co_return;
-        };
-        continuation(callback).force_destruction();
+        callback(std::size_t{});
       } else {
         callback(std::size_t{});
       }
