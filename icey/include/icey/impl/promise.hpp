@@ -82,7 +82,6 @@ public:
   }
 
   std::suspend_never initial_suspend() const noexcept { return {}; }
-  std::suspend_always final_suspend() const noexcept { return {}; }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
@@ -122,11 +121,6 @@ public:
   /// Calls the continuation coroutine
   void notify() {
     if (continuation_) continuation_.resume();
-    if(continuation_ && continuation_.done()) {
-     // std::cout << "DESTROIY IN NOTIFY()" << std::endl;
-      //continuation_.destroy();
-      continuation_ = nullptr;
-    }
   }
 
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
@@ -206,7 +200,19 @@ public:
     std::cout << get_type(*this) << " return_value(launch_async)-" << std::endl;
 #endif
   }
-
+  auto final_suspend() const noexcept {
+    struct Awaiter {
+      // std::coroutine_handle<> continuation_;
+      // Awaiter(std::coroutine_handle<> continuation):continuation_(continuation){}
+      bool await_ready() const noexcept { return false; }
+      auto await_suspend(std::coroutine_handle<Promise<_Value, _Error>> coro) const noexcept {
+        return coro.promise().continuation_;
+      }
+      void await_resume() const noexcept {}
+    };
+    //return Awaiter{};
+    return std::suspend_always{};
+  }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
@@ -223,6 +229,20 @@ class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
   using Base = PromiseBase<Nothing, Nothing>;
   using Cancel = Base::Cancel;
+
+  auto final_suspend() const noexcept {
+    struct Awaiter {
+      // std::coroutine_handle<> continuation_;
+      // Awaiter(std::coroutine_handle<> continuation):continuation_(continuation){}
+      bool await_ready() const noexcept { return false; }
+      auto await_suspend(std::coroutine_handle<Promise<void, Nothing>> coro) const noexcept {
+        return coro.promise().continuation_;
+      }
+      void await_resume() const noexcept {}
+    };
+    //return Awaiter{};
+    return std::suspend_always{};
+  }
 
   Task<void, Nothing> get_return_object();
   auto return_void() { this->resolve(Nothing{}); }
@@ -254,8 +274,8 @@ public:
     if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(*this);
-      if(shall_destroy_) std::cout << " FORCED ";
-       std::cout << " destroying ..  " << coroutine_.done() << std::endl;
+      if (shall_destroy_) std::cout << " FORCED ";
+      std::cout << " destroying ..  " << coroutine_.done() << std::endl;
 #endif
       coroutine_.destroy();
       coroutine_ = nullptr;
@@ -268,8 +288,8 @@ public:
 
   /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
   /// leaks.
-  void force_destruction() { 
-   // shall_destroy_ = true; 
+  void force_destruction() {
+    // shall_destroy_ = true;
   }
 
   auto operator co_await() const &noexcept {

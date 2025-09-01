@@ -31,10 +31,6 @@ icey::Task<Response, std::string> handle_srv_call(rclcpp::Node::SharedPtr node, 
     RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
   }
 
-  std::cout << "B4 second call" << std::endl;
-  icey::Result<Response, std::string> result2 = co_await client.call(request, 1s);
-  std::cout << "After second RPC call" << std::endl;
-
   co_return result;
 }
 
@@ -43,22 +39,24 @@ int main(int argc, char **argv) {
   auto node = std::make_shared<rclcpp::Node>("icey_service_client_async_await_example");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
-  
+
   /// Create the service client beforehand
   auto service = ctx->create_client<ExampleService>("set_bool_service");
   auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Task<void> {
+    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
+    co_return;
+    /*
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
-    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked, sending request: " << request->data);
-
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await handle_srv_call(node, service, request);
-    // icey::Result<Response, std::string> result = co_await service.call(request, 1s);
-
+    //icey::Result<Response, std::string> result = co_await handle_srv_call(node, service, request);
+    icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+    
     std::cout << "After handle srv call" << std::endl;
     // RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << response->success);
     co_return;
+    */
   });
   rclcpp::spin(node);
 }
