@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    //icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
-    icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+    icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
+    //icey::Result<Response, std::string> result = co_await service.call(request, 1s);
     std::cout << "After handle srv call" << std::endl;
 
      if (result.has_error()) {

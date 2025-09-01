@@ -127,6 +127,14 @@ public:
         fmt::print("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address()));
 #endif
         continuation_.resume();
+        if (false && continuation_.done()) {
+#ifdef ICEY_CORO_DEBUG_PRINT
+          fmt::print("Destructing coro after continue, 0x{:x}, it is done!\n",
+                     size_t(continuation_.address()));
+          continuation_.destroy();
+          continuation_ = nullptr;
+#endif
+        }
       } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
         fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
@@ -274,7 +282,8 @@ public:
 
   explicit Task(coroutine_handle handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this), std::size_t(handle.address()));
+    fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
+               std::size_t(handle.address()));
 #endif
   }
 
@@ -347,14 +356,14 @@ private:
 template <class Value, class Error>
 inline Task<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  //std::cout << get_type(*this) << " get_return_object() " << std::endl;
+  // std::cout << get_type(*this) << " get_return_object() " << std::endl;
 #endif
   return Task<Value, Error>{std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
 }
 
 inline Task<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  //std::cout << get_type(*this) << " get_return_object() " << std::endl;
+  // std::cout << get_type(*this) << " get_return_object() " << std::endl;
 #endif
   return Task<void, Nothing>{std::coroutine_handle<Promise<void, Nothing>>::from_promise(*this)};
 }
