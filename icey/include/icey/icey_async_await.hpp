@@ -722,7 +722,7 @@ public:
     auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
-        callback(std::size_t{}).force_destruction();
+        callback(std::size_t{});//.force_destruction();
       } else {
         callback(std::size_t{});
       }
