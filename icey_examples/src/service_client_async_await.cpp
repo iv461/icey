@@ -24,12 +24,6 @@ icey::Task<Response, std::string> handle_srv_call(rclcpp::Node::SharedPtr node, 
   std::cout << "B4 call" << std::endl;
   icey::Result<Response, std::string> result = co_await client.call(request, 1s);
   std::cout << "After RPC call" << std::endl;
-  if (result.has_error()) {
-    /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
-    RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
-  } else {
-    RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
-  }
 
   co_return result;
 }
@@ -50,10 +44,18 @@ int main(int argc, char **argv) {
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    //icey::Result<Response, std::string> result = co_await handle_srv_call(node, service, request);
-    icey::Result<Response, std::string> result = co_await service.call(request, 1s);
-    
+    icey::Result<Response, std::string> result = co_await handle_srv_call(node, service, request);
     std::cout << "After handle srv call" << std::endl;
+
+     if (result.has_error()) {
+      /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
+      RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
+    } else {
+      RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
+    }
+
+    //icey::Result<Response, std::string> result = co_await service.call(request, 1s);
+    
     // RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << response->success);
     co_return;
     
