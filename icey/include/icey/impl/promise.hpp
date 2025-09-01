@@ -211,7 +211,7 @@ public:
       void await_resume() const noexcept {}
     };
     //return Awaiter{};
-    return std::suspend_never{};
+    return std::suspend_always{};
   }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
@@ -241,7 +241,7 @@ public:
       void await_resume() const noexcept {}
     };
     //return Awaiter{};
-    return std::suspend_never{};
+    return std::suspend_always{};
   }
 
   Task<void, Nothing> get_return_object();

@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
   auto service = ctx->create_client<ExampleService>("set_bool_service");
   auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Task<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
-    co_return;
-    /*
+    
+
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     std::cout << "After handle srv call" << std::endl;
     // RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << response->success);
     co_return;
-    */
+    
   });
   rclcpp::spin(node);
 }
