@@ -286,16 +286,6 @@ public:
   }
   Task<_Value, _Error> get_return_object();
 
-  /// Sets a function that launches the asynchronous operation: This handler is called in the with
-  /// the address to this Promise so that it can store it and write to this promise later. This
-  /// handler returns a cancellation function that gets called when this Promise is destructed. This
-  /// constructor is useful for wrapping an existing callback-based API.
-  auto return_value(LaunchAsync &&h) {
-    this->launch_async_ = h;
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " return_value(launch_async)-" << std::endl;
-#endif
-  }
   auto final_suspend() const noexcept { return FinalAwaiter<Self>{this->destroy_in_final_await_}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
@@ -339,11 +329,24 @@ public:
   using Self = Task<_Value, _Error>;
   using Value = _Value;
   using Error = _Error;
-  using promise_type = Promise<_Value, _Error>;
+  using PromiseT = Promise<_Value, _Error>;
+  using promise_type = PromiseT;
+  using LaunchAsync = PromiseT::LaunchAsync;
+  std::unique_ptr<PromiseT> local_promise_;  /// for cB api
 
-  using coroutine_handle = std::coroutine_handle<promise_type>;
+  /// Sets a function that launches the asynchronous operation: This handler is called in the with
+  /// the address to this Promise so that it can store it and write to this promise later. This
+  /// handler returns a cancellation function that gets called when this Promise is destructed. This
+  /// constructor is useful for wrapping an existing callback-based API.
+  explicit Task(LaunchAsync &&h) {
+    local_promise_ = std::make_unique<PromiseT>();
+    local_promise_->launch_async_ = h;
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " Task(launch_async)-" << std::endl;
+#endif
+  }
 
-  explicit Task(coroutine_handle handle) : coroutine_(handle) {
+  explicit Task(std::coroutine_handle<PromiseT> handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
   // fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
   // std::size_t(handle.address()));
@@ -357,6 +360,9 @@ public:
 
   /// Destroys the coroutine if it is done or if force_destruction() was called before.
   ~Task() {
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " ~Task()-" << std::endl;
+#endif
     if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(*this);
@@ -379,13 +385,16 @@ public:
   /// leaks.
   void force_destruction() {
     // std::cout << "Forcing destruction for Task . " << std::endl;
-    promise().dont_destroy_coro();
+   
     // shall_destroy_ = true;
   }
 
-  auto operator co_await() const &noexcept {
+  auto operator co_await() noexcept {
     struct Awaiter {
-      Awaiter(coroutine_handle coroutine) noexcept : coroutine_(coroutine) {}
+      PromiseT *promise_{nullptr};
+      std::coroutine_handle<PromiseT> coroutine_{nullptr};
+      Awaiter(PromiseT *promise) noexcept : promise_(promise) {}
+      Awaiter(std::coroutine_handle<PromiseT> coroutine) noexcept : coroutine_(coroutine) {}
 
       bool await_ready() const noexcept {
         /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
@@ -394,36 +403,44 @@ public:
       }
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-        auto &p = coroutine_.promise();
-        p.launch_async(awaiting_coroutine);
+        if (coroutine_) {
+          auto &p = coroutine_.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
-                                 get_type(p), std::size_t(coroutine_.address()),
-                                 std::size_t(p.continuation_.address()))
-                  << std::endl;
+          std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
+                                   get_type(p), std::size_t(coroutine_.address()),
+                                   std::size_t(awaiting_coroutine.address()))
+                    << std::endl;
 #endif
+          p.launch_async(awaiting_coroutine);
+        } else {
+          promise_->launch_async(awaiting_coroutine);
+#ifdef ICEY_CORO_DEBUG_PRINT
+          std::cout << "await_suspend() called on promise task" << std::endl;
+#endif
+        }
         return true;
       }
 
       auto await_resume() {
-        auto &promise = this->coroutine_.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << get_type(promise) << " await_resume()" << std::endl;
+        std::cout << get_type(promise_) << " await_resume()" << std::endl;
 #endif
-        return promise.get();
+        if (coroutine_) {
+          auto &promise = this->coroutine_.promise();
+          return promise.get();
+        } else {
+          promise_->get();
+        }
       }
-
-      std::coroutine_handle<promise_type> coroutine_{nullptr};
     };
-    return Awaiter{coroutine_};
+    if (coroutine_) return Awaiter{coroutine_};
+    return Awaiter{this->local_promise_.get()};
   }
 
-  promise_type &promise() { return coroutine_.promise(); }
-  const promise_type &promise() const { return coroutine_.promise(); }
 
 private:
   bool shall_destroy_{false};
-  coroutine_handle coroutine_{nullptr};
+  std::coroutine_handle<PromiseT> coroutine_{nullptr};
 };
 
 template <class Value, class Error>
