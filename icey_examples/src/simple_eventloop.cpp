@@ -14,6 +14,7 @@ struct EventLoop {
     events.push_back(event);
   }
 
+  
   void spin() {
     do {
       if (timer_added_cnt < 100) {
@@ -29,7 +30,7 @@ struct EventLoop {
     } while (!events.empty());
   }
 
-  void add_timer(auto timer_event) { timer_ev = timer_event; }
+  void set_timer(auto timer_event) { timer_ev = timer_event; }
 
   std::function<void()> timer_ev;
   size_t timer_added_cnt{0};
@@ -37,15 +38,17 @@ struct EventLoop {
 };
 
 icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
+  std::cout << "In obtain_the_number_async" << std::endl;
   co_return [&](auto &promise, auto &) {
     event_loop.dispatch([&]() {
-      std::this_thread::sleep_for(1000ms);
+      std::this_thread::sleep_for(10ms);
       promise.resolve(42);
     });
   };
 }
 
 icey::Task<int> wrapper1(EventLoop &event_loop) {
+  std::cout << "In wrapper1" << std::endl;
   int res = co_await obtain_the_number_async(event_loop);
   co_return res;
 }
@@ -55,10 +58,11 @@ int main() {
     EventLoop event_loop;
 
     std::cout << "E3 Before do_async_stuff " << std::endl;
-    event_loop.add_timer([&]() -> icey::Task<void> {
+    event_loop.set_timer([&]() -> icey::Task<void> {
       std::cout << "Before obtain_the_number_async" << std::endl;
       int the_number = co_await wrapper1(event_loop);
       std::cout << "After obtain_the_number_async" << std::endl;
+      co_return;
     });
     std::cout << "After do_async_stuff, starting the event loop ... " << std::endl;
     event_loop.spin();

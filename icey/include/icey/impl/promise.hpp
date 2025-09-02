@@ -77,8 +77,8 @@ public:
   /// calls the cancel function if it was set
   ~PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    fmt::print("Destructing coroutine state: 0x{:x} (Promise {})\n",
-               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this));
+    std::cout << fmt::format("Destructing coroutine state: 0x{:x} (Promise {})\n",
+               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this)) <<std::endl;
     // std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     if (cancel_) cancel_(*this);
@@ -127,7 +127,7 @@ public:
       /// If a coro handle is done, the function ptr is nullptr, so we get a crash on resume
       if (!continuation_.done()) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-        fmt::print("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address()));
+        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address())) << std::endl;
 #endif
         continuation_.resume();
         if (false && continuation_.done()) {
@@ -142,6 +142,7 @@ public:
 #ifdef ICEY_CORO_DEBUG_PRINT
         fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
                    size_t(continuation_.address()));
+        getchar();
 
 #endif
       }
@@ -219,8 +220,8 @@ public:
 /// coro_handle::from_address is an ugly-ass pointer arithmetic hack to find out the address of a
 /// struct if you know the address of a member of it that somehow got standartized
 #ifdef ICEY_CORO_DEBUG_PRINT
-    fmt::print("Created coroutine state: 0x{:x} (Promise {})\n",
-               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this));
+    std::cout << fmt::format("Created coroutine state: 0x{:x} (Promise {})\n",
+               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this))<<std::endl;;
 #endif
   }
   Task<_Value, _Error> get_return_object();
@@ -271,8 +272,8 @@ public:
 /// coro_handle::from_address is an ugly-ass pointer arithmetic hack to find out the address of a
 /// struct if you know the address of a member of it that somehow got standartized
 #ifdef ICEY_CORO_DEBUG_PRINT
-    fmt::print("Created coroutine state: 0x{:x} (Promise {})\n",
-               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this));
+    std::cout << fmt::format("Created coroutine state: 0x{:x} (Promise {})\n",
+               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this))<<std::endl;
 #endif
   }
   auto final_suspend() const noexcept {
@@ -348,8 +349,8 @@ public:
         auto &p = coroutine_.promise();
         p.launch_async(awaiting_coroutine);
 #ifdef ICEY_CORO_DEBUG_PRINT
-        fmt::print("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n", get_type(p),
-                   std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()));
+        std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n", get_type(p),
+                   std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()))<<std::endl;
 #endif
         return true;
       }
