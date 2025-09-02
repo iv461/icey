@@ -116,7 +116,7 @@ public:
 
   PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " Constructor()" << std::endl;
+  std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -128,12 +128,12 @@ public:
 
   /// calls the cancel function if it was set
   ~PromiseBase() {
-#ifdef ICEY_CORO_DEBUG_PRINT
+    #ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " Destructor()" << std::endl;
     std::cout << fmt::format("Destructing coroutine state: 0x{:x} (Promise {})\n",
                              size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
                              get_type(*this))
               << std::endl;
-    // std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     if (cancel_ && has_none()) cancel_(*this);
   }
@@ -420,9 +420,9 @@ public:
           return promise.get();
         } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
-          std::cout << get_type(promise_) << " await_resume()" << std::endl;
+          std::cout << get_type(*promise_) << " await_resume()" << std::endl;
 #endif
-          promise_->get();
+          return promise_->get();
         }
       }
     };
