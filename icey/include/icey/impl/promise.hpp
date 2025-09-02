@@ -115,7 +115,7 @@ public:
 
   PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
-// std::cout << get_type(*this) << " Constructor()" << std::endl;
+std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -187,14 +187,6 @@ public:
                   << std::endl;
 #endif
         continuation_.resume();
-        if (false && continuation_.done()) {
-#ifdef ICEY_CORO_DEBUG_PRINT
-          fmt::print("Destructing coro after continue, 0x{:x}, it is done!\n",
-                     size_t(continuation_.address()));
-          continuation_.destroy();
-          continuation_ = nullptr;
-#endif
-        }
       } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
         fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
@@ -361,7 +353,7 @@ public:
   /// Destroys the coroutine if it is done or if force_destruction() was called before.
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " ~Task()-" << std::endl;
+    std::cout << get_type(*this) << " ~Task()" << std::endl;
 #endif
     if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -385,7 +377,7 @@ public:
   /// leaks.
   void force_destruction() {
     // std::cout << "Forcing destruction for Task . " << std::endl;
-   
+
     // shall_destroy_ = true;
   }
 
@@ -399,6 +391,10 @@ public:
       bool await_ready() const noexcept {
         /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
         /// suspend
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << fmt::format("await_ready(), coroutine 0x{:x} is done: {}",
+                                 std::size_t(coroutine_.address()), coroutine_.done()) << std::endl;
+#endif
         return false;  // coroutine_.done();
       }
 
@@ -436,7 +432,6 @@ public:
     if (coroutine_) return Awaiter{coroutine_};
     return Awaiter{this->local_promise_.get()};
   }
-
 
 private:
   bool shall_destroy_{false};

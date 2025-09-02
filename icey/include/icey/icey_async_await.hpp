@@ -723,15 +723,7 @@ public:
     auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
-        const auto c = [=]() -> icey::Task<void> {
-          std::cout << "Before cb" << std::endl;
-          co_await callback(std::size_t{});
-
-          std::cout << "After cb" << std::endl;
-          co_return;
-        };
-        c();
-
+        callback(std::size_t{});
       } else {
         callback(std::size_t{});
       }
