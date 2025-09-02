@@ -11,6 +11,7 @@
 #include <functional>
 #include <icey/impl/promise.hpp>
 #include <optional>
+#include <thread>  /// for ID
 #include <unordered_map>
 
 #include "rclcpp/rclcpp.hpp"
@@ -574,11 +575,14 @@ struct ServiceClientImpl {
     return Task<Response, std::string>([this, request, timeout](auto &promise, auto &cancel) {
       auto request_id = this->call(
           request, timeout,
-          [&](const auto &x) {
-            std::cout << "resolving RPC " << std::endl;
+          [&promise](const auto &x) {
+            std::cout << "resolving RPC from thread " << std::this_thread::get_id() << std::endl;
             promise.resolve(x);
           },
-          [&](const auto &x) { promise.reject(x); });
+          [&promise](const auto &x) {
+            std::cout << "rejecting RPC from thread " << std::this_thread::get_id() << std::endl;
+            promise.reject(x);
+          });
       cancel = [this, request_id](auto &) { cancel_request(request_id); };
     });
   }

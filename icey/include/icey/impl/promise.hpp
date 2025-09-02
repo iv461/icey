@@ -12,7 +12,7 @@
 
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
-
+#include <thread> // for ID 
 #include <boost/type_index.hpp>
 /// Returns a string that represents the type of the given value
 template <class T>
@@ -113,9 +113,9 @@ public:
   /// this promise (first argument Self&). It also sets Cancel function (second argument)
   using LaunchAsync = std::function<void(Self &, Cancel &)>;
 
-  PromiseBase(){
+  PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-std::cout << get_type(*this) << " Constructor()" << std::endl;
+    //std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -125,8 +125,7 @@ std::cout << get_type(*this) << " Constructor()" << std::endl;
   PromiseBase &operator=(const Self &) = delete;
   PromiseBase &operator=(Self &&) = delete;
 
-  bool destroy_in_final_await_{true};
-  void dont_destroy_coro() { destroy_in_final_await_ = false; }
+
 
   /// calls the cancel function if it was set
   ~PromiseBase() {
@@ -272,13 +271,13 @@ public:
     std::cout << fmt::format("Created coroutine state: 0x{:x} (Promise {})\n",
                              size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
                              get_type(*this))
-              << std::endl;
+              << " from thread " << std::this_thread::get_id() << std::endl;
     ;
 #endif
   }
   Task<_Value, _Error> get_return_object();
 
-  auto final_suspend() const noexcept { return FinalAwaiter<Self>{this->destroy_in_final_await_}; }
+  std::suspend_never final_suspend() const noexcept { return {}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
@@ -309,7 +308,7 @@ public:
 #endif
   }
 
-  auto final_suspend() const noexcept { return FinalAwaiter<Self>{this->destroy_in_final_await_}; }
+  std::suspend_never final_suspend() const noexcept { return {}; }
 
   Task<void, Nothing> get_return_object();
   auto return_void() { this->resolve(Nothing{}); }
@@ -354,8 +353,10 @@ public:
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " ~Task()" << std::endl;
+    if(local_promise_)
+      local_promise_.reset();
 #endif
-    if (coroutine_ && (coroutine_.done() || shall_destroy_)) {
+    if (false && coroutine_ && (coroutine_.done() || shall_destroy_)) {
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(*this);
       if (shall_destroy_) std::cout << " FORCED ";
@@ -365,21 +366,17 @@ public:
       coroutine_.destroy();
       coroutine_ = nullptr;
     } else {
-#ifdef ICEY_CORO_DEBUG_PRINT
+      /*
+      #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(*this) << " NOT destroying coroutine "
-                << fmt::format("coroutine 0x{:x}", std::size_t(coroutine_.address()))
-                << " (it is not done yet)" << std::endl;
-#endif
+      << fmt::format("coroutine 0x{:x}", std::size_t(coroutine_.address()))
+      << " (it is not done yet)" << std::endl;
+      #endif
+      */
     }
   }
 
-  /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
-  /// leaks.
-  void force_destruction() {
-    // std::cout << "Forcing destruction for Task . " << std::endl;
 
-    // shall_destroy_ = true;
-  }
 
   auto operator co_await() noexcept {
     struct Awaiter {
@@ -392,8 +389,11 @@ public:
         /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
         /// suspend
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("await_ready(), coroutine 0x{:x} is done: {}",
-                                 std::size_t(coroutine_.address()), coroutine_.done()) << std::endl;
+        if (coroutine_) {
+          std::cout << fmt::format("await_ready(), coroutine 0x{:x} is done: {}",
+                                   std::size_t(coroutine_.address()), coroutine_.done())
+                    << std::endl;
+        }
 #endif
         return false;  // coroutine_.done();
       }
@@ -418,13 +418,13 @@ public:
       }
 
       auto await_resume() {
-#ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << get_type(promise_) << " await_resume()" << std::endl;
-#endif
         if (coroutine_) {
           auto &promise = this->coroutine_.promise();
           return promise.get();
         } else {
+          #ifdef ICEY_CORO_DEBUG_PRINT
+                  std::cout << get_type(promise_) << " await_resume()" << std::endl;
+          #endif
           promise_->get();
         }
       }
