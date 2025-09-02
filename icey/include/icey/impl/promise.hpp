@@ -44,11 +44,16 @@ struct PromiseTag {};
 /// Promise is the derived one,i.e. called Promise below
 template <class Promise>
 struct FinalAwaiter {
-  bool await_ready() const noexcept { return false; }
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<Promise> coro) const noexcept {
+  FinalAwaiter(bool shall_destroy): shall_destroy_(shall_destroy) {}
+  bool shall_destroy_{false};
+  bool await_ready() const noexcept { return shall_destroy_; }
+  //std::coroutine_handle<> 
+  void await_suspend(std::coroutine_handle<Promise> coro) const noexcept {
+    return;
     /// Note that this awaiter is in the promise: the coro got here by argument is always the same
     /// as the promise from which this awaiter was constructed. This is why we don't need to store
     /// the coro in this awaiter
+/*
 
     auto continuation = coro.promise().continuation_;
     if (continuation && !continuation.done()) {
@@ -63,12 +68,14 @@ struct FinalAwaiter {
 #ifdef ICEY_CORO_DEBUG_PRINT
 
       std::cout << fmt::format(
-                       "final await_suspend(), coroutine 0x{:x} does not have a continuation.\n",
+                       "final await_suspend(), destroying coroutine 0x{:x}.\n",
                        std::size_t(coro.address()))
-                << std::endl;
+                << ", this coro done: " << coro.done() << std::endl;
 #endif
       return std::noop_coroutine();
     }
+      */
+    //return false;
   }
   void await_resume() const noexcept {}
 };
@@ -106,6 +113,11 @@ public:
   PromiseBase(PromiseBase &&) = delete;
   PromiseBase &operator=(const Self &) = delete;
   PromiseBase &operator=(Self &&) = delete;
+
+  bool destroy_in_final_await_{true};
+  void dont_destroy_coro() {
+    destroy_in_final_await_ = false;
+  }
 
   /// calls the cancel function if it was set
   ~PromiseBase() {
@@ -275,7 +287,7 @@ public:
     std::cout << get_type(*this) << " return_value(launch_async)-" << std::endl;
 #endif
   }
-  auto final_suspend() const noexcept { return FinalAwaiter<Self>{}; }
+  auto final_suspend() const noexcept { return FinalAwaiter<Self>{this->destroy_in_final_await_}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
@@ -306,7 +318,7 @@ public:
 #endif
   }
 
-  auto final_suspend() const noexcept { return FinalAwaiter<Self>{}; }
+  auto final_suspend() const noexcept { return FinalAwaiter<Self>{this->destroy_in_final_await_}; }
 
   Task<void, Nothing> get_return_object();
   auto return_void() { this->resolve(Nothing{}); }
@@ -356,7 +368,11 @@ public:
 
   /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
   /// leaks.
-  void force_destruction() { shall_destroy_ = true; }
+  void force_destruction() {
+    std::cout << "Forcing destruction for Task . "<<std::endl;
+    promise().dont_destroy_coro();
+    shall_destroy_ = true; 
+  }
 
   auto operator co_await() const &noexcept {
     struct Awaiter {
