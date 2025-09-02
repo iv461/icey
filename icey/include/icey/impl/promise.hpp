@@ -48,7 +48,7 @@ struct FinalAwaiter {
   bool shall_destroy_{false};
   bool await_ready() const noexcept {
     // std::cout << "Await ready called" << std::endl;
-    return false;
+    return true;
   }
   // std::coroutine_handle<>
   void await_suspend(std::coroutine_handle<Promise> coro) const noexcept {
