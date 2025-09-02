@@ -62,9 +62,10 @@ public:
   /// this promise (first argument Self&). It also sets Cancel function (second argument)
   using LaunchAsync = std::function<void(Self &, Cancel &)>;
 
-  PromiseBase() {
+  PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Constructor()" << std::endl;
+// std::cout << get_type(*this) << " Constructor()" << std::endl;
+// std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
 
@@ -76,7 +77,9 @@ public:
   /// calls the cancel function if it was set
   ~PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Destructor()" << std::endl;
+    fmt::print("Destructing coroutine state: 0x{:x} (Promise {})\n",
+               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this));
+    // std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     if (cancel_) cancel_(*this);
   }
@@ -204,12 +207,22 @@ public:
 template <class _Value, class _Error = Nothing>
 class Promise : public PromiseBase<_Value, _Error> {
 public:
+  using Self = Promise<_Value, _Error>;
   using Base = PromiseBase<_Value, _Error>;
   using LaunchAsync = Base::LaunchAsync;
   using Cancel = Base::Cancel;
   using State = Base::State;
-  using Base::Base;
 
+  Promise() : Base() {
+    /// The Promise is a member of the coroutine state, so we can effectively track coroutine state
+    /// allocations inside the promise
+/// coro_handle::from_address is an ugly-ass pointer arithmetic hack to find out the address of a
+/// struct if you know the address of a member of it that somehow got standartized
+#ifdef ICEY_CORO_DEBUG_PRINT
+    fmt::print("Created coroutine state: 0x{:x} (Promise {})\n",
+               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this));
+#endif
+  }
   Task<_Value, _Error> get_return_object();
 
   /// Sets a function that launches the asynchronous operation: This handler is called in the with
@@ -251,7 +264,17 @@ class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
   using Base = PromiseBase<Nothing, Nothing>;
   using Cancel = Base::Cancel;
-
+  using Self = Promise<void, Nothing>;
+  Promise() : Base() {
+    /// The Promise is a member of the coroutine state, so we can effectively track coroutine state
+    /// allocations inside the promise
+/// coro_handle::from_address is an ugly-ass pointer arithmetic hack to find out the address of a
+/// struct if you know the address of a member of it that somehow got standartized
+#ifdef ICEY_CORO_DEBUG_PRINT
+    fmt::print("Created coroutine state: 0x{:x} (Promise {})\n",
+               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this));
+#endif
+  }
   auto final_suspend() const noexcept {
     struct Awaiter {
       // std::coroutine_handle<> continuation_;
@@ -282,8 +305,7 @@ public:
 
   explicit Task(coroutine_handle handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
-               std::size_t(handle.address()));
+    //fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this), std::size_t(handle.address()));
 #endif
   }
 
@@ -298,15 +320,16 @@ public:
 #ifdef ICEY_CORO_DEBUG_PRINT
       std::cout << get_type(*this);
       if (shall_destroy_) std::cout << " FORCED ";
-      std::cout << " destroying task "
-                << fmt::format("coroutine_ is: 0x{:x}", std::size_t(coroutine_.address()))
-                << std::endl;
+      std::cout << " destroying "
+                << fmt::format("coroutine 0x{:x}", std::size_t(coroutine_.address())) << std::endl;
 #endif
       coroutine_.destroy();
       coroutine_ = nullptr;
     } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << get_type(*this) << " NOT destroying ! " << coroutine_.done() << std::endl;
+      std::cout << get_type(*this) << " NOT destroying coroutine "
+                << fmt::format("coroutine 0x{:x}", std::size_t(coroutine_.address()))
+                << " (it is not done yet)" << std::endl;
 #endif
     }
   }
@@ -325,8 +348,7 @@ public:
         auto &p = coroutine_.promise();
         p.launch_async(awaiting_coroutine);
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << get_type(p) << " await_suspend(), setting continuation .." << std::endl;
-        fmt::print("coroutine_ is: 0x{:x}, continuation_ is: 0x{:x}\n",
+        fmt::print("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n", get_type(p),
                    std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()));
 #endif
         return true;
