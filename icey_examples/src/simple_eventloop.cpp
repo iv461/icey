@@ -1,4 +1,5 @@
 #define ICEY_CORO_DEBUG_PRINT
+#include <deque>
 #include <icey/impl/promise.hpp>
 #include <iostream>
 #include <thread>
@@ -8,53 +9,57 @@
 /// asynchronous programming without using the word "thread".
 using namespace std::chrono_literals;
 struct EventLoop {
-  void dispatch(auto &&event) { events.push_back(event); }
+  void dispatch(auto &&event) {
+    std::cout << "Dispatching event " << std::endl;
+    events.push_back(event);
+  }
 
   void spin() {
-    for (auto ev : events) ev();
+    do {
+      if (timer_added_cnt < 100) {
+        events.push_back(timer_ev);
+        timer_added_cnt++;
+      }
+      auto event = events.front();  // Get the first event
+      // events.erase(events.begin());
+      events.pop_front();
+      std::cout << "Before ex event" << std::endl;
+      if (event) event();
+      std::cout << "After ex event" << std::endl;
+    } while (!events.empty());
   }
-  std::vector<std::function<void()>> events;
+
+  void add_timer(auto timer_event) { timer_ev = timer_event; }
+
+  std::function<void()> timer_ev;
+  size_t timer_added_cnt{0};
+  std::deque<std::function<void()>> events;
 };
 
 icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
   co_return [&](auto &promise, auto &) {
     event_loop.dispatch([&]() {
-      std::this_thread::sleep_for(10ms);
+      std::this_thread::sleep_for(1000ms);
       promise.resolve(42);
     });
   };
 }
-
 
 icey::Task<int> wrapper1(EventLoop &event_loop) {
   int res = co_await obtain_the_number_async(event_loop);
   co_return res;
 }
 
-
-icey::Task<void> do_async_stuff(EventLoop &event_loop) {
-  std::cout << "Before obtain_the_number_async" << std::endl;
-  event_loop.dispatch([&]() {
-    const auto f = [&]() -> icey::Task<void> {
-      std::cout << "Before obtain_the_number_async" << std::endl;
-      int the_number = co_await wrapper1(event_loop);//co_await obtain_the_number_async(event_loop);
-      std::cout << "Obtained number: " << the_number << std::endl;
-      co_return;
-    };
-    for (size_t i = 0; i < 1000; i++) {
-      f().force_destruction();
-    }
-  });
-  co_return;
-}
-
-
 int main() {
   {
     EventLoop event_loop;
 
     std::cout << "E3 Before do_async_stuff " << std::endl;
-    do_async_stuff(event_loop);
+    event_loop.add_timer([&]() -> icey::Task<void> {
+      std::cout << "Before obtain_the_number_async" << std::endl;
+      int the_number = co_await wrapper1(event_loop);
+      std::cout << "After obtain_the_number_async" << std::endl;
+    });
     std::cout << "After do_async_stuff, starting the event loop ... " << std::endl;
     event_loop.spin();
     std::cout << "Done" << std::endl;
