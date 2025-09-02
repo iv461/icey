@@ -51,6 +51,10 @@ icey::Task<int> wrapper2(EventLoop &event_loop) {
   std::cout << "b4 obtain_the_number_async" << std::endl;
   int res = co_await obtain_the_number_async(event_loop);
   std::cout << "After obtain_the_number_async" << std::endl;
+
+  std::cout << "b4 obtain_the_number_async2" << std::endl;
+  int res2 = co_await obtain_the_number_async(event_loop);
+  std::cout << "After obtain_the_number_async2" << std::endl;
   co_return res;
 }
 

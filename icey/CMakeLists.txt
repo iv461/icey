@@ -25,23 +25,21 @@ include_directories(
 )
 
 if(BUILD_TESTING)
-  # Automatic inclusion of lint-related tests
-  #find_package(ament_lint_auto REQUIRED)
-  #ament_lint_auto_find_test_dependencies()
+  
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+  find_package(ament_cmake_gtest REQUIRED)
 
-  # Add gtests
-  #find_package(ament_cmake_gtest REQUIRED)
-#
-  #ament_auto_add_gtest(test_main 
-  #test/promise_test.cpp
-  #test/entities_test.cpp
-  #test/entities_async_await_test.cpp
-  #  test/test_main.cpp
-  #  test/filters_test.cpp
-  #  test/callback_lifetime_test.cpp
-  #  test/context_test.cpp
-  #)
-  #target_link_libraries(test_main fmt::fmt)
+  ament_auto_add_gtest(test_main 
+    test/promise_test.cpp
+    test/entities_test.cpp
+    test/entities_async_await_test.cpp
+    test/test_main.cpp
+    test/filters_test.cpp
+    test/callback_lifetime_test.cpp
+    test/context_test.cpp
+  )
+  target_link_libraries(test_main fmt::fmt)
     
 endif()
 

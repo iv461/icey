@@ -42,56 +42,6 @@ template <class Value, class Error>
 class Task;
 struct PromiseTag {};
 
-/// Promise is the derived one,i.e. called Promise below
-template <class Promise>
-struct FinalAwaiter {
-  FinalAwaiter(bool shall_destroy) : shall_destroy_(shall_destroy) {}
-  bool shall_destroy_{false};
-  bool await_ready() const noexcept {
-    // std::cout << "Await ready called" << std::endl;
-    return true;
-  }
-  // std::coroutine_handle<>
-  void await_suspend(std::coroutine_handle<Promise> coro) const noexcept {
-#ifdef ICEY_CORO_DEBUG_PRINT
-
-    std::cout << fmt::format("final await_suspend() coro 0x{:x}", std::size_t(coro.address()))
-              << std::endl;
-#endif
-    if (false && shall_destroy_) {
-      coro.destroy();
-    }
-    return;
-    /// Note that this awaiter is in the promise: the coro got here by argument is always the same
-    /// as the promise from which this awaiter was constructed. This is why we don't need to store
-    /// the coro in this awaiter
-    /*
-
-        auto continuation = coro.promise().continuation_;
-        if (continuation && !continuation.done()) {
-    #ifdef ICEY_CORO_DEBUG_PRINT
-
-          std::cout << fmt::format("final await_suspend(), transferring coroutine 0x{:x} to
-    0x{:x}\n", std::size_t(coro.address()), std::size_t(continuation.address()))
-                    << std::endl;
-    #endif
-          return continuation;
-        } else {
-    #ifdef ICEY_CORO_DEBUG_PRINT
-
-          std::cout << fmt::format(
-                           "final await_suspend(), destroying coroutine 0x{:x}.\n",
-                           std::size_t(coro.address()))
-                    << ", this coro done: " << coro.done() << std::endl;
-    #endif
-          return std::noop_coroutine();
-        }
-          */
-    // return false;
-  }
-  void await_resume() const noexcept {}
-};
-
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
@@ -116,7 +66,7 @@ public:
 
   PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
-  std::cout << get_type(*this) << " Constructor()" << std::endl;
+  // std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -128,13 +78,15 @@ public:
 
   /// calls the cancel function if it was set
   ~PromiseBase() {
-    #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Destructor()" << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+    // std::cout << get_type(*this) << " Destructor()" << std::endl;
     std::cout << fmt::format("Destructing coroutine state: 0x{:x} (Promise {})\n",
                              size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
                              get_type(*this))
               << std::endl;
 #endif
+    /// cancellation only happens when the promise is destroyed before it has a value: This happens
+    /// only when the user forgets to add a co_await
     if (cancel_ && has_none()) cancel_(*this);
   }
 
@@ -275,7 +227,7 @@ public:
     ;
 #endif
   }
-  Task<_Value, _Error> get_return_object();
+  Task<_Value, _Error> get_return_object() noexcept;
 
   std::suspend_never final_suspend() const noexcept { return {}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
@@ -310,7 +262,7 @@ public:
 
   std::suspend_never final_suspend() const noexcept { return {}; }
 
-  Task<void, Nothing> get_return_object();
+  Task<void, Nothing> get_return_object() noexcept;
   auto return_void() { this->resolve(Nothing{}); }
 };
 
@@ -353,26 +305,7 @@ public:
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " ~Task()" << std::endl;
-    if (local_promise_) local_promise_.reset();
 #endif
-    if (false && coroutine_ && (coroutine_.done() || shall_destroy_)) {
-#ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << get_type(*this);
-      if (shall_destroy_) std::cout << " FORCED ";
-      std::cout << " destroying "
-                << fmt::format("coroutine 0x{:x}", std::size_t(coroutine_.address())) << std::endl;
-#endif
-      coroutine_.destroy();
-      coroutine_ = nullptr;
-    } else {
-      /*
-      #ifdef ICEY_CORO_DEBUG_PRINT
-      std::cout << get_type(*this) << " NOT destroying coroutine "
-      << fmt::format("coroutine 0x{:x}", std::size_t(coroutine_.address()))
-      << " (it is not done yet)" << std::endl;
-      #endif
-      */
-    }
   }
 
   auto operator co_await() noexcept {
@@ -392,7 +325,7 @@ public:
                     << std::endl;
         }
 #endif
-        return false;  // coroutine_.done();
+        return false;
       }
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
@@ -431,7 +364,6 @@ public:
   }
 
 private:
-  bool shall_destroy_{false};
   std::coroutine_handle<PromiseT> coroutine_{nullptr};
 };
 
