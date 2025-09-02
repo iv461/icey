@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
   /// Create the service client beforehand
   auto service = ctx->create_client<ExampleService>("set_bool_service");
-  auto timer = ctx->create_timer_async(1000ms, [&](std::size_t) -> icey::Task<void> {
+  auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Task<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
     //    co_return;
     // co_await obtain_the_number_sync();
@@ -44,21 +44,17 @@ int main(int argc, char **argv) {
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    //    icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
-     co_await service.call(request, 1s);
+    icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
 
     std::cout << "After handle srv call" << std::endl;
-    co_return;
-/*
-if (result.has_error()) {
-  /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
+
+    if (result.has_error()) {
+      /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")
       RCLCPP_INFO_STREAM(node->get_logger(), "Got error: " << result.error());
     } else {
       RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << result.value()->success);
-  }
-  
-  */
-    // RCLCPP_INFO_STREAM(node->get_logger(), "Got response: " << response->success);
+    }
+    co_return;
   });
   rclcpp::spin(node);
 }
