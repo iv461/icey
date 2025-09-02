@@ -44,38 +44,49 @@ struct PromiseTag {};
 /// Promise is the derived one,i.e. called Promise below
 template <class Promise>
 struct FinalAwaiter {
-  FinalAwaiter(bool shall_destroy): shall_destroy_(shall_destroy) {}
+  FinalAwaiter(bool shall_destroy) : shall_destroy_(shall_destroy) {}
   bool shall_destroy_{false};
-  bool await_ready() const noexcept { return shall_destroy_; }
-  //std::coroutine_handle<> 
+  bool await_ready() const noexcept {
+    // std::cout << "Await ready called" << std::endl;
+    return false;
+  }
+  // std::coroutine_handle<>
   void await_suspend(std::coroutine_handle<Promise> coro) const noexcept {
+#ifdef ICEY_CORO_DEBUG_PRINT
+
+    std::cout << fmt::format("final await_suspend() coro 0x{:x}", std::size_t(coro.address()))
+              << std::endl;
+#endif
+    if (false && shall_destroy_) {
+      coro.destroy();
+    }
     return;
     /// Note that this awaiter is in the promise: the coro got here by argument is always the same
     /// as the promise from which this awaiter was constructed. This is why we don't need to store
     /// the coro in this awaiter
-/*
+    /*
 
-    auto continuation = coro.promise().continuation_;
-    if (continuation && !continuation.done()) {
-#ifdef ICEY_CORO_DEBUG_PRINT
+        auto continuation = coro.promise().continuation_;
+        if (continuation && !continuation.done()) {
+    #ifdef ICEY_CORO_DEBUG_PRINT
 
-      std::cout << fmt::format("final await_suspend(), transferring coroutine 0x{:x} to 0x{:x}\n",
-                               std::size_t(coro.address()), std::size_t(continuation.address()))
-                << std::endl;
-#endif
-      return continuation;
-    } else {
-#ifdef ICEY_CORO_DEBUG_PRINT
+          std::cout << fmt::format("final await_suspend(), transferring coroutine 0x{:x} to
+    0x{:x}\n", std::size_t(coro.address()), std::size_t(continuation.address()))
+                    << std::endl;
+    #endif
+          return continuation;
+        } else {
+    #ifdef ICEY_CORO_DEBUG_PRINT
 
-      std::cout << fmt::format(
-                       "final await_suspend(), destroying coroutine 0x{:x}.\n",
-                       std::size_t(coro.address()))
-                << ", this coro done: " << coro.done() << std::endl;
-#endif
-      return std::noop_coroutine();
-    }
-      */
-    //return false;
+          std::cout << fmt::format(
+                           "final await_suspend(), destroying coroutine 0x{:x}.\n",
+                           std::size_t(coro.address()))
+                    << ", this coro done: " << coro.done() << std::endl;
+    #endif
+          return std::noop_coroutine();
+        }
+          */
+    // return false;
   }
   void await_resume() const noexcept {}
 };
@@ -115,9 +126,7 @@ public:
   PromiseBase &operator=(Self &&) = delete;
 
   bool destroy_in_final_await_{true};
-  void dont_destroy_coro() {
-    destroy_in_final_await_ = false;
-  }
+  void dont_destroy_coro() { destroy_in_final_await_ = false; }
 
   /// calls the cancel function if it was set
   ~PromiseBase() {
@@ -369,16 +378,20 @@ public:
   /// Call this function on the top-level coroutine that you are not awaiting to prevent memory
   /// leaks.
   void force_destruction() {
-    std::cout << "Forcing destruction for Task . "<<std::endl;
+    // std::cout << "Forcing destruction for Task . " << std::endl;
     promise().dont_destroy_coro();
-    shall_destroy_ = true; 
+    // shall_destroy_ = true;
   }
 
   auto operator co_await() const &noexcept {
     struct Awaiter {
       Awaiter(coroutine_handle coroutine) noexcept : coroutine_(coroutine) {}
 
-      bool await_ready() const noexcept { return false; }
+      bool await_ready() const noexcept {
+        /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
+        /// suspend
+        return false;  // coroutine_.done();
+      }
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
         auto &p = coroutine_.promise();
