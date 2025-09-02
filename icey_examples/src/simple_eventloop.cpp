@@ -45,14 +45,6 @@ icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
       promise.resolve(42);
     });
   });
-  /*
-  co_return [&](auto &promise, auto &) {
-  event_loop.dispatch([&]() {
-    std::this_thread::sleep_for(10ms);
-    promise.resolve(42);
-  });
-};
-*/
 }
 
 icey::Task<int> wrapper2(EventLoop &event_loop) {
@@ -79,7 +71,7 @@ int main() {
         std::cout << "After obtain_the_number_async" << std::endl;
         co_return;
       };
-      c().force_destruction();
+      c();
     });
     std::cout << "After do_async_stuff, starting the event loop ... " << std::endl;
     event_loop.spin();

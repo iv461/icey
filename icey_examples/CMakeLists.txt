@@ -49,8 +49,8 @@ ament_auto_find_build_dependencies()
 #
 #ament_auto_add_executable(lifecycle_node_example src/lifecycle_nodes.cpp)
 #ament_auto_add_executable(coroutine_example src/coroutine_example.cpp)
-#ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)
-#target_link_libraries(service_client_async_await_example fmt::fmt)
+ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)
+target_link_libraries(service_client_async_await_example fmt::fmt)
 
 ament_auto_add_executable(simple_eventloop src/simple_eventloop.cpp)
 target_link_libraries(simple_eventloop fmt::fmt)

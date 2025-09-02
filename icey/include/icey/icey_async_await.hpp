@@ -296,17 +296,18 @@ struct TransformBufferImpl {
                                                                  const std::string &source_frame,
                                                                  const Time &time,
                                                                  const Duration &timeout) {
-    co_return [this, target_frame, source_frame, time, timeout](auto &promise, auto &cancel) {
-      auto request_handle = this->lookup(
-          target_frame, source_frame, time, timeout,
-          [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
-          [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
-      return cancel = [this, request_handle](auto &promise) {
-        if (promise.has_none()) {
-          this->cancel_request(request_handle);
-        }
-      };
-    };
+    return Task<geometry_msgs::msg::TransformStamped, std::string>(
+        [this, target_frame, source_frame, time, timeout](auto &promise, auto &cancel) {
+          auto request_handle = this->lookup(
+              target_frame, source_frame, time, timeout,
+              [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
+              [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
+          return cancel = [this, request_handle](auto &promise) {
+            if (promise.has_none()) {
+              this->cancel_request(request_handle);
+            }
+          };
+        });
   }
 
   /// @brief Same as `lookup`, but accepts a ROS time point
@@ -570,7 +571,7 @@ struct ServiceClientImpl {
   }
 
   Task<Response, std::string> call(Request request, const Duration &timeout) {
-    co_return [this, request, timeout](auto &promise, auto &cancel) {
+    return Task<Response, std::string>([this, request, timeout](auto &promise, auto &cancel) {
       auto request_id = this->call(
           request, timeout,
           [&](const auto &x) {
@@ -579,7 +580,7 @@ struct ServiceClientImpl {
           },
           [&](const auto &x) { promise.reject(x); });
       cancel = [this, request_id](auto &) { cancel_request(request_id); };
-    };
+    });
   }
 
   /// Cancel the request so that callbacks will not be called anymore.
@@ -722,7 +723,15 @@ public:
     auto timer = node_base().create_wall_timer(period, [callback]() {
       using ReturnType = decltype(callback(std::size_t{}));
       if constexpr (has_promise_type_v<ReturnType>) {
-        callback(std::size_t{});//.force_destruction();
+        const auto c = [=]() -> icey::Task<void> {
+          std::cout << "Before cb" << std::endl;
+          co_await callback(std::size_t{});
+
+          std::cout << "After cb" << std::endl;
+          co_return;
+        };
+        c();
+
       } else {
         callback(std::size_t{});
       }
