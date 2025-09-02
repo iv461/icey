@@ -48,8 +48,9 @@ icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
 }
 
 icey::Task<int> wrapper2(EventLoop &event_loop) {
-  std::cout << "In wrapper2" << std::endl;
+  std::cout << "b4 obtain_the_number_async" << std::endl;
   int res = co_await obtain_the_number_async(event_loop);
+  std::cout << "After obtain_the_number_async" << std::endl;
   co_return res;
 }
 
@@ -59,6 +60,7 @@ icey::Task<int> wrapper1(EventLoop &event_loop) {
   co_return res;
 }
 
+/// TODO using sync crashes since we destroy too early, fix this
 icey::Task<int> obtain_the_number_sync() { 
     co_return 42; 
 }
@@ -72,8 +74,8 @@ int main() {
     event_loop.set_timer([&]() {
       const auto c = [&]() -> icey::Task<void> {
         std::cout << "Before obtain_the_number_async" << std::endl;
-        int the_number = co_await obtain_the_number_sync();
-        std::cout << "After obtain_the_number_async" << std::endl;
+        int the_number = co_await obtain_the_number_async(event_loop);
+        std::cout << "After obtain_the_number_async, the number: " << the_number << std::endl;
         co_return;
       };
       c();

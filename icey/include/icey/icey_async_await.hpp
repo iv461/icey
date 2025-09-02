@@ -548,11 +548,13 @@ struct ServiceClientImpl {
     auto req_id = std::make_shared<RequestID>();
     auto future_and_req_id = client->async_send_request(
         request, [this, on_response, on_error, req_id](typename Client::SharedFuture result) {
+          std::cout << "In async_send_request cb" << std::endl;
           if (!result.valid()) {
             on_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
           } else {
             /// Cancel and erase the timeout timer since we got a response
             active_timers_.erase(*req_id);
+            // TODO FIX HERE FRO MEM LEAK ? req_id.reset() ? 
             on_response(result.get());
           }
         });
@@ -562,6 +564,7 @@ struct ServiceClientImpl {
         future_and_req_id.request_id,
         node_.create_wall_timer(timeout,
                                 [this, on_error, request_id = future_and_req_id.request_id] {
+                                  std::cout << "In timeout timer cb" << std::endl;
                                   client->remove_pending_request(request_id);
                                   active_timers_.at(request_id)->cancel();
                                   cancelled_timers_.emplace(active_timers_.at(request_id));
@@ -583,7 +586,10 @@ struct ServiceClientImpl {
             std::cout << "rejecting RPC from thread " << std::this_thread::get_id() << std::endl;
             promise.reject(x);
           });
-      cancel = [this, request_id](auto &) { cancel_request(request_id); };
+      cancel = [this, request_id](auto &) { 
+        std::cout << "Canceling request" << std::endl;
+        cancel_request(request_id); 
+      };
     });
   }
 

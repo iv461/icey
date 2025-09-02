@@ -12,8 +12,9 @@
 
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
-#include <thread> // for ID 
+
 #include <boost/type_index.hpp>
+#include <thread>  // for ID
 /// Returns a string that represents the type of the given value
 template <class T>
 static std::string get_type(T &t) {
@@ -113,9 +114,9 @@ public:
   /// this promise (first argument Self&). It also sets Cancel function (second argument)
   using LaunchAsync = std::function<void(Self &, Cancel &)>;
 
-  PromiseBase() {
+  PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
-    //std::cout << get_type(*this) << " Constructor()" << std::endl;
+  // std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -124,8 +125,6 @@ public:
   PromiseBase(PromiseBase &&) = delete;
   PromiseBase &operator=(const Self &) = delete;
   PromiseBase &operator=(Self &&) = delete;
-
-
 
   /// calls the cancel function if it was set
   ~PromiseBase() {
@@ -136,7 +135,7 @@ public:
               << std::endl;
     // std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
-    if (cancel_) cancel_(*this);
+    if (cancel_ && has_none()) cancel_(*this);
   }
 
   std::suspend_never initial_suspend() const noexcept { return {}; }
@@ -206,7 +205,8 @@ public:
       return;
     else {
       if (has_none()) {
-        throw std::invalid_argument("Promise has nothing, called resume too early.");
+        std::cout << "Promise has nothing, called resume too early." << std::endl;
+        getchar();
       }
       return get_state().get();
     }
@@ -353,8 +353,7 @@ public:
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " ~Task()" << std::endl;
-    if(local_promise_)
-      local_promise_.reset();
+    if (local_promise_) local_promise_.reset();
 #endif
     if (false && coroutine_ && (coroutine_.done() || shall_destroy_)) {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -375,8 +374,6 @@ public:
       */
     }
   }
-
-
 
   auto operator co_await() noexcept {
     struct Awaiter {
@@ -422,9 +419,9 @@ public:
           auto &promise = this->coroutine_.promise();
           return promise.get();
         } else {
-          #ifdef ICEY_CORO_DEBUG_PRINT
-                  std::cout << get_type(promise_) << " await_resume()" << std::endl;
-          #endif
+#ifdef ICEY_CORO_DEBUG_PRINT
+          std::cout << get_type(promise_) << " await_resume()" << std::endl;
+#endif
           promise_->get();
         }
       }
