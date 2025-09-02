@@ -40,6 +40,39 @@ inline bool icey_coro_debug_print = false;
 template <class Value, class Error>
 class Task;
 struct PromiseTag {};
+
+/// Promise is the derived one,i.e. called Promise below
+template <class Promise>
+struct FinalAwaiter {
+  bool await_ready() const noexcept { return false; }
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<Promise> coro) const noexcept {
+    /// Note that this awaiter is in the promise: the coro got here by argument is always the same
+    /// as the promise from which this awaiter was constructed. This is why we don't need to store
+    /// the coro in this awaiter
+
+    auto continuation = coro.promise().continuation_;
+    if (continuation && !continuation.done()) {
+#ifdef ICEY_CORO_DEBUG_PRINT
+
+      std::cout << fmt::format("final await_suspend(), transferring coroutine 0x{:x} to 0x{:x}\n",
+                               std::size_t(coro.address()), std::size_t(continuation.address()))
+                << std::endl;
+#endif
+      return continuation;
+    } else {
+#ifdef ICEY_CORO_DEBUG_PRINT
+
+      std::cout << fmt::format(
+                       "final await_suspend(), coroutine 0x{:x} does not have a continuation.\n",
+                       std::size_t(coro.address()))
+                << std::endl;
+#endif
+      return std::noop_coroutine();
+    }
+  }
+  void await_resume() const noexcept {}
+};
+
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
@@ -78,7 +111,9 @@ public:
   ~PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format("Destructing coroutine state: 0x{:x} (Promise {})\n",
-               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this)) <<std::endl;
+                             size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
+                             get_type(*this))
+              << std::endl;
     // std::cout << get_type(*this) << " Destructor()" << std::endl;
 #endif
     if (cancel_) cancel_(*this);
@@ -127,7 +162,8 @@ public:
       /// If a coro handle is done, the function ptr is nullptr, so we get a crash on resume
       if (!continuation_.done()) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address())) << std::endl;
+        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address()))
+                  << std::endl;
 #endif
         continuation_.resume();
         if (false && continuation_.done()) {
@@ -221,7 +257,10 @@ public:
 /// struct if you know the address of a member of it that somehow got standartized
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format("Created coroutine state: 0x{:x} (Promise {})\n",
-               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this))<<std::endl;;
+                             size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
+                             get_type(*this))
+              << std::endl;
+    ;
 #endif
   }
   Task<_Value, _Error> get_return_object();
@@ -236,19 +275,7 @@ public:
     std::cout << get_type(*this) << " return_value(launch_async)-" << std::endl;
 #endif
   }
-  auto final_suspend() const noexcept {
-    struct Awaiter {
-      // std::coroutine_handle<> continuation_;
-      // Awaiter(std::coroutine_handle<> continuation):continuation_(continuation){}
-      bool await_ready() const noexcept { return false; }
-      auto await_suspend(std::coroutine_handle<Promise<_Value, _Error>> coro) const noexcept {
-        return coro.promise().continuation_;
-      }
-      void await_resume() const noexcept {}
-    };
-    // return Awaiter{};
-    return std::suspend_always{};
-  }
+  auto final_suspend() const noexcept { return FinalAwaiter<Self>{}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
@@ -273,22 +300,13 @@ public:
 /// struct if you know the address of a member of it that somehow got standartized
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format("Created coroutine state: 0x{:x} (Promise {})\n",
-               size_t(std::coroutine_handle<Self>::from_promise(*this).address()), get_type(*this))<<std::endl;
+                             size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
+                             get_type(*this))
+              << std::endl;
 #endif
   }
-  auto final_suspend() const noexcept {
-    struct Awaiter {
-      // std::coroutine_handle<> continuation_;
-      // Awaiter(std::coroutine_handle<> continuation):continuation_(continuation){}
-      bool await_ready() const noexcept { return false; }
-      auto await_suspend(std::coroutine_handle<Promise<void, Nothing>> coro) const noexcept {
-        return coro.promise().continuation_;
-      }
-      void await_resume() const noexcept {}
-    };
-    // return Awaiter{};
-    return std::suspend_always{};
-  }
+
+  auto final_suspend() const noexcept { return FinalAwaiter<Self>{}; }
 
   Task<void, Nothing> get_return_object();
   auto return_void() { this->resolve(Nothing{}); }
@@ -306,7 +324,8 @@ public:
 
   explicit Task(coroutine_handle handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    //fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this), std::size_t(handle.address()));
+  // fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
+  // std::size_t(handle.address()));
 #endif
   }
 
@@ -349,8 +368,10 @@ public:
         auto &p = coroutine_.promise();
         p.launch_async(awaiting_coroutine);
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n", get_type(p),
-                   std::size_t(coroutine_.address()), std::size_t(p.continuation_.address()))<<std::endl;
+        std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
+                                 get_type(p), std::size_t(coroutine_.address()),
+                                 std::size_t(p.continuation_.address()))
+                  << std::endl;
 #endif
         return true;
       }

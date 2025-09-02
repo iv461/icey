@@ -10,11 +10,11 @@
 using namespace std::chrono_literals;
 struct EventLoop {
   void dispatch(auto &&event) {
-    std::cout << "Dispatching event " << std::endl;
+    //std::cout << "Dispatching event " << std::endl;
     events.push_back(event);
   }
 
-  
+
   void spin() {
     do {
       if (timer_added_cnt < 100) {
@@ -24,9 +24,9 @@ struct EventLoop {
       auto event = events.front();  // Get the first event
       // events.erase(events.begin());
       events.pop_front();
-      std::cout << "Before ex event" << std::endl;
+      //std::cout << "Before ex event" << std::endl;
       if (event) event();
-      std::cout << "After ex event" << std::endl;
+      //std::cout << "After ex event" << std::endl;
     } while (!events.empty());
   }
 
