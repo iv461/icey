@@ -94,13 +94,13 @@ public:
     struct Awaiter {
       bool await_ready() const noexcept {
         //std::cout << "initial await_ready" << std::endl;
-        return false;
+        return true;
       }
       bool await_suspend(std::coroutine_handle<> awaiting_coroutine) const noexcept {
            std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
                                    std::size_t(awaiting_coroutine.address()));
         
-        return true;
+        return false;
       }
       void await_resume() const noexcept {}
     };
@@ -339,7 +339,7 @@ public:
       bool await_ready() const noexcept {
         /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
         /// suspend
-#ifdef ICE Y_CORO_DEBUG_PRINT
+#ifdef ICEY_CORO_DEBUG_PRINT
         if (coroutine_) {
           std::cout << fmt::format("await_ready(), coroutine 0x{:x} is done: {}",
                                    std::size_t(coroutine_.address()), coroutine_.done())
