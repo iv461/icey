@@ -36,26 +36,23 @@ struct EventLoop {
   std::deque<std::function<void()>> events;
 };
 
-icey::Task<int> obtain_the_number_async(EventLoop &event_loop) {
+icey::Task<std::string> obtain_the_number_async(EventLoop &event_loop) {
   std::cout << "In obtain_the_number_async" << std::endl;
-  return icey::Task<int>([&](auto &promise, auto &) {
+  co_await [&](auto &promise, auto &) {
     event_loop.dispatch([&]() {
       std::this_thread::sleep_for(10ms);
       std::cout << "resolving promise" <<std::endl;
-      promise.resolve(42);
+      promise.resolve("42");
     });
-  });
+  };
 }
 
 icey::Task<int> wrapper2(EventLoop &event_loop) {
   std::cout << "b4 obtain_the_number_async" << std::endl;
-  int res = co_await obtain_the_number_async(event_loop);
-  std::cout << "After obtain_the_number_async" << std::endl;
 
-  std::cout << "b4 obtain_the_number_async2" << std::endl;
-  int res2 = co_await obtain_the_number_async(event_loop);
-  std::cout << "After obtain_the_number_async2" << std::endl;
-  co_return res;
+  std::string res = co_await obtain_the_number_async(event_loop);
+
+  co_return std::atoi(res.c_str());
 }
 
 icey::Task<int> wrapper1(EventLoop &event_loop) {
@@ -76,13 +73,10 @@ int main() {
 
     std::cout << "E3 Before do_async_stuff " << std::endl;
     event_loop.set_timer([&]() {
-      const auto c = [&]() -> icey::Task<void> {
-        std::cout << "Before obtain_the_number_async" << std::endl;
-        int the_number = co_await wrapper1(event_loop);
-        std::cout << "After obtain_the_number_async, the number: " << the_number << std::endl;
-        co_return;
-      };
-      c().resume();
+      std::cout << "Before obtain_the_number_async" << std::endl;
+      wrapper1(event_loop);
+      std::cout << "After obtain_the_number_async, the number: " <<   std::endl;
+      
     });
     std::cout << "After do_async_stuff, starting the event loop ... " << std::endl;
     event_loop.spin();

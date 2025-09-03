@@ -42,6 +42,48 @@ template <class Value, class Error>
 class Task;
 struct PromiseTag {};
 
+template <class T>
+struct CallbackAPIAwaitable {
+  using Cancel = std::function<void(T &)>;
+  /// This is a function that launches the asynchronous operation. It is used to wrap a
+  /// callback-based API. This promise stores this function so that it can be called on
+  /// await_suspend. The callback-based API receives this promise and will write the result into
+  /// this promise (first argument Self&). It also sets Cancel function (second argument)
+  using LaunchAsync = std::function<void(T &, Cancel &)>;
+
+  LaunchAsync launch_async_;
+  CallbackAPIAwaitable(LaunchAsync l) : launch_async_(l) {}
+  auto operator co_await() noexcept {
+    struct Awaiter {
+      LaunchAsync launch_async_;
+      Awaiter(LaunchAsync l) : launch_async_(l) {}
+      std::coroutine_handle<T> coro_{nullptr};
+      bool await_ready() const noexcept { return false; }
+
+      auto await_suspend(std::coroutine_handle<T> awaiting_coroutine) noexcept {
+        auto &p = awaiting_coroutine.promise();
+        coro_ = awaiting_coroutine;
+        p.launch_async_ = launch_async_;
+        p.launch_async(awaiting_coroutine);
+#ifdef ICEY_CORO_DEBUG_PRINT
+        std::cout << fmt::format(
+                         "CallbackAPIAwaitable await_suspend(), awaiting coroutine is 0x{:x}, "
+                         "promise: {}\n", std::size_t(awaiting_coroutine.address()),
+                         get_type(p))
+                  << std::endl;
+#endif
+        return true;
+      }
+
+      auto await_resume() {
+        auto &promise = this->coro_.promise();
+        return promise.get();
+      }
+    };
+    return Awaiter{launch_async_};
+  }
+};
+
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
@@ -90,22 +132,7 @@ public:
     if (cancel_ && has_none()) cancel_(*this);
   }
 
-  auto initial_suspend() const noexcept {
-    struct Awaiter {
-      bool await_ready() const noexcept {
-        //std::cout << "initial await_ready" << std::endl;
-        return true;
-      }
-      bool await_suspend(std::coroutine_handle<> awaiting_coroutine) const noexcept {
-           std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
-                                   std::size_t(awaiting_coroutine.address()));
-        
-        return false;
-      }
-      void await_resume() const noexcept {}
-    };
-    return Awaiter{};
-  }
+  auto initial_suspend() const noexcept;
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
@@ -163,6 +190,9 @@ public:
     }
   }
 
+  auto await_transform(LaunchAsync launch_async) {
+    return CallbackAPIAwaitable<Self>{launch_async};
+  }
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
   auto get() {
     if (exception_ptr_) {
@@ -244,6 +274,24 @@ public:
   }
   Task<_Value, _Error> get_return_object() noexcept;
 
+  auto initial_suspend() const noexcept {
+    struct Awaiter {
+      bool await_ready() const noexcept {
+        // std::cout << "initial await_ready" << std::endl;
+        return true;
+      }
+      bool await_suspend(std::coroutine_handle<Self> awaiting_coroutine) const noexcept {
+        std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
+                                 std::size_t(awaiting_coroutine.address()));
+
+        return false;
+      }
+      void await_resume() const noexcept {}
+    };
+    return Awaiter{};
+  }
+
+ 
   std::suspend_never final_suspend() const noexcept { return {}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
@@ -275,6 +323,23 @@ public:
 #endif
   }
 
+
+  auto initial_suspend() const noexcept {
+    struct Awaiter {
+      bool await_ready() const noexcept {
+        // std::cout << "initial await_ready" << std::endl;
+        return true;
+      }
+      bool await_suspend(std::coroutine_handle<Self> awaiting_coroutine) const noexcept {
+        std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
+                                 std::size_t(awaiting_coroutine.address()));
+
+        return false;
+      }
+      void await_resume() const noexcept {}
+    };
+    return Awaiter{};
+  }
   std::suspend_never final_suspend() const noexcept { return {}; }
 
   Task<void, Nothing> get_return_object() noexcept;
@@ -321,8 +386,8 @@ public:
     std::cout << get_type(*this) << " ~Task() ";
     if (coroutine_) {
       std::cout << fmt::format("coroutine 0x{:x} is done: {}", std::size_t(coroutine_.address()),
-                  coroutine_.done())
-          << std::endl;
+                               coroutine_.done())
+                << std::endl;
     } else {
       std::cout << " (Promise)" << std::endl;
     }
@@ -384,9 +449,6 @@ public:
     return Awaiter{this->local_promise_.get()};
   }
 
-  void resume () {
-    coroutine_.resume();
-  }
 private:
   std::coroutine_handle<PromiseT> coroutine_{nullptr};
 };
