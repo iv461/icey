@@ -328,14 +328,14 @@ public:
   using PromiseT = Promise<_Value, _Error>;
   using promise_type = PromiseT;
 
-  std::unique_ptr<PromiseT> local_promise_;  /// for cB api
-
   explicit Task(std::coroutine_handle<PromiseT> handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
   // fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
   // std::size_t(handle.address()));
 #endif
   }
+
+
 
   Task(const Task &) = delete;
   Task(Task &&other) = delete;
@@ -344,70 +344,38 @@ public:
 
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " ~Task() ";
-    if (coroutine_) {
-      std::cout << fmt::format("coroutine 0x{:x} is done: {}", std::size_t(coroutine_.address()),
-                               coroutine_.done())
-                << std::endl;
-    } else {
-      std::cout << " (Promise)" << std::endl;
-    }
+
+    std::cout << fmt::format("coroutine 0x{:x} is done: {}", std::size_t(coroutine_.address()),
+                             coroutine_.done())
+              << std::endl;
+
 #endif
   }
 
   auto operator co_await() noexcept {
     struct Awaiter {
-      PromiseT *promise_{nullptr};
       std::coroutine_handle<PromiseT> coroutine_{nullptr};
-      Awaiter(PromiseT *promise) noexcept : promise_(promise) {}
       Awaiter(std::coroutine_handle<PromiseT> coroutine) noexcept : coroutine_(coroutine) {}
-
-      bool await_ready() const noexcept {
-        /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
-        /// suspend
-#ifdef ICEY_CORO_DEBUG_PRINT
-        if (coroutine_) {
-          std::cout << fmt::format("await_ready(), coroutine 0x{:x} is done: {}",
-                                   std::size_t(coroutine_.address()), coroutine_.done())
-                    << std::endl;
-        }
-#endif
-        return false;
-      }
+      bool await_ready() const noexcept { return false; }
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-        if (coroutine_) {
-          auto &p = coroutine_.promise();
+        auto &p = coroutine_.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-          std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
-                                   get_type(p), std::size_t(coroutine_.address()),
-                                   std::size_t(awaiting_coroutine.address()))
-                    << std::endl;
+        std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
+                                 get_type(p), std::size_t(coroutine_.address()),
+                                 std::size_t(awaiting_coroutine.address()))
+                  << std::endl;
 #endif
-          p.continuation_ = awaiting_coroutine;
-        } else {
-          //promise_->launch_async(awaiting_coroutine);
-#ifdef ICEY_CORO_DEBUG_PRINT
-          std::cout << "await_suspend() called on promise task" << std::endl;
-#endif
-        }
+        p.continuation_ = awaiting_coroutine;
         return true;
       }
 
       auto await_resume() {
-        if (coroutine_) {
-          auto &promise = this->coroutine_.promise();
-          return promise.get();
-        } else {
-#ifdef ICEY_CORO_DEBUG_PRINT
-          std::cout << get_type(*promise_) << " await_resume()" << std::endl;
-#endif
-          return promise_->get();
-        }
+        auto &promise = this->coroutine_.promise();
+        return promise.get();
       }
     };
-    if (coroutine_) return Awaiter{coroutine_};
-    return Awaiter{this->local_promise_.get()};
+    return Awaiter{coroutine_};
   }
 
 private:
