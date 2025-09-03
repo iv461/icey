@@ -16,7 +16,7 @@ struct EventLoop {
 
   void spin() {
     do {
-      if (timer_added_cnt < 100) {
+      if (timer_added_cnt < 1000) {
         events.push_back(timer_ev);
         timer_added_cnt++;
       }
@@ -34,26 +34,27 @@ struct EventLoop {
   std::function<void()> timer_ev;
   size_t timer_added_cnt{0};
   std::deque<std::function<void()>> events;
-};
+};  
 
-icey::Task<std::string> obtain_the_number_async(EventLoop &event_loop) {
+icey::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
   std::cout << "In obtain_the_number_async" << std::endl;
-  co_await icey::CBAwaiter<icey::Promise<std::string>>([&](auto &promise) {
+  return {[&](auto &promise) {
     event_loop.dispatch([&]() {
       std::this_thread::sleep_for(10ms);
       std::cout << "resolving promise" <<std::endl;
-      promise.resolve("42");
+      promise.resolve(42.1);
     });
-  });
+  }};
 }
+
 
 icey::Task<int> wrapper2(EventLoop &event_loop) {
   std::cout << "b4 obtain_the_number_async" << std::endl;
 
-  std::string res = co_await obtain_the_number_async(event_loop);
+  float res = co_await obtain_the_number_async(event_loop);
   std::cout << "a8 obtain_the_number_async" << std::endl;
 
-  co_return std::atoi(res.c_str());
+  co_return int(res);
 }
 
 icey::Task<int> wrapper1(EventLoop &event_loop) {

@@ -42,35 +42,6 @@ template <class Value, class Error>
 class Task;
 struct PromiseTag {};
 
-/// standard be like: there are awaiter and awaitables. Except when
-template <class T>
-struct CBAwaiter {
-  std::function<void(T &)> launch_async_;
-  CBAwaiter(std::function<void(T &)> l) : launch_async_(l) {}
-  std::coroutine_handle<T> coro_{nullptr};
-  bool await_ready() const noexcept { return false; }
-
-  auto await_suspend(std::coroutine_handle<T> awaiting_coroutine) noexcept {
-    auto &p = awaiting_coroutine.promise();
-    coro_ = awaiting_coroutine;
-    p.continuation_ = awaiting_coroutine;
-    launch_async_(p);
-
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << fmt::format(
-                     "CallbackAPIAwaitable await_suspend(), awaiting coroutine is 0x{:x}, "
-                     "promise: {}\n",
-                     std::size_t(awaiting_coroutine.address()), get_type(p))
-              << std::endl;
-#endif
-    return true;
-  }
-
-  auto await_resume() {
-    auto &promise = this->coro_.promise();
-    return promise.get();
-  }
-};
 
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
@@ -86,6 +57,10 @@ public:
   using Error = _Error;
   using State = Result<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
+
+
+  std::function<void(Self &)> launch_async_;
+  PromiseBase(std::function<void(Self &)> l) : launch_async_(l) {}
 
   PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -112,8 +87,6 @@ public:
     /// only when the user forgets to add a co_await
     if (cancel_ && has_none()) cancel_(*this);
   }
-
-  auto initial_suspend() const noexcept;
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
@@ -149,6 +122,22 @@ public:
     set_state(error);
     notify();
   }
+
+  
+  bool await_ready() const noexcept { return false; }
+  auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
+    this->continuation_ = awaiting_coroutine;
+    this->launch_async_(*this);
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << fmt::format(
+                     "PromiseBase await_suspend(), awaiting coroutine is 0x{:x}, "
+                     "promise: {}\n",
+                     std::size_t(awaiting_coroutine.address()), get_type(*this))
+              << std::endl;
+#endif
+    return true;
+  }
+  auto await_resume() { return get(); }
 
   /// Calls the continuation coroutine
   void notify() {
@@ -187,6 +176,8 @@ public:
     }
   }
 
+  std::suspend_never initial_suspend() const noexcept { return {}; }
+  std::suspend_never final_suspend() const noexcept { return {}; }
   using Cancel = std::function<void(Self &)>;
 
   void set_cancel(Cancel cancel) { cancel_ = cancel; }
@@ -226,12 +217,12 @@ public:
   using Self = Promise<_Value, _Error>;
   using Base = PromiseBase<_Value, _Error>;
   using State = Base::State;
+  using Base::Base;
 
   /// This is a function that launches the asynchronous operation. It is used to wrap a
   /// callback-based API. This promise stores this function so that it can be called on
   /// await_suspend. The callback-based API receives this promise and will write the result into
   /// this promise (first argument Self&). It also sets Cancel function (second argument)
-  using LaunchAsync = std::function<void(Self &)>;
 
   Promise() : Base() {
     /// The Promise is a member of the coroutine state, so we can effectively track coroutine state
@@ -266,7 +257,6 @@ public:
     return Awaiter{};
   }
 
-  std::suspend_never final_suspend() const noexcept { return {}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
   /// (Reference: https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019)
@@ -297,24 +287,6 @@ public:
 #endif
   }
 
-  auto initial_suspend() const noexcept {
-    struct Awaiter {
-      bool await_ready() const noexcept {
-        // std::cout << "initial await_ready" << std::endl;
-        return true;
-      }
-      bool await_suspend(std::coroutine_handle<Self> awaiting_coroutine) const noexcept {
-        std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
-                                 std::size_t(awaiting_coroutine.address()));
-
-        return false;
-      }
-      void await_resume() const noexcept {}
-    };
-    return Awaiter{};
-  }
-  std::suspend_never final_suspend() const noexcept { return {}; }
-
   Task<void, Nothing> get_return_object() noexcept;
   auto return_void() { this->resolve(Nothing{}); }
 };
@@ -330,12 +302,11 @@ public:
 
   explicit Task(std::coroutine_handle<PromiseT> handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  // fmt::print("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
-  // std::size_t(handle.address()));
+    std::cout << fmt::format("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
+                             std::size_t(handle.address()))
+              << std::endl;
 #endif
   }
-
-
 
   Task(const Task &) = delete;
   Task(Task &&other) = delete;
@@ -344,11 +315,9 @@ public:
 
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-
-    std::cout << fmt::format("coroutine 0x{:x} is done: {}", std::size_t(coroutine_.address()),
-                             coroutine_.done())
+    std::cout << fmt::format("{} Destructor from coroutine: 0x{:x}\n", get_type(*this),
+                             std::size_t(coroutine_.address()))
               << std::endl;
-
 #endif
   }
 
@@ -360,6 +329,9 @@ public:
 
       auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
         auto &p = coroutine_.promise();
+        if(p.continuation_) {
+
+        }
 #ifdef ICEY_CORO_DEBUG_PRINT
         std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
                                  get_type(p), std::size_t(coroutine_.address()),
