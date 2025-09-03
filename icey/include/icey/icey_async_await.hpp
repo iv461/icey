@@ -706,7 +706,7 @@ public:
               co_await callback(msg);
               co_return;
             };
-            continuation(msg, std::forward<Callback>(callback)).force_destruction();
+            continuation(msg, std::forward<Callback>(callback));
           } else {
             callback(msg);
           }
@@ -777,7 +777,7 @@ public:
                 server->send_response(*request_id, *response);
               co_return;
             };
-            continuation(server, callback, request_id, request).force_destruction();
+            continuation(server, callback, request_id, request);
           }
         },
         qos);

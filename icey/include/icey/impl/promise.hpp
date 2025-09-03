@@ -9,7 +9,7 @@
 #include <functional>
 #include <icey/impl/result.hpp>
 #include <iostream>
-
+#include <memory>
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
 
@@ -301,7 +301,6 @@ public:
   Task &operator=(const Task &) = delete;
   Task &operator=(Task &&other) = delete;
 
-  /// Destroys the coroutine if it is done or if force_destruction() was called before.
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << get_type(*this) << " ~Task()" << std::endl;
