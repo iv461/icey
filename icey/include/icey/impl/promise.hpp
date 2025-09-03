@@ -90,7 +90,22 @@ public:
     if (cancel_ && has_none()) cancel_(*this);
   }
 
-  std::suspend_never initial_suspend() const noexcept { return {}; }
+  auto initial_suspend() const noexcept {
+    struct Awaiter {
+      bool await_ready() const noexcept {
+        //std::cout << "initial await_ready" << std::endl;
+        return false;
+      }
+      bool await_suspend(std::coroutine_handle<> awaiting_coroutine) const noexcept {
+           std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
+                                   std::size_t(awaiting_coroutine.address()));
+        
+        return true;
+      }
+      void await_resume() const noexcept {}
+    };
+    return Awaiter{};
+  }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
@@ -224,7 +239,7 @@ public:
                              size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
                              get_type(*this))
               << " from thread " << std::this_thread::get_id() << std::endl;
-    ;
+
 #endif
   }
   Task<_Value, _Error> get_return_object() noexcept;
@@ -303,7 +318,14 @@ public:
 
   ~Task() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " ~Task()" << std::endl;
+    std::cout << get_type(*this) << " ~Task() ";
+    if (coroutine_) {
+      std::cout << fmt::format("coroutine 0x{:x} is done: {}", std::size_t(coroutine_.address()),
+                  coroutine_.done())
+          << std::endl;
+    } else {
+      std::cout << " (Promise)" << std::endl;
+    }
 #endif
   }
 
@@ -317,7 +339,7 @@ public:
       bool await_ready() const noexcept {
         /// If we co_return handler, the coro is immediately fulfilled and done and we shall not
         /// suspend
-#ifdef ICEY_CORO_DEBUG_PRINT
+#ifdef ICE Y_CORO_DEBUG_PRINT
         if (coroutine_) {
           std::cout << fmt::format("await_ready(), coroutine 0x{:x} is done: {}",
                                    std::size_t(coroutine_.address()), coroutine_.done())
@@ -362,6 +384,9 @@ public:
     return Awaiter{this->local_promise_.get()};
   }
 
+  void resume () {
+    coroutine_.resume();
+  }
 private:
   std::coroutine_handle<PromiseT> coroutine_{nullptr};
 };

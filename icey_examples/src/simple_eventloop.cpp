@@ -78,11 +78,11 @@ int main() {
     event_loop.set_timer([&]() {
       const auto c = [&]() -> icey::Task<void> {
         std::cout << "Before obtain_the_number_async" << std::endl;
-        int the_number = co_await obtain_the_number_async(event_loop);
+        int the_number = co_await wrapper1(event_loop);
         std::cout << "After obtain_the_number_async, the number: " << the_number << std::endl;
         co_return;
       };
-      c();
+      c().resume();
     });
     std::cout << "After do_async_stuff, starting the event loop ... " << std::endl;
     event_loop.spin();
