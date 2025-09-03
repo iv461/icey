@@ -42,45 +42,33 @@ template <class Value, class Error>
 class Task;
 struct PromiseTag {};
 
+/// standard be like: there are awaiter and awaitables. Except when
 template <class T>
-struct CallbackAPIAwaitable {
-  using Cancel = std::function<void(T &)>;
-  /// This is a function that launches the asynchronous operation. It is used to wrap a
-  /// callback-based API. This promise stores this function so that it can be called on
-  /// await_suspend. The callback-based API receives this promise and will write the result into
-  /// this promise (first argument Self&). It also sets Cancel function (second argument)
-  using LaunchAsync = std::function<void(T &, Cancel &)>;
+struct CBAwaiter {
+  std::function<void(T &)> launch_async_;
+  CBAwaiter(std::function<void(T &)> l) : launch_async_(l) {}
+  std::coroutine_handle<T> coro_{nullptr};
+  bool await_ready() const noexcept { return false; }
 
-  LaunchAsync launch_async_;
-  CallbackAPIAwaitable(LaunchAsync l) : launch_async_(l) {}
-  auto operator co_await() noexcept {
-    struct Awaiter {
-      LaunchAsync launch_async_;
-      Awaiter(LaunchAsync l) : launch_async_(l) {}
-      std::coroutine_handle<T> coro_{nullptr};
-      bool await_ready() const noexcept { return false; }
+  auto await_suspend(std::coroutine_handle<T> awaiting_coroutine) noexcept {
+    auto &p = awaiting_coroutine.promise();
+    coro_ = awaiting_coroutine;
+    p.continuation_ = awaiting_coroutine;
+    launch_async_(p);
 
-      auto await_suspend(std::coroutine_handle<T> awaiting_coroutine) noexcept {
-        auto &p = awaiting_coroutine.promise();
-        coro_ = awaiting_coroutine;
-        p.launch_async_ = launch_async_;
-        p.launch_async(awaiting_coroutine);
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format(
-                         "CallbackAPIAwaitable await_suspend(), awaiting coroutine is 0x{:x}, "
-                         "promise: {}\n", std::size_t(awaiting_coroutine.address()),
-                         get_type(p))
-                  << std::endl;
+    std::cout << fmt::format(
+                     "CallbackAPIAwaitable await_suspend(), awaiting coroutine is 0x{:x}, "
+                     "promise: {}\n",
+                     std::size_t(awaiting_coroutine.address()), get_type(p))
+              << std::endl;
 #endif
-        return true;
-      }
+    return true;
+  }
 
-      auto await_resume() {
-        auto &promise = this->coro_.promise();
-        return promise.get();
-      }
-    };
-    return Awaiter{launch_async_};
+  auto await_resume() {
+    auto &promise = this->coro_.promise();
+    return promise.get();
   }
 };
 
@@ -98,13 +86,6 @@ public:
   using Error = _Error;
   using State = Result<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
-
-  using Cancel = std::function<void(Self &)>;
-  /// This is a function that launches the asynchronous operation. It is used to wrap a
-  /// callback-based API. This promise stores this function so that it can be called on
-  /// await_suspend. The callback-based API receives this promise and will write the result into
-  /// this promise (first argument Self&). It also sets Cancel function (second argument)
-  using LaunchAsync = std::function<void(Self &, Cancel &)>;
 
   PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -190,9 +171,6 @@ public:
     }
   }
 
-  auto await_transform(LaunchAsync launch_async) {
-    return CallbackAPIAwaitable<Self>{launch_async};
-  }
   /// Get the result of the promise: Re-throws an exception if any was stored, other gets the state.
   auto get() {
     if (exception_ptr_) {
@@ -209,20 +187,12 @@ public:
     }
   }
 
-  /// Launches the asynchronous operation that was stored previously (if any). Sets the given
-  /// continuation.
-  void launch_async(std::coroutine_handle<> continuation) {
-    continuation_ = continuation;
-    if (launch_async_) launch_async_(*this, this->cancel_);
-  }
+  using Cancel = std::function<void(Self &)>;
+
+  void set_cancel(Cancel cancel) { cancel_ = cancel; }
 
   /// State of the promise: May be nothing, value or error.
   State state_;
-
-  /// Function that starts an asynchronous ROS operation like a service call. Must be asynchronous,
-  /// i.e. run in the event-loop, no synchronous operations are allowed (even if the result is
-  /// already available).
-  LaunchAsync launch_async_;
 
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback
@@ -255,9 +225,13 @@ class Promise : public PromiseBase<_Value, _Error> {
 public:
   using Self = Promise<_Value, _Error>;
   using Base = PromiseBase<_Value, _Error>;
-  using LaunchAsync = Base::LaunchAsync;
-  using Cancel = Base::Cancel;
   using State = Base::State;
+
+  /// This is a function that launches the asynchronous operation. It is used to wrap a
+  /// callback-based API. This promise stores this function so that it can be called on
+  /// await_suspend. The callback-based API receives this promise and will write the result into
+  /// this promise (first argument Self&). It also sets Cancel function (second argument)
+  using LaunchAsync = std::function<void(Self &)>;
 
   Promise() : Base() {
     /// The Promise is a member of the coroutine state, so we can effectively track coroutine state
@@ -272,6 +246,7 @@ public:
 
 #endif
   }
+
   Task<_Value, _Error> get_return_object() noexcept;
 
   auto initial_suspend() const noexcept {
@@ -291,7 +266,6 @@ public:
     return Awaiter{};
   }
 
- 
   std::suspend_never final_suspend() const noexcept { return {}; }
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
@@ -308,8 +282,8 @@ template <>
 class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
   using Base = PromiseBase<Nothing, Nothing>;
-  using Cancel = Base::Cancel;
   using Self = Promise<void, Nothing>;
+
   Promise() : Base() {
     /// The Promise is a member of the coroutine state, so we can effectively track coroutine state
     /// allocations inside the promise
@@ -322,7 +296,6 @@ public:
               << std::endl;
 #endif
   }
-
 
   auto initial_suspend() const noexcept {
     struct Awaiter {
@@ -354,20 +327,8 @@ public:
   using Error = _Error;
   using PromiseT = Promise<_Value, _Error>;
   using promise_type = PromiseT;
-  using LaunchAsync = PromiseT::LaunchAsync;
-  std::unique_ptr<PromiseT> local_promise_;  /// for cB api
 
-  /// Sets a function that launches the asynchronous operation: This handler is called in the with
-  /// the address to this Promise so that it can store it and write to this promise later. This
-  /// handler returns a cancellation function that gets called when this Promise is destructed. This
-  /// constructor is useful for wrapping an existing callback-based API.
-  explicit Task(LaunchAsync &&h) {
-    local_promise_ = std::make_unique<PromiseT>();
-    local_promise_->launch_async_ = h;
-#ifdef ICEY_CORO_DEBUG_PRINT
-    std::cout << get_type(*this) << " Task(launch_async)-" << std::endl;
-#endif
-  }
+  std::unique_ptr<PromiseT> local_promise_;  /// for cB api
 
   explicit Task(std::coroutine_handle<PromiseT> handle) : coroutine_(handle) {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -423,9 +384,9 @@ public:
                                    std::size_t(awaiting_coroutine.address()))
                     << std::endl;
 #endif
-          p.launch_async(awaiting_coroutine);
+          p.continuation_ = awaiting_coroutine;
         } else {
-          promise_->launch_async(awaiting_coroutine);
+          //promise_->launch_async(awaiting_coroutine);
 #ifdef ICEY_CORO_DEBUG_PRINT
           std::cout << "await_suspend() called on promise task" << std::endl;
 #endif
