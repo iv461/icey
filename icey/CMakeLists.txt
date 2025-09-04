@@ -24,7 +24,7 @@ include_directories(
     include
 )
 
-if(BUILD_TESTING AND OFF)
+if(BUILD_TESTING)
   
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
@@ -38,6 +38,7 @@ if(BUILD_TESTING AND OFF)
     test/filters_test.cpp
     test/callback_lifetime_test.cpp
     test/context_test.cpp
+    test/nested_coroutines.cpp
   )
   target_link_libraries(test_main fmt::fmt)
     
