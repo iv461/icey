@@ -12,9 +12,10 @@
 
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
-#include <thread>
+
 #include <boost/type_index.hpp>
 #include <iostream>
+#include <thread>
 /// Returns a string that represents the type of the given value
 template <class T>
 static std::string get_type(T &t) {
@@ -177,7 +178,7 @@ public:
       return;
     else {
       if (has_none()) {
-        //TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
+        // TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
       }
       return get_state().get();
     }
@@ -283,13 +284,13 @@ public:
 };
 }  // namespace impl
 
-/// This is the type that users writing coroutines use as the return type. It is what is returned when
-/// calling promise_type::get_return_value(). It is
-/// necessary because of the C++20 coroutines spec that apparently tries to optimize the copying of the promise inside the coroutine state to the caller.
-/// To not confuse the users with C++ coroutine
-/// spec's intricacies, we just call this "Promise". Note that this is not a "Task": this term is used seemingly
-/// exclusively for the structured programming approach of lazily started coroutines. I.e. it is not
-/// a Task as implemented in in Lewis Bakers's cppcoro library and described in
+/// This is the type that users writing coroutines use as the return type. It is what is returned
+/// when calling promise_type::get_return_value(). It is necessary because of the C++20 coroutines
+/// spec that apparently tries to optimize the copying of the promise inside the coroutine state to
+/// the caller. To not confuse the users with C++ coroutine spec's intricacies, we just call this
+/// "Promise". Note that this is not a "Task": this term is used seemingly exclusively for the
+/// structured programming approach of lazily started coroutines. I.e. it is not a Task as
+/// implemented in in Lewis Bakers's cppcoro library and described in
 /// https://www.open-std.org/JTC1/SC22/WG21/docs/papers/2018/p1056r1.html.
 /// We cannot use the structured programming approach because it requires a custom executor but we
 /// want to use the existing ROS executor.

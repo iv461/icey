@@ -694,11 +694,7 @@ public:
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
     auto subscription = node_base().create_subscription<MessageT>(
-        topic_name,
-        [callback](typename MessageT::SharedPtr msg) {
-          callback(msg);
-        },
-        qos, options);
+        topic_name, [callback](typename MessageT::SharedPtr msg) { callback(msg); }, qos, options);
     subscriptions_.push_back(std::dynamic_pointer_cast<rclcpp::SubscriptionBase>(subscription));
     return subscription;
   }
@@ -712,9 +708,7 @@ public:
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
-    auto timer = node_base().create_wall_timer(period, [callback]() {
-      callback(std::size_t{});
-    });
+    auto timer = node_base().create_wall_timer(period, [callback]() { callback(std::size_t{}); });
     timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
     return timer;
   }
@@ -754,8 +748,7 @@ public:
               server->send_response(*request_id, *response);
           } else {
             const auto continuation = [](auto server, const auto &async_callback,
-                                         RequestID request_id,
-                                         Request request) -> Promise<void> {
+                                         RequestID request_id, Request request) -> Promise<void> {
               auto response = co_await async_callback(request);
               if (response)  /// If we got nullptr, this means we do not respond.
                 server->send_response(*request_id, *response);

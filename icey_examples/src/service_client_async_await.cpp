@@ -17,22 +17,13 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Promise<Response, std::string> do_service_call(icey::ServiceClient<ExampleService> &client,
-                                                  auto request) {
-  std::cout << "B4 call" << std::endl;
-  icey::Result<Response, std::string> result = co_await client.call(request, 1s);
-  std::cout << "After RPC call" << std::endl;
-
-  co_return result;
-}
-
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("icey_service_client_async_await_example");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
   /// Create the service client beforehand
-  auto service = ctx->create_client<ExampleService>("set_bool_service");
+  auto client = ctx->create_client<ExampleService>("set_bool_service");
   auto timer = ctx->create_timer_async(500ms, [&](std::size_t) -> icey::Promise<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
 
@@ -40,8 +31,7 @@ int main(int argc, char **argv) {
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await do_service_call(service, request);
-
+    icey::Result<Response, std::string> result = co_await client.call(request, 1s);
 
     if (result.has_error()) {
       /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")

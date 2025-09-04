@@ -3,9 +3,11 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// This example shows how to use the more lightweight async/await-only context "icey::ContextAsyncAwait". Otherwise this example is the same as the 
+/// This example shows how to use the more lightweight async/await-only context
+/// "icey::ContextAsyncAwait". Otherwise this example is the same as the
 /// service_client_async_await_example.
-/// If you only need async/await and no reactive programming, use only the icey_async_await header to get faster compile times.
+/// If you only need async/await and no reactive programming, use only the icey_async_await header
+/// to get faster compile times.
 #include <icey/icey_async_await.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
