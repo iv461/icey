@@ -9,8 +9,6 @@
 /// calls client->async_send_request. ICEY gives you a clean and simple service API: no manual
 /// spinning of the event-loop, no threads, no manual cleanups needed.
 
-#define ICEY_CORO_DEBUG_PRINT
-
 #include <icey/icey_async_await.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -19,7 +17,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Promise<Response, std::string> handle_srv_call(icey::ServiceClient<ExampleService> &client,
+icey::Promise<Response, std::string> do_service_call(icey::ServiceClient<ExampleService> &client,
                                                   auto request) {
   std::cout << "B4 call" << std::endl;
   icey::Result<Response, std::string> result = co_await client.call(request, 1s);
@@ -35,18 +33,15 @@ int main(int argc, char **argv) {
 
   /// Create the service client beforehand
   auto service = ctx->create_client<ExampleService>("set_bool_service");
-  auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Promise<void> {
+  auto timer = ctx->create_timer_async(500ms, [&](std::size_t) -> icey::Promise<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
-    //    co_return;
-    // co_await obtain_the_number_sync();
 
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await handle_srv_call(service, request);
+    icey::Result<Response, std::string> result = co_await do_service_call(service, request);
 
-    std::cout << "After handle srv call" << std::endl;
 
     if (result.has_error()) {
       /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")

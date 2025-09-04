@@ -283,12 +283,11 @@ public:
 };
 }  // namespace impl
 
-/// This is the type users writing coroutines use as the return type. This is what is returned when
-/// calling promise_type::get_return_value(). It is a wrapper of the coroutine state. It is
-/// necessary because of the C++20 coroutines spec. To not confuse the users with C++ coroutine
-/// spec's intricacies, we just call this "Promise". It is not actually used to transmit the result
-/// of the asynchronous operation. For this, the promise inside the coroutine state (for which we
-/// use impl::Promise) is used. Note that this is not a "Task": this term is used seemingly
+/// This is the type that users writing coroutines use as the return type. It is what is returned when
+/// calling promise_type::get_return_value(). It is
+/// necessary because of the C++20 coroutines spec that apparently tries to optimize the copying of the promise inside the coroutine state to the caller.
+/// To not confuse the users with C++ coroutine
+/// spec's intricacies, we just call this "Promise". Note that this is not a "Task": this term is used seemingly
 /// exclusively for the structured programming approach of lazily started coroutines. I.e. it is not
 /// a Task as implemented in in Lewis Bakers's cppcoro library and described in
 /// https://www.open-std.org/JTC1/SC22/WG21/docs/papers/2018/p1056r1.html.

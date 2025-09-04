@@ -755,7 +755,7 @@ public:
           } else {
             const auto continuation = [](auto server, const auto &async_callback,
                                          RequestID request_id,
-                                         Request request) -> impl::Promise<void> {
+                                         Request request) -> Promise<void> {
               auto response = co_await async_callback(request);
               if (response)  /// If we got nullptr, this means we do not respond.
                 server->send_response(*request_id, *response);
