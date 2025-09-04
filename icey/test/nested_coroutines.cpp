@@ -16,15 +16,18 @@ struct EventLoop : testing::Test {
   void dispatch(auto &&event) { events.push_back(event); }
 
   void spin() {
+    events.push_back(timer_event_);
+    timer_added_cnt_++;
+
     do {
-      if (timer_added_cnt_ < number_of_times_) {
-        events.push_back(timer_event_);
-        timer_added_cnt_++;
-      }
       auto event = events.front();
       events.pop_front();
       if (event) event();
 
+      if (events.empty() && timer_added_cnt_ < number_of_times_) {
+        events.push_back(timer_event_);
+        timer_added_cnt_++;
+      }
       events_processed++;
     } while (!events.empty());
   }
@@ -43,12 +46,12 @@ struct EventLoop : testing::Test {
 };
 
 icey::impl::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
-  std::cout << "obtain_the_number_async" << std::endl;
+  //std::cout << "obtain_the_number_async" << std::endl;
   event_loop.event_log.push_back("obtain_the_number_async");
   return {[&](auto &promise) {
     event_loop.dispatch([&]() {
       std::this_thread::sleep_for(10ms);
-      std::cout << "resolving_promise" << std::endl;
+      //std::cout << "resolving_promise" << std::endl;
       event_loop.event_log.push_back("resolving_promise");
       promise.resolve(42 + event_loop.timer_added_cnt_ * 3.);
     });
@@ -56,18 +59,19 @@ icey::impl::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
 }
 
 icey::Promise<int> wrapper2(EventLoop &event_loop) {
-  std::cout << "before_wrapper2" << std::endl;
+  //std::cout << "before_wrapper2" << std::endl;
   event_loop.event_log.push_back("before_wrapper2");
   float res = co_await obtain_the_number_async(event_loop);
-  std::cout << "after_wrapper2" << std::endl;
+  //std::cout << "after_wrapper2" << std::endl;
   event_loop.event_log.push_back("after_wrapper2");
+  //std::cout << std::to_string(res) << std::endl;
   event_loop.event_log.push_back(std::to_string(res));
   co_return int(res);
 }
 
 icey::Promise<int> wrapper1(EventLoop &event_loop) {
   event_loop.event_log.push_back("wrapper1");
-  std::cout << "wrapper1" << std::endl;
+  //std::cout << "wrapper1" << std::endl;
   int res = co_await wrapper2(event_loop);
   co_return res;
 }
@@ -76,11 +80,11 @@ TEST_F(EventLoop, NestedCoroutines) {
   const size_t num_iterations = 10;
   this->set_timer(
       [&]() {
-        std::cout << "before_coro" << std::endl;
+        //std::cout << "before_coro" << std::endl;
         event_log.push_back("before_coro");
         wrapper1(*this);
         event_log.push_back("after_coro");
-        std::cout << "after_coro" << std::endl;
+        //std::cout << "after_coro" << std::endl;
       },
       num_iterations);
 
@@ -115,7 +119,7 @@ TEST_F(EventLoop, NestedCoroutines) {
           target = "after_wrapper2";
           break;
         case 7:
-          target = std::to_string(42. + i * 3);
+          target = std::to_string(42. + (i + 1) * 3);
           break;
       }
       EXPECT_EQ(event_log.at(i * 8 + j), target);
