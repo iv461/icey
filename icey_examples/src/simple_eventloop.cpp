@@ -1,4 +1,4 @@
-#define ICEY_CORO_DEBUG_PRINT
+//#define ICEY_CORO_DEBUG_PRINT
 #include <deque>
 #include <icey/impl/promise.hpp>
 #include <iostream>
@@ -9,51 +9,48 @@
 /// asynchronous programming without using the word "thread".
 using namespace std::chrono_literals;
 struct EventLoop {
-  void dispatch(auto &&event) {
-    // std::cout << "Dispatching event " << std::endl;
-    events.push_back(event);
-  }
+  void dispatch(auto &&event) { events.push_back(event); }
 
   void spin() {
     do {
-      if (timer_added_cnt < 1000) {
-        events.push_back(timer_ev);
-        timer_added_cnt++;
+      if (timer_added_cnt_ < number_of_times_) {
+        events.push_back(timer_event_);
+        timer_added_cnt_++;
       }
-      auto event = events.front();  // Get the first event
-      // events.erase(events.begin());
+      auto event = events.front();
       events.pop_front();
-      // std::cout << "Before ex event" << std::endl;
       if (event) event();
-      // std::cout << "After ex event" << std::endl;
+
     } while (!events.empty());
   }
 
-  void set_timer(auto timer_event) { timer_ev = timer_event; }
+  void set_timer(auto timer_event, size_t number_of_times) {
+    timer_event_ = timer_event;
+    number_of_times_ = number_of_times;
+  }
 
-  std::function<void()> timer_ev;
-  size_t timer_added_cnt{0};
+  std::function<void()> timer_event_;
+  size_t number_of_times_{0};
+  size_t timer_added_cnt_{0};
   std::deque<std::function<void()>> events;
-};  
+};
 
 icey::impl::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
   std::cout << "In obtain_the_number_async" << std::endl;
   return {[&](auto &promise) {
     event_loop.dispatch([&]() {
       std::this_thread::sleep_for(10ms);
-      std::cout << "resolving promise" <<std::endl;
+      std::cout << "resolving promise" << std::endl;
       promise.resolve(42.1);
     });
   }};
 }
 
-
 icey::Promise<int> wrapper2(EventLoop &event_loop) {
-  std::cout << "b4 obtain_the_number_async" << std::endl;
+  std::cout << "Before obtain_the_number_async" << std::endl;
 
   float res = co_await obtain_the_number_async(event_loop);
-  std::cout << "a8 obtain_the_number_async" << std::endl;
-
+  std::cout << "After obtain_the_number_async" << std::endl;
   co_return int(res);
 }
 
@@ -63,26 +60,19 @@ icey::Promise<int> wrapper1(EventLoop &event_loop) {
   co_return res;
 }
 
-/// TODO using sync crashes since we destroy too early, fix this
-icey::Promise<int> obtain_the_number_sync() { 
-    co_return 42; 
-}
-
-
 int main() {
-  {
-    EventLoop event_loop;
+  EventLoop event_loop;
 
-    std::cout << "E3 Before do_async_stuff " << std::endl;
-    event_loop.set_timer([&]() {
-      std::cout << "Before obtain_the_number_async" << std::endl;
-      wrapper1(event_loop);
-      std::cout << "After obtain_the_number_async, the number: " <<   std::endl;
-      
-    });
-    std::cout << "After do_async_stuff, starting the event loop ... " << std::endl;
-    event_loop.spin();
-    std::cout << "Done" << std::endl;
-    event_loop.events.clear();
-  }
+  std::cout << "Starting event loop " << std::endl;
+  event_loop.set_timer(
+      [&]() {
+        std::cout << "Before event" << std::endl;
+        wrapper1(event_loop);
+        std::cout << "After event loop" << std::endl;
+      },
+      100);
+  std::cout << "After set_timer, starting the event loop ... " << std::endl;
+  event_loop.spin();
+  std::cout << "Done." << std::endl;
+  event_loop.events.clear();
 }
