@@ -120,8 +120,9 @@ See also the [Service server](icey_examples/src/service_server_async_await.cpp) 
 
         if (tf_result.has_value()) {
           geometry_msgs::msg::TransformStamped transform_to_map = tf_result.value();
-          RCLCPP_INFO(node->get_logger(), "Got transform %f",
-                      transform_to_map.transform.rotation.w);
+          Eigen::Matrix4d tf_mat = tf2::transformToEigen(transform_to_map.transform).matrix();
+          RCLCPP_INFO_STREAM(node->get_logger(), "Got transform:\n",
+                      tf_mat);
         } else {
           RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error " << tf_result.error());
         }

@@ -3,12 +3,11 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// This example shows how to use service clients in ICEY: You make an asynchronous call and
-/// co_await the response. By using async/await syntax (i.e. C++20 coroutines) we achieve a
-/// synchronously-looking code. Under the hood, everything is asynchronous, ICEY actually
-/// calls client->async_send_request. ICEY gives you a clean and simple service API: no manual
-/// spinning of the event-loop, no threads, no manual cleanups needed.
-
+/// This example shows how to use the more lightweight async/await-only context
+/// "icey::ContextAsyncAwait". Otherwise this example is the same as the
+/// service_client_async_await_example.
+/// If you only need async/await and no reactive programming, use only the icey_async_await header
+/// to get faster compile times.
 #include <icey/icey_async_await.hpp>
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -19,19 +18,20 @@ using Response = ExampleService::Response::SharedPtr;
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<rclcpp::Node>("icey_service_client_async_await_example");
+  auto node = std::make_shared<rclcpp::Node>("icey_service_client_async_await_example2");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
   /// Create the service client beforehand
-  auto client = ctx->create_client<ExampleService>("set_bool_service");
-  auto timer = ctx->create_timer_async(500ms, [&](std::size_t) -> icey::Promise<void> {
-    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
+  auto service = ctx->create_client<ExampleService>("set_bool_service");
 
+  auto timer = ctx->create_timer_async(1s, [&](std::size_t) -> icey::Promise<void> {
     auto request = std::make_shared<ExampleService::Request>();
     request->data = 1;
+    RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked, sending request: " << request->data);
+
     /// Call the service and await it's response with a 1s timeout: (for both discovery and the
     /// actual service call)
-    icey::Result<Response, std::string> result = co_await client.call(request, 1s);
+    icey::Result<Response, std::string> result = co_await service.call(request, 1s);
 
     if (result.has_error()) {
       /// Handle errors: (possibly "TIMEOUT" or "INTERRUPTED")

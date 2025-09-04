@@ -1,51 +1,38 @@
 <?xml version="1.0"?>
 
-<?xml-model
-   href="http://download.ros.org/schema/package_format3.xsd"
-   schematypens="http://www.w3.org/2001/XMLSchema"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 
 <package format="3">
- <name>icey_examples</name>
- <version>0.2.0</version>
- <description>ICEY</description>
- <maintainer email="ivo.ivanov@tha.de">Ivo Ivanov</maintainer>
- <license>Apache-2</license>
+  <name>icey_examples</name>
+  <version>0.3.0</version>
+  <description>ICEY</description>
+  <maintainer email="ivo.ivanov@tha.de">Ivo Ivanov</maintainer>
+  <license>Apache-2</license>
 
- <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
- <depend>icey</depend>
- <depend>rclcpp</depend>
- <depend>rclcpp_components</depend>
- <depend>rclcpp_lifecycle</depend>
+  <depend>icey</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>rclcpp_lifecycle</depend>
 
-  <!-- For autoware_gyro_odometer-->
-  <depend>autoware_localization_util</depend>
-  <depend>autoware_universe_utils</depend>
-  <depend>tf2_geometry_msgs</depend>
-  <depend>diagnostic_msgs</depend>
-  <depend>fmt</depend>  
-  <!-- For autoware_gyro_odometer-->
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_eigen</depend>
 
- <depend>geometry_msgs</depend> 
- <depend>sensor_msgs</depend>
- <depend>nav_msgs</depend>
- <depend>tf2_ros</depend>
- <depend>tf2_eigen</depend>
- 
- <depend>std_srvs</depend>
- <depend>diagnostic_updater</depend>
- <depend>message_filters</depend>
- <depend>image_transport</depend>
+  <depend>std_srvs</depend>
+  <depend>diagnostic_updater</depend>
+  <depend>message_filters</depend>
+  <depend>image_transport</depend>
 
- <depend>libboost-dev</depend>
- 
- <test_depend>ament_lint_auto</test_depend>
- <test_depend>ament_lint_common</test_depend>
- <test_depend>ament_cmake_ros</test_depend>
- <test_depend>ament_cmake_gtest</test_depend>
- <test_depend>clang-tidy</test_depend>
+  <depend>libboost-dev</depend>
 
- <export>
-   <build_type>ament_cmake</build_type>
- </export>
+  <test_depend>ament_cmake_ros</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
 </package>

@@ -45,15 +45,6 @@ public:
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  /// Spin the node: we do some work here, other callbacks get called
-  icey::Promise<void> run() {
-    while (true) {
-      std::size_t ticks = co_await timer_;
-      RCLCPP_INFO_STREAM(get_logger(), "Spinning node for the " << ticks << "th time...");
-    }
-    co_return;
-  }
-
   /// We store the timer here only to be able to cancel it
   icey::TimerStream timer_;
   std::shared_ptr<icey::Context> icey_context_;
@@ -62,6 +53,4 @@ public:
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<ExampleLifecycleNode>("icey_lifecycle_node_example");
-  node->run();
-  return 0;
 }

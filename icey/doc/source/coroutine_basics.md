@@ -4,7 +4,7 @@ Before looking into services and TF are handled in ICEY, we will look into C++ 2
 Coroutines are functions that allow for asynchronous programming using async/await syntax, currently the most popular method of doing asynchronous programming. Async/await is used with other programming languages like JavaScript, Rust and C#.
 
 Coroutines contain any of the keywords `co_await`, `co_return` (or `co_yield`). 
-A coroutine is a function that __looks like it's returning__ when it needs to wait for an asynchronous operation with `co_await`, this is called *suspending*. Then, once the asynchronous operation is done, it *jumps* back into the function, this is called *resuming*. When a coroutine resumes, it continues to execute the code that follows the `co_await` statement.
+A coroutine is a function that can be paused and resumed later. When it reaches a `co_await` statement, it has to wait for an asynchronous operation and *suspends*. Then, once the asynchronous operation is done, it resumes after the `co_await` statement.
 
 To see what this means, let's look at an example: 
 
@@ -47,9 +47,9 @@ The order in which the statements are printed is:
 ```
 
 
-As you see, the function progresses as usual, there are no surprises up until the `3. Before awaiting timer` statement. After printing this statement, the coroutine hits `co_await` and suspends. This looks like the coroutine is returning -- `5. After calling the coroutine` is printed. 
+As you see, the function progresses as usual, there are no surprises up until the `3. Before awaiting timer` statement. After printing this statement, the coroutine hits `co_await` and suspends, i.e. returns. After the coroutine returns, `5. After calling the coroutine` is printed. 
 
-This behavior allows to reach the call to `rclcpp::spin` that spins the ROS executor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine. This is the interesting part -- the control seemingly *jumps* back again to the coroutine *after* it initially returned (`5. After calling the coroutine` was printed).
+This behavior allows to reach the call to `rclcpp::spin` that spins the ROS executor (the event loop). After one second has passed, `4. After awaiting timer` is printed from the coroutine. This is the interesting part -- the control resumes back again to the coroutine *after* it initially returned (`5. After calling the coroutine` was printed).
 
 ## Why are coroutines a good fit for ROS ?
 

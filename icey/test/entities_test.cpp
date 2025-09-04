@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -272,3 +272,21 @@ TEST_F(NodeTest, OneOffTimerTest) {
   spin(300ms);
   EXPECT_EQ(timer_ticked, 1);
 }
+
+/*TEST_F(TwoNodesFixture, ServiceClientTest) {
+  {
+    auto service_client =
+      receiver_->icey().create_client<ExampleService>("icey_test_service");
+
+    EXPECT_TRUE(receiver_->get_service_names_and_types().contains("icey_test_service"));
+    /// Test that copying the client works and that also making an request through a client copy
+works after this  client copy was destroyed
+    {
+      auto client2 = service_client;
+
+    }
+    spin(1500ms);
+  }
+  /// Assert the client was destroyed
+  EXPECT_TRUE(receiver_->get_service_names_and_types().empty());
+}*/

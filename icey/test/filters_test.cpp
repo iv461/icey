@@ -1,5 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
-/// All rights reserved. 
+/// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
@@ -19,12 +19,12 @@ TEST_F(NodeTest, SyncApproxTimeTest) {
       node_->icey().create_stream<icey::Stream<sensor_msgs::msg::PointCloud2::SharedPtr>>();
 
   size_t num_message_sets_received = 0;
-  auto synched = icey::synchronize_approx_time(5, images, point_clouds)
-                     .then([&](sensor_msgs::msg::Image::SharedPtr,
-                               sensor_msgs::msg::PointCloud2::SharedPtr) {
-                                /// TODO test that the stamps are indeed the expected ones
-                       num_message_sets_received++;
-                     });
+  auto synched =
+      icey::synchronize_approx_time(5, images, point_clouds)
+          .then([&](sensor_msgs::msg::Image::SharedPtr, sensor_msgs::msg::PointCloud2::SharedPtr) {
+            /// TODO test that the stamps are indeed the expected ones
+            num_message_sets_received++;
+          });
 
   auto img = std::make_shared<sensor_msgs::msg::Image>();
   img->header.stamp = icey::rclcpp_from_chrono(icey::Time(10000s));
@@ -160,8 +160,8 @@ TEST_F(NodeTest, TimeoutTest) {
   images
     .timeout(100ms)
     .unwrap_or([&](auto current_time, auto msg_time, auto max_age) {
-    
-    }) 
+
+    })
     .then([](sensor_msgs::msg::Image::SharedPtr msg) {
       /// Here we receive only NaN-free messages for further processing
     });
@@ -171,6 +171,6 @@ TEST_F(NodeTest, TimeoutTest) {
   images.impl()->put_value(img);
 
   spin(50ms);
-  
+
 }
 */

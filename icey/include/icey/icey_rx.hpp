@@ -3,9 +3,10 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// This header contains more features of ICEY related to reactive programming: Subscribers and timers modeled with the  
-/// Stream concept, synchronization and other transformations on streams like buffering, filtering. Support for message_fiters and TF synchronization.
-/// If you only need async/await, you do not need this header.
+/// This header contains more features of ICEY related to reactive programming: Subscribers and
+/// timers modeled with the Stream concept, synchronization and other transformations on streams
+/// like buffering, filtering. Support for message_fiters and TF synchronization. If you only need
+/// async/await, you do not need this header.
 #pragma once
 
 #include <boost/hana.hpp>
@@ -26,6 +27,7 @@
 
 /// TF2 support:
 #include "tf2_ros/message_filter.h"
+#include "tf2_ros/transform_broadcaster.h"
 
 // Message filters library: (.h so that this works with humble as well)
 #include <message_filters/subscriber.h>
@@ -41,6 +43,8 @@ extern std::unordered_set<std::thread::id> g_used_thread_ids;
 #define ICEY_DEGUG_TRACE_THIS_THREAD_ID
 #endif
 
+inline bool icey_debug_print = false;
+
 template <class T>
 struct t_is_shared_ptr : std::false_type {};
 
@@ -55,14 +59,27 @@ concept AnyOf = (std::is_convertible_v<T, Ts> || ...);
 
 namespace hana = boost::hana;
 
-/// Returns a string that represents the type of the given value: i.e. "icey::Stream<int>"
+/// A weak pointer that supports operator-> and allows construction from a shared_ptr
+/// TODO this was just to ease refactoring, remove it
 template <class T>
-static std::string get_type(T &t) {
-  std::stringstream ss;
-  auto this_class = boost::typeindex::type_id_runtime(t).pretty_name();
-  ss << "[" << this_class << " @ 0x" << std::hex << size_t(&t) << "]";
-  return ss.str();
-}
+struct Weak {
+  Weak() = default;
+  Weak(std::shared_ptr<T> p) : p_(p) {}
+  T *operator->() const {
+    if (!p_.lock()) throw std::bad_weak_ptr();
+    return p_.lock().get();
+  }
+  T &operator*() const {
+    if (!p_.lock()) throw std::bad_weak_ptr();
+    return *p_.lock().get();
+  }
+  T *get() const {
+    if (!p_.lock()) throw std::bad_weak_ptr();
+    return p_.lock().get();
+  }
+  auto lock() const { return p_.lock(); }
+  std::weak_ptr<T> p_;
+};
 
 /// A tag to be able to recognize the type "Stream", all types deriving from StreamTag satisfy the
 /// `AnyStream` concept. \sa AnyStream
@@ -92,8 +109,6 @@ struct SubscriptionStream;
 struct TimerStream;
 template <class V>
 struct PublisherStream;
-template <class V>
-struct ServiceStream;
 template <class V>
 struct TimeoutFilter;
 struct TransformBuffer;
@@ -388,16 +403,18 @@ struct Awaiter {
   Awaiter(S &s) : stream(s) {}
   /// @return Returns whether this Stream already has a value.
   bool await_ready() const noexcept {
-    if (icey_coro_debug_print)
-      std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Await ready on Stream " << get_type(stream) << " called" << std::endl;
+#endif
     return !stream.impl()->has_none();
   }
   /// @brief Registers the continuation (that's the code that follows the `co_await` statement, in
   /// form of a function pointer) as a callback of the stream. This callback then get's called by
   /// the ROS executor.
   void await_suspend(std::coroutine_handle<> continuation) noexcept {
-    if (icey_coro_debug_print)
-      std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Await suspend on Stream " << get_type(stream) << " called" << std::endl;
+#endif
     if (!stream.impl()->registered_continuation_callback_) {
       stream.impl()->register_handler([impl = stream.impl()](auto &) {
         /// Important: Call the continuation only once since we may be awaiting the stream only
@@ -416,8 +433,9 @@ struct Awaiter {
   /// @brief Returns the current value of the stream. If an exception occurred (but was not handled)
   /// previously, here it is re-thrown
   auto await_resume() const {
-    if (icey_coro_debug_print)
-      std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << "Await resume on Stream " << get_type(stream) << " called" << std::endl;
+#endif
     if (stream.exception_ptr_)  /// [Coroutine support] The coroutines are specified so that the
                                 /// compiler does not do exception handling
       /// everywhere, so they put the burden on the implementers to defer throwing the exception
@@ -486,9 +504,10 @@ public:
   /// [Coroutine support] Implementation of the operator co_return(x): It *sets* the value of the
   /// Stream object that is about to get returned (the compiler creates it beforehand)
   void return_value(const Value &x) {
-    if (icey_coro_debug_print)
-      std::cout << get_type(*this) << " setting value using operator co_return for "
-                << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+#ifdef ICEY_CORO_DEBUG_PRINT
+    std::cout << get_type(*this) << " setting value using operator co_return for "
+              << boost::typeindex::type_id_runtime(x).pretty_name() << " called " << std::endl;
+#endif
     this->impl()->set_value(x);
   }
 
