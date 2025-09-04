@@ -11,20 +11,17 @@
 
 using namespace std::chrono_literals;
 
-icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
-  /// Synchronize with a transform: This will yield the message and the transform from the
-  /// child_frame_id of the header message and the given target_frame ("map") at the time of the
-  /// header stamp. It will wait up to 200ms for the transform.
+int main(int argc, char **argv) {
+  rclcpp::init(argc, argv);
+
+  auto node = std::make_shared<icey::Node>("icey_tf_pub_example");
   auto pub = node->icey().create_publisher<sensor_msgs::msg::PointCloud2>("/icey/test_pcl");
   auto tf_pub = node->icey().create_transform_publisher();
-
-  auto timer = node->icey().create_timer(100ms);
 
   std::size_t cnt{0};
   icey::Time base_time{1700000000s};
 
-  while (true) {
-    co_await timer;
+  node->icey().create_timer(100ms, [&](std::size_t) {
     sensor_msgs::msg::PointCloud2 pcl;
     pcl.header.frame_id = "lidar";
     pcl.header.stamp = icey::rclcpp_from_chrono(base_time + cnt * 10ms);
@@ -39,15 +36,7 @@ icey::Promise<void> run(std::shared_ptr<icey::Node> node) {
     tf.transform.rotation.w = std::cos(0.001 * cnt);
     tf_pub.publish(tf);
     cnt++;
-  }
-  co_return;
-}
-
-int main(int argc, char **argv) {
-  rclcpp::init(argc, argv);
-
-  auto node = std::make_shared<icey::Node>("icey_tf_pub_example");
-  run(node);
+  });
 
   rclcpp::spin(node);
 }
