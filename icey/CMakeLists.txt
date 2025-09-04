@@ -24,7 +24,7 @@ include_directories(
     include
 )
 
-if(BUILD_TESTING AND FALSE)
+if(BUILD_TESTING AND OFF)
   
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()

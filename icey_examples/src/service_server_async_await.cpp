@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 
   /// Create the service server and give it a asynchronous callback (containing keyword co_await)
   ctx->create_service<ExampleService>(
-      "set_bool_service", [&](auto request) -> icey::Task<Response> {
+      "set_bool_service", [&](auto request) -> icey::Promise<Response> {
         RCLCPP_INFO_STREAM(
             node->get_logger(),
             "Received request: " << request->data << ", calling upstream service ... ");

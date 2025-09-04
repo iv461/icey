@@ -6,15 +6,15 @@
 #pragma once
 
 #include <coroutine>
+#include <exception>  /// for std::exception_ptr
 #include <functional>
 #include <icey/impl/result.hpp>
-#include <iostream>
-#include <memory>
+
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
-
+#include <thread>
 #include <boost/type_index.hpp>
-#include <thread>  // for ID
+#include <iostream>
 /// Returns a string that represents the type of the given value
 template <class T>
 static std::string get_type(T &t) {
@@ -27,6 +27,13 @@ static std::string get_type(T &t) {
 /// Not thread-safe.
 namespace icey {
 
+inline bool icey_coro_debug_print = false;
+
+template <class Value, class Error>
+class Promise;
+
+namespace impl {
+
 template <typename, typename = std::void_t<>>
 struct has_promise_type : std::false_type {};
 
@@ -35,21 +42,12 @@ struct has_promise_type<T, std::void_t<typename T::promise_type>> : std::true_ty
 
 template <typename T>
 inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
-
-inline bool icey_coro_debug_print = false;
-
-template <class Value, class Error>
-class Task;
 struct PromiseTag {};
-
 
 /// A Promise is an asynchronous abstraction that yields a single value or an error.
 /// I can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
 /// It does not use dynamic memory allocation to store the value.
-
-/// For references, see the promise implementations of this library:
-/// [asyncpp] https://github.com/asyncpp/asyncpp/blob/master/include/asyncpp/promise.h
 template <class _Value = Nothing, class _Error = Nothing>
 class PromiseBase : public PromiseTag {
 public:
@@ -58,9 +56,10 @@ public:
   using State = Result<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
 
-
-  std::function<void(Self &)> launch_async_;
-  PromiseBase(std::function<void(Self &)> l) : launch_async_(l) {}
+  using Cancel = std::function<void(Self &)>;
+  using LaunchAsync = std::function<void(Self &)>;
+  LaunchAsync launch_async_;
+  PromiseBase(LaunchAsync l) : launch_async_(l) {}
 
   PromiseBase(){
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -123,9 +122,16 @@ public:
     notify();
   }
 
-  
+  /// Returns always false, we always first have to go to the executor to yield something. Used only
+  /// when wrapping a callback-based API.
   bool await_ready() const noexcept { return false; }
+  /// Launches the asynchronous operation that was previously stored and sets the awaiting coroutine
+  /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
+  /// callback-based API.
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
+    if (!this->launch_async_) {
+      /// TODO throw something, this promise cannot be fulfilled
+    }
     this->continuation_ = awaiting_coroutine;
     this->launch_async_(*this);
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -137,6 +143,8 @@ public:
 #endif
     return true;
   }
+
+  /// get()s this promise. Used only when wrapping a callback-based API.
   auto await_resume() { return get(); }
 
   /// Calls the continuation coroutine
@@ -169,19 +177,23 @@ public:
       return;
     else {
       if (has_none()) {
-        std::cout << "Promise has nothing, called resume too early." << std::endl;
-        getchar();
+        //TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
       }
       return get_state().get();
     }
   }
 
+  /// We do not use structured concurrency approach, we want to start the coroutine directly.
   std::suspend_never initial_suspend() const noexcept { return {}; }
+  /// We do not suspend at the final suspend point, but continue so that the coroutine state is
+  /// destructed automaticall when the coroutine is finished.
   std::suspend_never final_suspend() const noexcept { return {}; }
-  using Cancel = std::function<void(Self &)>;
 
+  /// Set the cancellation function that is called in the destructor if this promise has_none().
   void set_cancel(Cancel cancel) { cancel_ = cancel; }
+  void set_continuation(std::coroutine_handle<> continuation) { continuation_ = continuation; }
 
+protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
@@ -219,11 +231,6 @@ public:
   using State = Base::State;
   using Base::Base;
 
-  /// This is a function that launches the asynchronous operation. It is used to wrap a
-  /// callback-based API. This promise stores this function so that it can be called on
-  /// await_suspend. The callback-based API receives this promise and will write the result into
-  /// this promise (first argument Self&). It also sets Cancel function (second argument)
-
   Promise() : Base() {
     /// The Promise is a member of the coroutine state, so we can effectively track coroutine state
     /// allocations inside the promise
@@ -238,24 +245,7 @@ public:
 #endif
   }
 
-  Task<_Value, _Error> get_return_object() noexcept;
-
-  auto initial_suspend() const noexcept {
-    struct Awaiter {
-      bool await_ready() const noexcept {
-        // std::cout << "initial await_ready" << std::endl;
-        return true;
-      }
-      bool await_suspend(std::coroutine_handle<Self> awaiting_coroutine) const noexcept {
-        std::cout << fmt::format("initial await_suspend(), awaited by 0x{:x}\n",
-                                 std::size_t(awaiting_coroutine.address()));
-
-        return false;
-      }
-      void await_resume() const noexcept {}
-    };
-    return Awaiter{};
-  }
+  ::icey::Promise<_Value, _Error> get_return_object() noexcept;
 
   /// return_value (aka. operator co_return) *sets* the value if called with an argument,
   /// very confusing, I know
@@ -267,7 +257,8 @@ public:
 };
 
 /// Specialization so that Promise<void> works. (Nothing interesting here, just C++ 20 coroutine
-/// specification being weird)
+/// specification being weird. There was an attempt to make it less weird, unfortunately
+/// unsuccessful: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1713r0.pdf)
 template <>
 class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
 public:
@@ -287,33 +278,45 @@ public:
 #endif
   }
 
-  Task<void, Nothing> get_return_object() noexcept;
+  ::icey::Promise<void, Nothing> get_return_object() noexcept;
   auto return_void() { this->resolve(Nothing{}); }
 };
+}  // namespace impl
 
+/// This is the type users writing coroutines use as the return type. This is what is returned when
+/// calling promise_type::get_return_value(). It is a wrapper of the coroutine state. It is
+/// necessary because of the C++20 coroutines spec. To not confuse the users with C++ coroutine
+/// spec's intricacies, we just call this "Promise". It is not actually used to transmit the result
+/// of the asynchronous operation. For this, the promise inside the coroutine state (for which we
+/// use impl::Promise) is used. Note that this is not a "Task": this term is used seemingly
+/// exclusively for the structured programming approach of lazily started coroutines. I.e. it is not
+/// a Task as implemented in in Lewis Bakers's cppcoro library and described in
+/// https://www.open-std.org/JTC1/SC22/WG21/docs/papers/2018/p1056r1.html.
+/// We cannot use the structured programming approach because it requires a custom executor but we
+/// want to use the existing ROS executor.
 template <class _Value, class _Error = Nothing>
-class [[nodiscard]] Task {
+class Promise {
 public:
-  using Self = Task<_Value, _Error>;
+  using Self = Promise<_Value, _Error>;
   using Value = _Value;
   using Error = _Error;
-  using PromiseT = Promise<_Value, _Error>;
-  using promise_type = PromiseT;
 
-  explicit Task(std::coroutine_handle<PromiseT> handle) : coroutine_(handle) {
+  using promise_type = impl::Promise<_Value, _Error>;
+
+  explicit Promise(std::coroutine_handle<promise_type> coroutine) : coroutine_(coroutine) {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format("{} Constructor from coroutine: 0x{:x}\n", get_type(*this),
-                             std::size_t(handle.address()))
+                             std::size_t(coroutine.address()))
               << std::endl;
 #endif
   }
 
-  Task(const Task &) = delete;
-  Task(Task &&other) = delete;
-  Task &operator=(const Task &) = delete;
-  Task &operator=(Task &&other) = delete;
+  Promise(const Promise &) = delete;
+  Promise(Promise &&other) = delete;
+  Promise &operator=(const Promise &) = delete;
+  Promise &operator=(Promise &&other) = delete;
 
-  ~Task() {
+  ~Promise() {
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format("{} Destructor from coroutine: 0x{:x}\n", get_type(*this),
                              std::size_t(coroutine_.address()))
@@ -321,52 +324,36 @@ public:
 #endif
   }
 
-  auto operator co_await() noexcept {
-    struct Awaiter {
-      std::coroutine_handle<PromiseT> coroutine_{nullptr};
-      Awaiter(std::coroutine_handle<PromiseT> coroutine) noexcept : coroutine_(coroutine) {}
-      bool await_ready() const noexcept { return false; }
+  bool await_ready() const noexcept { return false; }
 
-      auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-        auto &p = coroutine_.promise();
-        if(p.continuation_) {
-
-        }
+  auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
+    auto &p = coroutine_.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
-                                 get_type(p), std::size_t(coroutine_.address()),
-                                 std::size_t(awaiting_coroutine.address()))
-                  << std::endl;
+    std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",
+                             get_type(p), std::size_t(coroutine_.address()),
+                             std::size_t(awaiting_coroutine.address()))
+              << std::endl;
 #endif
-        p.continuation_ = awaiting_coroutine;
-        return true;
-      }
-
-      auto await_resume() {
-        auto &promise = this->coroutine_.promise();
-        return promise.get();
-      }
-    };
-    return Awaiter{coroutine_};
+    p.set_continuation(awaiting_coroutine);
+    return true;
   }
 
+  auto await_resume() { return coroutine_.promise().get(); }
+
 private:
-  std::coroutine_handle<PromiseT> coroutine_{nullptr};
+  std::coroutine_handle<promise_type> coroutine_{nullptr};
 };
 
+namespace impl {
 template <class Value, class Error>
-inline Task<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
-#ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " get_return_object() " << std::endl;
-#endif
-  return Task<Value, Error>{std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
+inline ::icey::Promise<Value, Error> Promise<Value, Error>::get_return_object() noexcept {
+  return ::icey::Promise<Value, Error>{
+      std::coroutine_handle<Promise<Value, Error>>::from_promise(*this)};
 }
-
-inline Task<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
-#ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " get_return_object() " << std::endl;
-#endif
-  return Task<void, Nothing>{std::coroutine_handle<Promise<void, Nothing>>::from_promise(*this)};
+inline ::icey::Promise<void, Nothing> Promise<void, Nothing>::get_return_object() noexcept {
+  return ::icey::Promise<void, Nothing>{
+      std::coroutine_handle<impl::Promise<void, Nothing>>::from_promise(*this)};
 }
+}  // namespace impl
 
 }  // namespace icey

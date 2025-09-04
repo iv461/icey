@@ -19,7 +19,7 @@ using namespace std::chrono_literals;
 using ExampleService = std_srvs::srv::SetBool;
 using Response = ExampleService::Response::SharedPtr;
 
-icey::Task<Response, std::string> handle_srv_call(icey::ServiceClient<ExampleService> &client,
+icey::Promise<Response, std::string> handle_srv_call(icey::ServiceClient<ExampleService> &client,
                                                   auto request) {
   std::cout << "B4 call" << std::endl;
   icey::Result<Response, std::string> result = co_await client.call(request, 1s);
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
   /// Create the service client beforehand
   auto service = ctx->create_client<ExampleService>("set_bool_service");
-  auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Task<void> {
+  auto timer = ctx->create_timer_async(10ms, [&](std::size_t) -> icey::Promise<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
     //    co_return;
     // co_await obtain_the_number_sync();

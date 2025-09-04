@@ -36,7 +36,7 @@ struct EventLoop {
   std::deque<std::function<void()>> events;
 };  
 
-icey::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
+icey::impl::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
   std::cout << "In obtain_the_number_async" << std::endl;
   return {[&](auto &promise) {
     event_loop.dispatch([&]() {
@@ -48,7 +48,7 @@ icey::Promise<float> obtain_the_number_async(EventLoop &event_loop) {
 }
 
 
-icey::Task<int> wrapper2(EventLoop &event_loop) {
+icey::Promise<int> wrapper2(EventLoop &event_loop) {
   std::cout << "b4 obtain_the_number_async" << std::endl;
 
   float res = co_await obtain_the_number_async(event_loop);
@@ -57,14 +57,14 @@ icey::Task<int> wrapper2(EventLoop &event_loop) {
   co_return int(res);
 }
 
-icey::Task<int> wrapper1(EventLoop &event_loop) {
+icey::Promise<int> wrapper1(EventLoop &event_loop) {
   std::cout << "In wrapper1" << std::endl;
   int res = co_await wrapper2(event_loop);
   co_return res;
 }
 
 /// TODO using sync crashes since we destroy too early, fix this
-icey::Task<int> obtain_the_number_sync() { 
+icey::Promise<int> obtain_the_number_sync() { 
     co_return 42; 
 }
 
