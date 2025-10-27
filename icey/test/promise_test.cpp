@@ -19,6 +19,7 @@ protected:
   template <MarkerBehavior behavior>
   auto marker(size_t i) {
     return [this, i](auto) {
+      using Result = icey::Result<std::string, std::string>;
       events.push_back(i);
       // std::cout << "Marker " << i << " called with val " << v << std::endl;
       if constexpr (behavior == MarkerBehavior::Some)
@@ -26,7 +27,7 @@ protected:
       else if constexpr (behavior == MarkerBehavior::None)
         return std::optional<std::string>{};
       else
-        return icey::Err("erroring_" + std::to_string(i));
+        return Result(icey::Err("erroring_" + std::to_string(i)));
     };
   }
 

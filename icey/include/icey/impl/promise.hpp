@@ -36,9 +36,6 @@ class Promise;
 /// A special type that indicates that there is no value. (Using `void` for this would cause many
 /// problems, so defining an extra struct is easier.)
 struct Nothing {};
-/// A tag to be able to recognize the following result type using std::is_base_of_v, a technique we
-/// will generally use in the following to recognize (unspecialized) class templates.
-struct ResultTag {};
 
 namespace impl {
 
@@ -52,14 +49,22 @@ template <typename T>
 inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 struct PromiseTag {};
 
-
 /// This state is a sum type that holds either a Value, Error, or none. 
 template <class _Value, class _Error>
-struct PromiseState : private std::variant<std::monostate, _Value, _Error>, public ResultTag {
+struct PromiseState : private std::variant<std::monostate, _Value, _Error> {
   using Value = _Value;
   using Error = _Error;
   using Self = PromiseState<_Value, _Error>;
   
+  PromiseState() = default;
+  PromiseState(const Result<Value, Error> &result) { // NOLINT
+    if(result.has_value()) {
+      set_value(result.value());
+    } else {
+      set_error(result.error());
+    }
+  }
+
   bool has_none() const { return this->index() == 0; }
   bool has_value() const { return this->index() == 1; }
   bool has_error() const { return this->index() == 2; }

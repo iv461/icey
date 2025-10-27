@@ -19,8 +19,10 @@ struct Err {
 };
 
 /// A result-type is a sum type that holds either a value or error. I is ike Rust's Result and like C++23's std::expected, but for C++20.
-template <class Value, class Error>
-struct Result : std::variant<Value, Error> {
+template <class _Value, class _Error>
+struct Result : std::variant<_Value, _Error> {
+  using Value = _Value;
+  using Error = _Error;
   Result(const Ok<Value> &ok_value) { set_value(ok_value.value); }
   Result(const Err<Error> &err_value) { set_error(err_value.value); }
   bool has_value() const { return this->index() == 0; }
