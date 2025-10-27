@@ -59,17 +59,7 @@ struct PromiseState : private std::variant<std::monostate, _Value, _Error>, publ
   using Value = _Value;
   using Error = _Error;
   using Self = PromiseState<_Value, _Error>;
-  static Self None() { return PromiseState<_Value, _Error>{}; }
-  static Self Ok(const _Value &x) {
-    Self ret;
-    ret.template emplace<1>(x);
-    return ret;
-  }
-  static Self Err(const _Error &x) {
-    Self ret;
-    ret.template emplace<2>(x);
-    return ret;
-  }
+  
   bool has_none() const { return this->index() == 0; }
   bool has_value() const { return this->index() == 1; }
   bool has_error() const { return this->index() == 2; }

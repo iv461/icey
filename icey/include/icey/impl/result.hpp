@@ -2,15 +2,11 @@
 /// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
-
 #pragma once
 
-#include <type_traits>
 #include <variant>
 
 namespace icey {
-
-
 template <class T>
 struct Ok {
   explicit Ok(const T &v) : value(v) {}
@@ -21,7 +17,8 @@ struct Err {
   explicit Err(const T &v) : value(v) {}
   T value;
 };
-/// A result-type, like Rust's result and like C++23's std::expected, but for C++20.
+
+/// A result-type is a sum type that holds either a value or error. I is ike Rust's Result and like C++23's std::expected, but for C++20.
 template <class Value, class Error>
 struct Result : std::variant<Value, Error> {
   Result(const Ok<Value> &ok_value) { set_value(ok_value.value); }

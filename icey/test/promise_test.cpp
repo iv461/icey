@@ -19,7 +19,6 @@ protected:
   template <MarkerBehavior behavior>
   auto marker(size_t i) {
     return [this, i](auto) {
-      using Result = icey::Result<std::string, std::string>;
       events.push_back(i);
       // std::cout << "Marker " << i << " called with val " << v << std::endl;
       if constexpr (behavior == MarkerBehavior::Some)
@@ -87,7 +86,6 @@ TEST_F(PromiseTest, ThenErroring) {
       ->then(marker<Err>(2))
       ->then(marker<Some>(3))
       ->except(marker<Err>(4))
-      ->except(marker<Err>(5))
       ->then(marker<Some>(6))
       ->then(marker<Err>(7));
 
