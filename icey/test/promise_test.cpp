@@ -86,6 +86,7 @@ TEST_F(PromiseTest, ThenErroring) {
       ->then(marker<Err>(2))
       ->then(marker<Some>(3))
       ->except(marker<Err>(4))
+      ->except(marker<Err>(5))
       ->then(marker<Some>(6))
       ->then(marker<Err>(7));
 
