@@ -135,7 +135,7 @@ public:
   using Value = _Value;
   using Error = _Error;
   using Self = Stream<Value, Error, Base, DefaultBase>;
-  using State = Result<Value, Error>;
+  using State = PromiseState<Value, Error>;
 
   /// If no error is possible (Error is Nothing), this it just the Value instead of the State
   /// to not force the user to write unnecessary error handling/unwraping code.

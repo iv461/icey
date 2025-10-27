@@ -231,10 +231,9 @@ struct TransformBufferImpl {
       const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
       // Note that this call does not wait, the transform must already have arrived.
       auto tf = buffer_->lookupTransform(target_frame, source_frame, legacy_timepoint);
-      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(
-          tf);  /// my Result-type is not the best, but it's also only 25 lines :D
+      return Ok(tf); 
     } catch (const tf2::TransformException &e) {
-      return Result<geometry_msgs::msg::TransformStamped, std::string>::Err(e.what());
+      return Err(std::string(e.what()));
     }
   }
 
