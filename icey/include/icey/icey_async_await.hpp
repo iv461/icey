@@ -425,18 +425,25 @@ protected:
 
   void notify_if_any_relevant_transform_was_received() {
     /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
-    /*mutex_.lock();
-    auto requests = requests_; /// TODO optimize this
-    mutex_.unlock();*/
-    std::erase_if(requests_, [this](auto req) {
+    std::vector<RequestHandle> requests_to_delete;
+    mutex_.lock();
+    auto requests = requests_; 
+    mutex_.unlock();
+
+    for(auto req: requests) {
       if (req->maybe_time) {
-        return maybe_notify_specific_time(req);
+        if(maybe_notify_specific_time(req)) {
+          requests_to_delete.push_back(req);
+        }
       } else {
         // If it is a regular subscription, is is persistend and never erased
         maybe_notify(*req);
-        return false;
       }
-    });
+    }
+    mutex_.lock();
+    for(auto k: requests_to_delete)
+      requests_.erase(k);
+    mutex_.unlock();
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
