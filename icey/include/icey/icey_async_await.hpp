@@ -166,14 +166,13 @@ protected:
 /// A subscription + buffer for transforms that allows for asynchronous lookups and to subscribe on
 /// a single transform between two coordinate systems. It is otherwise implemented similarly to the
 /// tf2_ros::TransformListener but offering a well-developed asynchronous API.
-///  It works like this: Every time a new message is received on /tf, we check whether a
 /// It subscribes on the topic /tf and listens for relevant transforms (i.e. ones we subscribed to
 /// or the ones we requested a lookup). If any relevant transform was received, it notifies via a
-/// callback. It is therefore an asynchronous interface to TF.
+/// callback.
 ///
-/// Why not using `tf2_ros::AsyncBuffer` ? Due to multiple issues with it. (1) It uses
+/// Why not using `tf2_ros::AsyncBuffer` ? Due to multiple issues with it: (1) It uses
 /// the `std::future/std::promise` primitives that are effectively useless. (2)
-/// tf2_ros::AsyncBuffer::waitFroTransform has a bug: We cannot make another lookup in the callback
+/// tf2_ros::AsyncBuffer::waitForTransform has a bug: We cannot make another lookup in the callback
 /// of a lookup (it holds a (non-reentrant) mutex locked while calling the user callback), making it
 /// impossible to chain asynchronous operations.
 ///
@@ -225,6 +224,7 @@ struct TransformBufferImpl {
   // different to the previously emitted one, the `on_transform` callback is called.
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
     requests_.emplace(
         std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error));
   }
@@ -242,10 +242,9 @@ struct TransformBufferImpl {
       const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
       // Note that this call does not wait, the transform must already have arrived.
       auto tf = buffer_->lookupTransform(target_frame, source_frame, legacy_timepoint);
-      return Result<geometry_msgs::msg::TransformStamped, std::string>::Ok(
-          tf);  /// my Result-type is not the best, but it's also only 25 lines :D
+      return Ok(tf); 
     } catch (const tf2::TransformException &e) {
-      return Result<geometry_msgs::msg::TransformStamped, std::string>::Err(e.what());
+      return Err(std::string(e.what()));
     }
   }
 
@@ -265,6 +264,7 @@ struct TransformBufferImpl {
   /// to the limitation of ROS 2 Humble only offering wall-timers
   RequestHandle lookup(const std::string &target_frame, const std::string &source_frame, Time time,
                        const Duration &timeout, OnTransform on_transform, OnError on_error) {
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
     /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that
     /// were cancelled since the last call to async_lookup:
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
@@ -283,13 +283,16 @@ struct TransformBufferImpl {
         rclcpp::create_wall_timer(
             timeout,
             [this, on_error, request = weak_request]() {
-              active_timers_.at(request.lock())
-                  ->cancel();  /// cancel this timer, (it still lives in the active_timers_)
-              cancelled_timers_.emplace(active_timers_.at(
+              {
+                std::lock_guard<std::recursive_mutex> lock{mutex_};
+                active_timers_.at(request.lock())
+                ->cancel();  /// cancel this timer, (it still lives in the active_timers_)
+                cancelled_timers_.emplace(active_timers_.at(
                   request.lock()));  /// Copy the timer over to the cancelled ones so that we know
-                                     /// we need to clean it up next time
-              active_timers_.erase(request.lock());  // Erase this timer from active_timers_
-              requests_.erase(request.lock());       // Destroy the request
+                  /// we need to clean it up next time
+                  active_timers_.erase(request.lock());  // Erase this timer from active_timers_
+                  requests_.erase(request.lock());       // Destroy the request
+              }
               on_error(tf2::TimeoutException{"Timed out waiting for transform"});
             },
             nullptr, node_.get_node_base_interface().get(),
@@ -337,6 +340,7 @@ struct TransformBufferImpl {
   /// Cancel a transform request: This means that the registered callbacks will no longer be called.
   /// If the given request does not exist, this function does nothing.
   bool cancel_request(RequestHandle request) {
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
     requests_.erase(request);
     return active_timers_.erase(request);
   }
@@ -418,7 +422,10 @@ protected:
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully(because the lookup succeeded), destroy (and
       /// therefore cancel) the associated timeout timer:
-      active_timers_.erase(request);
+       {
+          std::lock_guard<std::recursive_mutex> lock{mutex_};
+          active_timers_.erase(request);
+       }
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -429,15 +436,25 @@ protected:
 
   void notify_if_any_relevant_transform_was_received() {
     /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
-    std::erase_if(requests_, [this](auto req) {
+    std::vector<RequestHandle> requests_to_delete;
+    mutex_.lock();
+    auto requests = requests_; 
+    mutex_.unlock();
+
+    for(auto req: requests) {
       if (req->maybe_time) {
-        return maybe_notify_specific_time(req);
+        if(maybe_notify_specific_time(req)) {
+          requests_to_delete.push_back(req);
+        }
       } else {
         // If it is a regular subscription, is is persistend and never erased
         maybe_notify(*req);
-        return false;
       }
-    });
+    }
+    mutex_.lock();
+    for(auto k: requests_to_delete)
+      requests_.erase(k);
+    mutex_.unlock();
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
@@ -457,6 +474,7 @@ protected:
   std::unordered_map<RequestHandle, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
   /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+  std::recursive_mutex mutex_;
 };
 
 /// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given
@@ -546,6 +564,7 @@ struct ServiceClientImpl {
   RequestID call(Request request, const Duration &timeout,
                  std::function<void(Response)> on_response,
                  std::function<void(const std::string &)> on_error) {
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
     /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that
     /// were cancelled since the last call:
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
@@ -590,6 +609,7 @@ struct ServiceClientImpl {
 
   /// Cancel the request so that callbacks will not be called anymore.
   bool cancel_request(RequestID request_id) {
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
     if (our_to_real_req_id_.contains(request_id)) return false;
     client->remove_pending_request(our_to_real_req_id_.at(request_id));
     our_to_real_req_id_.erase(request_id);
@@ -599,15 +619,16 @@ struct ServiceClientImpl {
 protected:
   NodeBase &node_;
   RequestID request_counter_{
-      0};  /// We have to count the requests ourselves, since we cannot access
-  /// And a map in case rcl starts to create the request IDs differently compared to how  we are
-  /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
-  std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
-  /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
-  /// the timeout timers for pending requests.
-  std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
-  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+    0};  /// We have to count the requests ourselves, since we cannot access
+    /// And a map in case rcl starts to create the request IDs differently compared to how  we are
+    /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
+    std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
+    /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
+    /// the timeout timers for pending requests.
+    std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
+    /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
+    std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+    std::recursive_mutex mutex_; /// Mutex protecting request_counter_, our_to_real_req_id_, active_timers_ and cancelled_timers_.
 
 public:
   /// The underlying rclcpp service client
@@ -706,6 +727,7 @@ public:
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
     auto subscription = node_base().create_subscription<MessageT>(
         topic_name, [callback](typename MessageT::SharedPtr msg) { callback(msg); }, qos, options);
+    std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     subscriptions_.push_back(std::dynamic_pointer_cast<rclcpp::SubscriptionBase>(subscription));
     return subscription;
   }
@@ -720,6 +742,7 @@ public:
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
     auto timer = node_base().create_wall_timer(period, [callback]() { callback(std::size_t{}); });
+    std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
     return timer;
   }
@@ -769,6 +792,7 @@ public:
           }
         },
         qos);
+    std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     services_.push_back(std::dynamic_pointer_cast<rclcpp::ServiceBase>(service));
     return service;
   }
@@ -790,11 +814,11 @@ public:
   NodeBase &node_base() { return static_cast<NodeBase &>(*this); }
 
   std::shared_ptr<TransformBufferImpl> add_tf_listener_if_needed() {
-    if (!tf_buffer_impl_) {
+    std::call_once(tf_buffer_init_flag_, [this]() {
       /// We need only one subscription on /tf, but we can have multiple transforms on which we
       /// listen to
       tf_buffer_impl_ = std::make_shared<TransformBufferImpl>(this->node_base());
-    }
+    });
     return tf_buffer_impl_;
   }
 
@@ -802,6 +826,8 @@ public:
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
   /// We need bookkeeping for the service servers.
 protected:
+  std::once_flag tf_buffer_init_flag_; /// Needed for atomic, i.e. thread-safe initialization of tf buffer.
+  std::recursive_mutex bookkeeping_mutex_;
   std::vector<std::shared_ptr<rclcpp::TimerBase>> timers_;
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
   std::vector<std::shared_ptr<rclcpp::SubscriptionBase>> subscriptions_;

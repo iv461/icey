@@ -2,7 +2,10 @@
 
 The asynchronous primitives like `Promise` and `Stream` are the building blocks of ICEY.
 
-
+```{doxygenstruct} icey::Ok
+```
+```{doxygenstruct} icey::Err
+```
 ```{doxygenstruct} icey::Result
 ```
 ```{doxygenstruct} icey::Nothing
