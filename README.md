@@ -195,7 +195,7 @@ icey_context_->create_subscription<geometry_msgs::PoseStamped>("ego_pose")
 
 - C++20 
 - ROS 2 Humble or Jazzy
-- Boost (Hana, typeinfo)
+- Boost (Hana, typeinfo), not required if you need async/await only
 - FMT
 
 Install with: `sudo apt install libfmt-dev libboost-dev`.
@@ -233,7 +233,7 @@ and include `icey/icey.hpp` in your node.
 Our goal with ICEY is to support everything that ROS supports.
 However, there are a few minor limitations:
 
-- Not thread-safe: only the `SingleThreadedExecutor` is supported currently
+- Only the async-await API is thread-safe and supports the multi-threaded executor currently
 - Memory strategy is not implemented
 - Sub-nodes are not supported
 
