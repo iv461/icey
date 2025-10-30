@@ -316,10 +316,8 @@ struct TransformBufferImpl {
               target_frame, source_frame, time, timeout,
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
-          promise.set_cancel([this, request_handle](auto &promise) {
-            if (promise.has_none()) {
-              this->cancel_request(request_handle);
-            }
+          promise.set_cancel([this, request_handle](auto &) {
+            this->cancel_request(request_handle);
           });
         });
   }

@@ -8,6 +8,7 @@
 #include <coroutine>
 #include <exception>  /// for std::exception_ptr
 #include <functional>
+#include <mutex>
 #include <icey/impl/result.hpp>
 
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -131,28 +132,41 @@ public:
 #endif
     /// cancellation only happens when the promise is destroyed before it has a value: This happens
     /// only when the user forgets to add a co_await
-    if (cancel_ && has_none()) cancel_(*this);
+    if (cancel_) {
+      std::call_once(has_any_, [this]{ cancel_(*this);});
+    }
+    
   }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
-
-  bool has_none() const { return state_.has_none(); }
-  bool has_value() const { return state_.has_value(); }
-  bool has_error() const { return state_.has_error(); }
+  
   const Value &value() const { return state_.value(); }
   const Error &error() const { return state_.error(); }
   State &get_state() { return state_; }
-  const State &get_state() const { return state_; }
 
-  /// Sets the state to hold none, but does not notify about this state change.
-  void set_none() { state_.set_none(); }
   /// Sets the state to hold a value, but does not notify about this state change.
-  void set_value(const Value &x) { state_.set_value(x); }
-  /// Sets the state to hold an error, but does not notify about this state change.
-  void set_error(const Error &x) { state_.set_error(x); }
-  void set_state(const State &x) { state_ = x; }
+  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state are synchronized, i.e. thread-safe.
+  void set_value(const Value &x) { 
+    std::call_once(has_any_, [this, &x]() {
+      state_.set_value(x); 
+    });
+  }
+
+  /// Sets the state to hold an error, but does not notify about this state change. 
+  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state are synchronized, i.e. thread-safe.
+  void set_error(const Error &x) { 
+    std::call_once(has_any_, [this, &x]() {
+      state_.set_error(x); 
+    });
+  }
+
+  void set_state(const State &x) { 
+    std::call_once(has_any_, [this, &x]() {
+      state_ = x; 
+    });
+  }
 
   void resolve(const Value &value) {
     set_value(value);
@@ -223,9 +237,9 @@ public:
     if constexpr (std::is_same_v<Value, Nothing>)
       return;
     else {
-      if (has_none()) {
+      /*if (has_none()) {
         // TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
-      }
+      }*/
       return get_state().get();
     }
   }
@@ -244,6 +258,7 @@ protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
+  std::once_flag has_any_;
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback
   /// captures the Promises object by reference since it needs to write the result to it. But if we
