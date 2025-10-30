@@ -12,7 +12,6 @@ They demonstrate:
 - Looking up transforms using async/await
 - Subscribing single transforms
 - Synchronizing topics with transforms 
-- Using parameter structs, greatly simplifying declaration of many parameters
 - Transform broadcasting
 - Using image transport subscriptions/publishers
 
@@ -133,54 +132,6 @@ It should print on every transform the transformation matrix:
         0         0         1         0
         0         0         0         1
 ``` 
-
-# Run parameter struct example 
-
-The parameter struct example shows how you can declare a lot of parameters without boilerplate code.
-
-Runt the node:
-
-```sh 
-ros2 run icey_examples parameters_struct_example
-```
-
-Then inspect the parameters of the node from another terminal:
-
-```sh 
-ros2 param dump /icey_parameters_struct_example
-
-/icey_parameters_struct_example:
-  ros__parameters:
-    amplitude: 3.0
-    frequency: 10.0
-    mode: single
-    others:
-      cov: []
-      max_amp: 6.0
-    qos_overrides:
-      /parameter_events:
-        publisher:
-          depth: 1000
-          durability: volatile
-          history: keep_last
-          reliability: reliable
-    use_sim_time: false
-
-```
-
-You see all the parameter declared as well as the nested parameter (`others`)
-
-If you change one parameter now: 
-```sh 
-ros2 param set /icey_parameters_struct_example amplitude 4.0
-```
-
-You see you get the notification: 
-
-```sh 
-[INFO 1740685079.892726882] [parameters_struct_example]: Parameter amplitude changed
-```
-
 
 # Lifecycle node example 
 
