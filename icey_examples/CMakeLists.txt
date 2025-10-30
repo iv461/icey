@@ -37,7 +37,6 @@ ament_auto_find_build_dependencies()
 ## Add examples 
 ament_auto_add_executable(service_server_example src/service_server.cpp)
 ament_auto_add_executable(signal_generator_example src/signal_generator.cpp)
-ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
 ament_auto_add_executable(tf_subscription_example src/tf_subscription.cpp)
 ament_auto_add_executable(tf_broadcaster_example src/tf_broadcaster.cpp)
 ament_auto_add_executable(using_icey_context_example src/using_icey_context.cpp)

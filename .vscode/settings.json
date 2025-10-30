@@ -81,7 +81,11 @@
         "xtr1common": "cpp",
         "xutility": "cpp",
         "xhash": "cpp",
-        "xtree": "cpp"
+        "xtree": "cpp",
+        "charconv": "cpp",
+        "span": "cpp",
+        "format": "cpp",
+        "stdfloat": "cpp"
     },
     "cSpell.words": [
         "asyncpp",
