@@ -27,7 +27,7 @@ protected:
       else if constexpr (behavior == MarkerBehavior::None)
         return std::optional<std::string>{};
       else
-        return Result::Err("erroring_" + std::to_string(i));
+        return Result(icey::Err("erroring_" + std::to_string(i)));
     };
   }
 
