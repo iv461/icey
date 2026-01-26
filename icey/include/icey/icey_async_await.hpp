@@ -105,8 +105,7 @@ struct NodeBase {
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
-                                            std::forward<CallbackT>(callback),
-                                            qos.get_rmw_qos_profile(), group);
+                                            std::forward<CallbackT>(callback), qos, group);
   }
 
   template <class Service>
@@ -114,7 +113,7 @@ struct NodeBase {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
-                                          qos.get_rmw_qos_profile(), group);
+                                          qos, group);
   }
 
   bool is_regular_node() { return maybe_regular_node; }
@@ -645,12 +644,12 @@ struct ServiceClient {
   \param request the request
   \param timeout The timeout for the service call, both for service discovery and the actual call.
   \returns A promise that can be awaited to obtain the response or an error. Possible errors are "TIMEOUT", "SERVICE_UNAVAILABLE" or "INTERRUPTED".
-  
+
   Example usage:
   \verbatim
     auto client = node->icey().create_client<ExampleService>("set_bool_service1");
     auto request = std::make_shared<ExampleService::Request>();
-    icey::Result<ExampleService::Response::SharedPtr, std::string> result = co_await client.call(request, 1s); 
+    icey::Result<ExampleService::Response::SharedPtr, std::string> result = co_await client.call(request, 1s);
   \endverbatim
   */
   // clang-format on
@@ -717,7 +716,7 @@ public:
   /// received, the provided callback will be called. This callback receives the request and returns
   /// a shared pointer to the response. If it returns a nullptr, then no response is made. The
   /// callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The
-  /// callbacks returns the response. The context additionally provdes bookkeeping for this service,
+  /// callbacks returns the response. The context additionally provides bookkeeping for this service,
   /// this means you do not have to store service in the node class. Works otherwise the same as
   /// [rclcpp::Node::create_service]. \param service_name the name of the service \param callback
   /// the callback \param qos quality of service \tparam Callback Either
