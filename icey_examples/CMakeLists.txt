@@ -20,21 +20,21 @@ if(USE_ASAN_CHECKS)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=init-self) 
+  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=init-self)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Werror=return-local-addr -fmax-errors=1) 
+  add_compile_options(-Werror=return-local-addr -fmax-errors=1)
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Werror=return-stack-address) 
+  add_compile_options(-Werror=return-stack-address)
 endif()
 
 find_package(fmt)
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
-## Add examples 
+## Add examples
 ament_auto_add_executable(service_server_example src/service_server.cpp)
 ament_auto_add_executable(signal_generator_example src/signal_generator.cpp)
 ament_auto_add_executable(parameters_struct_example src/parameters_struct.cpp)
@@ -67,5 +67,6 @@ target_link_libraries(service_client_async_await_example fmt::fmt)
 
 
 ament_auto_package(
+  USE_SCOPED_HEADER_INSTALL_DIR  # Until Jazzy EOL
   INSTALL_TO_SHARE
 )
