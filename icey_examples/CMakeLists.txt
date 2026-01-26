@@ -65,8 +65,8 @@ ament_auto_add_executable(coroutine_example src/coroutine_example.cpp)
 ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)
 target_link_libraries(service_client_async_await_example fmt::fmt)
 
-
-ament_auto_package(
-  USE_SCOPED_HEADER_INSTALL_DIR  # Until Jazzy EOL
-  INSTALL_TO_SHARE
-)
+if(ament_cmake_auto_VERSION VERSION_LESS 2.7)  # Can be removed after Jazzy EOL or ament_cmake_auto 2.7.4 release
+  ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
+else()
+  ament_auto_package()
+endif()
