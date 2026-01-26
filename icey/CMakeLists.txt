@@ -42,8 +42,10 @@ if(BUILD_TESTING)
 
 endif()
 
-if(ament_cmake_auto_VERSION VERSION_LESS 2.7)  # Can be removed after Jazzy EOL or ament_cmake_auto 2.7.4 release
-  ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
-else()
+if(ament_cmake_auto_VERSION EQUAL 2.7.3)
   ament_auto_package()
+else()
+  ament_auto_package(
+    USE_SCOPED_HEADER_INSTALL_DIR  # can be removed after Jazzy EOL
+  )
 endif()
