@@ -26,7 +26,7 @@
   <depend>image_transport</depend>
 
   <depend>libboost-dev</depend>
-  <depend>libfmt-dev</depend>
+  <depend>fmt</depend>
 
   <test_depend>ament_cmake_ros</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
