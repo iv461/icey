@@ -26,13 +26,13 @@
 #include <unordered_map>
 
 /// TF2 support:
-#include "tf2_ros/message_filter.h"
-#include "tf2_ros/transform_broadcaster.h"
+#include <tf2_ros/message_filter.hpp>
+#include <tf2_ros/transform_broadcaster.hpp>
 
-// Message filters library: (.h so that this works with humble as well)
-#include <message_filters/subscriber.h>
-#include <message_filters/sync_policies/approximate_time.h>
-#include <message_filters/synchronizer.h>
+// Message filters library:
+#include <message_filters/subscriber.hpp>
+#include <message_filters/sync_policies/approximate_time.hpp>
+#include <message_filters/synchronizer.hpp>
 
 namespace icey {
 
@@ -168,7 +168,7 @@ public:
 
   \param params The parameter struct object where the values will be written to.
   \param notify_callback The callback that gets called when any field changes (optional)
-  \param name_prefix Prefix for each parameter (optional). Used by the recursive call to support nested structs. 
+  \param name_prefix Prefix for each parameter (optional). Used by the recursive call to support nested structs.
   \note The passed parameter struct object `params` must have the same lifetime as the node, so it's best is to
   store it as a member of the node class.
 
@@ -185,16 +185,16 @@ public:
 
       icey::Parameter<std::string> mode{"single", icey::Set<std::string>({"single", "double", "pulse"})};
 
-      /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov: 
-      struct OtherParams { 
-        double max_amp = 6.; 
-        std::vector<double> cov; 
+      /// We can also have nested structs with more parameters, they will be named others.max_amp, others.cov:
+      struct OtherParams {
+        double max_amp = 6.;
+        std::vector<double> cov;
       } others;
     };
 
     class MyNode : public icey::Node {
       MyNode(std::string name): icey::Node(name) {
-          /// Now simply declare the parameter struct and a callback that is called when any field updates: 
+          /// Now simply declare the parameter struct and a callback that is called when any field updates:
           this->icey().declare_parameter_struct(params_, [&](const std::string &changed_parameter) {
             RCLCPP_INFO_STREAM(node->get_logger(), "Parameter " << changed_parameter << " changed");
           });
@@ -363,7 +363,7 @@ public:
   bool registered_continuation_callback_{false};
 };
 
-/// Adds a default extention inside the impl::Stream by default.
+/// Adds a default extension inside the impl::Stream by default.
 /// Handy to not force the user to declare this, i.e. to not leak implementation details.
 template <class Base>
 struct WithDefaults : public Base, public StreamImplDefault {};
@@ -409,7 +409,7 @@ struct Awaiter {
     return !stream.impl()->has_none();
   }
   /// @brief Registers the continuation (that's the code that follows the `co_await` statement, in
-  /// form of a function pointer) as a callback of the stream. This callback then get's called by
+  /// form of a function pointer) as a callback of the stream. This callback then gets called by
   /// the ROS executor.
   void await_suspend(std::coroutine_handle<> continuation) noexcept {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -452,7 +452,7 @@ struct Awaiter {
 /// \tparam _Value the type of the value
 /// \tparam _Error the type of the error. It can also be an exception.
 /// \tparam ImplBase a class from which the implementation (impl::Stream) derives, used as an
-/// extention point.
+/// extension point.
 /// \note This class does not have any fields except a weak pointer to the actual
 /// implementation (i.e. it uses the PIMPL idiom). You should not add any fields when inheriting
 /// form this class. Instead, put the additional fields that you need in a separate struct and pass
@@ -684,17 +684,17 @@ public:
   // clang-format off
   /*!
     \brief Synchronizes a topic with a transform using the `tf2_ros::MessageFilter`.
-    \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message. 
+    \param target_frame the transform on which we wait is specified by source_frame and target_frame, where source_frame is the frame in the header of the message.
     \param lookup_timeout The maximum time to wait until the transform gets available for a message
-    
+
     Example:
     \verbatim
       /// Synchronize with a transform: This will yield the message and the transform from the child_frame_id of the header message
-      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform. 
+      /// and the given target_frame ("map") at the time of the header stamp. It will wait up to 200ms for the transform.
       node->icey().create_subscription<sensor_msgs::msg::Image>("camera")
         .synchronize_with_transform("map", 200ms)
         .unwrap_or([&](std::string error) { RCLCPP_INFO_STREAM(node->get_logger(), "Transform lookup error: " << error);})
-        .then([](sensor_msgs::msg::Image::SharedPtr image, 
+        .then([](sensor_msgs::msg::Image::SharedPtr image,
             const geometry_msgs::msg::TransformStamped &transform_to_map) {
 
         });
@@ -736,7 +736,7 @@ protected:
     return new_stream;
   }
 
-  /// The pointer to the undelying implementation (i.e. PIMPL idiom).
+  /// The pointer to the underlying implementation (i.e. PIMPL idiom).
   Weak<Impl> impl_{nullptr};
   std::exception_ptr exception_ptr_{nullptr};
 };
@@ -941,7 +941,7 @@ struct ParameterStream : public Stream<_Value> {
     this->register_with_ros(context);
   }
 
-  /// Register this paremeter with the ROS node, meaning it actually calls
+  /// Register this parameter with the ROS node, meaning it actually calls
   /// node->declare_parameter(). After calling this method, this ParameterStream will have a value.
   void register_with_ros(Context &context) {
     context.add_parameter<Value>(
@@ -1076,7 +1076,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   TimerStream(Context &context, const Duration &interval, bool is_one_off_timer) : Base(context) {
     this->impl()->timer =
         context.node_base().create_wall_timer(interval, [impl = this->impl(), is_one_off_timer]() {
-          /// Needed as separate state as it might be resetted in async/await mode
+          /// Needed as separate state as it might be reset in async/await mode
           auto cnt = impl->ticks_counter;
           impl->ticks_counter++;
           if (is_one_off_timer) impl->timer->cancel();
