@@ -5,14 +5,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=init-self) 
+  add_compile_options(-Wall -Wextra -pedantic -Werror=return-type -Werror=init-self)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Werror=return-local-addr -fmax-errors=1) 
+  add_compile_options(-Werror=return-local-addr -fmax-errors=1)
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Werror=return-stack-address) 
+  add_compile_options(-Werror=return-stack-address)
 endif()
 
 find_package(fmt)
@@ -28,7 +28,7 @@ include_directories(
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 
-  ament_auto_add_gtest(test_main 
+  ament_auto_add_gtest(test_main
     test/entities_test.cpp
     test/entities_async_await_test.cpp
     test/test_main.cpp
@@ -39,9 +39,13 @@ if(BUILD_TESTING)
     test/nested_coroutines.cpp
   )
   target_link_libraries(test_main fmt::fmt)
-    
+
 endif()
 
-ament_auto_package(
-  INSTALL_TO_SHARE
-)
+if(ament_cmake_auto_VERSION EQUAL 2.7.3)
+  ament_auto_package()
+else()
+  ament_auto_package(
+    USE_SCOPED_HEADER_INSTALL_DIR  # can be removed after Jazzy EOL
+  )
+endif()
