@@ -15,6 +15,7 @@
 #include <unordered_map>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/version.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "tf2_msgs/msg/tf_message.hpp"
 #include "tf2_ros/buffer.hpp"
@@ -105,7 +106,13 @@ struct NodeBase {
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
-                                            std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group);
+                                            std::forward<CallbackT>(callback), 
+#if RCLCPP_VERSION_MAJOR >= 29 // Not removed yet like create_client, but they likely will be in the near future
+                                            qos, 
+else 
+                                            qos.get_rmw_qos_profile(),
+#endif 
+                                            group);
   }
 
   template <class Service>
@@ -113,7 +120,12 @@ struct NodeBase {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
-                                          qos.get_rmw_qos_profile(), group);
+#if RCLCPP_VERSION_MAJOR >= 29 // The functions taking the C QoS type were removed in https://github.com/ros2/rclcpp/pull/2575
+                                            qos, 
+else 
+                                            qos.get_rmw_qos_profile(),
+#endif 
+                                          group);
   }
 
   bool is_regular_node() { return maybe_regular_node; }
