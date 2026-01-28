@@ -107,9 +107,9 @@ struct NodeBase {
                       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
                                             std::forward<CallbackT>(callback), 
-#if RCLCPP_VERSION_MAJOR >= 29 // Not removed yet like create_client, but they likely will be in the near future
+#if RCLCPP_VERSION_MAJOR >= 29 // Not removed yet like create_client, but likely will be in the near future
                                             qos, 
-else 
+#else 
                                             qos.get_rmw_qos_profile(),
 #endif 
                                             group);
@@ -120,9 +120,9 @@ else
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
-#if RCLCPP_VERSION_MAJOR >= 29 // The functions taking the C QoS type were removed in https://github.com/ros2/rclcpp/pull/2575
+#if RCLCPP_VERSION_MAJOR >= 29 // The function overload taking the C QoS type was removed in https://github.com/ros2/rclcpp/pull/2575
                                             qos, 
-else 
+#else 
                                             qos.get_rmw_qos_profile(),
 #endif 
                                           group);
