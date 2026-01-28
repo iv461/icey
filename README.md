@@ -195,7 +195,7 @@ icey_context_->create_subscription<geometry_msgs::PoseStamped>("ego_pose")
 # Dependencies: 
 
 - C++20 
-- ROS 2 Humble or Jazzy, Kilted
+- ROS 2 Humble, Jazzy or Kilted
 - Boost (Hana, typeinfo), not required if you need async/await only
 - FMT
 
