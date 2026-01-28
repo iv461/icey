@@ -5,6 +5,7 @@
 ---
 
 <p align="center" height="30rem">
+  <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_kilted%20(kilted)&label=ROS%202%20Kilted&style=for-the-badge" alt="ROS 2 Humble Kilted Status" />
   <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_jazzy%20(jazzy)&label=ROS%202%20Jazzy&style=for-the-badge" alt="ROS 2 Jazzy Build Status"/>
   <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_humble%20(humble)&label=ROS%202%20Humble&style=for-the-badge" alt="ROS 2 Humble Build Status" />
 </p>
@@ -194,7 +195,7 @@ icey_context_->create_subscription<geometry_msgs::PoseStamped>("ego_pose")
 # Dependencies: 
 
 - C++20 
-- ROS 2 Humble or Jazzy
+- ROS 2 Humble or Jazzy, Kilted
 - Boost (Hana, typeinfo)
 - FMT
 
