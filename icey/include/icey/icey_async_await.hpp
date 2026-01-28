@@ -105,7 +105,7 @@ struct NodeBase {
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
-                                            std::forward<CallbackT>(callback), qos, group);
+                                            std::forward<CallbackT>(callback), qos.get_rmw_qos_profile(), group);
   }
 
   template <class Service>
@@ -113,7 +113,7 @@ struct NodeBase {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
-                                          qos, group);
+                                          qos.get_rmw_qos_profile(), group);
   }
 
   bool is_regular_node() { return maybe_regular_node; }
