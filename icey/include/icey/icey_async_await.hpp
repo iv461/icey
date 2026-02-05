@@ -738,94 +738,45 @@ protected:
 };
 
 template <class ActionT>
-struct ActionClientImpl {
+struct ActionClient {
   using Goal = typename ActionT::Goal;
-  using Feedback = typename ActionT::Feedback;
   using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
   using Result = typename GoalHandle::WrappedResult;
   using RequestID = int64_t;
 
-  ActionClientImpl(const ActionClientImpl &) = delete;
-  ActionClientImpl(ActionClientImpl &&) = delete;
-  ActionClientImpl &operator=(const ActionClientImpl &) = delete;
-  ActionClientImpl &operator=(ActionClientImpl &&) = delete;
-
-  explicit ActionClientImpl(NodeBase &node, const std::string &action_name) : node_(node) {
-    client = rclcpp_action::create_client<ActionT>(
+  ActionClient(NodeBase &node, const std::string &action_name) : node_(node) {
+    client_ = rclcpp_action::create_client<ActionT>(
         node.get_node_base_interface(), node.get_node_graph_interface(),
         node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
   }
 
-  RequestID send_goal(
-      const Goal &goal, const Duration &timeout, std::function<void(const Result &)> on_result,
-      std::function<void(const std::string &)> on_error,
-      std::function<void(std::shared_ptr<GoalHandle>, std::shared_ptr<const Feedback>)>
-          on_feedback = {}) {
-    auto id = request_counter_++;
-    typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
-    options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
-      if (!gh) {
-        // Rejected by server
-        node_.cancel_task_for(id);
-        on_error("REJECTED");
-      } else {
-        goal_handles_.emplace(id, gh);
-        if (pending_cancel_.count(id)) {
-          // Cancel immediately if cancel requested before acceptance
-          client->async_cancel_goal(gh);
-        }
-      }
-    };
-
-    options.feedback_callback = [on_feedback](std::shared_ptr<GoalHandle> gh,
-                                              std::shared_ptr<const Feedback> feedback) {
-      if (on_feedback) on_feedback(gh, feedback);
-    };
-
-    options.result_callback = [this, id, on_result](const Result &result) {
-      if (timed_out_.count(id)) {
-        timed_out_.erase(id);
-        return;  // Drop late result after timeout
-      }
-      node_.cancel_task_for(id);
-      goal_handles_.erase(id);
-      on_result(result);
-    };
-
-    client->async_send_goal(goal, options);
-
-    node_.add_task_for(id, timeout, [this, id, on_error] {
-      timed_out_.insert(id);
-      // Try to cancel if accepted
-      if (goal_handles_.count(id)) {
-        auto gh = goal_handles_.at(id);
-        if (gh) client->async_cancel_goal(gh);
-        goal_handles_.erase(id);
-      } else {
-        pending_cancel_.insert(id);
-      }
-      node_.cancel_task_for(id);
-      on_error("TIMEOUT");
-    });
-
-    return id;
+  RequestID send_goal(const Goal &goal, const Duration &timeout,
+                      std::function<void(const Result &)> on_result,
+                      std::function<void(const std::string &)> on_error,
+                      std::function<void(std::shared_ptr<GoalHandle>,
+                                         std::shared_ptr<const typename ActionT::Feedback>)>
+                          on_feedback = {}) {
+    return send_goal_internal(goal, timeout, on_result, on_error, on_feedback);
   }
 
-  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) {
+  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) const {
     return impl::Promise<Result, std::string>([this, goal, timeout](auto &promise) {
-      auto id = this->send_goal(
+      auto id = const_cast<ActionClient *>(this)->send_goal_internal(
           goal, timeout, [&promise](const Result &r) { promise.resolve(r); },
           [&promise](const std::string &e) { promise.reject(e); });
-      promise.set_cancel([this, id](auto &) { cancel_goal(id); });
+      promise.set_cancel([this, id](auto &) { const_cast<ActionClient *>(this)->cancel_goal(id); });
     });
   }
 
+  // Session-based API: send a goal and obtain a session object. This resolves after acceptance or
+  // rejection. All session methods take explicit timeouts.
+  impl::Promise<ActionSession<ActionT>, std::string> send_goal(const Goal &goal);
+
   bool cancel_goal(RequestID id) {
-    // If no active task exists, nothing to cancel
     if (!node_.cancel_task_for(id) && !goal_handles_.count(id)) return false;
     if (goal_handles_.count(id)) {
       auto gh = goal_handles_.at(id);
-      if (gh) client->async_cancel_goal(gh);
+      if (gh) client_->async_cancel_goal(gh);
       goal_handles_.erase(id);
     } else {
       pending_cancel_.insert(id);
@@ -835,48 +786,59 @@ struct ActionClientImpl {
     return true;
   }
 
+  std::shared_ptr<rclcpp_action::Client<ActionT>> client() const { return client_; }
+
+  // Internal helper used by both callback and Promise overloads
+  RequestID send_goal_internal(
+      const Goal &goal, const Duration &timeout, std::function<void(const Result &)> on_result,
+      std::function<void(const std::string &)> on_error,
+      std::function<void(std::shared_ptr<GoalHandle>,
+                         std::shared_ptr<const typename ActionT::Feedback>)>
+          on_feedback = {}) {
+    auto id = request_counter_++;
+    typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
+    options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
+      if (!gh) {
+        node_.cancel_task_for(id);
+        on_error("REJECTED");
+      } else {
+        goal_handles_.emplace(id, gh);
+        if (pending_cancel_.count(id)) client_->async_cancel_goal(gh);
+      }
+    };
+    options.feedback_callback = [on_feedback](std::shared_ptr<GoalHandle> gh,
+                                              std::shared_ptr<const typename ActionT::Feedback> fb) {
+      if (on_feedback) on_feedback(gh, fb);
+    };
+    options.result_callback = [this, id, on_result](const Result &result) {
+      if (timed_out_.count(id)) { timed_out_.erase(id); return; }
+      node_.cancel_task_for(id);
+      goal_handles_.erase(id);
+      on_result(result);
+    };
+    client_->async_send_goal(goal, options);
+    node_.add_task_for(id, timeout, [this, id, on_error] {
+      timed_out_.insert(id);
+      if (goal_handles_.count(id)) {
+        auto gh = goal_handles_.at(id);
+        if (gh) client_->async_cancel_goal(gh);
+        goal_handles_.erase(id);
+      } else {
+        pending_cancel_.insert(id);
+      }
+      node_.cancel_task_for(id);
+      on_error("TIMEOUT");
+    });
+    return id;
+  }
+
+  // State
   NodeBase &node_;
   RequestID request_counter_{0};
-  /// Timeout tasks are managed by NodeBase; no per-goal timer storage here.
   std::unordered_map<RequestID, std::shared_ptr<GoalHandle>> goal_handles_;
   std::unordered_set<RequestID> timed_out_;
   std::unordered_set<RequestID> pending_cancel_;
-
-  std::shared_ptr<rclcpp_action::Client<ActionT>> client;
-};
-
-template <class ActionT>
-struct ActionClient {
-  using Goal = typename ActionT::Goal;
-  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
-  using Result = typename GoalHandle::WrappedResult;
-  using RequestID = int64_t;
-
-  ActionClient(NodeBase &node, const std::string &action_name)
-      : impl_(std::make_shared<ActionClientImpl<ActionT>>(node, action_name)) {}
-
-  RequestID send_goal(const Goal &goal, const Duration &timeout,
-                      std::function<void(const Result &)> on_result,
-                      std::function<void(const std::string &)> on_error,
-                      std::function<void(std::shared_ptr<GoalHandle>,
-                                         std::shared_ptr<const typename ActionT::Feedback>)>
-                          on_feedback = {}) {
-    return impl_->send_goal(goal, timeout, on_result, on_error, on_feedback);
-  }
-
-  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) const {
-    return impl_->send_goal(goal, timeout);
-  }
-
-  // Session-based API: send a goal and obtain a session object. This resolves after acceptance or
-  // rejection. All session methods take explicit timeouts.
-  impl::Promise<ActionSession<ActionT>, std::string> send_goal(const Goal &goal);
-
-  bool cancel_goal(RequestID id) { return impl_->cancel_goal(id); }
-
-  std::shared_ptr<rclcpp_action::Client<ActionT>> client() const { return impl_->client; }
-
-  std::shared_ptr<ActionClientImpl<ActionT>> impl_;
+  std::shared_ptr<rclcpp_action::Client<ActionT>> client_;
 };
 
 // Session-based async/await API for actions
@@ -1116,9 +1078,8 @@ template <class ActionT>
 impl::Promise<ActionSession<ActionT>, std::string> ActionClient<ActionT>::send_goal(
     const Goal &goal) {
   return impl::Promise<ActionSession<ActionT>, std::string>([this, goal](auto &promise) {
-    auto client = impl_->client;
     auto session_impl = std::make_shared<typename ActionSession<ActionT>::Impl>(
-        this->impl_->node_, std::weak_ptr<rclcpp_action::Client<ActionT>>(client));
+        this->node_, std::weak_ptr<rclcpp_action::Client<ActionT>>(client_));
 
     typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
     options.goal_response_callback =
@@ -1139,7 +1100,7 @@ impl::Promise<ActionSession<ActionT>, std::string> ActionClient<ActionT>::send_g
       session_impl->on_result(res);
     };
 
-    impl_->client->async_send_goal(goal, options);
+    client_->async_send_goal(goal, options);
   });
 }
 
