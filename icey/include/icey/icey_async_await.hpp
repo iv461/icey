@@ -719,16 +719,14 @@ struct ActionClientImpl {
   ActionClientImpl &operator=(const ActionClientImpl &) = delete;
   ActionClientImpl &operator=(ActionClientImpl &&) = delete;
 
-  explicit ActionClientImpl(NodeBase &node, const std::string &action_name)
-      : node_(node) {
+  explicit ActionClientImpl(NodeBase &node, const std::string &action_name) : node_(node) {
     client = rclcpp_action::create_client<ActionT>(
         node.get_node_base_interface(), node.get_node_graph_interface(),
         node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
   }
 
   RequestID send_goal(
-      const Goal &goal, const Duration &timeout,
-      std::function<void(const Result &)> on_result,
+      const Goal &goal, const Duration &timeout, std::function<void(const Result &)> on_result,
       std::function<void(const std::string &)> on_error,
       std::function<void(std::shared_ptr<GoalHandle>, std::shared_ptr<const Feedback>)>
           on_feedback = {}) {
@@ -737,30 +735,28 @@ struct ActionClientImpl {
     auto id = request_counter_++;
 
     typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
-    options.goal_response_callback =
-        [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
-          if (!gh) {
-            // Rejected by server
-            if (active_timers_.count(id)) {
-              active_timers_.at(id)->cancel();
-              cancelled_timers_.emplace(active_timers_.at(id));
-              active_timers_.erase(id);
-            }
-            on_error("REJECTED");
-          } else {
-            goal_handles_.emplace(id, gh);
-            if (pending_cancel_.count(id)) {
-              // Cancel immediately if cancel requested before acceptance
-              client->async_cancel_goal(gh);
-            }
-          }
-        };
+    options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
+      if (!gh) {
+        // Rejected by server
+        if (active_timers_.count(id)) {
+          active_timers_.at(id)->cancel();
+          cancelled_timers_.emplace(active_timers_.at(id));
+          active_timers_.erase(id);
+        }
+        on_error("REJECTED");
+      } else {
+        goal_handles_.emplace(id, gh);
+        if (pending_cancel_.count(id)) {
+          // Cancel immediately if cancel requested before acceptance
+          client->async_cancel_goal(gh);
+        }
+      }
+    };
 
-    options.feedback_callback =
-        [on_feedback](std::shared_ptr<GoalHandle> gh,
-                      std::shared_ptr<const Feedback> feedback) {
-          if (on_feedback) on_feedback(gh, feedback);
-        };
+    options.feedback_callback = [on_feedback](std::shared_ptr<GoalHandle> gh,
+                                              std::shared_ptr<const Feedback> feedback) {
+      if (on_feedback) on_feedback(gh, feedback);
+    };
 
     options.result_callback = [this, id, on_result](const Result &result) {
       if (timed_out_.count(id)) {
@@ -779,22 +775,22 @@ struct ActionClientImpl {
     client->async_send_goal(goal, options);
 
     active_timers_.emplace(id, node_.create_wall_timer(timeout, [this, id, on_error] {
-                          timed_out_.insert(id);
-                          // Try to cancel if accepted
-                          if (goal_handles_.count(id)) {
-                            auto gh = goal_handles_.at(id);
-                            if (gh) client->async_cancel_goal(gh);
-                            goal_handles_.erase(id);
-                          } else {
-                            pending_cancel_.insert(id);
-                          }
-                          if (active_timers_.count(id)) {
-                            active_timers_.at(id)->cancel();
-                            cancelled_timers_.emplace(active_timers_.at(id));
-                            active_timers_.erase(id);
-                          }
-                          on_error("TIMEOUT");
-                        }));
+      timed_out_.insert(id);
+      // Try to cancel if accepted
+      if (goal_handles_.count(id)) {
+        auto gh = goal_handles_.at(id);
+        if (gh) client->async_cancel_goal(gh);
+        goal_handles_.erase(id);
+      } else {
+        pending_cancel_.insert(id);
+      }
+      if (active_timers_.count(id)) {
+        active_timers_.at(id)->cancel();
+        cancelled_timers_.emplace(active_timers_.at(id));
+        active_timers_.erase(id);
+      }
+      on_error("TIMEOUT");
+    }));
 
     return id;
   }
@@ -845,17 +841,16 @@ struct ActionClient {
   ActionClient(NodeBase &node, const std::string &action_name)
       : impl_(std::make_shared<ActionClientImpl<ActionT>>(node, action_name)) {}
 
-  RequestID send_goal(
-      const Goal &goal, const Duration &timeout,
-      std::function<void(const Result &)> on_result,
-      std::function<void(const std::string &)> on_error,
-      std::function<void(std::shared_ptr<GoalHandle>,
-                         std::shared_ptr<const typename ActionT::Feedback>)>
-          on_feedback = {}) {
+  RequestID send_goal(const Goal &goal, const Duration &timeout,
+                      std::function<void(const Result &)> on_result,
+                      std::function<void(const std::string &)> on_error,
+                      std::function<void(std::shared_ptr<GoalHandle>,
+                                         std::shared_ptr<const typename ActionT::Feedback>)>
+                          on_feedback = {}) {
     return impl_->send_goal(goal, timeout, on_result, on_error, on_feedback);
   }
 
-  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) {
+  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) const {
     return impl_->send_goal(goal, timeout);
   }
 
@@ -978,8 +973,7 @@ public:
   std::shared_ptr<rclcpp_action::Server<ActionT>> create_action_server(
       const std::string &action_name, ExecuteCallbackT &&execute_callback,
       GoalCallbackT goal_callback =
-          [](const rclcpp_action::GoalUUID &,
-             std::shared_ptr<const typename ActionT::Goal>) {
+          [](const rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>) {
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
           },
       CancelCallbackT cancel_callback =
