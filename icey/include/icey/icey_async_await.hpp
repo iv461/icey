@@ -104,6 +104,66 @@ struct NodeBase {
                                      node_base_.get(), node_timers_.get());
   }
 
+  /// Internal helper to compute a stable key id for integral/enum keys
+  template <class Key>
+  static std::enable_if_t<std::is_integral_v<Key> || std::is_enum_v<Key>, std::uintptr_t>
+  task_key_id(const Key &key) {
+    return static_cast<std::uintptr_t>(key);
+  }
+  /// Internal helper to compute a stable key id for shared_ptr keys
+  template <class T>
+  static std::uintptr_t task_key_id(const std::shared_ptr<T> &ptr) {
+    return reinterpret_cast<std::uintptr_t>(ptr.get());
+  }
+
+  /// Add a one-off task bound to a key. The timer auto-removes itself on firing.
+  template <class Key, class CallbackT>
+  void add_task_for(const Key &key, const Duration &timeout, CallbackT &&on_timeout,
+                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    oneoff_cancelled_timers_.clear();
+    const auto id = task_key_id(key);
+    auto timer = create_wall_timer(
+        timeout,
+        [this, id, on_timeout]() {
+          auto it = oneoff_active_tasks_.find(id);
+          if (it != oneoff_active_tasks_.end()) {
+            cancel_task(it->second);
+            oneoff_active_tasks_.erase(it);
+          }
+          on_timeout();
+        },
+        group);
+    oneoff_active_tasks_[id] = timer;
+  }
+
+  /// Cancel a previously scheduled task by key (no-op if not present)
+  template <class Key>
+  bool cancel_task_for(const Key &key) {
+    const auto id = task_key_id(key);
+    auto it = oneoff_active_tasks_.find(id);
+    if (it == oneoff_active_tasks_.end()) return false;
+    cancel_task(it->second);
+    oneoff_active_tasks_.erase(it);
+    return true;
+  }
+
+  /// Add a one-off task executed after `timeout`. Uses a wall timer under the hood.
+  /// Cleans up previously cancelled timers (deferred cleanup) before scheduling.
+  template <class CallbackT>
+  std::shared_ptr<rclcpp::TimerBase> add_task(const Duration &timeout, CallbackT &&on_timeout,
+                                              rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    oneoff_cancelled_timers_.clear();
+    auto timer = create_wall_timer(timeout, std::forward<CallbackT>(on_timeout), group);
+    return timer;
+  }
+
+  /// Cancel a task timer and move it to a deferred cleanup set to avoid cleanup in callback
+  void cancel_task(const std::shared_ptr<rclcpp::TimerBase> &timer) {
+    if (!timer) return;
+    timer->cancel();
+    oneoff_cancelled_timers_.emplace(timer);
+  }
+
   template <class ServiceT, class CallbackT>
   auto create_service(const std::string &service_name, CallbackT &&callback,
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
@@ -167,6 +227,15 @@ protected:
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters_;
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
   rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_;
+  /// Deferred cleanup store for one-off timers cancelled inside callbacks
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
+  /// Active one-off tasks keyed by a stable uintptr_t key
+  std::unordered_map<std::uintptr_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_tasks_;
+
+public:
+  // Test helpers (introspection)
+  std::size_t oneoff_active_task_count() const { return oneoff_active_tasks_.size(); }
+  std::size_t oneoff_cancelled_task_count() const { return oneoff_cancelled_timers_.size(); }
 };
 
 /// A subscription + buffer for transforms that allows for asynchronous lookups and to subscribe on
@@ -276,7 +345,6 @@ struct TransformBufferImpl {
     // We need to do this kind of deferred cleanup because we would likely get a deadlock if
     // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock
     // occurs is currently an unspecified behavior, and therefore likely to change in the future.)
-    cancelled_timers_.clear();
     auto request{std::make_shared<TransformRequest>([target_frame]() { return target_frame; },
                                                     [source_frame]() { return source_frame; },
                                                     on_transform, on_error, time)};
@@ -284,22 +352,12 @@ struct TransformBufferImpl {
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
     /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
-    active_timers_.emplace(
-        request,
-        rclcpp::create_wall_timer(
-            timeout,
-            [this, on_error, request = weak_request]() {
-              active_timers_.at(request.lock())
-                  ->cancel();  /// cancel this timer, (it still lives in the active_timers_)
-              cancelled_timers_.emplace(active_timers_.at(
-                  request.lock()));  /// Copy the timer over to the cancelled ones so that we know
-                                     /// we need to clean it up next time
-              active_timers_.erase(request.lock());  // Erase this timer from active_timers_
-              requests_.erase(request.lock());       // Destroy the request
-              on_error(tf2::TimeoutException{"Timed out waiting for transform"});
-            },
-            nullptr, node_.get_node_base_interface().get(),
-            node_.get_node_timers_interface().get()));
+    node_.add_task_for(request, timeout, [this, on_error, request = weak_request]() {
+      if (auto req = request.lock()) {
+        requests_.erase(req);  // Destroy the request
+        on_error(tf2::TimeoutException{"Timed out waiting for transform"});
+      }
+    });
     return request;
   }
 
@@ -344,7 +402,7 @@ struct TransformBufferImpl {
   /// If the given request does not exist, this function does nothing.
   bool cancel_request(RequestHandle request) {
     requests_.erase(request);
-    return active_timers_.erase(request);
+    return node_.cancel_task_for(request);
   }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
@@ -422,9 +480,9 @@ protected:
       geometry_msgs::msg::TransformStamped tf_msg = buffer_->lookupTransform(
           request->target_frame(), request->source_frame(), request->maybe_time.value());
       request->on_transform(tf_msg);
-      /// If the request is destroyed gracefully(because the lookup succeeded), destroy (and
-      /// therefore cancel) the associated timeout timer:
-      active_timers_.erase(request);
+      /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
+      /// timer
+      node_.cancel_task_for(request);
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -458,11 +516,7 @@ protected:
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
 
   std::unordered_set<RequestHandle> requests_;
-  /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
-  /// the timeout timers for pending requests.
-  std::unordered_map<RequestHandle, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
-  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+  /// Timeout tasks are managed by NodeBase; no per-request timer storage here.
 };
 
 /// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given
@@ -552,12 +606,6 @@ struct ServiceClientImpl {
   RequestID call(Request request, const Duration &timeout,
                  std::function<void(Response)> on_response,
                  std::function<void(const std::string &)> on_error) {
-    /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that
-    /// were cancelled since the last call:
-    // We need to do this kind of deferred cleanup because we would likely get a deadlock if
-    // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock
-    // occurs is currently an unspecified behavior, and therefore likely to change in the future.)
-    cancelled_timers_.clear();
     /// We have to count the requests ourselves since we need it inside the callback to cancel the
     /// timeout timer but there is no way with the current rclcpp API to obtain the id in the
     /// callback
@@ -567,21 +615,17 @@ struct ServiceClientImpl {
           if (!result.valid()) {
             on_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
           } else {
-            /// Cancel and erase the timeout timer since we got a response
-            active_timers_.erase(request_id);
+            /// Cancel the timeout task since we got a response
+            node_.cancel_task_for(request_id);
             on_response(result.get());
           }
         });
     our_to_real_req_id_.emplace(request_id, future_and_req_id.request_id);
-    active_timers_.emplace(request_id,
-                           node_.create_wall_timer(timeout, [this, on_error, request_id] {
-                             client->remove_pending_request(our_to_real_req_id_.at(request_id));
-                             our_to_real_req_id_.erase(request_id);
-                             active_timers_.at(request_id)->cancel();
-                             cancelled_timers_.emplace(active_timers_.at(request_id));
-                             active_timers_.erase(request_id);
-                             on_error("TIMEOUT");
-                           }));
+    node_.add_task_for(request_id, timeout, [this, on_error, request_id] {
+      client->remove_pending_request(our_to_real_req_id_.at(request_id));
+      our_to_real_req_id_.erase(request_id);
+      on_error("TIMEOUT");
+    });
     return request_id;
   }
 
@@ -599,7 +643,7 @@ struct ServiceClientImpl {
     if (our_to_real_req_id_.contains(request_id)) return false;
     client->remove_pending_request(our_to_real_req_id_.at(request_id));
     our_to_real_req_id_.erase(request_id);
-    return active_timers_.erase(request_id);
+    return node_.cancel_task_for(request_id);
   }
 
 protected:
@@ -609,11 +653,7 @@ protected:
   /// And a map in case rcl starts to create the request IDs differently compared to how  we are
   /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
   std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
-  /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
-  /// the timeout timers for pending requests.
-  std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
-  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+  /// Timeout tasks are managed by NodeBase; no per-request timer storage here.
 
 public:
   /// The underlying rclcpp service client
@@ -712,7 +752,7 @@ struct ActionClientImpl {
       std::function<void(const std::string &)> on_error,
       std::function<void(std::shared_ptr<GoalHandle>, std::shared_ptr<const Feedback>)>
           on_feedback = {}) {
-    cancelled_timers_.clear();
+    // Deferred cleanup is handled by NodeBase::add_task
 
     auto id = request_counter_++;
 
@@ -720,11 +760,7 @@ struct ActionClientImpl {
     options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
       if (!gh) {
         // Rejected by server
-        if (active_timers_.count(id)) {
-          active_timers_.at(id)->cancel();
-          cancelled_timers_.emplace(active_timers_.at(id));
-          active_timers_.erase(id);
-        }
+        node_.cancel_task_for(id);
         on_error("REJECTED");
       } else {
         goal_handles_.emplace(id, gh);
@@ -745,18 +781,14 @@ struct ActionClientImpl {
         timed_out_.erase(id);
         return;  // Drop late result after timeout
       }
-      if (active_timers_.count(id)) {
-        active_timers_.at(id)->cancel();
-        cancelled_timers_.emplace(active_timers_.at(id));
-        active_timers_.erase(id);
-      }
+      node_.cancel_task_for(id);
       goal_handles_.erase(id);
       on_result(result);
     };
 
     client->async_send_goal(goal, options);
 
-    active_timers_.emplace(id, node_.create_wall_timer(timeout, [this, id, on_error] {
+    node_.add_task_for(id, timeout, [this, id, on_error] {
       timed_out_.insert(id);
       // Try to cancel if accepted
       if (goal_handles_.count(id)) {
@@ -766,13 +798,9 @@ struct ActionClientImpl {
       } else {
         pending_cancel_.insert(id);
       }
-      if (active_timers_.count(id)) {
-        active_timers_.at(id)->cancel();
-        cancelled_timers_.emplace(active_timers_.at(id));
-        active_timers_.erase(id);
-      }
+      node_.cancel_task_for(id);
       on_error("TIMEOUT");
-    }));
+    });
 
     return id;
   }
@@ -787,7 +815,8 @@ struct ActionClientImpl {
   }
 
   bool cancel_goal(RequestID id) {
-    if (!active_timers_.count(id)) return false;
+    // If no active task exists, nothing to cancel
+    if (!node_.cancel_task_for(id) && !goal_handles_.count(id)) return false;
     if (goal_handles_.count(id)) {
       auto gh = goal_handles_.at(id);
       if (gh) client->async_cancel_goal(gh);
@@ -795,17 +824,14 @@ struct ActionClientImpl {
     } else {
       pending_cancel_.insert(id);
     }
-    active_timers_.at(id)->cancel();
-    cancelled_timers_.emplace(active_timers_.at(id));
-    active_timers_.erase(id);
+    node_.cancel_task_for(id);
     timed_out_.erase(id);
     return true;
   }
 
   NodeBase &node_;
   RequestID request_counter_{0};
-  std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+  /// Timeout tasks are managed by NodeBase; no per-goal timer storage here.
   std::unordered_map<RequestID, std::shared_ptr<GoalHandle>> goal_handles_;
   std::unordered_set<RequestID> timed_out_;
   std::unordered_set<RequestID> pending_cancel_;
