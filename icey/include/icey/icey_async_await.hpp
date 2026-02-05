@@ -733,6 +733,9 @@ struct AsyncGoalHandle {
   using Goal = typename ActionT::Goal;
   using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
   using Result = typename GoalHandle::WrappedResult;
+  using CancelResponse = typename rclcpp_action::Client<ActionT>::CancelResponse::SharedPtr;
+  using Feedback = typename rclcpp_action::Client<ActionT>::Feedback;
+
   AsyncGoalHandle(NodeBase &node, std::shared_ptr<rclcpp_action::Client<ActionT>> client,
                   const std::shared_ptr<GoalHandle> &goal_handle)
       : node_(node), client_(client), goal_handle_(goal_handle) {}
@@ -742,15 +745,15 @@ struct AsyncGoalHandle {
     /// inside the rclcpp_action::Client, so we have to call it to prevent memory leaks apparently.
     client_->stop_callbacks(goal_handle_);
   }
+
   /// Obtain the result asynchronously
   impl::Promise<Result, std::string> result(const Duration &timeout) {
     return impl::Promise<Result, std::string>([this, timeout](auto &promise) {
       /// TODO handle retcode
       client_.lock()->async_get_result([&promise](const Result &res) { promise.resolve(res); });
-      node_.add_task_for(request_id, timeout, [this, &promise] {
+      node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this, &promise] {
         client_->stop_callbacks(goal_handle_);
-        our_to_real_req_id_.erase(request_id);
-        promise("RESULT TIMEOUT");
+        promise.reject("RESULT TIMEOUT");
       });
       promise.set_cancel(
           [client = client_, gh = goal_handle_]() { client.lock()->stop_callbacks(gh); });
@@ -758,12 +761,17 @@ struct AsyncGoalHandle {
   }
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
-  impl::Promise<Nothing, std::string> cancel() {
+  impl::Promise<CancelResponse, std::string> cancel() {
     return impl::Promise<AsyncGoalHandle, std::string>(
         [client = client_, gh = goal_handle_](auto &promise) {
-          client.lock()->async_cancel_goal(gh, [&promise]() { promise.resolve(); })
-          /// We can't cancel the cancellation :(, destroying the promise before the cancellation is
-          /// complete leads to UAF.
+          client.lock()->async_cancel_goal(gh, [&promise]() { promise.resolve(); });
+          /// Add timeout task
+          node_.add_task_for(gh->get_goal_id(), timeout, [this, &promise] {
+            client_->stop_callbacks(goal_handle_);
+            promise.reject("RESULT TIMEOUT");
+          });
+          /// We can't cancel the cancellation :(, destroying the promise before the
+          /// cancellation is complete leads to UAF.
         });
   }
 
@@ -774,13 +782,7 @@ private:
 };
 
 /*! A action client offering an async/await API and per-request timeouts. Everything happens
-asynchronously and returns a promise that can be awaited using co_await. This allows synchronization
-with other operations, enabling you to effectively perform synchronous service calls. We do not
-offer a function to wait until the service is available for two reasons: (1) there is no
-asynchronous function available at the rclcpp layer (re-implementation using asynchronous graph
-change notification would be required), and (2) ROS does not seem to optimize RPC calls by keeping
-connections open; therefore, it does not seem beneficial to differentiate whether the server is
-available or not.
+asynchronously and returns a promise that can be awaited using co_await.
 */
 template <class ActionT>
 struct ActionClient {
