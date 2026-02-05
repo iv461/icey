@@ -760,11 +760,11 @@ struct AsyncGoalHandle {
   ~AsyncGoalHandle() {
     /// This is a cleanup function that removes entries from a hashtable called "goal_handles_"
     /// inside the rclcpp_action::Client, so we have to call it to prevent memory leaks apparently.
-    client_->stop_callbacks(goal_handle_);
+    client_.lock()->stop_callbacks(goal_handle_);
   }
 
   /// Obtain the result asynchronously
-  impl::Promise<Result, std::string> result(const Duration &timeout) {
+  impl::Promise<Result, std::string> result(const Duration &timeout) const {
     return impl::Promise<Result, std::string>([this, timeout](auto &promise) {
       /// TODO handle retcode
       client_.lock()->async_get_result([this, &promise](const Result &res) {
@@ -772,16 +772,15 @@ struct AsyncGoalHandle {
         promise.resolve(res);
       });
       node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this, &promise] {
-        client_->stop_callbacks(goal_handle_);
+        client_.lock()->stop_callbacks(goal_handle_);
         promise.reject("RESULT TIMEOUT");
       });
-      promise.set_cancel(
-          [client = client_, gh = goal_handle_]() { client.lock()->stop_callbacks(gh); });
+      promise.set_cancel([this]() { client_.lock()->stop_callbacks(goal_handle_); });
     });
   }
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
-  impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) {
+  impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
     return impl::Promise<AsyncGoalHandle, std::string>([this, timeout](auto &promise) {
       client_->async_cancel_goal(goal_handle_, [this, &promise]() {
         node_.cancel_task_for(goal_handle_->get_goal_id());
@@ -797,6 +796,9 @@ struct AsyncGoalHandle {
     });
   }
 
+  /// Returns the held rclcpp_action::GoalHandle.
+  std::shared_ptr<GoalHandle> get_goal_handle() const { return goal_handle_; }
+
 private:
   NodeBase &node_;
   std::weak_ptr<rclcpp_action::Client<ActionT>> client_;
@@ -811,6 +813,7 @@ struct ActionClient {
   using Goal = typename ActionT::Goal;
   using Client = rclcpp_action::Client<ActionT>;
   using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
+  using FeedbackCallback = typename GoalHandle::FeedbackCallback;
   using Result = typename GoalHandle::WrappedResult;
   using RequestID = int64_t;
 
@@ -837,15 +840,17 @@ struct ActionClient {
             }
           };
           /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
-          options.feedback_callback = [feedback_callback](auto fb) { feedback_callback(); };
-
+          options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
+            feedback_callback(goal_handle, feedback);
+          };
           /// Citing the documentation of this function "[...] WARNING this method has inconsistent
           /// behaviour and a memory leak bug. If you set the result callback in @param options, the
           /// handle will be self referencing, and you will receive
           /// * callbacks even though you do not hold a reference to the shared pointer. In this
           /// case, the self reference will
           /// * be deleted if the result callback was received. If there is no result callback,
-          /// there will be a memory leak. So apparently, we need to set this callback. Internally,
+          /// there will be a memory leak.[...]".
+          // So apparently, we need to set this callback. Internally,
           /// this leads the goal to be "result aware" (???).
           options.result_callback = [](auto) {};
           client_->async_send_goal(goal, options);
