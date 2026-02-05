@@ -49,6 +49,14 @@ static rclcpp_action::GoalUUID ptr_to_uuid(void *p) {
   return a;
 }
 
+static rclcpp_action::GoalUUID int_to_uuid(uint64_t p) {
+  /// HINT: rclcpp_action::GoalUUID is of type std::array<uint8_t, 16>
+  auto low = std::bit_cast<std::array<uint8_t, 8>>(p);
+  rclcpp_action::GoalUUID a;
+  std::copy(low.begin(), low.end(), a.begin());
+  return a;
+}
+
 /// A helper to abstract regular rclcpp::Nodes and LifecycleNodes.
 /// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
 /// which doesn't look like it's going to come for Humble:
@@ -153,6 +161,12 @@ struct NodeBase {
     oneoff_active_timers_[id] = timer;
   }
 
+  template <class CallbackT>
+  void add_task_for(uint64_t id, const Duration &timeout, CallbackT &&on_timeout,
+                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    add_task_for(int_to_uuid(id), timeout, on_timeout, group);
+  }
+
   /// Cancel a task timer and move it to a deferred cleanup set to avoid cleanup in callback
   void cancel_task(const std::shared_ptr<rclcpp::TimerBase> &timer) {
     if (!timer) return;
@@ -168,6 +182,8 @@ struct NodeBase {
     oneoff_active_timers_.erase(it);
     return true;
   }
+
+  bool cancel_task_for(uint64_t id) { return cancel_task_for(int_to_uuid(id)); }
 
   template <class ServiceT, class CallbackT>
   auto create_service(const std::string &service_name, CallbackT &&callback,
@@ -813,7 +829,7 @@ struct ActionClient {
         [this, goal, timeout, feedback_callback](auto &promise) {
           typename Client::SendGoalOptions options;
           /// TODO timeout
-          options.goal_response_callback = [&promise](auto goal_handle) {
+          options.goal_response_callback = [this, &promise](auto goal_handle) {
             if (goal_handle == nullptr) {
               promise.reject("GOAL REJECTED");  /// TODO error type
             } else {
