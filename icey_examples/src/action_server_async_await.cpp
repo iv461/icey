@@ -12,6 +12,7 @@
 
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
@@ -21,11 +22,26 @@ int main(int argc, char **argv) {
   auto node = std::make_shared<rclcpp::Node>("icey_action_server_async_await_example");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
-  // Create server with async execute callback
+  using Upstream = std_srvs::srv::SetBool;
+  auto upstream = ctx->create_client<Upstream>("set_bool_service1");
+
+  // Create server with async execute callback that calls an upstream service
   auto server = ctx->create_action_server<Fibonacci>(
       "/fibonacci",
-      [ctx, node](
+      [ctx, node, upstream](
           std::shared_ptr<rclcpp_action::ServerGoalHandle<Fibonacci>> gh) -> icey::Promise<void> {
+        // Optionally call an upstream service first (demonstrates co_await inside action server)
+        auto req = std::make_shared<Upstream::Request>();
+        req->data = true;
+        auto upstream_result = co_await upstream.call(req, 1s);
+        if (upstream_result.has_error()) {
+          RCLCPP_WARN(node->get_logger(), "Upstream service error: %s",
+                      upstream_result.error().c_str());
+        } else {
+          RCLCPP_INFO(node->get_logger(), "Upstream response: %s",
+                      upstream_result.value()->success ? "true" : "false");
+        }
+
         // Read goal and compute sequence gradually, publishing feedback on a timer
         auto goal = gh->get_goal();
         int32_t a = 0, b = 1;

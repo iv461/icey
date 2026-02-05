@@ -671,7 +671,7 @@ struct ServiceClient {
   \endverbatim
   */
   // clang-format on
-  impl::Promise<Response, std::string> call(Request request, const Duration &timeout) {
+  impl::Promise<Response, std::string> call(Request request, const Duration &timeout) const {
     return impl_->call(request, timeout);
   }
 
