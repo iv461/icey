@@ -30,10 +30,6 @@ using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
 
-// Forward declaration for session-based action API
-template <class ActionT>
-class ActionSession;
-
 static rclcpp::Time rclcpp_from_chrono(const Time &time_point) {
   return rclcpp::Time(std::chrono::time_point_cast<std::chrono::nanoseconds>(time_point)
                           .time_since_epoch()
@@ -44,9 +40,13 @@ static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
   return Time(std::chrono::nanoseconds(time_point.nanoseconds()));
 }
 
-static int64_t ptr_to_int64(void *p) {
-  static_assert(sizeof(void *) <= sizeof(int64_t), "We assume a pointer is at most 64 bit wide");
-  return std::bit_cast<int64_t>(reinterpret_cast<uint64_t>(p));
+static rclcpp_action::GoalUUID ptr_to_uuid(void *p) {
+  static_assert(sizeof(void *) <= sizeof(uint64_t), "We assume a pointer is at most 64 bit wide");
+  /// HINT: rclcpp_action::GoalUUID is of type std::array<uint8_t, 16>
+  auto low = std::bit_cast<std::array<uint8_t, 8>>(reinterpret_cast<uint64_t>(p));
+  rclcpp_action::GoalUUID a;
+  std::copy(low.begin(), low.end(), a.begin());
+  return a;
 }
 
 /// A helper to abstract regular rclcpp::Nodes and LifecycleNodes.
@@ -136,7 +136,7 @@ struct NodeBase {
   /// This is of course fugly and slow, but there is no public API to create tasks (aka Waitables)
   /// in the executor, so this is the best we can do.
   template <class CallbackT>
-  void add_task_for(int64_t id, const Duration &timeout, CallbackT &&on_timeout,
+  void add_task_for(rclcpp_action::GoalUUID id, const Duration &timeout, CallbackT &&on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     oneoff_cancelled_timers_.clear();
     auto timer = create_wall_timer(
@@ -161,7 +161,7 @@ struct NodeBase {
   }
 
   /// Cancel a previously scheduled task by key (no-op if not present)
-  bool cancel_task_for(int64_t id) {
+  bool cancel_task_for(rclcpp_action::GoalUUID id) {
     auto it = oneoff_active_timers_.find(id);
     if (it == oneoff_active_timers_.end()) return false;
     cancel_task(it->second);
@@ -235,7 +235,8 @@ protected:
   /// Deferred cleanup store for one-off timers cancelled inside callbacks
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
   /// Active one-off tasks keyed by a stable uintptr_t key
-  std::unordered_map<int64_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
+  std::unordered_map<rclcpp_action::GoalUUID, std::shared_ptr<rclcpp::TimerBase>>
+      oneoff_active_timers_;
 
 public:
   // Test helpers (introspection)
@@ -351,7 +352,7 @@ struct TransformBufferImpl {
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
-    node_.add_task_for(ptr_to_int64(request.get()), timeout,
+    node_.add_task_for(ptr_to_uuid(request.get()), timeout,
                        [this, on_error, request = weak_request]() {
                          if (auto req = request.lock()) {
                            requests_.erase(req);  // Destroy the request
@@ -402,7 +403,7 @@ struct TransformBufferImpl {
   /// If the given request does not exist, this function does nothing.
   bool cancel_request(RequestHandle request) {
     requests_.erase(request);
-    return node_.cancel_task_for(ptr_to_int64(request.get()));
+    return node_.cancel_task_for(ptr_to_uuid(request.get()));
   }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
@@ -482,7 +483,7 @@ protected:
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
       /// timer
-      node_.cancel_task_for(ptr_to_int64(request.get()));
+      node_.cancel_task_for(ptr_to_uuid(request.get()));
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -750,7 +751,10 @@ struct AsyncGoalHandle {
   impl::Promise<Result, std::string> result(const Duration &timeout) {
     return impl::Promise<Result, std::string>([this, timeout](auto &promise) {
       /// TODO handle retcode
-      client_.lock()->async_get_result([&promise](const Result &res) { promise.resolve(res); });
+      client_.lock()->async_get_result([this, &promise](const Result &res) {
+        node_.cancel_task_for(goal_handle_->get_goal_id());
+        promise.resolve(res);
+      });
       node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this, &promise] {
         client_->stop_callbacks(goal_handle_);
         promise.reject("RESULT TIMEOUT");
@@ -761,18 +765,20 @@ struct AsyncGoalHandle {
   }
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
-  impl::Promise<CancelResponse, std::string> cancel() {
-    return impl::Promise<AsyncGoalHandle, std::string>(
-        [client = client_, gh = goal_handle_](auto &promise) {
-          client.lock()->async_cancel_goal(gh, [&promise]() { promise.resolve(); });
-          /// Add timeout task
-          node_.add_task_for(gh->get_goal_id(), timeout, [this, &promise] {
-            client_->stop_callbacks(goal_handle_);
-            promise.reject("RESULT TIMEOUT");
-          });
-          /// We can't cancel the cancellation :(, destroying the promise before the
-          /// cancellation is complete leads to UAF.
-        });
+  impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) {
+    return impl::Promise<AsyncGoalHandle, std::string>([this, timeout](auto &promise) {
+      client_->async_cancel_goal(goal_handle_, [this, &promise]() {
+        node_.cancel_task_for(goal_handle_->get_goal_id());
+        promise.resolve();
+      });
+      /// Add timeout task
+      node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this, &promise] {
+        client_->stop_callbacks(goal_handle_);
+        promise.reject("RESULT TIMEOUT");
+      });
+      /// We can't cancel the cancellation :(, destroying the promise before the
+      /// cancellation is complete leads to UAF.
+    });
   }
 
 private:
@@ -787,6 +793,7 @@ asynchronously and returns a promise that can be awaited using co_await.
 template <class ActionT>
 struct ActionClient {
   using Goal = typename ActionT::Goal;
+  using Client = rclcpp_action::Client<ActionT>;
   using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
   using Result = typename GoalHandle::WrappedResult;
   using RequestID = int64_t;
@@ -799,17 +806,18 @@ struct ActionClient {
 
   /// Send asynchronously an action goal: if it is accepted, then you get a goal handle.
   template <class F>
-  impl::Promise<AsyncGoalHandle, std::string> send_goal(const Goal &goal, const Duration &timeout,
-                                                        F &&feedback_callback) const {
-    return impl::Promise<AsyncGoalHandle, std::string>(
+  impl::Promise<AsyncGoalHandle<ActionT>, std::string> send_goal(const Goal &goal,
+                                                                 const Duration &timeout,
+                                                                 F &&feedback_callback) const {
+    return impl::Promise<AsyncGoalHandle<ActionT>, std::string>(
         [this, goal, timeout, feedback_callback](auto &promise) {
-          rclcpp_actions::Client::SendGoalOptions options;
+          typename Client::SendGoalOptions options;
           /// TODO timeout
           options.goal_response_callback = [&promise](auto goal_handle) {
             if (goal_handle == nullptr) {
               promise.reject("GOAL REJECTED");  /// TODO error type
             } else {
-              promise.resolve(AsyncGoalHandle(node_, client_, goal_handle));
+              promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
             }
           };
           /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
