@@ -29,20 +29,31 @@ int main(int argc, char **argv) {
     Fibonacci::Goal goal;
     goal.order = 7;
 
-    // Await final result with 2s timeout; error string on timeout or interruption
-    auto result = co_await client.send_goal(
-        goal, 2s, [node](auto goal_handle, auto feedback) { RCLCPP_WARN(node->get_logger(), "Got some feedback"); });
-    if (result.has_error()) {
-      RCLCPP_WARN(node->get_logger(), "Action error: %s", result.error().c_str());
+    // Request a goal with 2 seconds timeout
+    icey::Result<icey::AsyncGoalHandle<Fibonacci>, std::string> maybe_goal_handle =
+        co_await client.send_goal(goal, 2s, [node](auto goal_handle, auto feedback) {
+          RCLCPP_WARN(node->get_logger(), "Got some feedback");
+        });
+
+    if (maybe_goal_handle.has_error()) {
+      RCLCPP_WARN_STREAM(node->get_logger(),
+                         "Goal request was rejected: " << maybe_goal_handle.error());
       co_return;
     }
 
-    const auto &wrapped = result.value();
-    if (wrapped.code == rclcpp_action::ResultCode::SUCCEEDED) {
-      RCLCPP_INFO(node->get_logger(), "Fibonacci done. Size: %zu", wrapped.result->sequence.size());
+    const icey::AsyncGoalHandle<Fibonacci> &goal_handle = maybe_goal_handle.value();
+    /// Now wait for the result of the action for 20 seconds.
+    auto maybe_result = co_await goal_handle.result(20s);
+    if (maybe_result.has_error()) {
+      RCLCPP_WARN_STREAM(node->get_logger(), "Action failed: " << maybe_result.error());
+      co_return;
+    }
+    auto const &result = maybe_result.value();
+    if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+      RCLCPP_INFO(node->get_logger(), "Fibonacci done. Size: %zu", result.result->sequence.size());
     } else {
       RCLCPP_WARN(node->get_logger(), "Action finished with code %d",
-                  static_cast<int>(wrapped.code));
+                  static_cast<int>(result.code));
     }
     co_return;
   });
