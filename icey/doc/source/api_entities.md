@@ -3,6 +3,18 @@
 All the ROS entities (subscriptions, publishers, timers etc.) are wrapped so that they are either `Stream`s or provide an asynchronous interface with `icey::Promise` (service client, TF).
 
 
+```{doxygenstruct} icey::ServiceClient
+```
+
+```{doxygenstruct} icey::TransformBuffer
+```
+
+```{doxygenstruct} icey::ActionClient
+```
+
+```{doxygenstruct} icey::AsyncGoalHandle
+```
+
 ```{doxygenstruct} icey::ParameterStream
 ```
 
@@ -14,13 +26,8 @@ All the ROS entities (subscriptions, publishers, timers etc.) are wrapped so tha
 ```{doxygenstruct} icey::PublisherStream
 ```
 
-```{doxygenstruct} icey::ServiceClient
-```
 
 ```{doxygenstruct} icey::TransformSubscriptionStream
-```
-
-```{doxygenstruct} icey::TransformBuffer
 ```
 
 ```{doxygenstruct} icey::TransformPublisherStream
