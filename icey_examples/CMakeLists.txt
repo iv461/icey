@@ -65,7 +65,6 @@ ament_auto_add_executable(coroutine_example src/coroutine_example.cpp)
 ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)
 target_link_libraries(service_client_async_await_example fmt::fmt)
 
-# Action examples (client + server) using ICEY async/await
 ament_auto_add_executable(action_client_async_await_example src/action_client_async_await.cpp)
 ament_auto_add_executable(action_server_async_await_example src/action_server_async_await.cpp)
 

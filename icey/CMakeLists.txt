@@ -39,8 +39,7 @@ if(BUILD_TESTING)
     test/context_test.cpp
     test/promise_test.cpp
     test/nested_coroutines.cpp
-  )
-  ament_target_dependencies(test_main example_interfaces rclcpp_action)
+  )  
   target_link_libraries(test_main fmt::fmt)
 
 endif()
