@@ -128,15 +128,14 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionTimeoutAndMultipleGoalsTest) {
     EXPECT_EQ(first.error(), "TIMEOUT");
 
     // Then fire two parallel requests and await both
-    auto f1 = client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
-    auto f2 = client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
+    auto r2 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
+    auto r1 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
 
-    auto r2 = co_await f2;
+    
     EXPECT_TRUE(r2.has_value()) << (r2.has_error() ? r2.error() : "");
     auto ares = co_await r2.value().result(200ms);
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
-
-    auto r1 = co_await f1;
+    
     EXPECT_TRUE(r1.has_value()) << (r1.has_error() ? r1.error() : "");
     auto ares1 = co_await r1.value().result(200ms);
     EXPECT_EQ(ares1.value().code, rclcpp_action::ResultCode::SUCCEEDED);

@@ -10,7 +10,6 @@
 
 #include <functional>
 #include <icey/impl/promise.hpp>
-#include <mutex>
 #include <optional>
 #include <thread>  /// for ID
 #include <unordered_map>
