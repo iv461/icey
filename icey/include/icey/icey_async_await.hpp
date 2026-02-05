@@ -116,7 +116,11 @@ struct NodeBase {
     return reinterpret_cast<std::uintptr_t>(ptr.get());
   }
 
-  /// Add a one-off task bound to a key. The timer auto-removes itself on firing.
+  /// Add a one-off task bound to a key. This key can be used to cancel the task. We need these
+  /// tasks for the timeout detection for TF, services and actions. Currently, they are implemented
+  /// using ordinary rclcpp timers, that need to be cancelled and cleaned up in a deferred manner.
+  /// This is of course fugly and slow, but there is no public API to create tasks (aka Waitables)
+  /// in the executor, so this is the best we can do.
   template <class Key, class CallbackT>
   void add_task_for(const Key &key, const Duration &timeout, CallbackT &&on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
@@ -125,25 +129,25 @@ struct NodeBase {
     auto timer = create_wall_timer(
         timeout,
         [this, id, on_timeout]() {
-          auto it = oneoff_active_tasks_.find(id);
-          if (it != oneoff_active_tasks_.end()) {
+          auto it = oneoff_active_timers_.find(id);
+          if (it != oneoff_active_timers_.end()) {
             cancel_task(it->second);
-            oneoff_active_tasks_.erase(it);
+            oneoff_active_timers_.erase(it);
           }
           on_timeout();
         },
         group);
-    oneoff_active_tasks_[id] = timer;
+    oneoff_active_timers_[id] = timer;
   }
 
   /// Cancel a previously scheduled task by key (no-op if not present)
   template <class Key>
   bool cancel_task_for(const Key &key) {
     const auto id = task_key_id(key);
-    auto it = oneoff_active_tasks_.find(id);
-    if (it == oneoff_active_tasks_.end()) return false;
+    auto it = oneoff_active_timers_.find(id);
+    if (it == oneoff_active_timers_.end()) return false;
     cancel_task(it->second);
-    oneoff_active_tasks_.erase(it);
+    oneoff_active_timers_.erase(it);
     return true;
   }
 
@@ -152,7 +156,13 @@ struct NodeBase {
   template <class CallbackT>
   std::shared_ptr<rclcpp::TimerBase> add_task(const Duration &timeout, CallbackT &&on_timeout,
                                               rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that
+    /// were cancelled since the last call to add_task:
+    // We need to do this kind of deferred cleanup because we would likely get a deadlock if
+    // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock
+    // occurs is currently an unspecified behavior.)
     oneoff_cancelled_timers_.clear();
+    /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
     auto timer = create_wall_timer(timeout, std::forward<CallbackT>(on_timeout), group);
     return timer;
   }
@@ -230,11 +240,11 @@ protected:
   /// Deferred cleanup store for one-off timers cancelled inside callbacks
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
   /// Active one-off tasks keyed by a stable uintptr_t key
-  std::unordered_map<std::uintptr_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_tasks_;
+  std::unordered_map<std::uintptr_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
 
 public:
   // Test helpers (introspection)
-  std::size_t oneoff_active_task_count() const { return oneoff_active_tasks_.size(); }
+  std::size_t oneoff_active_task_count() const { return oneoff_active_timers_.size(); }
   std::size_t oneoff_cancelled_task_count() const { return oneoff_cancelled_timers_.size(); }
 };
 
@@ -340,18 +350,12 @@ struct TransformBufferImpl {
   /// to the limitation of ROS 2 Humble only offering wall-timers
   RequestHandle lookup(const std::string &target_frame, const std::string &source_frame, Time time,
                        const Duration &timeout, OnTransform on_transform, OnError on_error) {
-    /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that
-    /// were cancelled since the last call to async_lookup:
-    // We need to do this kind of deferred cleanup because we would likely get a deadlock if
-    // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock
-    // occurs is currently an unspecified behavior, and therefore likely to change in the future.)
     auto request{std::make_shared<TransformRequest>([target_frame]() { return target_frame; },
                                                     [source_frame]() { return source_frame; },
                                                     on_transform, on_error, time)};
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
-    /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
     node_.add_task_for(request, timeout, [this, on_error, request = weak_request]() {
       if (auto req = request.lock()) {
         requests_.erase(req);  // Destroy the request
@@ -752,10 +756,7 @@ struct ActionClientImpl {
       std::function<void(const std::string &)> on_error,
       std::function<void(std::shared_ptr<GoalHandle>, std::shared_ptr<const Feedback>)>
           on_feedback = {}) {
-    // Deferred cleanup is handled by NodeBase::add_task
-
     auto id = request_counter_++;
-
     typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
     options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
       if (!gh) {
