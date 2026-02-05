@@ -751,6 +751,9 @@ protected:
   std::shared_ptr<ServiceClientImpl<ServiceT>> impl_;
 };
 
+
+/// An AsyncGoalHandle is created once a requested goal was accepted by the action server. 
+/// It provides an async/await based API for requesting the result and cancellation. 
 template <class ActionT>
 struct AsyncGoalHandle {
   using Goal = typename ActionT::Goal;
