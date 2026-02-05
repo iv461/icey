@@ -394,7 +394,7 @@ struct TransformBufferImpl {
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
           promise.set_cancel(
-              [this, request_handle](auto &) { this->cancel_request(request_handle); });
+              [this, request_handle](auto &promise) { this->cancel_request(request_handle); });
         });
   }
 
@@ -773,7 +773,7 @@ struct AsyncGoalHandle {
   impl::Promise<Result, std::string> result(const Duration &timeout) const {
     return impl::Promise<Result, std::string>([this, timeout](auto &promise) {
       /// TODO handle retcode
-      client_.lock()->async_get_result([this, &promise](const Result &res) {
+      client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &res) {
         node_.cancel_task_for(goal_handle_->get_goal_id());
         promise.resolve(res);
       });
@@ -781,7 +781,7 @@ struct AsyncGoalHandle {
         client_.lock()->stop_callbacks(goal_handle_);
         promise.reject("RESULT TIMEOUT");
       });
-      promise.set_cancel([this]() { client_.lock()->stop_callbacks(goal_handle_); });
+      promise.set_cancel([this](auto &) { client_.lock()->stop_callbacks(goal_handle_); });
     });
   }
 
