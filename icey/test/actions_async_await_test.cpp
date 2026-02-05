@@ -28,7 +28,7 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionSendGoalTest) {
     goal.order = 5;
 
     // No server yet -> expect TIMEOUT
-    auto res1 = co_await client.send_goal(goal, 40ms);
+    auto res1 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
     EXPECT_TRUE(res1.has_error());
     EXPECT_EQ(res1.error(), "TIMEOUT");
 
@@ -67,10 +67,11 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionSendGoalTest) {
         "/icey_test_fib", handle_goal, handle_cancel, handle_accepted);
 
     // With server available -> expect success
-    auto res2 = co_await client.send_goal(goal, 200ms);
+    auto res2 = co_await client.send_goal(goal, 200ms, [](auto goal_handle, auto feedback) {});
     EXPECT_TRUE(res2.has_value()) << (res2.has_error() ? res2.error() : "");
-    EXPECT_EQ(res2.value().code, rclcpp_action::ResultCode::SUCCEEDED);
-    auto seq = res2.value().result->sequence;
+    auto ares = co_await res2.value().result(200ms);
+    EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+    auto seq = ares.value().result->sequence;
     std::vector<int32_t> expected{0, 1, 1, 2, 3};
     EXPECT_EQ(seq, expected);
 
@@ -122,21 +123,23 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionTimeoutAndMultipleGoalsTest) {
     goal.order = 5;
 
     // First call should timeout
-    auto first = co_await client.send_goal(goal, 40ms);
+    auto first = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
     EXPECT_TRUE(first.has_error());
     EXPECT_EQ(first.error(), "TIMEOUT");
 
     // Then fire two parallel requests and await both
-    auto f1 = client.send_goal(goal, 40ms);
-    auto f2 = client.send_goal(goal, 40ms);
+    auto f1 = client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
+    auto f2 = client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
 
     auto r2 = co_await f2;
     EXPECT_TRUE(r2.has_value()) << (r2.has_error() ? r2.error() : "");
-    EXPECT_EQ(r2.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+    auto ares = co_await r2.value().result(200ms);
+    EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 
     auto r1 = co_await f1;
     EXPECT_TRUE(r1.has_value()) << (r1.has_error() ? r1.error() : "");
-    EXPECT_EQ(r1.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+    auto ares1 = co_await r1.value().result(200ms);
+    EXPECT_EQ(ares1.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 
     async_completed = true;
     co_return 0;
