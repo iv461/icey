@@ -109,12 +109,13 @@ struct NodeBase {
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
-                                            std::forward<CallbackT>(callback), 
-#if RCLCPP_VERSION_MAJOR >= 29 // Not removed yet like create_client, but likely will be in the near future
-                                            qos, 
-#else 
+                                            std::forward<CallbackT>(callback),
+#if RCLCPP_VERSION_MAJOR >= \
+    29  // Not removed yet like create_client, but likely will be in the near future
+                                            qos,
+#else
                                             qos.get_rmw_qos_profile(),
-#endif 
+#endif
                                             group);
   }
 
@@ -123,11 +124,12 @@ struct NodeBase {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
-#if RCLCPP_VERSION_MAJOR >= 29 // The function overload taking the C QoS type was removed in https://github.com/ros2/rclcpp/pull/2575
-                                            qos, 
-#else 
-                                            qos.get_rmw_qos_profile(),
-#endif 
+#if RCLCPP_VERSION_MAJOR >= 29  // The function overload taking the C QoS type was removed in
+                                // https://github.com/ros2/rclcpp/pull/2575
+                                          qos,
+#else
+                                          qos.get_rmw_qos_profile(),
+#endif
                                           group);
   }
 
@@ -699,16 +701,14 @@ struct ActionClientImpl {
   ActionClientImpl &operator=(const ActionClientImpl &) = delete;
   ActionClientImpl &operator=(ActionClientImpl &&) = delete;
 
-  explicit ActionClientImpl(NodeBase &node, const std::string &action_name)
-      : node_(node) {
+  explicit ActionClientImpl(NodeBase &node, const std::string &action_name) : node_(node) {
     client = rclcpp_action::create_client<ActionT>(
         node.get_node_base_interface(), node.get_node_graph_interface(),
         node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
   }
 
   RequestID send_goal(
-      const Goal &goal, const Duration &timeout,
-      std::function<void(const Result &)> on_result,
+      const Goal &goal, const Duration &timeout, std::function<void(const Result &)> on_result,
       std::function<void(const std::string &)> on_error,
       std::function<void(std::shared_ptr<GoalHandle>, std::shared_ptr<const Feedback>)>
           on_feedback = {}) {
@@ -717,30 +717,28 @@ struct ActionClientImpl {
     auto id = request_counter_++;
 
     typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
-    options.goal_response_callback =
-        [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
-          if (!gh) {
-            // Rejected by server
-            if (active_timers_.count(id)) {
-              active_timers_.at(id)->cancel();
-              cancelled_timers_.emplace(active_timers_.at(id));
-              active_timers_.erase(id);
-            }
-            on_error("REJECTED");
-          } else {
-            goal_handles_.emplace(id, gh);
-            if (pending_cancel_.count(id)) {
-              // Cancel immediately if cancel requested before acceptance
-              client->async_cancel_goal(gh);
-            }
-          }
-        };
+    options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
+      if (!gh) {
+        // Rejected by server
+        if (active_timers_.count(id)) {
+          active_timers_.at(id)->cancel();
+          cancelled_timers_.emplace(active_timers_.at(id));
+          active_timers_.erase(id);
+        }
+        on_error("REJECTED");
+      } else {
+        goal_handles_.emplace(id, gh);
+        if (pending_cancel_.count(id)) {
+          // Cancel immediately if cancel requested before acceptance
+          client->async_cancel_goal(gh);
+        }
+      }
+    };
 
-    options.feedback_callback =
-        [on_feedback](std::shared_ptr<GoalHandle> gh,
-                      std::shared_ptr<const Feedback> feedback) {
-          if (on_feedback) on_feedback(gh, feedback);
-        };
+    options.feedback_callback = [on_feedback](std::shared_ptr<GoalHandle> gh,
+                                              std::shared_ptr<const Feedback> feedback) {
+      if (on_feedback) on_feedback(gh, feedback);
+    };
 
     options.result_callback = [this, id, on_result](const Result &result) {
       if (timed_out_.count(id)) {
@@ -759,22 +757,22 @@ struct ActionClientImpl {
     client->async_send_goal(goal, options);
 
     active_timers_.emplace(id, node_.create_wall_timer(timeout, [this, id, on_error] {
-                          timed_out_.insert(id);
-                          // Try to cancel if accepted
-                          if (goal_handles_.count(id)) {
-                            auto gh = goal_handles_.at(id);
-                            if (gh) client->async_cancel_goal(gh);
-                            goal_handles_.erase(id);
-                          } else {
-                            pending_cancel_.insert(id);
-                          }
-                          if (active_timers_.count(id)) {
-                            active_timers_.at(id)->cancel();
-                            cancelled_timers_.emplace(active_timers_.at(id));
-                            active_timers_.erase(id);
-                          }
-                          on_error("TIMEOUT");
-                        }));
+      timed_out_.insert(id);
+      // Try to cancel if accepted
+      if (goal_handles_.count(id)) {
+        auto gh = goal_handles_.at(id);
+        if (gh) client->async_cancel_goal(gh);
+        goal_handles_.erase(id);
+      } else {
+        pending_cancel_.insert(id);
+      }
+      if (active_timers_.count(id)) {
+        active_timers_.at(id)->cancel();
+        cancelled_timers_.emplace(active_timers_.at(id));
+        active_timers_.erase(id);
+      }
+      on_error("TIMEOUT");
+    }));
 
     return id;
   }
@@ -825,17 +823,16 @@ struct ActionClient {
   ActionClient(NodeBase &node, const std::string &action_name)
       : impl_(std::make_shared<ActionClientImpl<ActionT>>(node, action_name)) {}
 
-  RequestID send_goal(
-      const Goal &goal, const Duration &timeout,
-      std::function<void(const Result &)> on_result,
-      std::function<void(const std::string &)> on_error,
-      std::function<void(std::shared_ptr<GoalHandle>,
-                         std::shared_ptr<const typename ActionT::Feedback>)>
-          on_feedback = {}) {
+  RequestID send_goal(const Goal &goal, const Duration &timeout,
+                      std::function<void(const Result &)> on_result,
+                      std::function<void(const std::string &)> on_error,
+                      std::function<void(std::shared_ptr<GoalHandle>,
+                                         std::shared_ptr<const typename ActionT::Feedback>)>
+                          on_feedback = {}) {
     return impl_->send_goal(goal, timeout, on_result, on_error, on_feedback);
   }
 
-  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) {
+  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) const {
     return impl_->send_goal(goal, timeout);
   }
 
@@ -892,10 +889,10 @@ public:
   /// received, the provided callback will be called. This callback receives the request and returns
   /// a shared pointer to the response. If it returns a nullptr, then no response is made. The
   /// callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The
-  /// callbacks returns the response. The context additionally provides bookkeeping for this service,
-  /// this means you do not have to store service in the node class. Works otherwise the same as
-  /// [rclcpp::Node::create_service]. \param service_name the name of the service \param callback
-  /// the callback \param qos quality of service \tparam Callback Either
+  /// callbacks returns the response. The context additionally provides bookkeeping for this
+  /// service, this means you do not have to store service in the node class. Works otherwise the
+  /// same as [rclcpp::Node::create_service]. \param service_name the name of the service \param
+  /// callback the callback \param qos quality of service \tparam Callback Either
   /// (std::shared_ptr<ServiceT::Request>) -> std::shared_ptr<ServiceT::Response> or
   /// (std::shared_ptr<ServiceT::Request>) ->
   /// icey::impl::Promise<std::shared_ptr<ServiceT::Response>>
@@ -955,8 +952,7 @@ public:
   std::shared_ptr<rclcpp_action::Server<ActionT>> create_action_server(
       const std::string &action_name, ExecuteCallbackT &&execute_callback,
       GoalCallbackT goal_callback =
-          [](const rclcpp_action::GoalUUID &,
-             std::shared_ptr<const typename ActionT::Goal>) {
+          [](const rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>) {
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
           },
       CancelCallbackT cancel_callback =
