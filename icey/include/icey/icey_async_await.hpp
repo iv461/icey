@@ -44,6 +44,11 @@ static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
   return Time(std::chrono::nanoseconds(time_point.nanoseconds()));
 }
 
+static int64_t ptr_to_int64(void *p) {
+  static_assert(sizeof(void *) <= sizeof(int64_t), "We assume a pointer is at most 64 bit wide");
+  return std::bit_cast<int64_t>(reinterpret_cast<uint64_t>(p));
+}
+
 /// A helper to abstract regular rclcpp::Nodes and LifecycleNodes.
 /// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
 /// which doesn't look like it's going to come for Humble:
@@ -109,53 +114,6 @@ struct NodeBase {
                                      node_base_.get(), node_timers_.get());
   }
 
-  /// Internal helper to compute a stable key id for integral/enum keys
-  template <class Key>
-  static std::enable_if_t<std::is_integral_v<Key> || std::is_enum_v<Key>, std::uintptr_t>
-  task_key_id(const Key &key) {
-    return static_cast<std::uintptr_t>(key);
-  }
-  /// Internal helper to compute a stable key id for shared_ptr keys
-  template <class T>
-  static std::uintptr_t task_key_id(const std::shared_ptr<T> &ptr) {
-    return reinterpret_cast<std::uintptr_t>(ptr.get());
-  }
-
-  /// Add a one-off task bound to a key. This key can be used to cancel the task. We need these
-  /// tasks for the timeout detection for TF, services and actions. Currently, they are implemented
-  /// using ordinary rclcpp timers, that need to be cancelled and cleaned up in a deferred manner.
-  /// This is of course fugly and slow, but there is no public API to create tasks (aka Waitables)
-  /// in the executor, so this is the best we can do.
-  template <class Key, class CallbackT>
-  void add_task_for(const Key &key, const Duration &timeout, CallbackT &&on_timeout,
-                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    oneoff_cancelled_timers_.clear();
-    const auto id = task_key_id(key);
-    auto timer = create_wall_timer(
-        timeout,
-        [this, id, on_timeout]() {
-          auto it = oneoff_active_timers_.find(id);
-          if (it != oneoff_active_timers_.end()) {
-            cancel_task(it->second);
-            oneoff_active_timers_.erase(it);
-          }
-          on_timeout();
-        },
-        group);
-    oneoff_active_timers_[id] = timer;
-  }
-
-  /// Cancel a previously scheduled task by key (no-op if not present)
-  template <class Key>
-  bool cancel_task_for(const Key &key) {
-    const auto id = task_key_id(key);
-    auto it = oneoff_active_timers_.find(id);
-    if (it == oneoff_active_timers_.end()) return false;
-    cancel_task(it->second);
-    oneoff_active_timers_.erase(it);
-    return true;
-  }
-
   /// Add a one-off task executed after `timeout`. Uses a wall timer under the hood.
   /// Cleans up previously cancelled timers (deferred cleanup) before scheduling.
   template <class CallbackT>
@@ -172,11 +130,43 @@ struct NodeBase {
     return timer;
   }
 
+  /// Add a one-off task bound to a key. This key can be used to cancel the task. We need these
+  /// tasks for the timeout detection for TF, services and actions. Currently, they are implemented
+  /// using ordinary rclcpp timers, that need to be cancelled and cleaned up in a deferred manner.
+  /// This is of course fugly and slow, but there is no public API to create tasks (aka Waitables)
+  /// in the executor, so this is the best we can do.
+  template <class CallbackT>
+  void add_task_for(int64_t id, const Duration &timeout, CallbackT &&on_timeout,
+                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    oneoff_cancelled_timers_.clear();
+    auto timer = create_wall_timer(
+        timeout,
+        [this, id, on_timeout]() {
+          auto it = oneoff_active_timers_.find(id);
+          if (it != oneoff_active_timers_.end()) {
+            cancel_task(it->second);
+            oneoff_active_timers_.erase(it);
+          }
+          on_timeout();
+        },
+        group);
+    oneoff_active_timers_[id] = timer;
+  }
+
   /// Cancel a task timer and move it to a deferred cleanup set to avoid cleanup in callback
   void cancel_task(const std::shared_ptr<rclcpp::TimerBase> &timer) {
     if (!timer) return;
     timer->cancel();
     oneoff_cancelled_timers_.emplace(timer);
+  }
+
+  /// Cancel a previously scheduled task by key (no-op if not present)
+  bool cancel_task_for(int64_t id) {
+    auto it = oneoff_active_timers_.find(id);
+    if (it == oneoff_active_timers_.end()) return false;
+    cancel_task(it->second);
+    oneoff_active_timers_.erase(it);
+    return true;
   }
 
   template <class ServiceT, class CallbackT>
@@ -245,7 +235,7 @@ protected:
   /// Deferred cleanup store for one-off timers cancelled inside callbacks
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
   /// Active one-off tasks keyed by a stable uintptr_t key
-  std::unordered_map<std::uintptr_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
+  std::unordered_map<int64_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
 
 public:
   // Test helpers (introspection)
@@ -361,12 +351,13 @@ struct TransformBufferImpl {
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
-    node_.add_task_for(request, timeout, [this, on_error, request = weak_request]() {
-      if (auto req = request.lock()) {
-        requests_.erase(req);  // Destroy the request
-        on_error(tf2::TimeoutException{"Timed out waiting for transform"});
-      }
-    });
+    node_.add_task_for(ptr_to_int64(request.get()), timeout,
+                       [this, on_error, request = weak_request]() {
+                         if (auto req = request.lock()) {
+                           requests_.erase(req);  // Destroy the request
+                           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
+                         }
+                       });
     return request;
   }
 
@@ -411,7 +402,7 @@ struct TransformBufferImpl {
   /// If the given request does not exist, this function does nothing.
   bool cancel_request(RequestHandle request) {
     requests_.erase(request);
-    return node_.cancel_task_for(request);
+    return node_.cancel_task_for(ptr_to_int64(request.get()));
   }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
@@ -491,7 +482,7 @@ protected:
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
       /// timer
-      node_.cancel_task_for(request);
+      node_.cancel_task_for(ptr_to_int64(request.get()));
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -738,6 +729,60 @@ protected:
 };
 
 template <class ActionT>
+struct AsyncGoalHandle {
+  using Goal = typename ActionT::Goal;
+  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
+  using Result = typename GoalHandle::WrappedResult;
+  AsyncGoalHandle(NodeBase &node, std::shared_ptr<rclcpp_action::Client<ActionT>> client,
+                  const std::shared_ptr<GoalHandle> &goal_handle)
+      : node_(node), client_(client), goal_handle_(goal_handle) {}
+
+  ~AsyncGoalHandle() {
+    /// This is a cleanup function that removes entries from a hashtable called "goal_handles_"
+    /// inside the rclcpp_action::Client, so we have to call it to prevent memory leaks apparently.
+    client_->stop_callbacks(goal_handle_);
+  }
+  /// Obtain the result asynchronously
+  impl::Promise<Result, std::string> result(const Duration &timeout) {
+    return impl::Promise<Result, std::string>([this, timeout](auto &promise) {
+      /// TODO handle retcode
+      client_.lock()->async_get_result([&promise](const Result &res) { promise.resolve(res); });
+      node_.add_task_for(request_id, timeout, [this, &promise] {
+        client_->stop_callbacks(goal_handle_);
+        our_to_real_req_id_.erase(request_id);
+        promise("RESULT TIMEOUT");
+      });
+      promise.set_cancel(
+          [client = client_, gh = goal_handle_]() { client.lock()->stop_callbacks(gh); });
+    });
+  }
+
+  /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
+  impl::Promise<Nothing, std::string> cancel() {
+    return impl::Promise<AsyncGoalHandle, std::string>(
+        [client = client_, gh = goal_handle_](auto &promise) {
+          client.lock()->async_cancel_goal(gh, [&promise]() { promise.resolve(); })
+          /// We can't cancel the cancellation :(, destroying the promise before the cancellation is
+          /// complete leads to UAF.
+        });
+  }
+
+private:
+  NodeBase &node_;
+  std::weak_ptr<rclcpp_action::Client<ActionT>> client_;
+  std::shared_ptr<GoalHandle> goal_handle_;
+};
+
+/*! A action client offering an async/await API and per-request timeouts. Everything happens
+asynchronously and returns a promise that can be awaited using co_await. This allows synchronization
+with other operations, enabling you to effectively perform synchronous service calls. We do not
+offer a function to wait until the service is available for two reasons: (1) there is no
+asynchronous function available at the rclcpp layer (re-implementation using asynchronous graph
+change notification would be required), and (2) ROS does not seem to optimize RPC calls by keeping
+connections open; therefore, it does not seem beneficial to differentiate whether the server is
+available or not.
+*/
+template <class ActionT>
 struct ActionClient {
   using Goal = typename ActionT::Goal;
   using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
@@ -750,359 +795,41 @@ struct ActionClient {
         node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
   }
 
-  RequestID send_goal(const Goal &goal, const Duration &timeout,
-                      std::function<void(const Result &)> on_result,
-                      std::function<void(const std::string &)> on_error,
-                      std::function<void(std::shared_ptr<GoalHandle>,
-                                         std::shared_ptr<const typename ActionT::Feedback>)>
-                          on_feedback = {}) {
-    return send_goal_internal(goal, timeout, on_result, on_error, on_feedback);
+  /// Send asynchronously an action goal: if it is accepted, then you get a goal handle.
+  template <class F>
+  impl::Promise<AsyncGoalHandle, std::string> send_goal(const Goal &goal, const Duration &timeout,
+                                                        F &&feedback_callback) const {
+    return impl::Promise<AsyncGoalHandle, std::string>(
+        [this, goal, timeout, feedback_callback](auto &promise) {
+          rclcpp_actions::Client::SendGoalOptions options;
+          /// TODO timeout
+          options.goal_response_callback = [&promise](auto goal_handle) {
+            if (goal_handle == nullptr) {
+              promise.reject("GOAL REJECTED");  /// TODO error type
+            } else {
+              promise.resolve(AsyncGoalHandle(node_, client_, goal_handle));
+            }
+          };
+          /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
+          options.feedback_callback = [feedback_callback](auto fb) { feedback_callback(); };
+
+          /// Citing the documentation of this function "[...] WARNING this method has inconsistent
+          /// behaviour and a memory leak bug. If you set the result callback in @param options, the
+          /// handle will be self referencing, and you will receive
+          /// * callbacks even though you do not hold a reference to the shared pointer. In this
+          /// case, the self reference will
+          /// * be deleted if the result callback was received. If there is no result callback,
+          /// there will be a memory leak. So apparently, we need to set this callback. Internally,
+          /// this leads the goal to be "result aware" (???).
+          options.result_callback = [](auto) {};
+          client_->async_send_goal(goal, options);
+        });
   }
 
-  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) const {
-    return impl::Promise<Result, std::string>([this, goal, timeout](auto &promise) {
-      auto id = const_cast<ActionClient *>(this)->send_goal_internal(
-          goal, timeout, [&promise](const Result &r) { promise.resolve(r); },
-          [&promise](const std::string &e) { promise.reject(e); });
-      promise.set_cancel([this, id](auto &) { const_cast<ActionClient *>(this)->cancel_goal(id); });
-    });
-  }
-
-  // Session-based API: send a goal and obtain a session object. This resolves after acceptance or
-  // rejection. All session methods take explicit timeouts.
-  impl::Promise<ActionSession<ActionT>, std::string> send_goal(const Goal &goal);
-
-  bool cancel_goal(RequestID id) {
-    if (!node_.cancel_task_for(id) && !goal_handles_.count(id)) return false;
-    if (goal_handles_.count(id)) {
-      auto gh = goal_handles_.at(id);
-      if (gh) client_->async_cancel_goal(gh);
-      goal_handles_.erase(id);
-    } else {
-      pending_cancel_.insert(id);
-    }
-    node_.cancel_task_for(id);
-    timed_out_.erase(id);
-    return true;
-  }
-
-  std::shared_ptr<rclcpp_action::Client<ActionT>> client() const { return client_; }
-
-  // Internal helper used by both callback and Promise overloads
-  RequestID send_goal_internal(
-      const Goal &goal, const Duration &timeout, std::function<void(const Result &)> on_result,
-      std::function<void(const std::string &)> on_error,
-      std::function<void(std::shared_ptr<GoalHandle>,
-                         std::shared_ptr<const typename ActionT::Feedback>)>
-          on_feedback = {}) {
-    auto id = request_counter_++;
-    typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
-    options.goal_response_callback = [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
-      if (!gh) {
-        node_.cancel_task_for(id);
-        on_error("REJECTED");
-      } else {
-        goal_handles_.emplace(id, gh);
-        if (pending_cancel_.count(id)) client_->async_cancel_goal(gh);
-      }
-    };
-    options.feedback_callback = [on_feedback](std::shared_ptr<GoalHandle> gh,
-                                              std::shared_ptr<const typename ActionT::Feedback> fb) {
-      if (on_feedback) on_feedback(gh, fb);
-    };
-    options.result_callback = [this, id, on_result](const Result &result) {
-      if (timed_out_.count(id)) { timed_out_.erase(id); return; }
-      node_.cancel_task_for(id);
-      goal_handles_.erase(id);
-      on_result(result);
-    };
-    client_->async_send_goal(goal, options);
-    node_.add_task_for(id, timeout, [this, id, on_error] {
-      timed_out_.insert(id);
-      if (goal_handles_.count(id)) {
-        auto gh = goal_handles_.at(id);
-        if (gh) client_->async_cancel_goal(gh);
-        goal_handles_.erase(id);
-      } else {
-        pending_cancel_.insert(id);
-      }
-      node_.cancel_task_for(id);
-      on_error("TIMEOUT");
-    });
-    return id;
-  }
-
-  // State
+protected:
   NodeBase &node_;
-  RequestID request_counter_{0};
-  std::unordered_map<RequestID, std::shared_ptr<GoalHandle>> goal_handles_;
-  std::unordered_set<RequestID> timed_out_;
-  std::unordered_set<RequestID> pending_cancel_;
   std::shared_ptr<rclcpp_action::Client<ActionT>> client_;
 };
-
-// Session-based async/await API for actions
-template <class ActionT>
-class ActionSession {
-public:
-  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
-  using Feedback = typename ActionT::Feedback;
-  using Result = typename GoalHandle::WrappedResult;
-
-  ActionSession() = default;
-
-  // Await all feedbacks until result or timeout. Returns a vector of feedbacks; a final nullopt
-  // is appended to indicate stream end (result ready) or timeout.
-  impl::Promise<std::vector<std::optional<Feedback>>, std::string> feedback(
-      const Duration &timeout) {
-    return impl::Promise<std::vector<std::optional<Feedback>>, std::string>(
-        [impl = impl_, timeout](auto &promise) {
-          if (!impl) {
-            promise.reject("INVALID_SESSION");
-            return;
-          }
-          std::uintptr_t key = reinterpret_cast<std::uintptr_t>(&promise);
-          std::vector<std::optional<Feedback>> out;
-          {
-            std::scoped_lock lk(impl->mtx);
-            // If we already have result, flush all feedback now and append end marker
-            if (impl->done) {
-              for (size_t i = impl->fb_read_index; i < impl->feedbacks.size(); ++i)
-                out.emplace_back(impl->feedbacks[i]);
-              impl->fb_read_index = impl->feedbacks.size();
-              out.emplace_back(std::nullopt);
-              promise.resolve(out);
-              return;
-            }
-            // Register waiter to resolve when result arrives or timeout fires
-            impl->fb_waiters.emplace(
-                key, typename Impl::FBWaiter{impl->fb_read_index, [&promise, impl]() {
-                                               std::vector<std::optional<Feedback>> res;
-                                               {
-                                                 std::scoped_lock lk2(impl->mtx);
-                                                 for (size_t i = impl->fb_read_index;
-                                                      i < impl->feedbacks.size(); ++i)
-                                                   res.emplace_back(impl->feedbacks[i]);
-                                                 impl->fb_read_index = impl->feedbacks.size();
-                                                 res.emplace_back(std::nullopt);
-                                               }
-                                               promise.resolve(res);
-                                             }});
-          }
-          // Timeout resolves with whatever accumulated so far + end marker
-          impl->node.add_task_for(key, timeout, [impl, key, &promise]() {
-            std::vector<std::optional<Feedback>> res;
-            {
-              std::scoped_lock lk(impl->mtx);
-              auto it = impl->fb_waiters.find(key);
-              if (it == impl->fb_waiters.end()) return;  // already resolved
-              for (size_t i = it->second.start_index; i < impl->feedbacks.size(); ++i)
-                res.emplace_back(impl->feedbacks[i]);
-              impl->fb_read_index = impl->feedbacks.size();
-              impl->fb_waiters.erase(it);
-            }
-            res.emplace_back(std::nullopt);
-            promise.resolve(res);
-          });
-          promise.set_cancel([impl, key](auto &) {
-            if (impl) impl->node.cancel_task_for(key);
-            if (impl) {
-              std::scoped_lock lk(impl->mtx);
-              impl->fb_waiters.erase(key);
-            }
-          });
-        });
-  }
-
-  // Await the final result; implicitly waits for acceptance.
-  impl::Promise<Result, std::string> result(const Duration &timeout) {
-    return impl::Promise<Result, std::string>([impl = impl_, timeout](auto &promise) {
-      if (!impl) {
-        promise.reject("INVALID_SESSION");
-        return;
-      }
-      std::uintptr_t key = reinterpret_cast<std::uintptr_t>(&promise);
-      {
-        std::scoped_lock lk(impl->mtx);
-        if (impl->cached_result) {
-          promise.resolve(*impl->cached_result);
-          return;
-        }
-        // If explicitly rejected earlier
-        if (impl->acceptance_known && !impl->accepted) {
-          Result r{};
-          r.code = rclcpp_action::ResultCode::UNKNOWN;
-          promise.reject("REJECTED");
-          return;
-        }
-        impl->result_waiters.emplace(key, [&promise, impl]() {
-          if (impl->cached_result)
-            promise.resolve(*impl->cached_result);
-          else
-            promise.reject("INTERRUPTED");
-        });
-      }
-      impl->node.add_task_for(key, timeout, [impl, key, &promise]() {
-        {
-          std::scoped_lock lk(impl->mtx);
-          auto it = impl->result_waiters.find(key);
-          if (it == impl->result_waiters.end()) return;  // already resolved
-          impl->result_waiters.erase(it);
-        }
-        promise.reject("TIMEOUT");
-      });
-      promise.set_cancel([impl, key](auto &) {
-        if (impl) impl->node.cancel_task_for(key);
-        if (impl) {
-          std::scoped_lock lk(impl->mtx);
-          impl->result_waiters.erase(key);
-        }
-      });
-    });
-  }
-
-  // Request cancellation and await final result with timeout. If already finished/canceled, returns
-  // cached result immediately.
-  impl::Promise<Result, std::string> cancel(const Duration &timeout) {
-    return impl::Promise<Result, std::string>([impl = impl_, timeout](auto &promise) {
-      if (!impl) {
-        promise.reject("INVALID_SESSION");
-        return;
-      }
-      // If already have a result, return it (Rule 3: cached)
-      {
-        std::scoped_lock lk(impl->mtx);
-        if (impl->cached_result) {
-          promise.resolve(*impl->cached_result);
-          return;
-        }
-      }
-      // Try to cancel if we have a goal handle
-      if (auto client = impl->client.lock()) {
-        if (auto gh = impl->goal_handle.lock()) {
-          client->async_cancel_goal(gh);
-        }
-      }
-      // Then wait for result as usual
-      auto inner = ActionSession{impl}.result(timeout);
-      // Bridge resolution of inner to our promise
-      inner = std::move(inner);
-      // The Promise implementation doesn’t expose a then(); resolve via a one-off task that polls
-      // cached_result (quickly) until timeout of inner handles it.
-      std::uintptr_t key = reinterpret_cast<std::uintptr_t>(&promise);
-      impl->node.add_task_for(key, timeout, [impl, &promise, key]() {
-        {
-          std::scoped_lock lk(impl->mtx);
-          if (impl->cached_result) {
-            auto r = *impl->cached_result;
-            impl->node.cancel_task_for(key);
-            promise.resolve(r);
-            return;
-          }
-        }
-        promise.reject("TIMEOUT");
-      });
-      promise.set_cancel([impl, key](auto &) {
-        if (impl) impl->node.cancel_task_for(key);
-      });
-    });
-  }
-
-  // internal: used by ActionClient to construct a session
-  struct Impl : public std::enable_shared_from_this<Impl> {
-    explicit Impl(NodeBase &n, std::weak_ptr<rclcpp_action::Client<ActionT>> c)
-        : node(n), client(std::move(c)) {}
-
-    NodeBase &node;
-    std::weak_ptr<rclcpp_action::Client<ActionT>> client;
-    std::weak_ptr<GoalHandle> goal_handle;
-
-    std::mutex mtx;
-    std::vector<Feedback> feedbacks;
-    size_t fb_read_index{0};
-    bool acceptance_known{false};
-    bool accepted{false};
-    bool done{false};
-    std::optional<Result> cached_result;
-
-    struct FBWaiter {
-      size_t start_index;
-      std::function<void()> resolve;
-    };
-    std::unordered_map<std::uintptr_t, FBWaiter> fb_waiters;
-    std::unordered_map<std::uintptr_t, std::function<void()>> result_waiters;
-
-    void on_feedback(std::shared_ptr<const Feedback> fb) {
-      std::scoped_lock lk(mtx);
-      feedbacks.emplace_back(*fb);
-    }
-
-    void on_accepted(std::shared_ptr<GoalHandle> gh) {
-      std::scoped_lock lk(mtx);
-      acceptance_known = true;
-      accepted = (gh != nullptr);
-      if (gh) goal_handle = gh;
-      if (!accepted) {
-        // Wake result waiters with rejection
-        auto waiters = std::move(result_waiters);
-        for (auto &kv : waiters) kv.second();
-      }
-    }
-
-    void on_result(const Result &res) {
-      std::unordered_map<std::uintptr_t, FBWaiter> fb_to_resolve;
-      std::unordered_map<std::uintptr_t, std::function<void()>> res_to_resolve;
-      {
-        std::scoped_lock lk(mtx);
-        done = true;
-        cached_result = res;
-        fb_to_resolve = std::move(fb_waiters);
-        res_to_resolve = std::move(result_waiters);
-      }
-      for (auto &kv : fb_to_resolve) kv.second.resolve();
-      for (auto &kv : res_to_resolve) kv.second();
-    }
-  };
-
-  explicit ActionSession(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
-
-private:
-  std::shared_ptr<Impl> impl_;
-
-  template <class>
-  friend struct ActionClient;
-};
-
-// Out-of-class definition for ActionClient::send_goal (session-based)
-template <class ActionT>
-impl::Promise<ActionSession<ActionT>, std::string> ActionClient<ActionT>::send_goal(
-    const Goal &goal) {
-  return impl::Promise<ActionSession<ActionT>, std::string>([this, goal](auto &promise) {
-    auto session_impl = std::make_shared<typename ActionSession<ActionT>::Impl>(
-        this->node_, std::weak_ptr<rclcpp_action::Client<ActionT>>(client_));
-
-    typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
-    options.goal_response_callback =
-        [session_impl, &promise](std::shared_ptr<typename ActionSession<ActionT>::GoalHandle> gh) {
-          session_impl->on_accepted(gh);
-          if (!gh) {
-            promise.reject("REJECTED");
-            return;
-          }
-          promise.resolve(ActionSession<ActionT>(session_impl));
-        };
-    options.feedback_callback =
-        [session_impl](std::shared_ptr<typename ActionSession<ActionT>::GoalHandle> /*gh*/,
-                       std::shared_ptr<const typename ActionSession<ActionT>::Feedback> fb) {
-          session_impl->on_feedback(fb);
-        };
-    options.result_callback = [session_impl](const typename ActionSession<ActionT>::Result &res) {
-      session_impl->on_result(res);
-    };
-
-    client_->async_send_goal(goal, options);
-  });
-}
 
 /// A context that provides only async/await related entities.
 class ContextAsyncAwait : public NodeBase {
