@@ -16,6 +16,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/version.h"
+#include "rclcpp_action/rclcpp_action.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "tf2_msgs/msg/tf_message.hpp"
 #include "tf2_ros/buffer.hpp"
@@ -53,7 +54,8 @@ struct NodeBase {
         node_topics_(node->get_node_topics_interface()),
         node_services_(node->get_node_services_interface()),
         node_parameters_(node->get_node_parameters_interface()),
-        node_time_source_(node->get_node_time_source_interface()) {
+        node_time_source_(node->get_node_time_source_interface()),
+        node_waitables_(node->get_node_waitables_interface()) {
     if constexpr (std::is_base_of_v<rclcpp_lifecycle::LifecycleNode, _Node>)
       maybe_lifecycle_node = node;
     else if constexpr (std::is_base_of_v<rclcpp::Node, _Node>)
@@ -75,6 +77,7 @@ struct NodeBase {
   auto get_node_services_interface() const { return node_services_; }
   auto get_node_parameters_interface() const { return node_parameters_; }
   auto get_node_time_source_interface() const { return node_time_source_; }
+  auto get_node_waitables_interface() const { return node_waitables_; }
 
   template <class T>
   auto get_parameter(const std::string &name) {
@@ -161,6 +164,7 @@ protected:
   rclcpp::node_interfaces::NodeServicesInterface::SharedPtr node_services_;
   rclcpp::node_interfaces::NodeParametersInterface::SharedPtr node_parameters_;
   rclcpp::node_interfaces::NodeTimeSourceInterface::SharedPtr node_time_source_;
+  rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_;
 };
 
 /// A subscription + buffer for transforms that allows for asynchronous lookups and to subscribe on
@@ -670,7 +674,7 @@ struct ServiceClient {
   }
 
   /// Cancel the request so that callbacks will not be called anymore.
-  bool cancel_request(RequestID request_id) { return impl_->cancel_request(); }
+  bool cancel_request(RequestID request_id) { return impl_->cancel_request(request_id); }
 
   /// Returns the underlying rclcpp service client.
   std::shared_ptr<rclcpp::Client<ServiceT>> client() const { return impl_->client; }
@@ -680,6 +684,166 @@ protected:
   /// Still, we do do not want users to have to litter their code with shared pointers. So we still
   /// use PIMPL, but compared to TF we own the impl.
   std::shared_ptr<ServiceClientImpl<ServiceT>> impl_;
+};
+
+template <class ActionT>
+struct ActionClientImpl {
+  using Goal = typename ActionT::Goal;
+  using Feedback = typename ActionT::Feedback;
+  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
+  using Result = typename GoalHandle::WrappedResult;
+  using RequestID = int64_t;
+
+  ActionClientImpl(const ActionClientImpl &) = delete;
+  ActionClientImpl(ActionClientImpl &&) = delete;
+  ActionClientImpl &operator=(const ActionClientImpl &) = delete;
+  ActionClientImpl &operator=(ActionClientImpl &&) = delete;
+
+  explicit ActionClientImpl(NodeBase &node, const std::string &action_name)
+      : node_(node) {
+    client = rclcpp_action::create_client<ActionT>(
+        node.get_node_base_interface(), node.get_node_graph_interface(),
+        node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
+  }
+
+  RequestID send_goal(
+      const Goal &goal, const Duration &timeout,
+      std::function<void(const Result &)> on_result,
+      std::function<void(const std::string &)> on_error,
+      std::function<void(std::shared_ptr<GoalHandle>, std::shared_ptr<const Feedback>)>
+          on_feedback = {}) {
+    cancelled_timers_.clear();
+
+    auto id = request_counter_++;
+
+    typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
+    options.goal_response_callback =
+        [this, id, on_error](std::shared_ptr<GoalHandle> gh) {
+          if (!gh) {
+            // Rejected by server
+            if (active_timers_.count(id)) {
+              active_timers_.at(id)->cancel();
+              cancelled_timers_.emplace(active_timers_.at(id));
+              active_timers_.erase(id);
+            }
+            on_error("REJECTED");
+          } else {
+            goal_handles_.emplace(id, gh);
+            if (pending_cancel_.count(id)) {
+              // Cancel immediately if cancel requested before acceptance
+              client->async_cancel_goal(gh);
+            }
+          }
+        };
+
+    options.feedback_callback =
+        [on_feedback](std::shared_ptr<GoalHandle> gh,
+                      std::shared_ptr<const Feedback> feedback) {
+          if (on_feedback) on_feedback(gh, feedback);
+        };
+
+    options.result_callback = [this, id, on_result](const Result &result) {
+      if (timed_out_.count(id)) {
+        timed_out_.erase(id);
+        return;  // Drop late result after timeout
+      }
+      if (active_timers_.count(id)) {
+        active_timers_.at(id)->cancel();
+        cancelled_timers_.emplace(active_timers_.at(id));
+        active_timers_.erase(id);
+      }
+      goal_handles_.erase(id);
+      on_result(result);
+    };
+
+    client->async_send_goal(goal, options);
+
+    active_timers_.emplace(id, node_.create_wall_timer(timeout, [this, id, on_error] {
+                          timed_out_.insert(id);
+                          // Try to cancel if accepted
+                          if (goal_handles_.count(id)) {
+                            auto gh = goal_handles_.at(id);
+                            if (gh) client->async_cancel_goal(gh);
+                            goal_handles_.erase(id);
+                          } else {
+                            pending_cancel_.insert(id);
+                          }
+                          if (active_timers_.count(id)) {
+                            active_timers_.at(id)->cancel();
+                            cancelled_timers_.emplace(active_timers_.at(id));
+                            active_timers_.erase(id);
+                          }
+                          on_error("TIMEOUT");
+                        }));
+
+    return id;
+  }
+
+  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) {
+    return impl::Promise<Result, std::string>([this, goal, timeout](auto &promise) {
+      auto id = this->send_goal(
+          goal, timeout, [&promise](const Result &r) { promise.resolve(r); },
+          [&promise](const std::string &e) { promise.reject(e); });
+      promise.set_cancel([this, id](auto &) { cancel_goal(id); });
+    });
+  }
+
+  bool cancel_goal(RequestID id) {
+    if (!active_timers_.count(id)) return false;
+    if (goal_handles_.count(id)) {
+      auto gh = goal_handles_.at(id);
+      if (gh) client->async_cancel_goal(gh);
+      goal_handles_.erase(id);
+    } else {
+      pending_cancel_.insert(id);
+    }
+    active_timers_.at(id)->cancel();
+    cancelled_timers_.emplace(active_timers_.at(id));
+    active_timers_.erase(id);
+    timed_out_.erase(id);
+    return true;
+  }
+
+  NodeBase &node_;
+  RequestID request_counter_{0};
+  std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+  std::unordered_map<RequestID, std::shared_ptr<GoalHandle>> goal_handles_;
+  std::unordered_set<RequestID> timed_out_;
+  std::unordered_set<RequestID> pending_cancel_;
+
+  std::shared_ptr<rclcpp_action::Client<ActionT>> client;
+};
+
+template <class ActionT>
+struct ActionClient {
+  using Goal = typename ActionT::Goal;
+  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
+  using Result = typename GoalHandle::WrappedResult;
+  using RequestID = int64_t;
+
+  ActionClient(NodeBase &node, const std::string &action_name)
+      : impl_(std::make_shared<ActionClientImpl<ActionT>>(node, action_name)) {}
+
+  RequestID send_goal(
+      const Goal &goal, const Duration &timeout,
+      std::function<void(const Result &)> on_result,
+      std::function<void(const std::string &)> on_error,
+      std::function<void(std::shared_ptr<GoalHandle>,
+                         std::shared_ptr<const typename ActionT::Feedback>)>
+          on_feedback = {}) {
+    return impl_->send_goal(goal, timeout, on_result, on_error, on_feedback);
+  }
+
+  impl::Promise<Result, std::string> send_goal(const Goal &goal, const Duration &timeout) {
+    return impl_->send_goal(goal, timeout);
+  }
+
+  bool cancel_goal(RequestID id) { return impl_->cancel_goal(id); }
+
+  std::shared_ptr<rclcpp_action::Client<ActionT>> client() const { return impl_->client; }
+
+  std::shared_ptr<ActionClientImpl<ActionT>> impl_;
 };
 
 /// A context that provides only async/await related entities.
@@ -781,6 +945,54 @@ public:
     return ServiceClient<ServiceT>(node_base(), service_name, qos);
   }
 
+  /// Create an action server with a synchronous or asynchronous execute callback.
+  /// The goal and cancel callbacks default to ACCEPT/ACCEPT behavior.
+  template <class ActionT, class ExecuteCallbackT,
+            class GoalCallbackT = std::function<rclcpp_action::GoalResponse(
+                const rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>)>,
+            class CancelCallbackT = std::function<rclcpp_action::CancelResponse(
+                std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>)>>
+  std::shared_ptr<rclcpp_action::Server<ActionT>> create_action_server(
+      const std::string &action_name, ExecuteCallbackT &&execute_callback,
+      GoalCallbackT goal_callback =
+          [](const rclcpp_action::GoalUUID &,
+             std::shared_ptr<const typename ActionT::Goal>) {
+            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+          },
+      CancelCallbackT cancel_callback =
+          [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>) {
+            return rclcpp_action::CancelResponse::ACCEPT;
+          }) {
+    using ServerGoalHandleT = rclcpp_action::ServerGoalHandle<ActionT>;
+
+    auto server = rclcpp_action::create_server<ActionT>(
+        get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
+        get_node_waitables_interface(), action_name, goal_callback, cancel_callback,
+        [execute_callback = std::forward<ExecuteCallbackT>(execute_callback)](
+            std::shared_ptr<ServerGoalHandleT> goal_handle) {
+          using ReturnType = decltype(execute_callback(goal_handle));
+          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+            execute_callback(goal_handle);
+          } else {
+            const auto continuation = [](auto exec_cb,
+                                         std::shared_ptr<ServerGoalHandleT> gh) -> Promise<void> {
+              co_await exec_cb(gh);
+              co_return;
+            };
+            continuation(execute_callback, goal_handle);
+          }
+        });
+
+    action_servers_.push_back(std::dynamic_pointer_cast<rclcpp_action::ServerBase>(server));
+    return server;
+  }
+
+  /// Create an action client that supports async/await send_goal
+  template <class ActionT>
+  ActionClient<ActionT> create_action_client(const std::string &action_name) {
+    return ActionClient<ActionT>(node_base(), action_name);
+  }
+
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
   /// tf2_ros::TransformListener. It is used to `lookup()` transforms asynchronously at a specific
   /// point in time.
@@ -805,6 +1017,7 @@ protected:
   std::vector<std::shared_ptr<rclcpp::TimerBase>> timers_;
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
   std::vector<std::shared_ptr<rclcpp::SubscriptionBase>> subscriptions_;
+  std::vector<std::shared_ptr<rclcpp_action::ServerBase>> action_servers_;
 };
 
 }  // namespace icey

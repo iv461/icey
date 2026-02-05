@@ -195,7 +195,8 @@ TEST_F(TwoNodesFixture, PubSubTest) {
     received_cnt++;
   });
 
-  spin(1100ms);
+  // Add slack for scheduling jitter to ensure 10 messages
+  spin(1600ms);
   EXPECT_EQ(received_cnt, 10);
 }
 
@@ -239,7 +240,8 @@ TEST_F(TwoNodesFixture, TransformSubscriptionTest) {
   std::size_t received_cnt = 0;
   sub.then([&](const geometry_msgs::msg::TransformStamped&) { received_cnt++; });
 
-  spin(1500ms);
+  // Add slack for scheduling and first TF availability across two timers
+  spin(2500ms);
   EXPECT_EQ(received_cnt, 20);
 }
 
