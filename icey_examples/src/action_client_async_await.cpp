@@ -30,7 +30,8 @@ int main(int argc, char **argv) {
     goal.order = 7;
 
     // Await final result with 2s timeout; error string on timeout or interruption
-    auto result = co_await client.send_goal(goal, 2s);
+    auto result = co_await client.send_goal(
+        goal, 2s, [node](auto feedback) { RCLCPP_WARN(node->get_logger(), "Got some feedback"); });
     if (result.has_error()) {
       RCLCPP_WARN(node->get_logger(), "Action error: %s", result.error().c_str());
       co_return;

@@ -46,18 +46,18 @@ TEST_F(NodeTasksTest, TaskCancelPreventsCallbackAndCleans) {
 
 TEST_F(NodeTasksTest, SharedPtrKeyCancelAndFire) {
   icey::ContextAsyncAwait ctx(node_.get());
-  auto key = std::make_shared<int>(42);
+  
   bool fired = false;
-  ctx.add_task_for(key, 80ms, [&] { fired = true; });
+  ctx.add_task_for(12352134, 80ms, [&] { fired = true; });
   EXPECT_EQ(ctx.oneoff_active_task_count(), 1u);
 
   // Cancel should succeed and prevent callback
-  EXPECT_TRUE(ctx.cancel_task_for(key));
+  EXPECT_TRUE(ctx.cancel_task_for(12352134));
   spin(100ms);
   EXPECT_FALSE(fired);
 
   // Now schedule another with same key and let it fire
-  ctx.add_task_for(key, 20ms, [&] { fired = true; });
+  ctx.add_task_for(12352134, 20ms, [&] { fired = true; });
   spin(50ms);
   EXPECT_TRUE(fired);
 
