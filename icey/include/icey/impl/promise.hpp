@@ -128,11 +128,12 @@ public:
   /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
   /// callback-based API.
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-    if (!this->launch_async_) {
-      /// TODO throw something, this promise cannot be fulfilled
-    }
     this->continuation_ = awaiting_coroutine;
-    this->launch_async_(*this);
+    if (this->launch_async_) {
+      /// The only place where we currently  do not launch anything asynchronously is in the actions
+      /// API (because it already has been launched)
+      this->launch_async_(*this);
+    }
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format(
                      "PromiseBase await_suspend(), awaiting coroutine is 0x{:x}, "
