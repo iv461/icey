@@ -731,21 +731,33 @@ struct AsyncGoalHandle {
   const rclcpp_action::GoalUUID &get_goal_id() const { return goal_handle_->get_goal_id(); }
   /// Get the time when the goal was accepted.
   rclcpp::Time get_goal_stamp() const { return goal_handle_->get_goal_stamp(); }
-  /// Get the goal status code. See https://docs.ros.org/en/ros2_packages/rolling/api/action_msgs/msg/GoalStatus.html for possible values
+  /// Get the goal status code. See
+  /// https://docs.ros.org/en/ros2_packages/rolling/api/action_msgs/msg/GoalStatus.html for possible
+  /// values
   int8_t get_status() { return goal_handle_->get_status; }
 
   /// Obtain the result asynchronously.
   /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
   /// do we get a stack overflow ?
-  ResultPromise &result(const Duration &timeout) {
-    node_.add_task_for(uint64_t(&result_promise_), timeout, [this] {
+  ResultPromise result(const Duration &timeout) {
+    return ResultPromise{[this, timeout](auto &promise) {
+      try {
+        client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &result) {
+          node_.cancel_task_for(uint64_t(&promise));
+          promise.resolve(result);
+        });
+        node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
 #if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
-                               /// version: https://index.ros.org/p/rclcpp/#humble
-      client_.lock()->stop_callbacks(goal_handle_);
+          /// version: https://index.ros.org/p/rclcpp/#humble
+          client_.lock()->stop_callbacks(goal_handle_);
 #endif
-      result_promise_.reject("RESULT TIMEOUT");
-    });
-    return result_promise_;
+          promise.reject("RESULT TIMEOUT");
+        });
+      } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
+        /// According to the documentation, the
+        promise.reject(ex.what());
+      }
+    }};
   }
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
@@ -768,7 +780,8 @@ struct AsyncGoalHandle {
         /// We can't cancel the cancellation :(, destroying the promise before the
         /// cancellation is complete leads to UAF.
       } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
-        /// According to the documentation, the
+        /// According to the documentation, an exception can we thrown if we try to cancel, but the
+        /// goal was already reached
         promise.reject(ex.what());
       }
     });
@@ -776,8 +789,6 @@ struct AsyncGoalHandle {
 
   /// Returns the held rclcpp_action::GoalHandle.
   std::shared_ptr<GoalHandle> get_goal_handle() const { return goal_handle_; }
-
-  ResultPromise result_promise_;
 
 private:
   NodeBase &node_;
@@ -837,16 +848,8 @@ struct ActionClient {
       /// there will be a memory leak.[...]".
       // So apparently, we need to set this callback. Internally,
       /// this leads the goal to be "result aware" (???).
-      options.result_callback = [this, &promise](const Result &result) {
-        if (!promise.has_value()) {
-          /// this is a state error, bug in ros
-          throw std::invalid_argument(
-              "Action result callback was called before goal handle was received");
-        } else {
-          auto &goal_handle = promise.get_state().value();
-          node_.cancel_task_for(uint64_t(&goal_handle->result_promise_));
-          goal_handle->result_promise_.resolve(result);
-        }
+      options.result_callback = [](const Result &) {
+        std::cout << "Called options.result_callback " << std::endl;
       };
       client_->async_send_goal(goal, options);
     });
