@@ -149,11 +149,7 @@ struct NodeBase {
     oneoff_active_timers_.emplace(id, create_wall_timer(
                                           timeout,
                                           [this, id, on_timeout]() {
-                                            auto it = oneoff_active_timers_.find(id);
-                                            if (it != oneoff_active_timers_.end()) {
-                                              cancel_task(it->second);
-                                              oneoff_active_timers_.erase(it);
-                                            }
+                                            cancel_task_for(id);
                                             on_timeout();
                                           },
                                           group));
@@ -624,18 +620,21 @@ struct ServiceClientImpl {
     auto request_id = request_counter_++;
     auto future_and_req_id = client->async_send_request(
         request, [this, on_response, on_error, request_id](typename Client::SharedFuture result) {
+          /// Cancel the timeout task since we got a response
+          node_.cancel_task_for(request_id);
           if (!result.valid()) {
             on_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
           } else {
-            /// Cancel the timeout task since we got a response
-            node_.cancel_task_for(request_id);
             on_response(result.get());
           }
         });
     our_to_real_req_id_.emplace(request_id, future_and_req_id.request_id);
     node_.add_task_for(request_id, timeout, [this, on_error, request_id] {
-      client->remove_pending_request(our_to_real_req_id_.at(request_id));
-      our_to_real_req_id_.erase(request_id);
+      auto it = our_to_real_req_id_.find(request_id);
+      if (it != our_to_real_req_id_.end()) {
+        client->remove_pending_request(it->second);
+        our_to_real_req_id_.erase(it);
+      }
       on_error("TIMEOUT");
     });
     return request_id;
@@ -827,39 +826,38 @@ struct ActionClient {
   impl::Promise<AsyncGoalHandle<ActionT>, std::string> send_goal(const Goal &goal,
                                                                  const Duration &timeout,
                                                                  F &&feedback_callback) const {
-    return impl::Promise<AsyncGoalHandle<ActionT>, std::string>(
-        [this, goal, timeout, feedback_callback](auto &promise) {
-          typename Client::SendGoalOptions options;
-          // Acceptance timeout: reject if no acceptance within timeout
-          std::uintptr_t accept_key = reinterpret_cast<std::uintptr_t>(&promise);
-          node_.add_task_for(static_cast<uint64_t>(accept_key), timeout, [this, &promise]() {
-            promise.reject("TIMEOUT");
-          });
-          options.goal_response_callback = [this, &promise](auto goal_handle) {
-            // Cancel acceptance timeout
-            node_.cancel_task_for(static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(&promise)));
-            if (goal_handle == nullptr) {
-              promise.reject("GOAL REJECTED");  /// TODO error type
-            } else {
-              promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
-            }
-          };
-          /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
-          options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
-            feedback_callback(goal_handle, feedback);
-          };
-          /// Citing the documentation of this function "[...] WARNING this method has inconsistent
-          /// behaviour and a memory leak bug. If you set the result callback in @param options, the
-          /// handle will be self referencing, and you will receive
-          /// * callbacks even though you do not hold a reference to the shared pointer. In this
-          /// case, the self reference will
-          /// * be deleted if the result callback was received. If there is no result callback,
-          /// there will be a memory leak.[...]".
-          // So apparently, we need to set this callback. Internally,
-          /// this leads the goal to be "result aware" (???).
-          options.result_callback = [](auto) {};
-          client_->async_send_goal(goal, options);
-        });
+    return impl::Promise<AsyncGoalHandle<ActionT>, std::string>([this, goal, timeout,
+                                                                 feedback_callback](auto &promise) {
+      typename Client::SendGoalOptions options;
+      // Acceptance timeout: reject if no acceptance within timeout
+      std::uintptr_t accept_key = reinterpret_cast<std::uintptr_t>(&promise);
+      node_.add_task_for(static_cast<uint64_t>(accept_key), timeout,
+                         [this, &promise]() { promise.reject("TIMEOUT"); });
+      options.goal_response_callback = [this, &promise](auto goal_handle) {
+        // Cancel acceptance timeout
+        node_.cancel_task_for(static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(&promise)));
+        if (goal_handle == nullptr) {
+          promise.reject("GOAL REJECTED");  /// TODO error type
+        } else {
+          promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
+        }
+      };
+      /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
+      options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
+        feedback_callback(goal_handle, feedback);
+      };
+      /// Citing the documentation of this function "[...] WARNING this method has inconsistent
+      /// behaviour and a memory leak bug. If you set the result callback in @param options, the
+      /// handle will be self referencing, and you will receive
+      /// * callbacks even though you do not hold a reference to the shared pointer. In this
+      /// case, the self reference will
+      /// * be deleted if the result callback was received. If there is no result callback,
+      /// there will be a memory leak.[...]".
+      // So apparently, we need to set this callback. Internally,
+      /// this leads the goal to be "result aware" (???).
+      options.result_callback = [](auto) {};
+      client_->async_send_goal(goal, options);
+    });
   }
 
 protected:
