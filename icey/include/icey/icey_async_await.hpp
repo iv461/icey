@@ -753,6 +753,8 @@ struct AsyncGoalHandle {
   using CancelResponse = typename rclcpp_action::Client<ActionT>::CancelResponse::SharedPtr;
   using Feedback = typename rclcpp_action::Client<ActionT>::Feedback;
 
+  using ResultPromise = impl::Promise<Result, std::string>;
+
   AsyncGoalHandle(NodeBase &node, std::shared_ptr<rclcpp_action::Client<ActionT>> client,
                   const std::shared_ptr<GoalHandle> &goal_handle)
       : node_(node), client_(client), goal_handle_(goal_handle) {}
@@ -763,20 +765,22 @@ struct AsyncGoalHandle {
     client_.lock()->stop_callbacks(goal_handle_);
   }
 
-  /// Obtain the result asynchronously
-  impl::Promise<Result, std::string> result(const Duration &timeout) const {
-    return impl::Promise<Result, std::string>([this, timeout](auto &promise) {
-      /// TODO handle retcode
-      client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &res) {
-        node_.cancel_task_for(goal_handle_->get_goal_id());
-        promise.resolve(res);
-      });
-      node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this, &promise] {
-        client_.lock()->stop_callbacks(goal_handle_);
-        promise.reject("RESULT TIMEOUT");
-      });
-      promise.set_cancel([this](auto &) { client_.lock()->stop_callbacks(goal_handle_); });
+  /// Get the goal UUID.
+  const rclcpp_action::GoalUUID &get_goal_id() const { return goal_handle_->get_goal_id(); }
+  /// Get the time when the goal was accepted.
+  rclcpp::Time get_goal_stamp() const { return goal_handle_->get_goal_stamp(); }
+  /// Get the goal status code.
+  rclcpp_action::ResultCode get_status() { return goal_handle_->get_status; }
+
+  /// Obtain the result asynchronously.
+  /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
+  /// do we get a stack overflow ?
+  ResultPromise &result(const Duration &timeout) {
+    node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this] {
+      client_.lock()->stop_callbacks(goal_handle_);
+      result_promise_.reject("RESULT TIMEOUT");
     });
+    return result_promise_;
   }
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
@@ -799,6 +803,8 @@ struct AsyncGoalHandle {
   /// Returns the held rclcpp_action::GoalHandle.
   std::shared_ptr<GoalHandle> get_goal_handle() const { return goal_handle_; }
 
+  ResultPromise result_promise_;
+
 private:
   NodeBase &node_;
   std::weak_ptr<rclcpp_action::Client<ActionT>> client_;
@@ -817,6 +823,7 @@ struct ActionClient {
   using Result = typename GoalHandle::WrappedResult;
   using RequestID = int64_t;
 
+  using AsyncGoalHandleT = std::shared_ptr<AsyncGoalHandle<ActionT>>;
   ActionClient(NodeBase &node, const std::string &action_name) : node_(node) {
     client_ = rclcpp_action::create_client<ActionT>(
         node.get_node_base_interface(), node.get_node_graph_interface(),
@@ -825,11 +832,10 @@ struct ActionClient {
 
   /// Send asynchronously an action goal: if it is accepted, then you get a goal handle.
   template <class F>
-  impl::Promise<AsyncGoalHandle<ActionT>, std::string> send_goal(const Goal &goal,
-                                                                 const Duration &timeout,
-                                                                 F &&feedback_callback) const {
-    return impl::Promise<AsyncGoalHandle<ActionT>, std::string>([this, goal, timeout,
-                                                                 feedback_callback](auto &promise) {
+  impl::Promise<AsyncGoalHandleT, std::string> send_goal(const Goal &goal, const Duration &timeout,
+                                                         F &&feedback_callback) const {
+    return impl::Promise<AsyncGoalHandleT, std::string>([this, goal, timeout,
+                                                         feedback_callback](auto &promise) {
       typename Client::SendGoalOptions options;
       // Acceptance timeout: reject if no acceptance within timeout
       std::uintptr_t accept_key = reinterpret_cast<std::uintptr_t>(&promise);
@@ -841,7 +847,7 @@ struct ActionClient {
         if (goal_handle == nullptr) {
           promise.reject("GOAL REJECTED");  /// TODO error type
         } else {
-          promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
+          promise.resolve(std::make_shared<AsyncGoalHandle<ActionT>>(node_, client_, goal_handle));
         }
       };
       /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
@@ -857,7 +863,16 @@ struct ActionClient {
       /// there will be a memory leak.[...]".
       // So apparently, we need to set this callback. Internally,
       /// this leads the goal to be "result aware" (???).
-      options.result_callback = [](auto) {};
+      options.result_callback = [&promise](const Result &result) {
+        if (!promise.has_value()) {
+          /// this is a state error, bug in ros
+          throw std::invalid_argument(
+              "Action result callback was called before goal handle was received");
+        } else {
+          auto &gc = promise.get_state().value();
+          gc->result_promise_.resolve(result);
+        }
+      };
       client_->async_send_goal(goal, options);
     });
   }
