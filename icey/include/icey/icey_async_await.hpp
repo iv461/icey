@@ -383,7 +383,7 @@ struct TransformBufferImpl {
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
           promise.set_cancel(
-              [this, request_handle](auto &promise) { this->cancel_request(request_handle); });
+              [this, request_handle](auto &) { this->cancel_request(request_handle); });
         });
   }
 

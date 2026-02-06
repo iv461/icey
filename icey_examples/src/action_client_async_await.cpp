@@ -30,10 +30,8 @@ int main(int argc, char **argv) {
     goal.order = 7;
 
     // Request a goal with 2 seconds timeout
-    auto maybe_goal_handle =
-        co_await client.send_goal(goal, 2s, [node](auto goal_handle, auto feedback) {
-          RCLCPP_WARN(node->get_logger(), "Got some feedback");
-        });
+    auto maybe_goal_handle = co_await client.send_goal(
+        goal, 2s, [node](auto, auto) { RCLCPP_WARN(node->get_logger(), "Got some feedback"); });
 
     if (maybe_goal_handle.has_error()) {
       RCLCPP_WARN_STREAM(node->get_logger(),

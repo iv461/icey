@@ -25,8 +25,8 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionSendGoalTest) {
     goal.order = 5;
 
     // No server yet -> expect TIMEOUT
-    auto res1 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
-    std::cout << "got here" << std::endl;
+    auto res1 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
+
     EXPECT_TRUE(res1.has_error());
     EXPECT_EQ(res1.error(), "TIMEOUT");
 
@@ -65,15 +65,16 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionSendGoalTest) {
         "/icey_test_fib", handle_goal, handle_cancel, handle_accepted);
 
     // With server available -> expect success
-    auto res2 = co_await client.send_goal(goal, 200ms, [](auto goal_handle, auto feedback) {});
-    std::cout << "got 2here" << std::endl;
+    auto res2 = co_await client.send_goal(goal, 200ms, [](auto, auto) {});
     EXPECT_TRUE(res2.has_value()) << (res2.has_error() ? res2.error() : "");
     std::cout << "got here23, goal handle status: "
               << int(res2.value()->get_goal_handle()->get_status()) << std::endl;
     auto ares = co_await res2.value()->result(200ms);
     std::cout << "got r" << std::endl;
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+    std::cout << "got r2" << std::endl;
     auto seq = ares.value().result->sequence;
+    std::cout << "got r3" << std::endl;
     std::vector<int32_t> expected{0, 1, 1, 2, 3};
     EXPECT_EQ(seq, expected);
 
@@ -125,13 +126,13 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionTimeoutAndMultipleGoalsTest) {
     goal.order = 5;
 
     // First call should timeout
-    auto first = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
+    auto first = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
     EXPECT_TRUE(first.has_error());
     EXPECT_EQ(first.error(), "TIMEOUT");
 
     // Then fire two parallel requests and await both
-    auto r2 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
-    auto r1 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
+    auto r2 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
+    auto r1 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
 
     EXPECT_TRUE(r2.has_value()) << (r2.has_error() ? r2.error() : "");
     auto ares = co_await r2.value()->result(200ms);
