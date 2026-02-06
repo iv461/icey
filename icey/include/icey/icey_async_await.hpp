@@ -149,11 +149,7 @@ struct NodeBase {
     oneoff_active_timers_.emplace(id, create_wall_timer(
                                           timeout,
                                           [this, id, on_timeout]() {
-                                            auto it = oneoff_active_timers_.find(id);
-                                            if (it != oneoff_active_timers_.end()) {
-                                              cancel_task(it->second);
-                                              oneoff_active_timers_.erase(it);
-                                            }
+                                            cancel_task_for(id);
                                             on_timeout();
                                           },
                                           group));
@@ -632,18 +628,21 @@ struct ServiceClientImpl {
     auto request_id = request_counter_++;
     auto future_and_req_id = client->async_send_request(
         request, [this, on_response, on_error, request_id](typename Client::SharedFuture result) {
+          /// Cancel the timeout task since we got a response
+          node_.cancel_task_for(request_id);
           if (!result.valid()) {
             on_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
           } else {
-            /// Cancel the timeout task since we got a response
-            node_.cancel_task_for(request_id);
             on_response(result.get());
           }
         });
     our_to_real_req_id_.emplace(request_id, future_and_req_id.request_id);
     node_.add_task_for(request_id, timeout, [this, on_error, request_id] {
-      client->remove_pending_request(our_to_real_req_id_.at(request_id));
-      our_to_real_req_id_.erase(request_id);
+      auto it = our_to_real_req_id_.find(request_id);
+      if (it != our_to_real_req_id_.end()) {
+        client->remove_pending_request(it->second);
+        our_to_real_req_id_.erase(it);
+      }
       on_error("TIMEOUT");
     });
     return request_id;

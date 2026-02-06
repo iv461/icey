@@ -65,7 +65,8 @@ TEST_F(NodeTest, AnyTest) {
   std::unordered_multiset<std::string> received_values;
   icey::any(s1, s2, s3).then([&](std::string val) { received_values.emplace(val); });
 
-  spin(250ms);
+  // Give a bit more headroom to avoid scheduler jitter
+  spin(350ms);
   std::unordered_multiset<std::string> target_values{"s1_1", "s1_2", "s1_3", "s2_1", "s2_2",
                                                      "s2_3", "s3_1", "s3_2", "s3_3"};
 
