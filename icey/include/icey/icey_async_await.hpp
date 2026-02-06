@@ -749,7 +749,7 @@ struct AsyncGoalHandle {
     /// This is a cleanup function that removes entries from a hashtable called "goal_handles_"
     /// inside the rclcpp_action::Client, so we have to call it to prevent memory leaks apparently.
 #if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
-                                /// version: https://index.ros.org/p/rclcpp/#humble
+                               /// version: https://index.ros.org/p/rclcpp/#humble
     client_.lock()->stop_callbacks(goal_handle_);
 #endif
   }
@@ -766,7 +766,10 @@ struct AsyncGoalHandle {
   /// do we get a stack overflow ?
   ResultPromise &result(const Duration &timeout) {
     node_.add_task_for(ptr_to_uuid(&result_promise_), timeout, [this] {
+#if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
+                               /// version: https://index.ros.org/p/rclcpp/#humble
       client_.lock()->stop_callbacks(goal_handle_);
+#endif
       result_promise_.reject("RESULT TIMEOUT");
     });
     return result_promise_;
