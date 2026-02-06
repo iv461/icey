@@ -62,9 +62,9 @@ public:
   LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {}
 
-  PromiseBase(){
+  PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " Constructor()" << std::endl;
+    // std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -123,18 +123,17 @@ public:
     notify();
   }
 
-  /// Returns always false, we always first have to go to the executor to yield something. Used only
-  /// when wrapping a callback-based API.
-  bool await_ready() const noexcept { return false; }
+  bool await_ready() const noexcept { return !has_none(); }
   /// Launches the asynchronous operation that was previously stored and sets the awaiting coroutine
   /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
   /// callback-based API.
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-    if (!this->launch_async_) {
-      /// TODO throw something, this promise cannot be fulfilled
-    }
     this->continuation_ = awaiting_coroutine;
-    this->launch_async_(*this);
+    if (this->launch_async_) {
+      /// The only place where we currently  do not launch anything asynchronously is in the actions
+      /// API (because it already has been launched)
+      this->launch_async_(*this);
+    }
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format(
                      "PromiseBase await_suspend(), awaiting coroutine is 0x{:x}, "

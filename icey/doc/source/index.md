@@ -27,6 +27,7 @@ async_flow
 coroutine_basics
 using_services
 using_tf
+using_actions
 lifecycle_nodes
 ```
 
