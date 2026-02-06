@@ -16,8 +16,7 @@
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
 
-icey::Promise<void> call_action() {
-  auto node = std::make_shared<rclcpp::Node>("icey_action_client_async_await_example");
+icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
   auto client = ctx->create_action_client<Fibonacci>("/icey_test_action_fibonacci");
 
@@ -51,12 +50,12 @@ icey::Promise<void> call_action() {
                   static_cast<int>(result.code));
     }
   }
-
-  rclcpp::spin(node);
 }
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
-  call_action();
+  auto node = std::make_shared<rclcpp::Node>("icey_action_client_async_await_example");
+  call_action(node);
+  rclcpp::spin(node);
   return 0;
 }

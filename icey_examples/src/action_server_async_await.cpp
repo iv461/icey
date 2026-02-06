@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
   auto upstream = ctx->create_client<Upstream>("set_bool_service1");
 
   // Create server with async execute callback that calls an upstream service
-  auto server = ctx->create_action_server<Fibonacci>(
+  ctx->create_action_server<Fibonacci>(
       "/icey_test_action_fibonacci",
       [ctx, node, upstream](
           std::shared_ptr<rclcpp_action::ServerGoalHandle<Fibonacci>> gh) -> icey::Promise<void> {
@@ -46,6 +46,7 @@ int main(int argc, char **argv) {
 
         // Read goal and compute sequence gradually, publishing feedback on a timer
         auto goal = gh->get_goal();
+        RCLCPP_INFO_STREAM(node->get_logger(), "Received goal");
         int32_t a = 0, b = 1;
         std::vector<int32_t> seq;
         seq.reserve(goal->order);
@@ -65,16 +66,19 @@ int main(int argc, char **argv) {
 
           Fibonacci::Feedback fb;
           fb.sequence = seq;
+          RCLCPP_INFO_STREAM(node->get_logger(), "Sending feedback ..");
+
           gh->publish_feedback(std::make_shared<Fibonacci::Feedback>(fb));
         }
 
         auto result = std::make_shared<Fibonacci::Result>();
         result->sequence = seq;
+        RCLCPP_INFO_STREAM(node->get_logger(), "Sending succeed");
         gh->succeed(result);
         co_return;
       });
 
-  (void)server;
+  RCLCPP_INFO_STREAM(node->get_logger(), "Created action sever");
   rclcpp::spin(node);
   return 0;
 }

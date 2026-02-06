@@ -6,7 +6,7 @@ They demonstrate:
 
 - Using the icey::Context for both regular and lifecycle Nodes
 - Synchronous-looking service calls using async/await 
-
+- Actions using async/await
 - Simple publisher/subscriptions, demonstrating Streams
 - Automatic synchronization between multiple topics 
 - Looking up transforms using async/await
@@ -93,6 +93,22 @@ ros2 run icey_examples service_client_async_await_example
 ```
 
 You should now receive responses and see how both servers receive requests.
+
+# Actions using async/await 
+
+Run action server:
+
+
+```sh 
+ros2 run icey_examples action_server_async_await_example
+```
+
+And the action client:
+
+```sh 
+ros2 run icey_examples action_client_async_await_example
+```
+
 
 # TF lookup using async/await 
 
