@@ -86,7 +86,7 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib2");
 
     // Create a server that sleeps on first goal only
@@ -141,7 +141,7 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
     EXPECT_EQ(ares1.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(1200ms);
@@ -149,7 +149,7 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionSendGoalAcceptanceTimeout) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_no_server");
 
     co_await receiver_->icey().create_timer(20ms);
@@ -159,7 +159,7 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalAcceptanceTimeout) {
     EXPECT_TRUE(res.has_error());
     EXPECT_EQ(res.error(), "TIMEOUT");
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(400ms);
@@ -167,7 +167,7 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalAcceptanceTimeout) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionGoalRejected) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_reject");
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::REJECT;
@@ -186,7 +186,7 @@ TEST_F(ActionsAsyncAwait, ActionGoalRejected) {
     EXPECT_TRUE(res.has_error());
     EXPECT_EQ(res.error(), "GOAL REJECTED");
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(400ms);
@@ -194,7 +194,7 @@ TEST_F(ActionsAsyncAwait, ActionGoalRejected) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client =
         receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_result_timeout");
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
@@ -219,7 +219,7 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     EXPECT_TRUE(r.has_error());
     EXPECT_EQ(r.error(), "RESULT TIMEOUT");
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(600ms);
@@ -227,7 +227,7 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client =
         receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_cancel_timeout");
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
@@ -250,7 +250,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
     EXPECT_TRUE(cres.has_error());
     EXPECT_EQ(cres.error(), "RESULT TIMEOUT");
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(800ms);
@@ -258,7 +258,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     // Abort case
     {
       auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_abort");
@@ -351,7 +351,7 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
     }
 
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(2000ms);
@@ -359,7 +359,7 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client =
         receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_cancel_after_success");
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
@@ -392,7 +392,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
     auto cres = co_await gh.value()->cancel(50ms);
     EXPECT_TRUE(cres.has_error());
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(800ms);
@@ -400,7 +400,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
 }
 
 TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<void> {
     auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_cancel_twice");
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -431,7 +431,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
     auto c2 = co_await gh.value()->cancel(50ms);
     EXPECT_TRUE(c2.has_error());  // second cancel should be rejected
     async_completed = true;
-    co_return 0;
+    co_return;
   };
   l();
   spin(1000ms);
