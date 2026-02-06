@@ -24,7 +24,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Werror=return-local-addr -fmax-errors=1)
+  add_compile_options(-Werror=return-local-addr)
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=return-stack-address)
