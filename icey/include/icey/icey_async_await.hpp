@@ -753,12 +753,13 @@ struct AsyncGoalHandle {
   /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
   /// do we get a stack overflow ?
   impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
-    return impl::Promise<AsyncGoalHandle, std::string>([this, timeout](auto &promise) {
+    return impl::Promise<CancelResponse, std::string>([this, timeout](auto &promise) {
       try {
-        client_.lock()->async_cancel_goal(goal_handle_, [this, &promise]() {
-          node_.cancel_task_for(uint64_t(&promise));
-          promise.resolve();
-        });
+        client_.lock()->async_cancel_goal(goal_handle_,
+                                          [this, &promise](CancelResponse cancel_response) {
+                                            node_.cancel_task_for(uint64_t(&promise));
+                                            promise.resolve(cancel_response);
+                                          });
         /// Add timeout task
         node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
           client_.lock()->stop_callbacks(goal_handle_);

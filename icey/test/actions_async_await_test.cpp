@@ -383,10 +383,10 @@ TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
     Fibonacci::Goal goal;
     goal.order = 3;
     auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-      EXPECT_TRUE(gh.has_value());
+    EXPECT_TRUE(gh.has_value());
     // Wait for success
     auto res = co_await gh.value()->result(200ms);
-      EXPECT_TRUE(res.has_value());
+    EXPECT_TRUE(res.has_value());
     EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::SUCCEEDED);
     // Now attempt to cancel after success; should error (invalid transition/no-op)
     auto cres = co_await gh.value()->cancel(50ms);
