@@ -146,18 +146,17 @@ struct NodeBase {
   void add_task_for(rclcpp_action::GoalUUID id, const Duration &timeout, CallbackT &&on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     oneoff_cancelled_timers_.clear();
-    auto timer = create_wall_timer(
-        timeout,
-        [this, id, on_timeout]() {
-          auto it = oneoff_active_timers_.find(id);
-          if (it != oneoff_active_timers_.end()) {
-            cancel_task(it->second);
-            oneoff_active_timers_.erase(it);
-          }
-          on_timeout();
-        },
-        group);
-    oneoff_active_timers_[id] = timer;
+    oneoff_active_timers_.emplace(id, create_wall_timer(
+                                          timeout,
+                                          [this, id, on_timeout]() {
+                                            auto it = oneoff_active_timers_.find(id);
+                                            if (it != oneoff_active_timers_.end()) {
+                                              cancel_task(it->second);
+                                              oneoff_active_timers_.erase(it);
+                                            }
+                                            on_timeout();
+                                          },
+                                          group));
   }
 
   template <class CallbackT>
@@ -661,11 +660,12 @@ struct ServiceClientImpl {
 
   /// Cancel the request so that callbacks will not be called anymore.
   bool cancel_request(RequestID request_id) {
-    std::lock_guard<std::recursive_mutex> lock{mutex_};
-    if (our_to_real_req_id_.contains(request_id)) return false;
-    client->remove_pending_request(our_to_real_req_id_.at(request_id));
-    our_to_real_req_id_.erase(request_id);
-    return node_.cancel_task_for(request_id);
+    auto it = our_to_real_req_id_.find(request_id);
+    if (it == our_to_real_req_id_.end()) return false;
+    client->remove_pending_request(it->second);
+    our_to_real_req_id_.erase(it);
+    node_.cancel_task_for(request_id);
+    return true;
   }
 
 protected:
@@ -675,7 +675,6 @@ protected:
   /// And a map in case rcl starts to create the request IDs differently compared to how  we are
   /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
   std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
-  /// Timeout tasks are managed by NodeBase; no per-request timer storage here.
 
 public:
   /// The underlying rclcpp service client
@@ -750,9 +749,8 @@ protected:
   std::shared_ptr<ServiceClientImpl<ServiceT>> impl_;
 };
 
-
-/// An AsyncGoalHandle is created once a requested goal was accepted by the action server. 
-/// It provides an async/await based API for requesting the result and cancellation. 
+/// An AsyncGoalHandle is created once a requested goal was accepted by the action server.
+/// It provides an async/await based API for requesting the result and cancellation.
 template <class ActionT>
 struct AsyncGoalHandle {
   using Goal = typename ActionT::Goal;
@@ -836,33 +834,38 @@ struct ActionClient {
   impl::Promise<AsyncGoalHandle<ActionT>, std::string> send_goal(const Goal &goal,
                                                                  const Duration &timeout,
                                                                  F &&feedback_callback) const {
-    return impl::Promise<AsyncGoalHandle<ActionT>, std::string>(
-        [this, goal, timeout, feedback_callback](auto &promise) {
-          typename Client::SendGoalOptions options;
-          /// TODO timeout
-          options.goal_response_callback = [this, &promise](auto goal_handle) {
-            if (goal_handle == nullptr) {
-              promise.reject("GOAL REJECTED");  /// TODO error type
-            } else {
-              promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
-            }
-          };
-          /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
-          options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
-            feedback_callback(goal_handle, feedback);
-          };
-          /// Citing the documentation of this function "[...] WARNING this method has inconsistent
-          /// behaviour and a memory leak bug. If you set the result callback in @param options, the
-          /// handle will be self referencing, and you will receive
-          /// * callbacks even though you do not hold a reference to the shared pointer. In this
-          /// case, the self reference will
-          /// * be deleted if the result callback was received. If there is no result callback,
-          /// there will be a memory leak.[...]".
-          // So apparently, we need to set this callback. Internally,
-          /// this leads the goal to be "result aware" (???).
-          options.result_callback = [](auto) {};
-          client_->async_send_goal(goal, options);
-        });
+    return impl::Promise<AsyncGoalHandle<ActionT>, std::string>([this, goal, timeout,
+                                                                 feedback_callback](auto &promise) {
+      typename Client::SendGoalOptions options;
+      // Acceptance timeout: reject if no acceptance within timeout
+      std::uintptr_t accept_key = reinterpret_cast<std::uintptr_t>(&promise);
+      node_.add_task_for(static_cast<uint64_t>(accept_key), timeout,
+                         [this, &promise]() { promise.reject("TIMEOUT"); });
+      options.goal_response_callback = [this, &promise](auto goal_handle) {
+        // Cancel acceptance timeout
+        node_.cancel_task_for(static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(&promise)));
+        if (goal_handle == nullptr) {
+          promise.reject("GOAL REJECTED");  /// TODO error type
+        } else {
+          promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
+        }
+      };
+      /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
+      options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
+        feedback_callback(goal_handle, feedback);
+      };
+      /// Citing the documentation of this function "[...] WARNING this method has inconsistent
+      /// behaviour and a memory leak bug. If you set the result callback in @param options, the
+      /// handle will be self referencing, and you will receive
+      /// * callbacks even though you do not hold a reference to the shared pointer. In this
+      /// case, the self reference will
+      /// * be deleted if the result callback was received. If there is no result callback,
+      /// there will be a memory leak.[...]".
+      // So apparently, we need to set this callback. Internally,
+      /// this leads the goal to be "result aware" (???).
+      options.result_callback = [](auto) {};
+      client_->async_send_goal(goal, options);
+    });
   }
 
 protected:
