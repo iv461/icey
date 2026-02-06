@@ -143,7 +143,7 @@ struct NodeBase {
   /// This is of course fugly and slow, but there is no public API to create tasks (aka Waitables)
   /// in the executor, so this is the best we can do.
   template <class CallbackT>
-  void add_task_for(rclcpp_action::GoalUUID id, const Duration &timeout, CallbackT &&on_timeout,
+  void add_task_for(rclcpp_action::GoalUUID id, const Duration &timeout, CallbackT on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     oneoff_cancelled_timers_.clear();
     oneoff_active_timers_.emplace(id, create_wall_timer(
@@ -161,18 +161,13 @@ struct NodeBase {
     add_task_for(int_to_uuid(id), timeout, on_timeout, group);
   }
 
-  /// Cancel a task timer and move it to a deferred cleanup set to avoid cleanup in callback
-  void cancel_task(const std::shared_ptr<rclcpp::TimerBase> &timer) {
-    if (!timer) return;
-    timer->cancel();
-    oneoff_cancelled_timers_.emplace(timer);
-  }
-
   /// Cancel a previously scheduled task by key (no-op if not present)
   bool cancel_task_for(rclcpp_action::GoalUUID id) {
     auto it = oneoff_active_timers_.find(id);
     if (it == oneoff_active_timers_.end()) return false;
-    cancel_task(it->second);
+    auto timer = it->second;
+    timer->cancel();
+    oneoff_cancelled_timers_.emplace(timer);
     oneoff_active_timers_.erase(it);
     return true;
   }
