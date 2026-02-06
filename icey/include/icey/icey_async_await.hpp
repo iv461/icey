@@ -40,7 +40,8 @@ static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
 }
 
 static rclcpp_action::GoalUUID ptr_to_uuid(void *p) {
-  static_assert(sizeof(void *) <= sizeof(uint64_t), "We assume a pointer is at most 64 bit wide");
+  static_assert(sizeof(void *) <= sizeof(uint64_t),
+                "We assume a pointer is at most as big as an uint64_t");
   /// HINT: rclcpp_action::GoalUUID is of type std::array<uint8_t, 16>
   auto low = std::bit_cast<std::array<uint8_t, 8>>(reinterpret_cast<uint64_t>(p));
   rclcpp_action::GoalUUID a;
@@ -119,22 +120,6 @@ struct NodeBase {
     /// We have not no normal timer in Humble, this is why only wall_timer is supported
     return rclcpp::create_wall_timer(time_interval, std::forward<CallbackT>(callback), group,
                                      node_base_.get(), node_timers_.get());
-  }
-
-  /// Add a one-off task executed after `timeout`. Uses a wall timer under the hood.
-  /// Cleans up previously cancelled timers (deferred cleanup) before scheduling.
-  template <class CallbackT>
-  std::shared_ptr<rclcpp::TimerBase> add_task(const Duration &timeout, CallbackT &&on_timeout,
-                                              rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    /// Clean up the cancelled timers, i.e. collect the rclcpp::TimerBase objects for timers that
-    /// were cancelled since the last call to add_task:
-    // We need to do this kind of deferred cleanup because we would likely get a deadlock if
-    // we tried to clean them up in their own callback. ("Likely" means that whether a deadlock
-    // occurs is currently an unspecified behavior.)
-    oneoff_cancelled_timers_.clear();
-    /// TODO use non-wall timer so that this works with rosbags, it is not available in Humble
-    auto timer = create_wall_timer(timeout, std::forward<CallbackT>(on_timeout), group);
-    return timer;
   }
 
   /// Add a one-off task bound to a key. This key can be used to cancel the task. We need these
@@ -738,6 +723,7 @@ protected:
 
 /// An AsyncGoalHandle is created once a requested goal was accepted by the action server.
 /// It provides an async/await based API for requesting the result and cancellation.
+/// WARNING: On Humble, there seems to be a memory leak bug in the underlying send_goal API.
 template <class ActionT>
 struct AsyncGoalHandle {
   using Goal = typename ActionT::Goal;
@@ -755,7 +741,10 @@ struct AsyncGoalHandle {
   ~AsyncGoalHandle() {
     /// This is a cleanup function that removes entries from a hashtable called "goal_handles_"
     /// inside the rclcpp_action::Client, so we have to call it to prevent memory leaks apparently.
+#if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
+                                /// version: https://index.ros.org/p/rclcpp/#humble
     client_.lock()->stop_callbacks(goal_handle_);
+#endif
   }
 
   /// Get the goal UUID.
