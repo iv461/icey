@@ -769,7 +769,7 @@ struct AsyncGoalHandle {
   /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
   /// do we get a stack overflow ?
   ResultPromise &result(const Duration &timeout) {
-    node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this] {
+    node_.add_task_for(ptr_to_uuid(&result_promise_), timeout, [this] {
       client_.lock()->stop_callbacks(goal_handle_);
       result_promise_.reject("RESULT TIMEOUT");
     });
@@ -831,12 +831,12 @@ struct ActionClient {
                                                          feedback_callback](auto &promise) {
       typename Client::SendGoalOptions options;
       // Acceptance timeout: reject if no acceptance within timeout
-      std::uintptr_t accept_key = reinterpret_cast<std::uintptr_t>(&promise);
-      node_.add_task_for(static_cast<uint64_t>(accept_key), timeout,
+      node_.add_task_for(ptr_to_uuid(&promise), timeout,
                          [this, &promise]() { promise.reject("TIMEOUT"); });
+
       options.goal_response_callback = [this, &promise](auto goal_handle) {
         // Cancel acceptance timeout
-        node_.cancel_task_for(static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(&promise)));
+        node_.cancel_task_for(ptr_to_uuid(&promise));
         if (goal_handle == nullptr) {
           promise.reject("GOAL REJECTED");  /// TODO error type
         } else {
@@ -856,13 +856,14 @@ struct ActionClient {
       /// there will be a memory leak.[...]".
       // So apparently, we need to set this callback. Internally,
       /// this leads the goal to be "result aware" (???).
-      options.result_callback = [&promise](const Result &result) {
+      options.result_callback = [this, &promise](const Result &result) {
         if (!promise.has_value()) {
           /// this is a state error, bug in ros
           throw std::invalid_argument(
               "Action result callback was called before goal handle was received");
         } else {
           auto &gc = promise.get_state().value();
+          node_.cancel_task_for(ptr_to_uuid(&gc->result_promise_));
           gc->result_promise_.resolve(result);
         }
       };
