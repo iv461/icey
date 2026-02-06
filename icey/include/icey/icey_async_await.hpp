@@ -731,8 +731,8 @@ struct AsyncGoalHandle {
   const rclcpp_action::GoalUUID &get_goal_id() const { return goal_handle_->get_goal_id(); }
   /// Get the time when the goal was accepted.
   rclcpp::Time get_goal_stamp() const { return goal_handle_->get_goal_stamp(); }
-  /// Get the goal status code.
-  rclcpp_action::ResultCode get_status() { return goal_handle_->get_status; }
+  /// Get the goal status code. See https://docs.ros.org/en/ros2_packages/rolling/api/action_msgs/msg/GoalStatus.html for possible values
+  int8_t get_status() { return goal_handle_->get_status; }
 
   /// Obtain the result asynchronously.
   /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
