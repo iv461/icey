@@ -314,12 +314,13 @@ struct TransformBufferImpl {
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
-    node_.add_task_for(uint64_t(request.get()), timeout, [this, on_error, request = weak_request]() {
-      if (auto req = request.lock()) {
-        requests_.erase(req);  // Destroy the request
-        on_error(tf2::TimeoutException{"Timed out waiting for transform"});
-      }
-    });
+    node_.add_task_for(uint64_t(request.get()), timeout,
+                       [this, on_error, request = weak_request]() {
+                         if (auto req = request.lock()) {
+                           requests_.erase(req);  // Destroy the request
+                           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
+                         }
+                       });
     return request;
   }
 
@@ -748,19 +749,27 @@ struct AsyncGoalHandle {
   }
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
+  // The promise is rejected in case the goal was already reached.
+  /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
+  /// do we get a stack overflow ?
   impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
     return impl::Promise<AsyncGoalHandle, std::string>([this, timeout](auto &promise) {
-      client_->async_cancel_goal(goal_handle_, [this, &promise]() {
-        node_.cancel_task_for(uint64_t(&promise));
-        promise.resolve();
-      });
-      /// Add timeout task
-      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
-        client_->stop_callbacks(goal_handle_);
-        promise.reject("RESULT TIMEOUT");
-      });
-      /// We can't cancel the cancellation :(, destroying the promise before the
-      /// cancellation is complete leads to UAF.
+      try {
+        client_->async_cancel_goal(goal_handle_, [this, &promise]() {
+          node_.cancel_task_for(uint64_t(&promise));
+          promise.resolve();
+        });
+        /// Add timeout task
+        node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
+          client_->stop_callbacks(goal_handle_);
+          promise.reject("RESULT TIMEOUT");
+        });
+        /// We can't cancel the cancellation :(, destroying the promise before the
+        /// cancellation is complete leads to UAF.
+      } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
+        /// According to the documentation, the
+        promise.reject(ex.what());
+      }
     });
   }
 
