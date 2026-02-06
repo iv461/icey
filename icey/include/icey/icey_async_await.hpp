@@ -39,24 +39,6 @@ static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
   return Time(std::chrono::nanoseconds(time_point.nanoseconds()));
 }
 
-static rclcpp_action::GoalUUID ptr_to_uuid(void *p) {
-  static_assert(sizeof(void *) <= sizeof(uint64_t),
-                "We assume a pointer is at most as big as an uint64_t");
-  /// HINT: rclcpp_action::GoalUUID is of type std::array<uint8_t, 16>
-  auto low = std::bit_cast<std::array<uint8_t, 8>>(reinterpret_cast<uint64_t>(p));
-  rclcpp_action::GoalUUID a;
-  std::copy(low.begin(), low.end(), a.begin());
-  return a;
-}
-
-static rclcpp_action::GoalUUID int_to_uuid(uint64_t p) {
-  /// HINT: rclcpp_action::GoalUUID is of type std::array<uint8_t, 16>
-  auto low = std::bit_cast<std::array<uint8_t, 8>>(p);
-  rclcpp_action::GoalUUID a;
-  std::copy(low.begin(), low.end(), a.begin());
-  return a;
-}
-
 /// A helper to abstract regular rclcpp::Nodes and LifecycleNodes.
 /// Similar to the NodeInterfaces class: https://github.com/ros2/rclcpp/pull/2041
 /// which doesn't look like it's going to come for Humble:
@@ -128,7 +110,7 @@ struct NodeBase {
   /// This is of course fugly and slow, but there is no public API to create tasks (aka Waitables)
   /// in the executor, so this is the best we can do.
   template <class CallbackT>
-  void add_task_for(rclcpp_action::GoalUUID id, const Duration &timeout, CallbackT on_timeout,
+  void add_task_for(uint64_t id, const Duration &timeout, CallbackT on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     oneoff_cancelled_timers_.clear();
     oneoff_active_timers_.emplace(id, create_wall_timer(
@@ -140,14 +122,8 @@ struct NodeBase {
                                           group));
   }
 
-  template <class CallbackT>
-  void add_task_for(uint64_t id, const Duration &timeout, CallbackT &&on_timeout,
-                    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    add_task_for(int_to_uuid(id), timeout, on_timeout, group);
-  }
-
   /// Cancel a previously scheduled task by key (no-op if not present)
-  bool cancel_task_for(rclcpp_action::GoalUUID id) {
+  bool cancel_task_for(uint64_t id) {
     auto it = oneoff_active_timers_.find(id);
     if (it == oneoff_active_timers_.end()) return false;
     auto timer = it->second;
@@ -156,8 +132,6 @@ struct NodeBase {
     oneoff_active_timers_.erase(it);
     return true;
   }
-
-  bool cancel_task_for(uint64_t id) { return cancel_task_for(int_to_uuid(id)); }
 
   template <class ServiceT, class CallbackT>
   auto create_service(const std::string &service_name, CallbackT &&callback,
@@ -225,8 +199,7 @@ protected:
   /// Deferred cleanup store for one-off timers cancelled inside callbacks
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
   /// Active one-off tasks keyed by a stable uintptr_t key
-  std::unordered_map<rclcpp_action::GoalUUID, std::shared_ptr<rclcpp::TimerBase>>
-      oneoff_active_timers_;
+  std::unordered_map<uint64_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
 
 public:
   // Test helpers (introspection)
@@ -341,13 +314,12 @@ struct TransformBufferImpl {
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
-    node_.add_task_for(ptr_to_uuid(request.get()), timeout,
-                       [this, on_error, request = weak_request]() {
-                         if (auto req = request.lock()) {
-                           requests_.erase(req);  // Destroy the request
-                           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
-                         }
-                       });
+    node_.add_task_for(uint64_t(request.get()), timeout, [this, on_error, request = weak_request]() {
+      if (auto req = request.lock()) {
+        requests_.erase(req);  // Destroy the request
+        on_error(tf2::TimeoutException{"Timed out waiting for transform"});
+      }
+    });
     return request;
   }
 
@@ -390,7 +362,7 @@ struct TransformBufferImpl {
   bool cancel_request(RequestHandle request) {
     std::lock_guard<std::recursive_mutex> lock{mutex_};
     requests_.erase(request);
-    return node_.cancel_task_for(ptr_to_uuid(request.get()));
+    return node_.cancel_task_for(uint64_t(request.get()));
   }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
@@ -470,7 +442,7 @@ protected:
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
       /// timer
-      node_.cancel_task_for(ptr_to_uuid(request.get()));
+      node_.cancel_task_for(uint64_t(request.get()));
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -765,7 +737,7 @@ struct AsyncGoalHandle {
   /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
   /// do we get a stack overflow ?
   ResultPromise &result(const Duration &timeout) {
-    node_.add_task_for(ptr_to_uuid(&result_promise_), timeout, [this] {
+    node_.add_task_for(uint64_t(&result_promise_), timeout, [this] {
 #if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
                                /// version: https://index.ros.org/p/rclcpp/#humble
       client_.lock()->stop_callbacks(goal_handle_);
@@ -779,11 +751,11 @@ struct AsyncGoalHandle {
   impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
     return impl::Promise<AsyncGoalHandle, std::string>([this, timeout](auto &promise) {
       client_->async_cancel_goal(goal_handle_, [this, &promise]() {
-        node_.cancel_task_for(goal_handle_->get_goal_id());
+        node_.cancel_task_for(uint64_t(&promise));
         promise.resolve();
       });
       /// Add timeout task
-      node_.add_task_for(goal_handle_->get_goal_id(), timeout, [this, &promise] {
+      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
         client_->stop_callbacks(goal_handle_);
         promise.reject("RESULT TIMEOUT");
       });
@@ -830,12 +802,12 @@ struct ActionClient {
                                                          feedback_callback](auto &promise) {
       typename Client::SendGoalOptions options;
       // Acceptance timeout: reject if no acceptance within timeout
-      node_.add_task_for(ptr_to_uuid(&promise), timeout,
+      node_.add_task_for(uint64_t(&promise), timeout,
                          [this, &promise]() { promise.reject("TIMEOUT"); });
 
       options.goal_response_callback = [this, &promise](auto goal_handle) {
         // Cancel acceptance timeout
-        node_.cancel_task_for(ptr_to_uuid(&promise));
+        node_.cancel_task_for(uint64_t(&promise));
         if (goal_handle == nullptr) {
           promise.reject("GOAL REJECTED");  /// TODO error type
         } else {
@@ -862,7 +834,7 @@ struct ActionClient {
               "Action result callback was called before goal handle was received");
         } else {
           auto &goal_handle = promise.get_state().value();
-          node_.cancel_task_for(ptr_to_uuid(&goal_handle->result_promise_));
+          node_.cancel_task_for(uint64_t(&goal_handle->result_promise_));
           goal_handle->result_promise_.resolve(result);
         }
       };
