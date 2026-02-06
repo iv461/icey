@@ -214,7 +214,7 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     Fibonacci::Goal goal;
     goal.order = 3;
     auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-    ASSERT_TRUE(gh_res.has_value()) << (gh_res.has_error() ? gh_res.error() : "");
+    EXPECT_TRUE(gh_res.has_value()) << (gh_res.has_error() ? gh_res.error() : "");
     auto r = co_await gh_res.value()->result(60ms);
     EXPECT_TRUE(r.has_error());
     EXPECT_EQ(r.error(), "RESULT TIMEOUT");
@@ -245,7 +245,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
     Fibonacci::Goal goal;
     goal.order = 2;
     auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-    ASSERT_TRUE(gh_res.has_value());
+    EXPECT_TRUE(gh_res.has_value());
     auto cres = co_await gh_res.value()->cancel(50ms);
     EXPECT_TRUE(cres.has_error());
     EXPECT_EQ(cres.error(), "RESULT TIMEOUT");
@@ -283,9 +283,9 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
       Fibonacci::Goal goal;
       goal.order = 2;
       auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-      ASSERT_TRUE(gh.has_value());
+      EXPECT_TRUE(gh.has_value());
       auto res = co_await gh.value()->result(200ms);
-      ASSERT_TRUE(res.has_value());
+      EXPECT_TRUE(res.has_value());
       EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::ABORTED);
     }
 
@@ -313,9 +313,9 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
       Fibonacci::Goal goal;
       goal.order = 2;
       auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-      ASSERT_TRUE(gh.has_value());
+      EXPECT_TRUE(gh.has_value());
       auto res = co_await gh.value()->result(200ms);
-      ASSERT_TRUE(res.has_value());
+      EXPECT_TRUE(res.has_value());
       EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::CANCELED);
     }
 
@@ -344,9 +344,9 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
       Fibonacci::Goal goal;
       goal.order = 2;
       auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-      ASSERT_TRUE(gh.has_value());
+      EXPECT_TRUE(gh.has_value());
       auto res = co_await gh.value()->result(200ms);
-      ASSERT_TRUE(res.has_value());
+      EXPECT_TRUE(res.has_value());
       EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::SUCCEEDED);
     }
 
@@ -383,10 +383,10 @@ TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
     Fibonacci::Goal goal;
     goal.order = 3;
     auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-    ASSERT_TRUE(gh.has_value());
+      EXPECT_TRUE(gh.has_value());
     // Wait for success
     auto res = co_await gh.value()->result(200ms);
-    ASSERT_TRUE(res.has_value());
+      EXPECT_TRUE(res.has_value());
     EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::SUCCEEDED);
     // Now attempt to cancel after success; should error (invalid transition/no-op)
     auto cres = co_await gh.value()->cancel(50ms);
@@ -424,7 +424,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
     Fibonacci::Goal goal;
     goal.order = 2;
     auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-    ASSERT_TRUE(gh.has_value());
+    EXPECT_TRUE(gh.has_value());
     auto c1 = co_await gh.value()->cancel(100ms);
     EXPECT_TRUE(c1.has_error() ||
                 c1.has_value());  // cancel may resolve or be no-op depending on timing

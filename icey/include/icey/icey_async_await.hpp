@@ -755,13 +755,13 @@ struct AsyncGoalHandle {
   impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
     return impl::Promise<AsyncGoalHandle, std::string>([this, timeout](auto &promise) {
       try {
-        client_->async_cancel_goal(goal_handle_, [this, &promise]() {
+        client_.lock()->async_cancel_goal(goal_handle_, [this, &promise]() {
           node_.cancel_task_for(uint64_t(&promise));
           promise.resolve();
         });
         /// Add timeout task
         node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
-          client_->stop_callbacks(goal_handle_);
+          client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
         /// We can't cancel the cancellation :(, destroying the promise before the
