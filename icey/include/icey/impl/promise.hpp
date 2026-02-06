@@ -62,9 +62,9 @@ public:
   LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {}
 
-  PromiseBase(){
+  PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " Constructor()" << std::endl;
+    // std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -123,9 +123,7 @@ public:
     notify();
   }
 
-  /// Returns always false, we always first have to go to the executor to yield something. Used only
-  /// when wrapping a callback-based API.
-  bool await_ready() const noexcept { return false; }
+  bool await_ready() const noexcept { return !has_none(); }
   /// Launches the asynchronous operation that was previously stored and sets the awaiting coroutine
   /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
   /// callback-based API.

@@ -68,8 +68,9 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionSendGoalTest) {
     auto res2 = co_await client.send_goal(goal, 200ms, [](auto goal_handle, auto feedback) {});
     std::cout << "got 2here" << std::endl;
     EXPECT_TRUE(res2.has_value()) << (res2.has_error() ? res2.error() : "");
-    std::cout << "got here23, goal handle status: " << int(res2.value().get_goal_handle()->get_status()) << std::endl;
-    auto ares = co_await res2.value().result(200ms);
+    std::cout << "got here23, goal handle status: "
+              << int(res2.value()->get_goal_handle()->get_status()) << std::endl;
+    auto ares = co_await res2.value()->result(200ms);
     std::cout << "got r" << std::endl;
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
     auto seq = ares.value().result->sequence;
@@ -133,11 +134,11 @@ TEST_F(ActionsAsyncAwaitTwoNodeTest, ActionTimeoutAndMultipleGoalsTest) {
     auto r1 = co_await client.send_goal(goal, 40ms, [](auto gh, auto fb) {});
 
     EXPECT_TRUE(r2.has_value()) << (r2.has_error() ? r2.error() : "");
-    auto ares = co_await r2.value().result(200ms);
+    auto ares = co_await r2.value()->result(200ms);
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 
     EXPECT_TRUE(r1.has_value()) << (r1.has_error() ? r1.error() : "");
-    auto ares1 = co_await r1.value().result(200ms);
+    auto ares1 = co_await r1.value()->result(200ms);
     EXPECT_EQ(ares1.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 
     async_completed = true;

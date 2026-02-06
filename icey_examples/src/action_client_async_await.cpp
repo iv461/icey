@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     goal.order = 7;
 
     // Request a goal with 2 seconds timeout
-    icey::Result<icey::AsyncGoalHandle<Fibonacci>, std::string> maybe_goal_handle =
+    auto maybe_goal_handle =
         co_await client.send_goal(goal, 2s, [node](auto goal_handle, auto feedback) {
           RCLCPP_WARN(node->get_logger(), "Got some feedback");
         });
@@ -41,9 +41,9 @@ int main(int argc, char **argv) {
       co_return;
     }
 
-    const icey::AsyncGoalHandle<Fibonacci> &goal_handle = maybe_goal_handle.value();
+    const auto &goal_handle = maybe_goal_handle.value();
     /// Now wait for the result of the action for 20 seconds.
-    auto maybe_result = co_await goal_handle.result(20s);
+    auto maybe_result = co_await goal_handle->result(20s);
     if (maybe_result.has_error()) {
       RCLCPP_WARN_STREAM(node->get_logger(), "Action failed: " << maybe_result.error());
       co_return;
