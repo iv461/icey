@@ -27,20 +27,22 @@ int main(int argc, char **argv) {
 
   // Create server with async execute callback that calls an upstream service
   auto server = ctx->create_action_server<Fibonacci>(
-      "/fibonacci",
+      "/icey_test_action_fibonacci",
       [ctx, node, upstream](
           std::shared_ptr<rclcpp_action::ServerGoalHandle<Fibonacci>> gh) -> icey::Promise<void> {
-        // Optionally call an upstream service first (demonstrates co_await inside action server)
+        // Call an upstream service first (demonstrates co_await inside action server)
+        /*
         auto req = std::make_shared<Upstream::Request>();
         req->data = true;
         auto upstream_result = co_await upstream.call(req, 1s);
         if (upstream_result.has_error()) {
           RCLCPP_WARN(node->get_logger(), "Upstream service error: %s",
-                      upstream_result.error().c_str());
+          upstream_result.error().c_str());
         } else {
           RCLCPP_INFO(node->get_logger(), "Upstream response: %s",
-                      upstream_result.value()->success ? "true" : "false");
-        }
+        upstream_result.value()->success ? "true" : "false");
+      }
+      */
 
         // Read goal and compute sequence gradually, publishing feedback on a timer
         auto goal = gh->get_goal();

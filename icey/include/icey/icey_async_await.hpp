@@ -869,9 +869,9 @@ struct ActionClient {
           throw std::invalid_argument(
               "Action result callback was called before goal handle was received");
         } else {
-          auto &gc = promise.get_state().value();
-          node_.cancel_task_for(ptr_to_uuid(&gc->result_promise_));
-          gc->result_promise_.resolve(result);
+          auto &goal_handle = promise.get_state().value();
+          node_.cancel_task_for(ptr_to_uuid(&goal_handle->result_promise_));
+          goal_handle->result_promise_.resolve(result);
         }
       };
       client_->async_send_goal(goal, options);
