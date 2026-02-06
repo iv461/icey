@@ -3,10 +3,13 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
+#include <fmt/core.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
+
 #include "example_interfaces/action/fibonacci.hpp"
 #include "node_fixture.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
-
 using namespace std::chrono_literals;
 
 using Fibonacci = example_interfaces::action::Fibonacci;
@@ -205,7 +208,6 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     };
     auto handle_accepted = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
       // Do not send any result to force client result(timeout)
-      std::thread{[]() { std::this_thread::sleep_for(300ms); }}.detach();
     };
     auto server = rclcpp_action::create_server<Fibonacci>(
         sender_->get_node_base_interface(), sender_->get_node_clock_interface(),
@@ -216,7 +218,12 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
     EXPECT_TRUE(gh_res.has_value()) << (gh_res.has_error() ? gh_res.error() : "");
     auto r = co_await gh_res.value()->result(60ms);
+    if (r.has_value()) {
+      std::cout << "Result code: " << int(r.value().code)
+                << ", result: " << fmt::format("{}", r.value().result->sequence) << std::endl;
+    }
     EXPECT_TRUE(r.has_error());
+    EXPECT_FALSE(r.has_value());
     EXPECT_EQ(r.error(), "RESULT TIMEOUT");
     async_completed = true;
     co_return;
