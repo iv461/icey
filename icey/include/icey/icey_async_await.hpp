@@ -821,6 +821,7 @@ struct ActionClient {
 
       options.goal_response_callback = [this, &promise](auto goal_handle) {
         // Cancel acceptance timeout
+        std::cout << "options.goal_response_callback" << std::endl;
         node_.cancel_task_for(uint64_t(&promise));
         if (goal_handle == nullptr) {
           promise.reject("GOAL REJECTED");  /// TODO error type
@@ -830,6 +831,7 @@ struct ActionClient {
       };
       /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
       options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
+        std::cout << "options.feedback_callback" << std::endl;
         feedback_callback(goal_handle, feedback);
       };
       /// Citing the documentation of this function "[...] WARNING this method has inconsistent
