@@ -94,31 +94,19 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
 
     // Create a server that sleeps on first goal only
     std::atomic<size_t> call_idx{0};
-    auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
+    auto handle_goal = [&call_idx](const rclcpp_action::GoalUUID &,
+                                   std::shared_ptr<const Fibonacci::Goal>) {
+      if (call_idx == 0) {
+        std::this_thread::sleep_for(100ms);
+      }
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
     auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
       return rclcpp_action::CancelResponse::ACCEPT;
     };
     auto handle_accepted = [&call_idx](std::shared_ptr<ServerGoalHandleFibonacci> gh) {
-      std::thread{[gh, &call_idx]() {
-        auto idx = call_idx.fetch_add(1);
-        if (idx == 0) std::this_thread::sleep_for(100ms);
-        auto goal = gh->get_goal();
-        std::vector<int32_t> seq;
-        int32_t a = 0, b = 1;
-        for (int i = 0; i < static_cast<int>(goal->order); ++i) {
-          seq.push_back(a);
-          int32_t next = a + b;
-          a = b;
-          b = next;
-        }
-        auto result = std::make_shared<Fibonacci::Result>();
-        result->sequence = seq;
-        gh->succeed(result);
-      }}.detach();
+      gh->succeed(std::make_shared<Fibonacci::Result>());
     };
-
     auto server = rclcpp_action::create_server<Fibonacci>(
         sender_->get_node_base_interface(), sender_->get_node_clock_interface(),
         sender_->get_node_logging_interface(), sender_->get_node_waitables_interface(),
