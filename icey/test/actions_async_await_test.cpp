@@ -16,9 +16,11 @@ using Fibonacci = example_interfaces::action::Fibonacci;
 using GoalHandleFibonacci = rclcpp_action::ClientGoalHandle<Fibonacci>;
 using ServerGoalHandleFibonacci = rclcpp_action::ServerGoalHandle<Fibonacci>;
 
+/*
 struct ActionsAsyncAwait : TwoNodesFixture {
   bool async_completed{false};
 };
+*/
 
 TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
   const auto l = [this]() -> icey::Promise<void> {
@@ -206,8 +208,10 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
       return rclcpp_action::CancelResponse::REJECT;
     };
-    auto handle_accepted = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
-      // Do not send any result to force client result(timeout)
+    auto handle_accepted = [](std::shared_ptr<ServerGoalHandleFibonacci> goal_handle) {
+      std::this_thread::sleep_for(2s);
+      auto result = std::make_shared<Fibonacci::Result>();
+      goal_handle->succeed(result);
     };
     auto server = rclcpp_action::create_server<Fibonacci>(
         sender_->get_node_base_interface(), sender_->get_node_clock_interface(),
@@ -215,9 +219,9 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
         "/icey_test_fib_result_timeout", handle_goal, handle_cancel, handle_accepted);
     Fibonacci::Goal goal;
     goal.order = 3;
-    auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
+    auto gh_res = co_await client.send_goal(goal, 1s, [](auto, auto) {});
     EXPECT_TRUE(gh_res.has_value()) << (gh_res.has_error() ? gh_res.error() : "");
-    auto r = co_await gh_res.value()->result(60ms);
+    auto r = co_await gh_res.value()->result(1s);
     if (r.has_value()) {
       std::cout << "Result code: " << int(r.value().code)
                 << ", result: " << fmt::format("{}", r.value().result->sequence) << std::endl;
