@@ -122,10 +122,13 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
     EXPECT_EQ(first.error(), "TIMEOUT");
 
     auto r2 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
+    std::cout << "AETRFZGU" <<std::endl; 
     /// This deadlocks again because of non-reentrant mutexes being held locked unnecessarily in user-callbacks (https://github.com/ros2/rclcpp/issues/2796)
     // auto r1 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
 
     EXPECT_TRUE(r2.has_value()) << r2.error();
+
+    std::cout << "g324r" <<std::endl; 
     auto ares = co_await r2.value()->result(200ms);
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 

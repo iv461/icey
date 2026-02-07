@@ -777,8 +777,9 @@ struct AsyncGoalHandle {
           client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
-        /// We can't cancel the cancellation :(, destroying the promise before the
-        /// cancellation is complete leads to UAF.
+        promise.set_cancel([](auto &) {
+          std::cout << "WARNING: Promise from AsyncGoalHandle::cancel was not awaited" << std::endl;
+        });
       } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, an exception can we thrown if we try to cancel, but the
         /// goal was already reached
@@ -854,6 +855,10 @@ struct ActionClient {
         std::cout << "Called options.result_callback " << std::endl;
       };
       client_->async_send_goal(goal, options);
+      /// TODO Is there really no way to cancel this operation if the promise goes out of scope ?
+      promise.set_cancel([](auto &) {
+        std::cout << "WARNING: Promise from ActionClient::send_goal was not awaited" << std::endl;
+      });
     });
   }
 
