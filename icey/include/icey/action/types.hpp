@@ -46,7 +46,7 @@ to_string(const GoalUUID & goal_id);
  */
 RCLCPP_ACTION_PUBLIC
 void
-convert(const GoalUUID & goal_id, rcl_action_goal_info_t * info);
+rclcpp_action::convert(const GoalUUID & goal_id, rcl_action_goal_info_t * info);
 
 /// Convert rcl_action_goal_info_t to C++ GoalID
 /**
@@ -56,7 +56,7 @@ convert(const GoalUUID & goal_id, rcl_action_goal_info_t * info);
  */
 RCLCPP_ACTION_PUBLIC
 void
-convert(const rcl_action_goal_info_t & info, GoalUUID * goal_id);
+rclcpp_action::convert(const rcl_action_goal_info_t & info, GoalUUID * goal_id);
 }  // namespace rclcpp_action
 
 namespace std

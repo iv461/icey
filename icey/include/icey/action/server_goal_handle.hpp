@@ -24,8 +24,9 @@
 #include "action_msgs/msg/goal_status.hpp"
 
 #include "rclcpp_action/visibility_control.hpp"
-#include <icey/action/types.hpp>
+#include "rclcpp_action/types.hpp"
 
+using GoalUUID = rclcpp_action::GoalUUID;
 namespace icey::rclcpp_action
 {
 
