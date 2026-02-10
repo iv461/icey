@@ -24,6 +24,10 @@ include_directories(
     include
 )
 
+ament_auto_add_library(icey 
+  src/actions/client.cpp 
+  src/actions/server.cpp 
+  )
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
