@@ -11,17 +11,21 @@
 
 #include "example_interfaces/action/fibonacci.hpp"
 #include "node_fixture.hpp"
+#include "rclcpp_action/client.hpp"
+#include "rclcpp_action/client_goal_handle.hpp"
+#include "rclcpp_action/create_client.hpp"
 
 using namespace std::chrono_literals;
 
 using Fibonacci = example_interfaces::action::Fibonacci;
 using GoalHandleFibonacci = rclcpp_action::ClientGoalHandle<Fibonacci>;
-using ServerGoalHandleFibonacci = rclcpp_action::ServerGoalHandle<Fibonacci>;
+using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacci>;
+
+using namespace icey::rclcpp_action;
 
 struct ActionsAsyncAwait : TwoNodesFixture {
   bool async_completed{false};
 };
-
 
 TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   const auto l = [this]() -> icey::Promise<void> {
@@ -31,14 +35,13 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
         "/icey_8ufg23");
 
     /// Use coroutines as callbacks for the server
-    auto handle_goal =
-        [](const rclcpp_action::GoalUUID &,
-           std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<rclcpp_action::GoalResponse> {
-      co_return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    auto handle_goal = [](const GoalUUID &,
+                          std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
+      co_return GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>)
-        -> icey::Promise<rclcpp_action::CancelResponse> {
-      co_return rclcpp_action::CancelResponse::REJECT;
+    auto handle_cancel =
+        [](std::shared_ptr<ServerGoalHandleFibonacci>) -> icey::Promise<CancelResponse> {
+      co_return CancelResponse::REJECT;
     };
     std::shared_ptr<ServerGoalHandleFibonacci> stored_gh;
     auto handle_accepted =

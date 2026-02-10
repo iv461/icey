@@ -72,11 +72,8 @@ struct CancelRequest {
 };
 
 template <class ActionT>
-struct GoalRequest {
-  rcl_action_goal_info_t goal_info;
-  rmw_request_id_t request_header;
-  GoalUUID uuid;
-  std::shared_ptr<typename ActionT::Impl::SendGoalService::Request> request;  ///
+struct GoalRequest : public GoalRequestBase {
+  std::shared_ptr<typename ActionT::Impl::SendGoalService::Request> request;
   std::shared_ptr<typename ActionT::Goal> goal;
 };
 
@@ -205,16 +202,15 @@ protected:
   // The subclass should convert to the real type and call a user's callback.
   /// \internal
   RCLCPP_ACTION_PUBLIC
-  virtual std::pair<GoalResponse, std::shared_ptr<void>> call_handle_goal_callback(
-      const GoalRequestBase &goal_request) = 0;
+  virtual void call_handle_goal_callback(const GoalRequestBase &goal_request) = 0;
 
   // ServerBase will determine which goal ids are being cancelled, and then call this function for
   // each goal id.
   // The subclass should look up a goal handle and call the user's callback.
   /// \internal
   RCLCPP_ACTION_PUBLIC
-  virtual CancelResponse call_handle_cancel_callback(const GoalUUID &uuid,
-                                                     const CancelRequest &cancel_request) = 0;
+  virtual void call_handle_cancel_callback(const GoalUUID &uuid,
+                                           const CancelRequest &cancel_request) = 0;
 
   /// Given a goal request message, return the UUID contained within.
   /// \internal
@@ -393,8 +389,12 @@ protected:
     auto request = std::static_pointer_cast<typename ActionT::Impl::SendGoalService::Request>(
         goal_request.message);
     auto goal = std::shared_ptr<typename ActionT::Goal>(request, &request->goal);
-    GoalRequest<ActionT> gh{goal_request.goal_info, goal_request.request_header, goal_request.uuid,
-                            request, goal};
+    GoalRequest<ActionT> gh{goal_request.goal_info,
+                            goal_request.request_header,
+                            goal_request.uuid,
+                            goal_request.message,
+                            request,
+                            goal};
     handle_goal_(this->shared_from_this(), gh);
   }
 
