@@ -9,8 +9,7 @@
 #pragma once
 
 #include <functional>
-#include <icey/actions/client.hpp>
-#include <icey/actions/create_server.hpp>
+#include <icey/action/action.hpp>
 #include <icey/impl/promise.hpp>
 #include <optional>
 #include <thread>  /// for ID

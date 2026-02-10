@@ -35,6 +35,8 @@
 #include "rosidl_typesupport_cpp/action_type_support.hpp"
 
 namespace icey::rclcpp_action {
+using GoalUUID = ::rclcpp_action::GoalUUID;
+
 // Forward declaration
 class ServerBaseImpl;
 
@@ -157,8 +159,10 @@ public:
   RCLCPP_ACTION_PUBLIC
   void clear_on_ready_callback() override;
 
+  RCLCPP_ACTION_PUBLIC
   void send_goal_response(rmw_request_id_t request_header, GoalResponse response);
 
+  RCLCPP_ACTION_PUBLIC
   void send_cancel_response(const GoalUUID &uuid, const rmw_request_id_t &request_header,
                             CancelResponse response_code);
 

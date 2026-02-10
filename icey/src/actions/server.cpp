@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <icey/action/server.hpp>
-
 #include <inttypes.h>
 
 #include <deque>
+#include <icey/action/server.hpp>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -32,8 +31,6 @@
 #include "rclcpp/exceptions.hpp"
 #include "rcpputils/scope_exit.hpp"
 
-using rclcpp_action::GoalUUID;
-using rclcpp_action::ServerBase;
 
 struct ServerBaseData;
 

@@ -27,6 +27,7 @@ include_directories(
 ament_auto_add_library(icey 
   src/actions/client.cpp 
   src/actions/server.cpp 
+  src/actions/server_goal_handle.cpp
   )
 
 if(BUILD_TESTING)
