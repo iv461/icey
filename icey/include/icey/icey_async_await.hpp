@@ -797,6 +797,31 @@ private:
   std::shared_ptr<GoalHandle> goal_handle_;
 };
 
+/* TODO refactor timeout handling:
+template<class V, class E>
+impl::Promise<V, E> launch_with_timeout(const Duration &timeout, F &f, const E &timeout_error) {
+  return impl::Promise<AsyncGoalHandleT, std::string>([timeout, f](auto &promise) {
+      struct TimeoutedPromise : public impl::Promise<V, E> {
+        using Base = impl::Promise<V, E>;
+          void resolve(const V &v)  {
+            node_.cancel_task_for(uint64_t(this));
+            Base::resolve(v);
+           }
+           void reject(const E &v)  {
+            node_.cancel_task_for(uint64_t(this));
+            Base::reject(v);
+           }
+      };
+      f(TimeoutedPromise(promise));
+      node_.add_task_for(uint64_t(&promise), timeout,
+                         [this, &promise]() { promise.reject(timeout_error); });
+      promise.set_cancel([this](auto &promise) {
+        node_.cancel_task_for(uint64_t(&promise));
+        std::cout << "WARNING: Promise from ActionClient::send_goal was not awaited" << std::endl;
+      });
+  });
+}*/
+
 /*! A action client offering an async/await API and per-request timeouts. Everything happens
 asynchronously and returns a promise that can be awaited using co_await.
 */
@@ -824,16 +849,20 @@ struct ActionClient {
                                                          feedback_callback](auto &promise) {
       typename Client::SendGoalOptions options;
       // Acceptance timeout: reject if no acceptance within timeout
-      node_.add_task_for(uint64_t(&promise), timeout,
-                         [this, &promise]() { promise.reject("TIMEOUT"); });
+      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise]() {
+        std::cout << "Timeout in  promise " << get_type(promise) << std::endl;
+        promise.reject("TIMEOUT");
+      });
 
       options.goal_response_callback = [this, &promise](auto goal_handle) {
         // Cancel acceptance timeout
         std::cout << "options.goal_response_callback" << std::endl;
         node_.cancel_task_for(uint64_t(&promise));
         if (goal_handle == nullptr) {
+          std::cout << "Rejecting promise " << get_type(promise) << std::endl;
           promise.reject("GOAL REJECTED");  /// TODO error type
         } else {
+          std::cout << "Resolving promise " << get_type(promise) << std::endl;
           promise.resolve(std::make_shared<AsyncGoalHandle<ActionT>>(node_, client_, goal_handle));
         }
       };
@@ -856,8 +885,10 @@ struct ActionClient {
       };
       client_->async_send_goal(goal, options);
       /// TODO Is there really no way to cancel this operation if the promise goes out of scope ?
-      promise.set_cancel([](auto &) {
-        std::cout << "WARNING: Promise from ActionClient::send_goal was not awaited" << std::endl;
+      promise.set_cancel([this](auto &p) {
+        node_.cancel_task_for(uint64_t(&p));
+        std::cout << "WARNING: Promise from ActionClient::send_goal " << get_type(p)
+                  << "was not awaited" << std::endl;
       });
     });
   }

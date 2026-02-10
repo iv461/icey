@@ -11,7 +11,7 @@
 #include <functional>
 #include <icey/impl/result.hpp>
 
-#ifdef ICEY_CORO_DEBUG_PRINT
+#if defined(ICEY_CORO_DEBUG_PRINT) || defined(ICEY_PROMISE_LIFETIMES_DEBUG_PRINT)
 #include <fmt/format.h>
 
 #include <boost/type_index.hpp>
@@ -107,7 +107,11 @@ public:
   using Cancel = std::function<void(Self &)>;
   using LaunchAsync = std::function<void(Self &)>;
   LaunchAsync launch_async_;
-  PromiseBase(LaunchAsync l) : launch_async_(l) {}
+  PromiseBase(LaunchAsync l) : launch_async_(l) {
+#ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
+    std::cout << fmt::format("Constructing promise {}", get_type(*this)) << std::endl;
+#endif
+  }
 
   PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -129,6 +133,9 @@ public:
                              size_t(std::coroutine_handle<Self>::from_promise(*this).address()),
                              get_type(*this))
               << std::endl;
+#endif
+#ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
+    std::cout << fmt::format("Destructing promise {}", get_type(*this)) << std::endl;
 #endif
     /// cancellation only happens when the promise is destroyed before it has a value: This happens
     /// only when the user forgets to add a co_await

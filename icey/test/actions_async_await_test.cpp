@@ -3,6 +3,8 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
+#define ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
+
 #include <fmt/core.h>
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
@@ -117,24 +119,27 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
     goal.order = 5;
 
     // First call should timeout
+    std::cout << "sjkfn34" << std::endl;
     auto first = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
     EXPECT_TRUE(first.has_error());
     EXPECT_EQ(first.error(), "TIMEOUT");
-
+    std::cout << "sjdsd" << std::endl;
     auto r2 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
-    std::cout << "AETRFZGU" <<std::endl; 
-    /// This deadlocks again because of non-reentrant mutexes being held locked unnecessarily in user-callbacks (https://github.com/ros2/rclcpp/issues/2796)
+    std::cout << "AETRFZGU" << std::endl;
+    /// This deadlocks because of non-reentrant mutexes being held locked unnecessarily in
+    /// user-callbacks (https://github.com/ros2/rclcpp/issues/2796) (These kind of bugs are present
+    /// in many cases in rclcpp unfortunately)
     // auto r1 = co_await client.send_goal(goal, 40ms, [](auto, auto) {});
 
     EXPECT_TRUE(r2.has_value()) << r2.error();
 
-    std::cout << "g324r" <<std::endl; 
+    std::cout << "g324r" << std::endl;
     auto ares = co_await r2.value()->result(200ms);
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
 
-   /* EXPECT_TRUE(r1.has_value()) << r1.error();
-    auto ares1 = co_await r1.value()->result(200ms);
-    EXPECT_EQ(ares1.value().code, rclcpp_action::ResultCode::SUCCEEDED);*/
+    /* EXPECT_TRUE(r1.has_value()) << r1.error();
+     auto ares1 = co_await r1.value()->result(200ms);
+     EXPECT_EQ(ares1.value().code, rclcpp_action::ResultCode::SUCCEEDED);*/
 
     async_completed = true;
     co_return;
