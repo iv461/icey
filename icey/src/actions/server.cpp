@@ -428,10 +428,10 @@ void ServerBase::execute_goal_request_received(rcl_ret_t ret, rcl_action_goal_in
   }
 
   GoalUUID uuid = get_goal_id_from_goal_request(message.get());
-  convert(uuid, &goal_info);
+  ::rclcpp_action::convert(uuid, &goal_info);
 
   // Call user's callback, getting the user's response and a ros message to send back
-  call_handle_goal_callback(uuid, message);
+  call_handle_goal_callback(request_header, uuid, message);
 }
 
 void ServerBase::execute_cancel_request_received(
@@ -448,7 +448,7 @@ void ServerBase::execute_cancel_request_received(
 
   // Convert c++ message to C message
   rcl_action_cancel_request_t cancel_request = rcl_action_get_zero_initialized_cancel_request();
-  convert(request->goal_info.goal_id.uuid, &cancel_request.goal_info);
+  ::rclcpp_action::convert(request->goal_info.goal_id.uuid, &cancel_request.goal_info);
   cancel_request.goal_info.stamp.sec = request->goal_info.stamp.sec;
   cancel_request.goal_info.stamp.nanosec = request->goal_info.stamp.nanosec;
 
@@ -480,7 +480,7 @@ void ServerBase::execute_cancel_request_received(
   for (size_t i = 0; i < goals.size; ++i) {
     const rcl_action_goal_info_t &goal_info = goals.data[i];
     GoalUUID uuid;
-    convert(goal_info, &uuid);
+    ::rclcpp_action::convert(goal_info, &uuid);
     call_handle_cancel_callback(uuid, request_header);
   }
 }
@@ -502,7 +502,7 @@ void ServerBase::execute_result_request_received(rcl_ret_t ret,
   // check if the goal exists
   GoalUUID uuid = get_goal_id_from_result_request(result_request.get());
   rcl_action_goal_info_t goal_info;
-  convert(uuid, &goal_info);
+  ::rclcpp_action::convert(uuid, &goal_info);
   bool goal_exists;
   {
     std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
@@ -530,7 +530,7 @@ void ServerBase::execute_result_request_received(rcl_ret_t ret,
                                                         &request_header, result_response.get());
     if (rcl_ret == RCL_RET_TIMEOUT) {
       RCLCPP_WARN(pimpl_->logger_, "Failed to send result response %s (timeout): %s",
-                  to_string(uuid).c_str(), rcl_get_error_string().str);
+                  ::rclcpp_action::to_string(uuid).c_str(), rcl_get_error_string().str);
       rcl_reset_error();
       return;
     }
@@ -557,8 +557,8 @@ void ServerBase::execute_check_expired_goals() {
     } else if (num_expired) {
       // A goal expired!
       GoalUUID uuid;
-      convert(expired_goals[0], &uuid);
-      RCLCPP_DEBUG(pimpl_->logger_, "Expired goal %s", to_string(uuid).c_str());
+      ::rclcpp_action::convert(expired_goals[0], &uuid);
+      RCLCPP_DEBUG(pimpl_->logger_, "Expired goal %s", ::rclcpp_action::to_string(uuid).c_str());
       std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
       pimpl_->goal_results_.erase(uuid);
       pimpl_->result_requests_.erase(uuid);
@@ -607,7 +607,7 @@ void ServerBase::publish_status() {
     action_msgs::msg::GoalStatus msg;
     msg.status = c_status_msg.status;
     // Convert C goal info to C++ goal info
-    convert(c_status_msg.goal_info, &msg.goal_info.goal_id.uuid);
+    ::rclcpp_action::convert(c_status_msg.goal_info, &msg.goal_info.goal_id.uuid);
     msg.goal_info.stamp.sec = c_status_msg.goal_info.stamp.sec;
     msg.goal_info.stamp.nanosec = c_status_msg.goal_info.stamp.nanosec;
 
@@ -625,7 +625,7 @@ void ServerBase::publish_status() {
 void ServerBase::publish_result(const GoalUUID &uuid, std::shared_ptr<void> result_msg) {
   // Check that the goal exists
   rcl_action_goal_info_t goal_info;
-  convert(uuid, &goal_info);
+  ::rclcpp_action::convert(uuid, &goal_info);
   bool goal_exists;
   {
     std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
@@ -660,7 +660,7 @@ void ServerBase::publish_result(const GoalUUID &uuid, std::shared_ptr<void> resu
                                                         &request_header, result_msg.get());
         if (ret == RCL_RET_TIMEOUT) {
           RCLCPP_WARN(pimpl_->logger_, "Failed to send result response %s (timeout): %s",
-                      to_string(uuid).c_str(), rcl_get_error_string().str);
+                      ::rclcpp_action::to_string(uuid).c_str(), rcl_get_error_string().str);
           rcl_reset_error();
         } else if (RCL_RET_OK != ret) {
           rclcpp::exceptions::throw_from_rcl_error(ret);
@@ -802,16 +802,18 @@ void ServerBase::clear_on_ready_callback() {
 }
 
 void ServerBase::send_goal_response(rmw_request_id_t request_header, GoalResponse response) {
+  int ret = 0;
+  auto response_msg = make_response_service_msg(response);
   {
     std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
     ret = rcl_action_send_goal_response(pimpl_->action_server_.get(), &request_header,
-                                        response_pair.second.get());
+                                        ros_response.get());
   }
 
   if (RCL_RET_OK != ret) {
     if (ret == RCL_RET_TIMEOUT) {
       RCLCPP_WARN(pimpl_->logger_, "Failed to send goal response %s (timeout): %s",
-                  to_string(uuid).c_str(), rcl_get_error_string().str);
+                  ::rclcpp_action::to_string(uuid).c_str(), rcl_get_error_string().str);
       rcl_reset_error();
       return;
     } else {
@@ -823,7 +825,7 @@ void ServerBase::send_goal_response(rmw_request_id_t request_header, GoalRespons
 
   // if goal is accepted, create a goal handle, and store it
   if (GoalResponse::ACCEPT_AND_EXECUTE == status || GoalResponse::ACCEPT_AND_DEFER == status) {
-    RCLCPP_DEBUG(pimpl_->logger_, "Accepted goal %s", to_string(uuid).c_str());
+    RCLCPP_DEBUG(pimpl_->logger_, "Accepted goal %s", ::rclcpp_action::to_string(uuid).c_str());
     // rcl_action will set time stamp
     auto deleter = [](rcl_action_goal_handle_t *ptr) {
       if (nullptr != ptr) {
@@ -906,7 +908,7 @@ void ServerBase::send_cancel_response(const GoalUUID &uuid, const rmw_request_id
 
   if (ret == RCL_RET_TIMEOUT) {
     RCLCPP_WARN(pimpl_->logger_, "Failed to send cancel response %s (timeout): %s",
-                to_string(uuid).c_str(), rcl_get_error_string().str);
+                ::rclcpp_action::to_string(uuid).c_str(), rcl_get_error_string().str);
     rcl_reset_error();
     return;
   }

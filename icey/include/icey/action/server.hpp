@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <icey/action/server_goal_handle.hpp>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -28,7 +29,6 @@
 #include "rclcpp/node_interfaces/node_clock_interface.hpp"
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/waitable.hpp"
-#include <icey/action/server_goal_handle.hpp>
 #include "rclcpp_action/types.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 #include "rosidl_runtime_c/action_type_support_struct.h"
@@ -158,6 +158,14 @@ public:
   RCLCPP_ACTION_PUBLIC
   void clear_on_ready_callback() override;
 
+  /// This does something very important uhh...
+  static std::shared_ptr<void> make_response_service_msg(GoalResponse response) {
+    auto msg = std::make_shared<typename ActionT::Impl::SendGoalService::Response>();
+    msg->accepted =
+        GoalResponse::ACCEPT_AND_EXECUTE == response || GoalResponse::ACCEPT_AND_DEFER == response;
+    return msg;
+  }
+  
   RCLCPP_ACTION_PUBLIC
   void send_goal_response(rmw_request_id_t request_header, GoalResponse response);
 
@@ -184,14 +192,15 @@ protected:
   /// \internal
   RCLCPP_ACTION_PUBLIC
   virtual std::pair<GoalResponse, std::shared_ptr<void>> call_handle_goal_callback(
-      GoalUUID &, std::shared_ptr<void> request) = 0;
+      const rmw_request_id_t &request_header, GoalUUID &, std::shared_ptr<void> request) = 0;
 
   // ServerBase will determine which goal ids are being cancelled, and then call this function for
   // each goal id.
   // The subclass should look up a goal handle and call the user's callback.
   /// \internal
   RCLCPP_ACTION_PUBLIC
-  virtual CancelResponse call_handle_cancel_callback(const GoalUUID &uuid) = 0;
+  virtual CancelResponse call_handle_cancel_callback(const GoalUUID &uuid,
+                                                     const rmw_request_id_t &request_header) = 0;
 
   /// Given a goal request message, return the UUID contained within.
   /// \internal
