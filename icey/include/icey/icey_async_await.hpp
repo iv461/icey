@@ -990,17 +990,21 @@ public:
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
         get_node_waitables_interface(), name,
         [handle_goal](std::shared_ptr<Server> server,
-                      const GoalRequest<ActionT> &goal_request) -> rclcpp_action::GoalResponse {
-          const auto continuation = [](auto server, const auto &handle_goal,
-                                       const GoalRequest<ActionT> &goal_request) -> Promise<void> {
+                      const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
+          const auto continuation =
+              [](auto server, const auto &handle_goal,
+                 const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) -> Promise<void> {
             auto response = co_await handle_goal(goal_request.uuid, goal_request.goal);
             server->send_goal_response(goal_request, response);
             co_return;
           };
           continuation(server, handle_goal, goal_request);
         },
-        [handle_cancel](std::shared_ptr<ServerGoalHandleT> goal_handle)
-            -> rclcpp_action::CancelResponse { return handle_cancel(goal_handle); },
+        [handle_cancel](std::shared_ptr<Server> server,
+                        std::shared_ptr<ServerGoalHandleT> goal_handle,
+                        const icey::rclcpp_action::CancelRequest &cancel_request) {
+
+        },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
           handle_accepted(goal_handle);
         },
@@ -1010,10 +1014,10 @@ public:
   }
 
   /// Create an action client that supports async/await send_goal
-  template <class ActionT>
+  /*template <class ActionT>
   ActionClient<ActionT> create_action_client(const std::string &action_name) {
     return ActionClient<ActionT>(node_base(), action_name);
-  }
+  }*/
 
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
   /// tf2_ros::TransformListener. It is used to `lookup()` transforms asynchronously at a specific
