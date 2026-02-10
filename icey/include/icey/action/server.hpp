@@ -334,13 +334,14 @@ protected:
 template <typename ActionT>
 class Server : public ServerBase, public std::enable_shared_from_this<Server<ActionT>> {
 public:
+  using Self = Server<ActionT>;
   RCLCPP_SMART_PTR_DEFINITIONS_NOT_COPYABLE(Server)
 
   /// Signature of a callback that accepts or rejects goal requests.
-  using GoalCallback = std::function<void(const GoalRequest<ActionT> &)>;
+  using GoalCallback = std::function<void(std::shared_ptr<Self>, const GoalRequest<ActionT> &)>;
   /// Signature of a callback that accepts or rejects requests to cancel a goal.
-  using CancelCallback =
-      std::function<void(std::shared_ptr<ServerGoalHandle<ActionT>>, const CancelRequest &)>;
+  using CancelCallback = std::function<void(
+      std::shared_ptr<Self>, std::shared_ptr<ServerGoalHandle<ActionT>>, const CancelRequest &)>;
   /// Signature of a callback that is used to notify when the goal has been accepted.
   using AcceptedCallback = std::function<void(std::shared_ptr<ServerGoalHandle<ActionT>>)>;
 
@@ -394,7 +395,7 @@ protected:
     auto goal = std::shared_ptr<typename ActionT::Goal>(request, &request->goal);
     GoalRequest<ActionT> gh{goal_request.goal_info, goal_request.request_header, goal_request.uuid,
                             request, goal};
-    handle_goal_(gh);
+    handle_goal_(this->shared_from_this(), gh);
   }
 
   /// \internal
@@ -410,7 +411,7 @@ protected:
     }
 
     if (goal_handle) {
-      handle_cancel_(goal_handle, cancel_request);
+      handle_cancel_(this->shared_from_this(), goal_handle, cancel_request);
     }
   }
 

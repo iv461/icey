@@ -22,7 +22,6 @@ struct ActionsAsyncAwait : TwoNodesFixture {
   bool async_completed{false};
 };
 
-/*
 TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
   const auto l = [this]() -> icey::Promise<void> {
     auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib");
@@ -444,7 +443,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
   spin(1000ms);
   ASSERT_TRUE(async_completed);
 }
-*/
+
 TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   const auto l = [this]() -> icey::Promise<void> {
     auto client = rclcpp_action::create_client<Fibonacci>(
@@ -453,8 +452,9 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
         "/icey_8ufg23");
 
     /// Use coroutines as callbacks for the server
-    auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>)
-        -> icey::Promise<rclcpp_action::GoalResponse> {
+    auto handle_goal =
+        [](const rclcpp_action::GoalUUID &,
+           std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<rclcpp_action::GoalResponse> {
       co_return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
     auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>)

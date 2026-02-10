@@ -985,12 +985,20 @@ public:
       const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using ServerGoalHandleT = icey::rclcpp_action::ServerGoalHandle<ActionT>;
+    using Server = icey::rclcpp_action::Server<ActionT>;
     auto server = icey::rclcpp_action::create_server<ActionT>(
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
         get_node_waitables_interface(), name,
-        [handle_goal](const rclcpp_action::GoalUUID &goal_id,
-                      std::shared_ptr<const typename ActionT::Goal> goal)
-            -> rclcpp_action::GoalResponse { return handle_goal(goal_id, goal); },
+        [handle_goal](std::shared_ptr<Server> server,
+                      const GoalRequest<ActionT> &goal_request) -> rclcpp_action::GoalResponse {
+          const auto continuation = [](auto server, const auto &handle_goal,
+                                       const GoalRequest<ActionT> &goal_request) -> Promise<void> {
+            auto response = co_await handle_goal(goal_request.uuid, goal_request.goal);
+            server->send_goal_response(goal_request, response);
+            co_return;
+          };
+          continuation(server, handle_goal, goal_request);
+        },
         [handle_cancel](std::shared_ptr<ServerGoalHandleT> goal_handle)
             -> rclcpp_action::CancelResponse { return handle_cancel(goal_handle); },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {

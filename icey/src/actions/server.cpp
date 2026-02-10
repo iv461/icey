@@ -915,7 +915,8 @@ void ServerBase::send_cancel_response(const CancelRequest &cancel_request,
 
   if (ret == RCL_RET_TIMEOUT) {
     RCLCPP_WARN(pimpl_->logger_, "Failed to send cancel response %s (timeout): %s",
-                ::rclcpp_action::to_string(cancel_request.uuid).c_str(), rcl_get_error_string().str);
+                ::rclcpp_action::to_string(cancel_request.uuid).c_str(),
+                rcl_get_error_string().str);
     rcl_reset_error();
     return;
   }
