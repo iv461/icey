@@ -438,71 +438,6 @@ void ServerBase::execute_goal_request_received(rcl_ret_t ret, rcl_action_goal_in
 
   // Call user's callback, getting the user's response and a ros message to send back
   auto response_pair = call_handle_goal_callback(uuid, message);
-
-  {
-    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
-    ret = rcl_action_send_goal_response(pimpl_->action_server_.get(), &request_header,
-                                        response_pair.second.get());
-  }
-
-  if (RCL_RET_OK != ret) {
-    if (ret == RCL_RET_TIMEOUT) {
-      RCLCPP_WARN(pimpl_->logger_, "Failed to send goal response %s (timeout): %s",
-                  to_string(uuid).c_str(), rcl_get_error_string().str);
-      rcl_reset_error();
-      return;
-    } else {
-      rclcpp::exceptions::throw_from_rcl_error(ret);
-    }
-  }
-
-  const auto status = response_pair.first;
-
-  // if goal is accepted, create a goal handle, and store it
-  if (GoalResponse::ACCEPT_AND_EXECUTE == status || GoalResponse::ACCEPT_AND_DEFER == status) {
-    RCLCPP_DEBUG(pimpl_->logger_, "Accepted goal %s", to_string(uuid).c_str());
-    // rcl_action will set time stamp
-    auto deleter = [](rcl_action_goal_handle_t *ptr) {
-      if (nullptr != ptr) {
-        rcl_ret_t fail_ret = rcl_action_goal_handle_fini(ptr);
-        if (RCL_RET_OK != fail_ret) {
-          RCLCPP_DEBUG(rclcpp::get_logger("rclcpp_action"),
-                       "failed to fini rcl_action_goal_handle_t in deleter");
-        }
-        delete ptr;
-      }
-    };
-    rcl_action_goal_handle_t *rcl_handle;
-    {
-      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
-      rcl_handle = rcl_action_accept_new_goal(pimpl_->action_server_.get(), &goal_info);
-    }
-    if (!rcl_handle) {
-      throw std::runtime_error("Failed to accept new goal\n");
-    }
-
-    std::shared_ptr<rcl_action_goal_handle_t> handle(new rcl_action_goal_handle_t, deleter);
-    // Copy out goal handle since action server storage disappears when it is fini'd
-    *handle = *rcl_handle;
-
-    {
-      std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
-      pimpl_->goal_handles_[uuid] = handle;
-    }
-
-    if (GoalResponse::ACCEPT_AND_EXECUTE == status) {
-      // Change status to executing
-      ret = rcl_action_update_goal_state(handle.get(), GOAL_EVENT_EXECUTE);
-      if (RCL_RET_OK != ret) {
-        rclcpp::exceptions::throw_from_rcl_error(ret);
-      }
-    }
-    // publish status since a goal's state has changed (was accepted or has begun execution)
-    publish_status();
-
-    // Tell user to start executing action
-    call_goal_accepted_callback(handle, uuid, message);
-  }
 }
 
 void ServerBase::execute_cancel_request_received(
@@ -552,42 +487,7 @@ void ServerBase::execute_cancel_request_received(
     const rcl_action_goal_info_t &goal_info = goals.data[i];
     GoalUUID uuid;
     convert(goal_info, &uuid);
-    auto response_code = call_handle_cancel_callback(uuid);
-    if (CancelResponse::ACCEPT == response_code) {
-      action_msgs::msg::GoalInfo cpp_info;
-      cpp_info.goal_id.uuid = uuid;
-      cpp_info.stamp.sec = goal_info.stamp.sec;
-      cpp_info.stamp.nanosec = goal_info.stamp.nanosec;
-      response->goals_canceling.push_back(cpp_info);
-    }
-  }
-
-  // If the user rejects all individual requests to cancel goals,
-  // then we consider the top-level cancel request as rejected.
-  if (goals.size >= 1u && 0u == response->goals_canceling.size()) {
-    response->return_code = action_msgs::srv::CancelGoal::Response::ERROR_REJECTED;
-  }
-
-  if (!response->goals_canceling.empty()) {
-    // at least one goal state changed, publish a new status message
-    publish_status();
-  }
-
-  {
-    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
-    ret = rcl_action_send_cancel_response(pimpl_->action_server_.get(), &request_header,
-                                          response.get());
-  }
-
-  if (ret == RCL_RET_TIMEOUT) {
-    GoalUUID uuid = request->goal_info.goal_id.uuid;
-    RCLCPP_WARN(pimpl_->logger_, "Failed to send cancel response %s (timeout): %s",
-                to_string(uuid).c_str(), rcl_get_error_string().str);
-    rcl_reset_error();
-    return;
-  }
-  if (RCL_RET_OK != ret) {
-    rclcpp::exceptions::throw_from_rcl_error(ret);
+    call_handle_cancel_callback(uuid, request_header);
   }
 }
 
