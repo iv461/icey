@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__CLIENT_HPP_
-#define RCLCPP_ACTION__CLIENT_HPP_
+#pragma once
 
 #include <algorithm>
 #include <chrono>
@@ -700,5 +699,3 @@ private:
   std::recursive_mutex goal_handles_mutex_;
 };
 }  // namespace rclcpp_action
-
-#endif  // RCLCPP_ACTION__CLIENT_HPP_
