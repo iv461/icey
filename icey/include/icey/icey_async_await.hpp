@@ -1002,41 +1002,27 @@ public:
 
   /// Create an action server with a synchronous or asynchronous execute callback.
   /// The goal and cancel callbacks default to ACCEPT/ACCEPT behavior.
-  template <class ActionT, class ExecuteCallbackT,
-            class GoalCallbackT = std::function<rclcpp_action::GoalResponse(
-                const rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>)>,
-            class CancelCallbackT = std::function<rclcpp_action::CancelResponse(
-                std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>)>>
+  template <class ActionT, class GoalCallback, class CancelCallback, class AcceptedCallback>
   std::shared_ptr<rclcpp_action::Server<ActionT>> create_action_server(
-      const std::string &action_name, ExecuteCallbackT &&execute_callback,
-      GoalCallbackT goal_callback =
-          [](const rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>) {
-            return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-          },
-      CancelCallbackT cancel_callback =
-          [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>) {
-            return rclcpp_action::CancelResponse::ACCEPT;
-          }) {
+      const std::string &name, GoalCallback handle_goal, CancelCallback handle_cancel,
+      AcceptedCallback handle_accepted,
+      const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
+      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using ServerGoalHandleT = rclcpp_action::ServerGoalHandle<ActionT>;
-
     auto server = rclcpp_action::create_server<ActionT>(
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
-        get_node_waitables_interface(), action_name, goal_callback, cancel_callback,
-        [execute_callback = std::forward<ExecuteCallbackT>(execute_callback)](
-            std::shared_ptr<ServerGoalHandleT> goal_handle) {
-          using ReturnType = decltype(execute_callback(goal_handle));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
-            execute_callback(goal_handle);
-          } else {
-            const auto continuation = [](auto exec_cb,
-                                         std::shared_ptr<ServerGoalHandleT> gh) -> Promise<void> {
-              co_await exec_cb(gh);
-              co_return;
-            };
-            continuation(execute_callback, goal_handle);
-          }
-        });
-
+        get_node_waitables_interface(), name,
+        [handle_goal](const rclcpp_action::GoalUUID &goal_id,
+                      std::shared_ptr<const typename ActionT::Goal> goal) -> rclcpp_action::GoalResponse{
+          return handle_goal(goal_id, goal);
+        },
+        [handle_cancel](std::shared_ptr<ServerGoalHandleT> goal_handle) -> rclcpp_action::CancelResponse {
+          return handle_cancel(goal_handle);
+        },
+        [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
+          handle_accepted(goal_handle);
+        },
+        options, group);
     action_servers_.push_back(std::dynamic_pointer_cast<rclcpp_action::ServerBase>(server));
     return server;
   }
