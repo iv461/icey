@@ -35,7 +35,7 @@
 #include "rosidl_runtime_c/action_type_support_struct.h"
 #include "rosidl_typesupport_cpp/action_type_support.hpp"
 
-namespace rclcpp_action {
+namespace icey::rclcpp_action {
 // Forward declaration
 class ServerBaseImpl;
 
@@ -477,7 +477,7 @@ protected:
   }
 
   /// \internal
-  auto call_handle_cancel_callback(const GoalUUID &uuid,
+  void call_handle_cancel_callback(const GoalUUID &uuid,
                                    const rmw_request_id_t &request_header) override {
     std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
     {
@@ -591,5 +591,5 @@ private:
   std::unordered_map<GoalUUID, GoalHandleWeakPtr> goal_handles_;
   std::mutex goal_handles_mutex_;
 };
-}  // namespace rclcpp_action
+}  // namespace icey::rclcpp_action
 #endif  // RCLCPP_ACTION__SERVER_HPP_

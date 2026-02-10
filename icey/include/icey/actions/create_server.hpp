@@ -19,18 +19,15 @@
 #include <string>
 
 #include "rcl_action/action_server.h"
-
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_interfaces/node_base_interface.hpp"
 #include "rclcpp/node_interfaces/node_clock_interface.hpp"
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/node_interfaces/node_waitables_interface.hpp"
-
 #include "rclcpp_action/server.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 
-namespace rclcpp_action
-{
+namespace icey::rclcpp_action {
 /// Create an action server.
 /**
  * All provided callback functions must be non-blocking.
@@ -53,58 +50,49 @@ namespace rclcpp_action
  * \param[in] group The action server will be added to this callback group.
  *   If `nullptr`, then the action server is added to the default callback group.
  */
-template<typename ActionT>
-typename Server<ActionT>::SharedPtr
-create_server(
-  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_interface,
-  rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_interface,
-  rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_interface,
-  rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface,
-  const std::string & name,
-  typename Server<ActionT>::GoalCallback handle_goal,
-  typename Server<ActionT>::CancelCallback handle_cancel,
-  typename Server<ActionT>::AcceptedCallback handle_accepted,
-  const rcl_action_server_options_t & options = rcl_action_server_get_default_options(),
-  rclcpp::CallbackGroup::SharedPtr group = nullptr)
-{
+template <typename ActionT>
+typename Server<ActionT>::SharedPtr create_server(
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_interface,
+    rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock_interface,
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_interface,
+    rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface,
+    const std::string &name, typename Server<ActionT>::GoalCallback handle_goal,
+    typename Server<ActionT>::CancelCallback handle_cancel,
+    typename Server<ActionT>::AcceptedCallback handle_accepted,
+    const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
+    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
   std::weak_ptr<rclcpp::node_interfaces::NodeWaitablesInterface> weak_node =
-    node_waitables_interface;
+      node_waitables_interface;
   std::weak_ptr<rclcpp::CallbackGroup> weak_group = group;
   bool group_is_null = (nullptr == group.get());
 
-  auto deleter = [weak_node, weak_group, group_is_null](Server<ActionT> * ptr)
-    {
-      if (nullptr == ptr) {
-        return;
-      }
-      auto shared_node = weak_node.lock();
-      if (shared_node) {
-        // API expects a shared pointer, give it one with a deleter that does nothing.
-        std::shared_ptr<Server<ActionT>> fake_shared_ptr(ptr, [](Server<ActionT> *) {});
+  auto deleter = [weak_node, weak_group, group_is_null](Server<ActionT> *ptr) {
+    if (nullptr == ptr) {
+      return;
+    }
+    auto shared_node = weak_node.lock();
+    if (shared_node) {
+      // API expects a shared pointer, give it one with a deleter that does nothing.
+      std::shared_ptr<Server<ActionT>> fake_shared_ptr(ptr, [](Server<ActionT> *) {});
 
-        if (group_is_null) {
-          // Was added to default group
-          shared_node->remove_waitable(fake_shared_ptr, nullptr);
-        } else {
-          // Was added to a specific group
-          auto shared_group = weak_group.lock();
-          if (shared_group) {
-            shared_node->remove_waitable(fake_shared_ptr, shared_group);
-          }
+      if (group_is_null) {
+        // Was added to default group
+        shared_node->remove_waitable(fake_shared_ptr, nullptr);
+      } else {
+        // Was added to a specific group
+        auto shared_group = weak_group.lock();
+        if (shared_group) {
+          shared_node->remove_waitable(fake_shared_ptr, shared_group);
         }
       }
-      delete ptr;
-    };
+    }
+    delete ptr;
+  };
 
-  std::shared_ptr<Server<ActionT>> action_server(new Server<ActionT>(
-      node_base_interface,
-      node_clock_interface,
-      node_logging_interface,
-      name,
-      options,
-      handle_goal,
-      handle_cancel,
-      handle_accepted), deleter);
+  std::shared_ptr<Server<ActionT>> action_server(
+      new Server<ActionT>(node_base_interface, node_clock_interface, node_logging_interface, name,
+                          options, handle_goal, handle_cancel, handle_accepted),
+      deleter);
 
   node_waitables_interface->add_waitable(action_server, group);
   return action_server;
@@ -127,28 +115,17 @@ create_server(
  * \param[in] group The action server will be added to this callback group.
  *   If `nullptr`, then the action server is added to the default callback group.
  */
-template<typename ActionT, typename NodeT>
-typename Server<ActionT>::SharedPtr
-create_server(
-  NodeT node,
-  const std::string & name,
-  typename Server<ActionT>::GoalCallback handle_goal,
-  typename Server<ActionT>::CancelCallback handle_cancel,
-  typename Server<ActionT>::AcceptedCallback handle_accepted,
-  const rcl_action_server_options_t & options = rcl_action_server_get_default_options(),
-  rclcpp::CallbackGroup::SharedPtr group = nullptr)
-{
-  return create_server<ActionT>(
-    node->get_node_base_interface(),
-    node->get_node_clock_interface(),
-    node->get_node_logging_interface(),
-    node->get_node_waitables_interface(),
-    name,
-    handle_goal,
-    handle_cancel,
-    handle_accepted,
-    options,
-    group);
+template <typename ActionT, typename NodeT>
+typename Server<ActionT>::SharedPtr create_server(
+    NodeT node, const std::string &name, typename Server<ActionT>::GoalCallback handle_goal,
+    typename Server<ActionT>::CancelCallback handle_cancel,
+    typename Server<ActionT>::AcceptedCallback handle_accepted,
+    const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
+    rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+  return create_server<ActionT>(node->get_node_base_interface(), node->get_node_clock_interface(),
+                                node->get_node_logging_interface(),
+                                node->get_node_waitables_interface(), name, handle_goal,
+                                handle_cancel, handle_accepted, options, group);
 }
-}  // namespace rclcpp_action
+}  // namespace icey::rclcpp_action
 #endif  // RCLCPP_ACTION__CREATE_SERVER_HPP_
