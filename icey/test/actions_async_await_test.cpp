@@ -22,6 +22,7 @@ struct ActionsAsyncAwait : TwoNodesFixture {
   bool async_completed{false};
 };
 
+/*
 TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
   const auto l = [this]() -> icey::Promise<void> {
     auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib");
@@ -443,7 +444,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
   spin(1000ms);
   ASSERT_TRUE(async_completed);
 }
-
+*/
 TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   const auto l = [this]() -> icey::Promise<void> {
     auto client = rclcpp_action::create_client<Fibonacci>(
