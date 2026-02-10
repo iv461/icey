@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__SERVER_HPP_
-#define RCLCPP_ACTION__SERVER_HPP_
+#pragma once 
 
 #include <functional>
 #include <memory>
@@ -592,4 +591,4 @@ private:
   std::mutex goal_handles_mutex_;
 };
 }  // namespace icey::rclcpp_action
-#endif  // RCLCPP_ACTION__SERVER_HPP_
+
