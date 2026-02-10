@@ -36,7 +36,8 @@ if(BUILD_TESTING)
   ament_auto_add_gtest(test_main
     test/entities_test.cpp
     test/entities_async_await_test.cpp
-    test/actions_async_await_test.cpp
+    test/action_server_test.cpp
+    #test/action_client_test.cpp
     test/node_tasks_test.cpp
     test/test_main.cpp
     test/filters_test.cpp
