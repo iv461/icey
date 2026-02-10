@@ -37,7 +37,7 @@ using rclcpp_action::ServerBase;
 
 struct ServerBaseData;
 
-namespace rclcpp_action {
+namespace icey::rclcpp_action {
 
 struct ServerBaseData {
   using GoalRequestData =
@@ -226,7 +226,7 @@ public:
   rclcpp::Logger logger_;
 };
 
-}  // namespace rclcpp_action
+}  // namespace icey::rclcpp_action
 
 ServerBase::ServerBase(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
                        rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock,
@@ -437,7 +437,7 @@ void ServerBase::execute_goal_request_received(rcl_ret_t ret, rcl_action_goal_in
   convert(uuid, &goal_info);
 
   // Call user's callback, getting the user's response and a ros message to send back
-  auto response_pair = call_handle_goal_callback(uuid, message);
+  call_handle_goal_callback(uuid, message);
 }
 
 void ServerBase::execute_cancel_request_received(
