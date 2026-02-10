@@ -979,13 +979,13 @@ public:
   /// Create an action server with a synchronous or asynchronous execute callback.
   /// The goal and cancel callbacks default to ACCEPT/ACCEPT behavior.
   template <class ActionT, class GoalCallback, class CancelCallback, class AcceptedCallback>
-  std::shared_ptr<rclcpp_action::Server<ActionT>> create_action_server(
+  std::shared_ptr<icey::rclcpp_action::Server<ActionT>> create_action_server(
       const std::string &name, GoalCallback handle_goal, CancelCallback handle_cancel,
       AcceptedCallback handle_accepted,
       const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    using ServerGoalHandleT = rclcpp_action::ServerGoalHandle<ActionT>;
-    auto server = rclcpp_action::create_server<ActionT>(
+    using ServerGoalHandleT = icey::rclcpp_action::ServerGoalHandle<ActionT>;
+    auto server = icey::rclcpp_action::create_server<ActionT>(
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
         get_node_waitables_interface(), name,
         [handle_goal](const rclcpp_action::GoalUUID &goal_id,
@@ -997,7 +997,7 @@ public:
           handle_accepted(goal_handle);
         },
         options, group);
-    action_servers_.push_back(std::dynamic_pointer_cast<rclcpp_action::ServerBase>(server));
+    action_servers_.push_back(std::dynamic_pointer_cast<icey::rclcpp_action::ServerBase>(server));
     return server;
   }
 
@@ -1034,7 +1034,7 @@ protected:
   std::vector<std::shared_ptr<rclcpp::TimerBase>> timers_;
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
   std::vector<std::shared_ptr<rclcpp::SubscriptionBase>> subscriptions_;
-  std::vector<std::shared_ptr<rclcpp_action::ServerBase>> action_servers_;
+  std::vector<std::shared_ptr<icey::rclcpp_action::ServerBase>> action_servers_;
 };
 
 }  // namespace icey

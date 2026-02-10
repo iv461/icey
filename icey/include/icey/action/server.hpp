@@ -57,6 +57,29 @@ enum class CancelResponse : int8_t {
   ACCEPT = 2,
 };
 
+/// A struct to store the stuff of a request, a type-erased version and a normal one.
+struct GoalRequestBase {
+  rcl_action_goal_info_t goal_info;
+  rmw_request_id_t request_header;
+  GoalUUID uuid;
+  std::shared_ptr<void> message;  /// ActionT::Impl::SendGoalService::Request
+};
+
+struct CancelRequest {
+  rcl_action_goal_info_t goal_info;
+  rmw_request_id_t request_header;
+  GoalUUID uuid;
+};
+
+template <class ActionT>
+struct GoalRequest {
+  rcl_action_goal_info_t goal_info;
+  rmw_request_id_t request_header;
+  GoalUUID uuid;
+  std::shared_ptr<typename ActionT::Impl::SendGoalService::Request> request;  ///
+  std::shared_ptr<typename ActionT::Goal> goal;
+};
+
 /// Base Action Server implementation
 /// \internal
 /**
@@ -158,20 +181,11 @@ public:
   RCLCPP_ACTION_PUBLIC
   void clear_on_ready_callback() override;
 
-  /// This does something very important uhh...
-  static std::shared_ptr<void> make_response_service_msg(GoalResponse response) {
-    auto msg = std::make_shared<typename ActionT::Impl::SendGoalService::Response>();
-    msg->accepted =
-        GoalResponse::ACCEPT_AND_EXECUTE == response || GoalResponse::ACCEPT_AND_DEFER == response;
-    return msg;
-  }
-  
   RCLCPP_ACTION_PUBLIC
-  void send_goal_response(rmw_request_id_t request_header, GoalResponse response);
+  void send_goal_response(const GoalRequestBase &goal_request, GoalResponse response);
 
   RCLCPP_ACTION_PUBLIC
-  void send_cancel_response(const GoalUUID &uuid, const rmw_request_id_t &request_header,
-                            CancelResponse response_code);
+  void send_cancel_response(const CancelRequest &cancel_request, CancelResponse response_code);
 
   // End Waitables API
   // -----------------
@@ -192,7 +206,7 @@ protected:
   /// \internal
   RCLCPP_ACTION_PUBLIC
   virtual std::pair<GoalResponse, std::shared_ptr<void>> call_handle_goal_callback(
-      const rmw_request_id_t &request_header, GoalUUID &, std::shared_ptr<void> request) = 0;
+      const GoalRequestBase &goal_request) = 0;
 
   // ServerBase will determine which goal ids are being cancelled, and then call this function for
   // each goal id.
@@ -200,7 +214,7 @@ protected:
   /// \internal
   RCLCPP_ACTION_PUBLIC
   virtual CancelResponse call_handle_cancel_callback(const GoalUUID &uuid,
-                                                     const rmw_request_id_t &request_header) = 0;
+                                                     const CancelRequest &cancel_request) = 0;
 
   /// Given a goal request message, return the UUID contained within.
   /// \internal
@@ -211,6 +225,11 @@ protected:
   /// \internal
   RCLCPP_ACTION_PUBLIC
   virtual std::shared_ptr<void> create_goal_request() = 0;
+
+  /// Create a response message so it can be taken from a lower layer.
+  /// \internal
+  RCLCPP_ACTION_PUBLIC
+  virtual std::shared_ptr<void> create_goal_response(GoalResponse response) = 0;
 
   /// Call user callback to inform them a goal has been accepted.
   /// \internal
@@ -318,11 +337,10 @@ public:
   RCLCPP_SMART_PTR_DEFINITIONS_NOT_COPYABLE(Server)
 
   /// Signature of a callback that accepts or rejects goal requests.
-  using GoalCallback = std::function<void(const GoalUUID &, const rmw_request_id_t &,
-                                          std::shared_ptr<const typename ActionT::Goal>)>;
+  using GoalCallback = std::function<void(const GoalRequest<ActionT> &)>;
   /// Signature of a callback that accepts or rejects requests to cancel a goal.
   using CancelCallback =
-      std::function<void(std::shared_ptr<ServerGoalHandle<ActionT>>, const rmw_request_id_t &)>;
+      std::function<void(std::shared_ptr<ServerGoalHandle<ActionT>>, const CancelRequest &)>;
   /// Signature of a callback that is used to notify when the goal has been accepted.
   using AcceptedCallback = std::function<void(std::shared_ptr<ServerGoalHandle<ActionT>>)>;
 
@@ -370,17 +388,18 @@ protected:
   // API for communication between ServerBase and Server<>
 
   /// \internal
-  void call_handle_goal_callback(GoalUUID &uuid, const rmw_request_id_t &request_header,
-                                 std::shared_ptr<void> message) override {
-    auto request =
-        std::static_pointer_cast<typename ActionT::Impl::SendGoalService::Request>(message);
+  void call_handle_goal_callback(const GoalRequestBase &goal_request) override {
+    auto request = std::static_pointer_cast<typename ActionT::Impl::SendGoalService::Request>(
+        goal_request.message);
     auto goal = std::shared_ptr<typename ActionT::Goal>(request, &request->goal);
-    handle_goal_(uuid, request_header, goal);
+    GoalRequest<ActionT> gh{goal_request.goal_info, goal_request.request_header, goal_request.uuid,
+                            request, goal};
+    handle_goal_(gh);
   }
 
   /// \internal
   void call_handle_cancel_callback(const GoalUUID &uuid,
-                                   const rmw_request_id_t &request_header) override {
+                                   const CancelRequest &cancel_request) override {
     std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
     {
       std::lock_guard<std::mutex> lock(goal_handles_mutex_);
@@ -391,7 +410,7 @@ protected:
     }
 
     if (goal_handle) {
-      handle_cancel_(goal_handle);
+      handle_cancel_(goal_handle, cancel_request);
     }
   }
 
@@ -459,6 +478,14 @@ protected:
   /// \internal
   std::shared_ptr<void> create_goal_request() override {
     return std::shared_ptr<void>(new typename ActionT::Impl::SendGoalService::Request());
+  }
+
+  /// \internal
+  std::shared_ptr<void> create_goal_response(GoalResponse response) override {
+    auto ros_response = std::make_shared<typename ActionT::Impl::SendGoalService::Response>();
+    ros_response->accepted =
+        GoalResponse::ACCEPT_AND_EXECUTE == response || GoalResponse::ACCEPT_AND_DEFER == response;
+    return ros_response;
   }
 
   /// \internal

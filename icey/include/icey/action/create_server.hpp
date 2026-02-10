@@ -15,6 +15,7 @@
 #ifndef RCLCPP_ACTION__CREATE_SERVER_HPP_
 #define RCLCPP_ACTION__CREATE_SERVER_HPP_
 
+#include <icey/action/server.hpp>
 #include <memory>
 #include <string>
 
@@ -24,7 +25,6 @@
 #include "rclcpp/node_interfaces/node_clock_interface.hpp"
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/node_interfaces/node_waitables_interface.hpp"
-#include <icey/actions/server.hpp>
 #include "rclcpp_action/visibility_control.hpp"
 
 namespace icey::rclcpp_action {
