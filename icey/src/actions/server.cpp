@@ -31,7 +31,6 @@
 #include "rclcpp/exceptions.hpp"
 #include "rcpputils/scope_exit.hpp"
 
-
 struct ServerBaseData;
 
 namespace icey::rclcpp_action {
@@ -222,8 +221,6 @@ public:
 
   rclcpp::Logger logger_;
 };
-
-}  // namespace icey::rclcpp_action
 
 ServerBase::ServerBase(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
                        rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock,
@@ -917,3 +914,4 @@ void ServerBase::send_cancel_response(const GoalUUID &uuid, const rmw_request_id
     rclcpp::exceptions::throw_from_rcl_error(ret);
   }
 }
+}  // namespace icey::rclcpp_action
