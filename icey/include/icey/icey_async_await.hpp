@@ -9,6 +9,8 @@
 #pragma once
 
 #include <functional>
+#include <icey/actions/client.hpp>
+#include <icey/actions/create_server.hpp>
 #include <icey/impl/promise.hpp>
 #include <optional>
 #include <thread>  /// for ID
@@ -16,7 +18,6 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/version.h"
-#include "rclcpp_action/rclcpp_action.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "tf2_msgs/msg/tf_message.hpp"
 #include "tf2_ros/buffer.hpp"
@@ -704,6 +705,7 @@ protected:
 /// An AsyncGoalHandle is created once a requested goal was accepted by the action server.
 /// It provides an async/await based API for requesting the result and cancellation.
 /// WARNING: On Humble, there seems to be a memory leak bug in the underlying send_goal API.
+/*
 template <class ActionT>
 struct AsyncGoalHandle {
   using Goal = typename ActionT::Goal;
@@ -797,34 +799,9 @@ private:
   std::shared_ptr<GoalHandle> goal_handle_;
 };
 
-/* TODO refactor timeout handling:
-template<class V, class E>
-impl::Promise<V, E> launch_with_timeout(const Duration &timeout, F &f, const E &timeout_error) {
-  return impl::Promise<AsyncGoalHandleT, std::string>([timeout, f](auto &promise) {
-      struct TimeoutedPromise : public impl::Promise<V, E> {
-        using Base = impl::Promise<V, E>;
-          void resolve(const V &v)  {
-            node_.cancel_task_for(uint64_t(this));
-            Base::resolve(v);
-           }
-           void reject(const E &v)  {
-            node_.cancel_task_for(uint64_t(this));
-            Base::reject(v);
-           }
-      };
-      f(TimeoutedPromise(promise));
-      node_.add_task_for(uint64_t(&promise), timeout,
-                         [this, &promise]() { promise.reject(timeout_error); });
-      promise.set_cancel([this](auto &promise) {
-        node_.cancel_task_for(uint64_t(&promise));
-        std::cout << "WARNING: Promise from ActionClient::send_goal was not awaited" << std::endl;
-      });
-  });
-}*/
+/// A action client offering an async/await API and per-request timeouts. Everything happens
+/// asynchronously and returns a promise that can be awaited using co_await.
 
-/*! A action client offering an async/await API and per-request timeouts. Everything happens
-asynchronously and returns a promise that can be awaited using co_await.
-*/
 template <class ActionT>
 struct ActionClient {
   using Goal = typename ActionT::Goal;
@@ -897,7 +874,7 @@ protected:
   NodeBase &node_;
   std::shared_ptr<rclcpp_action::Client<ActionT>> client_;
 };
-
+*/
 /// A context that provides only async/await related entities.
 class ContextAsyncAwait : public NodeBase {
 public:
@@ -1013,12 +990,10 @@ public:
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
         get_node_waitables_interface(), name,
         [handle_goal](const rclcpp_action::GoalUUID &goal_id,
-                      std::shared_ptr<const typename ActionT::Goal> goal) -> rclcpp_action::GoalResponse{
-          return handle_goal(goal_id, goal);
-        },
-        [handle_cancel](std::shared_ptr<ServerGoalHandleT> goal_handle) -> rclcpp_action::CancelResponse {
-          return handle_cancel(goal_handle);
-        },
+                      std::shared_ptr<const typename ActionT::Goal> goal)
+            -> rclcpp_action::GoalResponse { return handle_goal(goal_id, goal); },
+        [handle_cancel](std::shared_ptr<ServerGoalHandleT> goal_handle)
+            -> rclcpp_action::CancelResponse { return handle_cancel(goal_handle); },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
           handle_accepted(goal_handle);
         },

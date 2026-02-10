@@ -225,51 +225,7 @@ public:
   }
 
   void send_cancel_response(const GoalUUID &uuid, const rmw_request_id_t &request_header,
-                            CancelResponse response_code) {
-    auto response = std::make_shared<action_msgs::srv::CancelGoal::Response>();
-
-    if (CancelResponse::ACCEPT == response_code) {
-      action_msgs::msg::GoalInfo cpp_info;
-      cpp_info.goal_id.uuid = uuid;
-      cpp_info.stamp.sec = goal_info.stamp.sec;
-      cpp_info.stamp.nanosec = goal_info.stamp.nanosec;
-      response->goals_canceling.push_back(cpp_info);
-      try {
-        goal_handle->_cancel_goal();
-      } catch (const rclcpp::exceptions::RCLError &ex) {
-        RCLCPP_DEBUG(rclcpp::get_logger("rclcpp_action"),
-                     "Failed to cancel goal in call_handle_cancel_callback: %s", ex.what());
-        return CancelResponse::REJECT;
-      }
-    }
-
-    // If the user rejects all individual requests to cancel goals,
-    // then we consider the top-level cancel request as rejected.
-    if (goals.size >= 1u && 0u == response->goals_canceling.size()) {
-      response->return_code = action_msgs::srv::CancelGoal::Response::ERROR_REJECTED;
-    }
-
-    if (!response->goals_canceling.empty()) {
-      // at least one goal state changed, publish a new status message
-      publish_status();
-    }
-
-    {
-      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
-      ret = rcl_action_send_cancel_response(pimpl_->action_server_.get(), &request_header,
-                                            response.get());
-    }
-
-    if (ret == RCL_RET_TIMEOUT) {
-      RCLCPP_WARN(pimpl_->logger_, "Failed to send cancel response %s (timeout): %s",
-                  to_string(uuid).c_str(), rcl_get_error_string().str);
-      rcl_reset_error();
-      return;
-    }
-    if (RCL_RET_OK != ret) {
-      rclcpp::exceptions::throw_from_rcl_error(ret);
-    }
-  }
+                            CancelResponse response_code);
 
   // End Waitables API
   // -----------------
