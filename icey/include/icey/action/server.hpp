@@ -28,14 +28,13 @@
 #include "rclcpp/node_interfaces/node_clock_interface.hpp"
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/waitable.hpp"
-#include "rclcpp_action/server_goal_handle.hpp"
+#include <icey/action/server_goal_handle.hpp>
 #include "rclcpp_action/types.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 #include "rosidl_runtime_c/action_type_support_struct.h"
 #include "rosidl_typesupport_cpp/action_type_support.hpp"
 
 namespace icey::rclcpp_action {
-using GoalUUID = ::rclcpp_action::GoalUUID;
 
 // Forward declaration
 class ServerBaseImpl;

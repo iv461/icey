@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__SERVER_GOAL_HANDLE_HPP_
-#define RCLCPP_ACTION__SERVER_GOAL_HANDLE_HPP_
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -25,9 +24,9 @@
 #include "action_msgs/msg/goal_status.hpp"
 
 #include "rclcpp_action/visibility_control.hpp"
-#include "rclcpp_action/types.hpp"
+#include <icey/action/types.hpp>
 
-namespace rclcpp_action
+namespace icey::rclcpp_action
 {
 
 /// Base class to interact with goals on a server.
@@ -281,4 +280,4 @@ protected:
 };
 }  // namespace rclcpp_action
 
-#endif  // RCLCPP_ACTION__SERVER_GOAL_HANDLE_HPP_
+
