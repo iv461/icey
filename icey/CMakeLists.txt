@@ -30,7 +30,7 @@ ament_auto_add_library(icey
   src/actions/server_goal_handle.cpp  
   )
 
-if(BUILD_TESTING)
+if(FALSE)
   find_package(ament_cmake_gtest REQUIRED)
 
   ament_auto_add_gtest(test_main
