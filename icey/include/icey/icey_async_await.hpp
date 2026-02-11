@@ -995,6 +995,7 @@ public:
                  const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) -> Promise<void> {
             std::cout << "handle goal cb called" << std::endl;
             auto response = co_await handle_goal(goal_request.uuid, goal_request.goal);
+            std::cout << "user handle_goal returned" << std::endl;
             server->send_goal_response(goal_request, response);
             co_return;
           };
@@ -1003,7 +1004,6 @@ public:
         [handle_cancel](std::shared_ptr<Server> server,
                         std::shared_ptr<ServerGoalHandleT> goal_handle,
                         const icey::rclcpp_action::CancelRequest &cancel_request) {
-                          
           const auto continuation = [](auto server, const auto &handle_cancel,
                                        const icey::rclcpp_action::CancelRequest &cancel_request,
                                        auto goal_handle) -> Promise<void> {
