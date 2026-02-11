@@ -2,13 +2,15 @@
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
+#define ICEY_CORO_DEBUG_PRINT
+
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
 
 #include "rclcpp_action/client.hpp"
 #include "rclcpp_action/client_goal_handle.hpp"
 #include "rclcpp_action/create_client.hpp"
-
+#include "std_srvs/srv/set_bool.hpp"
 using namespace std::chrono_literals;
 
 using Fibonacci = example_interfaces::action::Fibonacci;
@@ -16,16 +18,25 @@ using GoalHandleFibonacci = rclcpp_action::ClientGoalHandle<Fibonacci>;
 using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacci>;
 
 using namespace icey::rclcpp_action;
+using ExampleService = std_srvs::srv::SetBool;
+using Request = ExampleService::Request;
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("icey_action_server_async_await_example");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
+  /// Create a service client for an upstream service that is actually capable of answering the
+  /// request.
+  auto upstream_service_client = ctx->create_client<ExampleService>("set_bool_service_upstream");
 
   //&auto action_client = ctx->create_action_client<Fibonacci>("/icey_test_fib_result_timeout");
-  auto handle_goal = [](const GoalUUID &,
-                        std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
+  auto handle_goal = [&](const GoalUUID &,
+                         std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
     std::cout << "got goal request" << std::endl;
+    /// Call the upstream service with 1s timeout asynchronously:
+    auto request = std::make_shared<Request>();
+    auto upstream_result = co_await upstream_service_client.call(request, 1s);
+
     co_return GoalResponse::ACCEPT_AND_EXECUTE;
   };
   auto handle_cancel =
@@ -64,7 +75,7 @@ int main(int argc, char **argv) {
     result_received = true;
   };
   client->async_send_goal(goal, options);
-  
+
   rclcpp::spin(node);
   return 0;
 }

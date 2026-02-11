@@ -991,10 +991,10 @@ public:
         [handle_goal](std::shared_ptr<Server> server,
                       const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
           const auto continuation =
-              [](auto server, const auto &handle_goal,
+              [](auto server, const auto &async_cb,
                  const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) -> Promise<void> {
             std::cout << "handle goal cb called" << std::endl;
-            auto response = co_await handle_goal(goal_request.uuid, goal_request.goal);
+            auto response = co_await async_cb(goal_request.uuid, goal_request.goal);
             std::cout << "user handle_goal returned" << std::endl;
             server->send_goal_response(goal_request, response);
             co_return;
