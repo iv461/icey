@@ -976,6 +976,28 @@ public:
     return ServiceClient<ServiceT>(node_base(), service_name, qos);
   }
 
+  /*
+  template <class ActionT>
+  static auto make_sync_handle_goal_cb(
+      std::function<Promise<icey::rclcpp::GoalResponse>(
+        const icey::rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>)>
+        handle_goal) {
+          using Server = icey::rclcpp_action::Server<ActionT>;
+          return [handle_goal](std::shared_ptr<Server> server,
+          const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
+            const auto continuation =
+            [](auto server, auto handle_goal,
+            icey::rclcpp_action::GoalRequest<ActionT> goal_request) -> Promise<void> {
+              server->send_goal_response(goal_request,
+              co_await handle_goal(goal_request.uuid, goal_request.goal));
+            };
+            continuation(server, handle_goal, goal_request);
+            server->send_goal_response(goal_request, handle_goal(goal_request.uuid,
+  goal_request.goal));
+          };
+        }
+        */
+
   /// Create an action server with a synchronous or asynchronous callbacks.
   template <class ActionT, class GoalCallback, class CancelCallback, class AcceptedCallback>
   std::shared_ptr<icey::rclcpp_action::Server<ActionT>> create_action_server(
@@ -984,7 +1006,7 @@ public:
       const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using ServerGoalHandleT = icey::rclcpp_action::ServerGoalHandle<ActionT>;
-    using Server = icey::rclcpp_action::Server<ActionT>;
+    using Server = icey::rclcpp_action::Server<ActionT>;  
     auto server = icey::rclcpp_action::create_server<ActionT>(
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
         get_node_waitables_interface(), name,
@@ -993,9 +1015,8 @@ public:
           const auto continuation =
               [](auto server, auto handle_goal,
                  icey::rclcpp_action::GoalRequest<ActionT> goal_request) -> Promise<void> {
-            auto response = co_await handle_goal(goal_request.uuid, goal_request.goal);
-            server->send_goal_response(goal_request, response);
-            co_return;
+            server->send_goal_response(goal_request,
+                                       co_await handle_goal(goal_request.uuid, goal_request.goal));
           };
           continuation(server, handle_goal, goal_request);
         },
@@ -1012,7 +1033,6 @@ public:
           continuation(server, handle_cancel, cancel_request, goal_handle);
         },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
-          std::cout << "handle accepted cb called" << std::endl;
           handle_accepted(goal_handle);
         },
         options, group);
