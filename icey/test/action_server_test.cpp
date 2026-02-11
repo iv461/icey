@@ -31,26 +31,29 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   /// Use coroutines as callbacks for the server
   auto handle_goal = [](const GoalUUID &,
                         std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
+    std::cout << "got goal request" << std::endl;
     co_return GoalResponse::ACCEPT_AND_EXECUTE;
   };
   auto handle_cancel =
       [](std::shared_ptr<ServerGoalHandleFibonacci>) -> icey::Promise<CancelResponse> {
+    std::cout << "got reject request" << std::endl;
     co_return CancelResponse::REJECT;
   };
   std::shared_ptr<ServerGoalHandleFibonacci> stored_gh;
   auto handle_accepted =
       [&stored_gh](std::shared_ptr<ServerGoalHandleFibonacci> gh) -> icey::Promise<void> {
+    std::cout << "got  request accepted" << std::endl;
     stored_gh = gh;
     co_return;
   };
 
-  auto server = receiver_->icey().create_action_server<Fibonacci>("/icey_8ufg23", handle_goal,
-                                                                handle_cancel, handle_accepted);
+  auto server = receiver_->icey().create_action_server<Fibonacci>(
+      "/icey_server_async_test", handle_goal, handle_cancel, handle_accepted);
 
   auto client = rclcpp_action::create_client<Fibonacci>(
       receiver_->get_node_base_interface(), receiver_->get_node_graph_interface(),
       receiver_->get_node_logging_interface(), receiver_->get_node_waitables_interface(),
-      "/icey_8ufg23");
+      "/icey_server_async_test");
   Fibonacci::Goal goal;
   goal.order = 2;
   typename rclcpp_action::Client<Fibonacci>::SendGoalOptions options;
@@ -61,10 +64,10 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
     std::cout << "options.feedback_callback" << std::endl;
   };
   bool result_received = false;
-  options.result_callback = [&](const auto &) { 
+  options.result_callback = [&](const auto &) {
     std::cout << "options.result_callback" << std::endl;
-    result_received = true; }
-    ;
+    result_received = true;
+  };
   client->async_send_goal(goal, options);
   spin(1000ms);
   EXPECT_TRUE(result_received);
