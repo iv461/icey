@@ -419,6 +419,7 @@ protected:
   void call_goal_accepted_callback(std::shared_ptr<rcl_action_goal_handle_t> rcl_goal_handle,
                                    GoalUUID uuid,
                                    std::shared_ptr<void> goal_request_message) override {
+    
     std::shared_ptr<ServerGoalHandle<ActionT>> goal_handle;
     std::weak_ptr<Server<ActionT>> weak_this = this->shared_from_this();
 
