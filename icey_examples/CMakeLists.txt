@@ -72,7 +72,7 @@ ament_auto_find_build_dependencies()
 #target_link_libraries(action_server_async_await_example icey fmt::fmt)
 
 ament_auto_add_executable(action_server2 src/action_server2.cpp)
-target_link_libraries(action_server2 icey fmt::fmt)
+target_link_libraries(action_server2 fmt::fmt)
 
 if(ament_cmake_auto_VERSION EQUAL 2.7.3)
   ament_auto_package()

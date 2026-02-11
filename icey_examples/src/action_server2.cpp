@@ -4,6 +4,11 @@
 
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
+
+#include "rclcpp_action/client.hpp"
+#include "rclcpp_action/client_goal_handle.hpp"
+#include "rclcpp_action/create_client.hpp"
+
 using namespace std::chrono_literals;
 
 using Fibonacci = example_interfaces::action::Fibonacci;
