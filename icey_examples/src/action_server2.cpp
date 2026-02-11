@@ -17,7 +17,9 @@ using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacc
 
 using namespace icey::rclcpp_action;
 
-void call(std::shared_ptr<rclcpp::Node> node) {
+int main(int argc, char **argv) {
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<rclcpp::Node>("icey_action_server_async_await_example");
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
 
   //&auto action_client = ctx->create_action_client<Fibonacci>("/icey_test_fib_result_timeout");
@@ -62,12 +64,7 @@ void call(std::shared_ptr<rclcpp::Node> node) {
     result_received = true;
   };
   client->async_send_goal(goal, options);
-}
-
-int main(int argc, char **argv) {
-  rclcpp::init(argc, argv);
-  auto node = std::make_shared<rclcpp::Node>("icey_action_server_async_await_example");
-  call(node);
+  
   rclcpp::spin(node);
   return 0;
 }
