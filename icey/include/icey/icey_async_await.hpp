@@ -991,11 +991,9 @@ public:
         [handle_goal](std::shared_ptr<Server> server,
                       const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
           const auto continuation =
-              [](auto server, const auto &async_cb,
-                 const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) -> Promise<void> {
-            std::cout << "handle goal cb called" << std::endl;
-            auto response = co_await async_cb(goal_request.uuid, goal_request.goal);
-            std::cout << "user handle_goal returned" << std::endl;
+              [](auto server, auto handle_goal,
+                 icey::rclcpp_action::GoalRequest<ActionT> goal_request) -> Promise<void> {
+            auto response = co_await handle_goal(goal_request.uuid, goal_request.goal);
             server->send_goal_response(goal_request, response);
             co_return;
           };
@@ -1004,8 +1002,8 @@ public:
         [handle_cancel](std::shared_ptr<Server> server,
                         std::shared_ptr<ServerGoalHandleT> goal_handle,
                         const icey::rclcpp_action::CancelRequest &cancel_request) {
-          const auto continuation = [](auto server, const auto &handle_cancel,
-                                       const icey::rclcpp_action::CancelRequest &cancel_request,
+          const auto continuation = [](auto server, auto handle_cancel,
+                                       icey::rclcpp_action::CancelRequest cancel_request,
                                        auto goal_handle) -> Promise<void> {
             auto response = co_await handle_cancel(goal_handle);
             server->send_cancel_response(cancel_request, response);
