@@ -44,7 +44,7 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
     co_return;
   };
 
-  auto server = sender_->icey().create_action_server<Fibonacci>("/icey_8ufg23", handle_goal,
+  auto server = receiver_->icey().create_action_server<Fibonacci>("/icey_8ufg23", handle_goal,
                                                                 handle_cancel, handle_accepted);
 
   auto client = rclcpp_action::create_client<Fibonacci>(
@@ -54,12 +54,17 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   Fibonacci::Goal goal;
   goal.order = 2;
   typename rclcpp_action::Client<Fibonacci>::SendGoalOptions options;
-  options.goal_response_callback = [](auto goal_handle) {};
+  options.goal_response_callback = [](auto goal_handle) {
+    std::cout << "options.goal_response_callback" << std::endl;
+  };
   options.feedback_callback = [](auto goal_handle, auto feedback) {
     std::cout << "options.feedback_callback" << std::endl;
   };
   bool result_received = false;
-  options.result_callback = [&](const auto &) { result_received = true; };
+  options.result_callback = [&](const auto &) { 
+    std::cout << "options.result_callback" << std::endl;
+    result_received = true; }
+    ;
   client->async_send_goal(goal, options);
   spin(1000ms);
   EXPECT_TRUE(result_received);
