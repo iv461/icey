@@ -14,7 +14,7 @@
 #include "rclcpp_action/client.hpp"
 #include "rclcpp_action/client_goal_handle.hpp"
 #include "rclcpp_action/create_client.hpp"
-
+#include "std_srvs/srv/set_bool.hpp"
 using namespace std::chrono_literals;
 
 using Fibonacci = example_interfaces::action::Fibonacci;
@@ -29,11 +29,19 @@ struct ActionsAsyncAwait : TwoNodesFixture {
 
 TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   /// Use coroutines as callbacks for the server
-  auto handle_goal = [](const GoalUUID &,
-                        std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
+  auto upstream_service_client =
+      receiver_->icey().create_client<ExampleService>("set_bool_service_upstream");
+  auto handle_goal = [&](const GoalUUID &,
+                         std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
     std::cout << "got goal request" << std::endl;
+
+    /// This will just timeout. Note that you always need at lease one co_await inside a coroutine
+    auto upstream_result = co_await upstream_service_client.call(
+        std::make_shared<std_srvs::srv::SetBool::Request>(), 1s);
+
     co_return GoalResponse::ACCEPT_AND_EXECUTE;
   };
+
   auto handle_cancel =
       [](std::shared_ptr<ServerGoalHandleFibonacci>) -> icey::Promise<CancelResponse> {
     std::cout << "got reject request" << std::endl;

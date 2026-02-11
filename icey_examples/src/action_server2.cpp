@@ -29,13 +29,12 @@ int main(int argc, char **argv) {
   /// request.
   auto upstream_service_client = ctx->create_client<ExampleService>("set_bool_service_upstream");
 
-  //&auto action_client = ctx->create_action_client<Fibonacci>("/icey_test_fib_result_timeout");
   auto handle_goal = [&](const GoalUUID &,
                          std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
     std::cout << "got goal request" << std::endl;
+
     /// Call the upstream service with 1s timeout asynchronously:
-    auto request = std::make_shared<Request>();
-    auto upstream_result = co_await upstream_service_client.call(request, 1s);
+    auto upstream_result = co_await upstream_service_client.call(std::make_shared<Request>(), 1s);
 
     co_return GoalResponse::ACCEPT_AND_EXECUTE;
   };
@@ -47,7 +46,7 @@ int main(int argc, char **argv) {
   std::shared_ptr<ServerGoalHandleFibonacci> stored_gh;
   auto handle_accepted =
       [&stored_gh](std::shared_ptr<ServerGoalHandleFibonacci> gh) -> icey::Promise<void> {
-    std::cout << "got  request accepted" << std::endl;
+    std::cout << "got request accepted" << std::endl;
     stored_gh = gh;
     co_return;
   };
@@ -70,7 +69,7 @@ int main(int argc, char **argv) {
     std::cout << "options.feedback_callback" << std::endl;
   };
   bool result_received = false;
-  options.result_callback = [&](const auto &) {
+  options.result_callback = [&](const auto &response) {
     std::cout << "options.result_callback" << std::endl;
     result_received = true;
   };
