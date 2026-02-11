@@ -976,12 +976,11 @@ public:
     return ServiceClient<ServiceT>(node_base(), service_name, qos);
   }
 
-  /// Create an action server with a synchronous or asynchronous execute callback.
-  /// The goal and cancel callbacks default to ACCEPT/ACCEPT behavior.
+  /// Create an action server with a synchronous or asynchronous callbacks.
   template <class ActionT, class GoalCallback, class CancelCallback, class AcceptedCallback>
   std::shared_ptr<icey::rclcpp_action::Server<ActionT>> create_action_server(
-      const std::string &name, GoalCallback handle_goal, CancelCallback handle_cancel,
-      AcceptedCallback handle_accepted,
+      const std::string &name, const GoalCallback &handle_goal, const CancelCallback &handle_cancel,
+      const AcceptedCallback &handle_accepted,
       const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using ServerGoalHandleT = icey::rclcpp_action::ServerGoalHandle<ActionT>;
@@ -1003,7 +1002,14 @@ public:
         [handle_cancel](std::shared_ptr<Server> server,
                         std::shared_ptr<ServerGoalHandleT> goal_handle,
                         const icey::rclcpp_action::CancelRequest &cancel_request) {
-
+          const auto continuation = [](auto server, const auto &handle_cancel,
+                                       const icey::rclcpp_action::CancelRequest &cancel_request,
+                                       auto goal_handle) -> Promise<void> {
+            auto response = co_await handle_cancel(goal_handle);
+            server->send_cancel_response(cancel_request, response);
+            co_return;
+          };
+          continuation(server, handle_cancel, cancel_request, goal_handle);
         },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
           handle_accepted(goal_handle);
