@@ -17,10 +17,10 @@
 #include "rcl_action/action_server.h"
 #include "rcl_action/goal_handle.h"
 
-#include "rclcpp_action/server_goal_handle.hpp"
+#include <icey/action/server_goal_handle.hpp>
 #include "rclcpp/exceptions.hpp"
 
-namespace rclcpp_action
+namespace icey::rclcpp_action
 {
 ServerGoalHandleBase::~ServerGoalHandleBase()
 {

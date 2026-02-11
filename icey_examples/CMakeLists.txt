@@ -66,9 +66,13 @@ ament_auto_add_executable(service_client_async_await_example src/service_client_
 target_link_libraries(service_client_async_await_example fmt::fmt)
 
 ament_auto_add_executable(action_client_async_await_example src/action_client_async_await.cpp)
+target_link_libraries(action_client_async_await_example icey fmt::fmt)
+
 ament_auto_add_executable(action_server_async_await_example src/action_server_async_await.cpp)
+target_link_libraries(action_server_async_await_example icey fmt::fmt)
+
 ament_auto_add_executable(action_server2 src/action_server2.cpp)
-target_link_libraries(action_server2 fmt::fmt)
+target_link_libraries(action_server2 icey fmt::fmt)
 
 if(ament_cmake_auto_VERSION EQUAL 2.7.3)
   ament_auto_package()
