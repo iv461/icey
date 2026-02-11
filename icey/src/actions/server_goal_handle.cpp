@@ -9,26 +9,20 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
+// See the License for the specific language governing permissFions and
 // limitations under the License.
 
+#include <icey/action/server_goal_handle.hpp>
 #include <memory>
 
 #include "rcl_action/action_server.h"
 #include "rcl_action/goal_handle.h"
-
-#include <icey/action/server_goal_handle.hpp>
 #include "rclcpp/exceptions.hpp"
 
-namespace icey::rclcpp_action
-{
-ServerGoalHandleBase::~ServerGoalHandleBase()
-{
-}
+namespace icey::rclcpp_action {
+ServerGoalHandleBase::~ServerGoalHandleBase() {}
 
-bool
-ServerGoalHandleBase::is_canceling() const
-{
+bool ServerGoalHandleBase::is_canceling() const {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_action_goal_state_t state = GOAL_STATE_UNKNOWN;
   rcl_ret_t ret = rcl_action_goal_handle_get_status(rcl_handle_.get(), &state);
@@ -38,16 +32,12 @@ ServerGoalHandleBase::is_canceling() const
   return GOAL_STATE_CANCELING == state;
 }
 
-bool
-ServerGoalHandleBase::is_active() const
-{
+bool ServerGoalHandleBase::is_active() const {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   return rcl_action_goal_handle_is_active(rcl_handle_.get());
 }
 
-bool
-ServerGoalHandleBase::is_executing() const
-{
+bool ServerGoalHandleBase::is_executing() const {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_action_goal_state_t state = GOAL_STATE_UNKNOWN;
   rcl_ret_t ret = rcl_action_goal_handle_get_status(rcl_handle_.get(), &state);
@@ -57,9 +47,7 @@ ServerGoalHandleBase::is_executing() const
   return GOAL_STATE_EXECUTING == state;
 }
 
-void
-ServerGoalHandleBase::_abort()
-{
+void ServerGoalHandleBase::_abort() {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_ret_t ret = rcl_action_update_goal_state(rcl_handle_.get(), GOAL_EVENT_ABORT);
   if (RCL_RET_OK != ret) {
@@ -67,9 +55,7 @@ ServerGoalHandleBase::_abort()
   }
 }
 
-void
-ServerGoalHandleBase::_succeed()
-{
+void ServerGoalHandleBase::_succeed() {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_ret_t ret = rcl_action_update_goal_state(rcl_handle_.get(), GOAL_EVENT_SUCCEED);
   if (RCL_RET_OK != ret) {
@@ -77,9 +63,7 @@ ServerGoalHandleBase::_succeed()
   }
 }
 
-void
-ServerGoalHandleBase::_cancel_goal()
-{
+void ServerGoalHandleBase::_cancel_goal() {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_ret_t ret = rcl_action_update_goal_state(rcl_handle_.get(), GOAL_EVENT_CANCEL_GOAL);
   if (RCL_RET_OK != ret) {
@@ -87,9 +71,7 @@ ServerGoalHandleBase::_cancel_goal()
   }
 }
 
-void
-ServerGoalHandleBase::_canceled()
-{
+void ServerGoalHandleBase::_canceled() {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_ret_t ret = rcl_action_update_goal_state(rcl_handle_.get(), GOAL_EVENT_CANCELED);
   if (RCL_RET_OK != ret) {
@@ -97,9 +79,7 @@ ServerGoalHandleBase::_canceled()
   }
 }
 
-void
-ServerGoalHandleBase::_execute()
-{
+void ServerGoalHandleBase::_execute() {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_ret_t ret = rcl_action_update_goal_state(rcl_handle_.get(), GOAL_EVENT_EXECUTE);
   if (RCL_RET_OK != ret) {
@@ -107,9 +87,7 @@ ServerGoalHandleBase::_execute()
   }
 }
 
-bool
-ServerGoalHandleBase::try_canceling() noexcept
-{
+bool ServerGoalHandleBase::try_canceling() noexcept {
   std::lock_guard<std::mutex> lock(rcl_handle_mutex_);
   rcl_ret_t ret;
   // Check if the goal is cancelable
@@ -137,4 +115,4 @@ ServerGoalHandleBase::try_canceling() noexcept
 
   return false;
 }
-}  // namespace rclcpp_action
+}  // namespace icey::rclcpp_action
