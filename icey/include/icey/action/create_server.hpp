@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__CREATE_SERVER_HPP_
-#define RCLCPP_ACTION__CREATE_SERVER_HPP_
+#pragma once
 
 #include <icey/action/server.hpp>
 #include <memory>
@@ -128,4 +127,3 @@ typename Server<ActionT>::SharedPtr create_server(
                                 handle_cancel, handle_accepted, options, group);
 }
 }  // namespace icey::rclcpp_action
-#endif  // RCLCPP_ACTION__CREATE_SERVER_HPP_
