@@ -730,7 +730,7 @@ struct AsyncGoalHandle {
   int8_t get_status() { return goal_handle_->get_status; }
 
   /// Obtain the result asynchronously.
-  ResultPromise result(const Duration &timeout) {
+  ResultPromise result(const Duration &timeout) const {
     return ResultPromise{[this, timeout](auto &promise) {
       try {
         auto request_id =
