@@ -12,38 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__CLIENT_GOAL_HANDLE_HPP_
-#define RCLCPP_ACTION__CLIENT_GOAL_HANDLE_HPP_
+#pragma once
 
 #include <functional>
 #include <future>
 #include <memory>
 #include <mutex>
 
-#include "rcl_action/action_client.h"
-
 #include "action_msgs/msg/goal_status.hpp"
+#include "rcl_action/action_client.h"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/time.hpp"
-
 #include "rclcpp_action/exceptions.hpp"
 #include "rclcpp_action/types.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 
-namespace rclcpp_action
-{
+namespace icey::rclcpp_action {
+
+using GoalUUID = std::array<uint8_t, UUID_SIZE>;
+using GoalStatus = action_msgs::msg::GoalStatus;
+using GoalInfo = action_msgs::msg::GoalInfo;
+
 /// The possible statuses that an action goal can finish with.
-enum class ResultCode : int8_t
-{
+enum class ResultCode : int8_t {
   UNKNOWN = action_msgs::msg::GoalStatus::STATUS_UNKNOWN,
   SUCCEEDED = action_msgs::msg::GoalStatus::STATUS_SUCCEEDED,
   CANCELED = action_msgs::msg::GoalStatus::STATUS_CANCELED,
   ABORTED = action_msgs::msg::GoalStatus::STATUS_ABORTED
 };
 
-
 // Forward declarations
-template<typename ActionT>
+template <typename ActionT>
 class Client;
 
 /// Class for interacting with goals sent from action clients.
@@ -55,15 +54,13 @@ class Client;
  * A `Client` will create an instance and return it to the user (via a future) after calling
  * `Client::async_send_goal`.
  */
-template<typename ActionT>
-class ClientGoalHandle
-{
+template <typename ActionT>
+class ClientGoalHandle {
 public:
   RCLCPP_SMART_PTR_DEFINITIONS_NOT_COPYABLE(ClientGoalHandle)
 
   // A wrapper that defines the result of an action
-  struct WrappedResult
-  {
+  struct WrappedResult {
     /// The unique identifier of the goal
     GoalUUID goal_id;
     /// A status to indicate if the goal was canceled, aborted, or succeeded
@@ -74,53 +71,40 @@ public:
 
   using Feedback = typename ActionT::Feedback;
   using Result = typename ActionT::Result;
-  using FeedbackCallback =
-    std::function<void (
-        typename ClientGoalHandle<ActionT>::SharedPtr,
-        const std::shared_ptr<const Feedback>)>;
-  using ResultCallback = std::function<void (const WrappedResult & result)>;
+  using FeedbackCallback = std::function<void(typename ClientGoalHandle<ActionT>::SharedPtr,
+                                              const std::shared_ptr<const Feedback>)>;
+  using ResultCallback = std::function<void(const WrappedResult& result)>;
 
   virtual ~ClientGoalHandle();
 
   /// Get the unique ID for the goal.
-  const GoalUUID &
-  get_goal_id() const;
+  const GoalUUID& get_goal_id() const;
 
   /// Get the time when the goal was accepted.
-  rclcpp::Time
-  get_goal_stamp() const;
+  rclcpp::Time get_goal_stamp() const;
 
   /// Get the goal status code.
-  int8_t
-  get_status();
+  int8_t get_status();
 
   /// Check if an action client has subscribed to feedback for the goal.
-  bool
-  is_feedback_aware();
+  bool is_feedback_aware();
 
   /// Check if an action client has requested the result for the goal.
-  bool
-  is_result_aware();
+  bool is_result_aware();
 
 private:
   // The templated Client creates goal handles
   friend class Client<ActionT>;
 
-  ClientGoalHandle(
-    const GoalInfo & info,
-    FeedbackCallback feedback_callback,
-    ResultCallback result_callback);
+  ClientGoalHandle(const GoalInfo& info, FeedbackCallback feedback_callback,
+                   ResultCallback result_callback);
 
-  void
-  set_feedback_callback(FeedbackCallback callback);
+  void set_feedback_callback(FeedbackCallback callback);
 
-  void
-  set_result_callback(ResultCallback callback);
+  void set_result_callback(ResultCallback callback);
 
-  void
-  call_feedback_callback(
-    typename ClientGoalHandle<ActionT>::SharedPtr shared_this,
-    typename std::shared_ptr<const Feedback> feedback_message);
+  void call_feedback_callback(typename ClientGoalHandle<ActionT>::SharedPtr shared_this,
+                              typename std::shared_ptr<const Feedback> feedback_message);
 
   /// Get a future to the goal result.
   /**
@@ -129,27 +113,21 @@ private:
    *
    * `is_result_aware()` can be used to check if it is safe to call this method.
    *
-   * \throws exceptions::UnawareGoalHandleError If the the goal handle is unaware of the result.
+   * \throws ::rclcpp_action::exceptions::UnawareGoalHandleError If the the goal handle is unaware of the result.
    * \return A future to the result.
    */
-  std::shared_future<WrappedResult>
-  async_get_result();
+  std::shared_future<WrappedResult> async_get_result();
 
   /// Returns the previous value of awareness
-  bool
-  set_result_awareness(bool awareness);
+  bool set_result_awareness(bool awareness);
 
-  void
-  set_status(int8_t status);
+  void set_status(int8_t status);
 
-  void
-  set_result(const WrappedResult & wrapped_result);
+  void set_result(const WrappedResult& wrapped_result);
 
-  void
-  invalidate(const exceptions::UnawareGoalHandleError & ex);
+  void invalidate(const ::rclcpp_action::exceptions::UnawareGoalHandleError& ex);
 
-  bool
-  is_invalidated() const;
+  bool is_invalidated() const;
 
   GoalInfo info_;
 
@@ -165,7 +143,6 @@ private:
 
   std::recursive_mutex handle_mutex_;
 };
-}  // namespace rclcpp_action
+}  // namespace icey::rclcpp_action
 
-#include <rclcpp_action/client_goal_handle_impl.hpp>  // NOLINT(build/include_order)
-#endif  // RCLCPP_ACTION__CLIENT_GOAL_HANDLE_HPP_
+#include <icey/action/client_goal_handle_impl.hpp>  // NOLINT(build/include_order)

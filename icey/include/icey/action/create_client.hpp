@@ -12,19 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__CREATE_CLIENT_HPP_
-#define RCLCPP_ACTION__CREATE_CLIENT_HPP_
+#pragma once
 
+#include <icey/action/client.hpp>
 #include <memory>
 #include <string>
 
 #include "rclcpp/node.hpp"
-
-#include "rclcpp_action/client.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 
-namespace rclcpp_action
-{
+namespace icey::rclcpp_action {
 /// Create an action client.
 /**
  * This function is equivalent to \sa create_client()` however is using the individual
@@ -39,54 +36,46 @@ namespace rclcpp_action
  *   If `nullptr`, then the action client is added to the default callback group.
  * \param[in] options Options to pass to the underlying `rcl_action_client_t`.
  */
-template<typename ActionT>
-typename Client<ActionT>::SharedPtr
-create_client(
-  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_interface,
-  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_interface,
-  rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_interface,
-  rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface,
-  const std::string & name,
-  rclcpp::CallbackGroup::SharedPtr group = nullptr,
-  const rcl_action_client_options_t & options = rcl_action_client_get_default_options())
-{
+template <typename ActionT>
+typename Client<ActionT>::SharedPtr create_client(
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base_interface,
+    rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_interface,
+    rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging_interface,
+    rclcpp::node_interfaces::NodeWaitablesInterface::SharedPtr node_waitables_interface,
+    const std::string &name, rclcpp::CallbackGroup::SharedPtr group = nullptr,
+    const rcl_action_client_options_t &options = rcl_action_client_get_default_options()) {
   std::weak_ptr<rclcpp::node_interfaces::NodeWaitablesInterface> weak_node =
-    node_waitables_interface;
+      node_waitables_interface;
   std::weak_ptr<rclcpp::CallbackGroup> weak_group = group;
   bool group_is_null = (nullptr == group.get());
 
-  auto deleter = [weak_node, weak_group, group_is_null](Client<ActionT> * ptr)
-    {
-      if (nullptr == ptr) {
-        return;
-      }
-      auto shared_node = weak_node.lock();
-      if (shared_node) {
-        // API expects a shared pointer, give it one with a deleter that does nothing.
-        std::shared_ptr<Client<ActionT>> fake_shared_ptr(ptr, [](Client<ActionT> *) {});
+  auto deleter = [weak_node, weak_group, group_is_null](Client<ActionT> *ptr) {
+    if (nullptr == ptr) {
+      return;
+    }
+    auto shared_node = weak_node.lock();
+    if (shared_node) {
+      // API expects a shared pointer, give it one with a deleter that does nothing.
+      std::shared_ptr<Client<ActionT>> fake_shared_ptr(ptr, [](Client<ActionT> *) {});
 
-        if (group_is_null) {
-          // Was added to default group
-          shared_node->remove_waitable(fake_shared_ptr, nullptr);
-        } else {
-          // Was added to a specific group
-          auto shared_group = weak_group.lock();
-          if (shared_group) {
-            shared_node->remove_waitable(fake_shared_ptr, shared_group);
-          }
+      if (group_is_null) {
+        // Was added to default group
+        shared_node->remove_waitable(fake_shared_ptr, nullptr);
+      } else {
+        // Was added to a specific group
+        auto shared_group = weak_group.lock();
+        if (shared_group) {
+          shared_node->remove_waitable(fake_shared_ptr, shared_group);
         }
       }
-      delete ptr;
-    };
+    }
+    delete ptr;
+  };
 
   std::shared_ptr<Client<ActionT>> action_client(
-    new Client<ActionT>(
-      node_base_interface,
-      node_graph_interface,
-      node_logging_interface,
-      name,
-      options),
-    deleter);
+      new Client<ActionT>(node_base_interface, node_graph_interface, node_logging_interface, name,
+                          options),
+      deleter);
 
   node_waitables_interface->add_waitable(action_client, group);
   return action_client;
@@ -100,23 +89,13 @@ create_client(
  *   If `nullptr`, then the action client is added to the default callback group.
  * \param[in] options Options to pass to the underlying `rcl_action_client_t`.
  */
-template<typename ActionT, typename NodeT>
-typename Client<ActionT>::SharedPtr
-create_client(
-  NodeT node,
-  const std::string & name,
-  rclcpp::CallbackGroup::SharedPtr group = nullptr,
-  const rcl_action_client_options_t & options = rcl_action_client_get_default_options())
-{
+template <typename ActionT, typename NodeT>
+typename Client<ActionT>::SharedPtr create_client(
+    NodeT node, const std::string &name, rclcpp::CallbackGroup::SharedPtr group = nullptr,
+    const rcl_action_client_options_t &options = rcl_action_client_get_default_options()) {
   return rclcpp_action::create_client<ActionT>(
-    node->get_node_base_interface(),
-    node->get_node_graph_interface(),
-    node->get_node_logging_interface(),
-    node->get_node_waitables_interface(),
-    name,
-    group,
-    options);
+      node->get_node_base_interface(), node->get_node_graph_interface(),
+      node->get_node_logging_interface(), node->get_node_waitables_interface(), name, group,
+      options);
 }
-}  // namespace rclcpp_action
-
-#endif  // RCLCPP_ACTION__CREATE_CLIENT_HPP_
+}  // namespace icey::rclcpp_action

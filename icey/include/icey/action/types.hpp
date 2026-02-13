@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once 
+#pragma once
 
 #include <array>
 #include <climits>
 #include <functional>
 #include <string>
 
-#include "rcl_action/types.h"
-
-#include "action_msgs/msg/goal_status.hpp"
 #include "action_msgs/msg/goal_info.hpp"
-
+#include "action_msgs/msg/goal_status.hpp"
+#include "rcl_action/types.h"
 #include "rclcpp_action/visibility_control.hpp"
 
-namespace icey::rclcpp_action
-{
+namespace icey::rclcpp_action {
 
 using GoalUUID = std::array<uint8_t, UUID_SIZE>;
 using GoalStatus = action_msgs::msg::GoalStatus;
@@ -35,8 +32,7 @@ using GoalInfo = action_msgs::msg::GoalInfo;
 
 /// Convert a goal id to a human readable RFC-4122 compliant string.
 RCLCPP_ACTION_PUBLIC
-std::string
-to_string(const GoalUUID & goal_id);
+std::string to_string(const GoalUUID& goal_id);
 
 /// Convert C++ GoalID to rcl_action_goal_info_t
 /**
@@ -45,8 +41,7 @@ to_string(const GoalUUID & goal_id);
  * \throws std::runtime_error if info is null.
  */
 RCLCPP_ACTION_PUBLIC
-void
-rclcpp_action::rclcpp_action::convert(const GoalUUID & goal_id, rcl_action_goal_info_t * info);
+void convert(const GoalUUID& goal_id, rcl_action_goal_info_t* info);
 
 /// Convert rcl_action_goal_info_t to C++ GoalID
 /**
@@ -55,34 +50,26 @@ rclcpp_action::rclcpp_action::convert(const GoalUUID & goal_id, rcl_action_goal_
  * \throws std::runtime_error if goal_id is null.
  */
 RCLCPP_ACTION_PUBLIC
-void
-rclcpp_action::rclcpp_action::convert(const rcl_action_goal_info_t & info, GoalUUID * goal_id);
-}  // namespace rclcpp_action
+void convert(const rcl_action_goal_info_t& info, GoalUUID* goal_id);
+}  // namespace icey::rclcpp_action
 
-namespace std
-{
-template<>
-struct less<rclcpp_action::GoalUUID>
-{
-  bool operator()(
-    const rclcpp_action::GoalUUID & lhs,
-    const rclcpp_action::GoalUUID & rhs) const
-  {
+namespace std {
+template <>
+struct less<rclcpp_action::GoalUUID> {
+  bool operator()(const rclcpp_action::GoalUUID& lhs, const rclcpp_action::GoalUUID& rhs) const {
     return lhs < rhs;
   }
 };
 
 /// Hash a goal id so it can be used as a key in std::unordered_map
-template<>
-struct hash<rclcpp_action::GoalUUID>
-{
-  size_t operator()(const rclcpp_action::GoalUUID & uuid) const noexcept
-  {
+template <>
+struct hash<rclcpp_action::GoalUUID> {
+  size_t operator()(const rclcpp_action::GoalUUID& uuid) const noexcept {
     // Using the FNV-1a hash algorithm
     constexpr size_t FNV_prime = 1099511628211u;
     size_t result = 14695981039346656037u;
 
-    for (const auto & byte : uuid) {
+    for (const auto& byte : uuid) {
       result ^= byte;
       result *= FNV_prime;
     }
@@ -90,4 +77,3 @@ struct hash<rclcpp_action::GoalUUID>
   }
 };
 }  // namespace std
-

@@ -704,18 +704,19 @@ protected:
 /// An AsyncGoalHandle is created once a requested goal was accepted by the action server.
 /// It provides an async/await based API for requesting the result and cancellation.
 /// WARNING: On Humble, there seems to be a memory leak bug in the underlying send_goal API.
-/*
+
 template <class ActionT>
 struct AsyncGoalHandle {
   using Goal = typename ActionT::Goal;
-  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
+  using GoalHandle = icey::rclcpp_action::ClientGoalHandle<ActionT>;
   using Result = typename GoalHandle::WrappedResult;
-  using CancelResponse = typename rclcpp_action::Client<ActionT>::CancelResponse::SharedPtr;
-  using Feedback = typename rclcpp_action::Client<ActionT>::Feedback;
+  using Client = icey::rclcpp_action::Client<ActionT>;
+  using CancelResponse = typename Client::CancelResponse::SharedPtr;
+  using Feedback = typename Client::Feedback;
 
   using ResultPromise = impl::Promise<Result, std::string>;
 
-  AsyncGoalHandle(NodeBase &node, std::shared_ptr<rclcpp_action::Client<ActionT>> client,
+  AsyncGoalHandle(NodeBase &node, std::shared_ptr<Client> client,
                   const std::shared_ptr<GoalHandle> &goal_handle)
       : node_(node), client_(client), goal_handle_(goal_handle) {}
 
@@ -754,7 +755,7 @@ struct AsyncGoalHandle {
 #endif
           promise.reject("RESULT TIMEOUT");
         });
-      } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
+      } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, the
         promise.reject(ex.what());
       }
@@ -768,20 +769,21 @@ struct AsyncGoalHandle {
   impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
     return impl::Promise<CancelResponse, std::string>([this, timeout](auto &promise) {
       try {
-        client_.lock()->async_cancel_goal(goal_handle_,
-                                          [this, &promise](CancelResponse cancel_response) {
-                                            node_.cancel_task_for(uint64_t(&promise));
-                                            promise.resolve(cancel_response);
-                                          });
+        auto request_id = client_.lock()->async_cancel_goal(
+            goal_handle_, [this, &promise](CancelResponse cancel_response) {
+              node_.cancel_task_for(uint64_t(&promise));
+              promise.resolve(cancel_response);
+            });
         /// Add timeout task
-        node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
+        node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
+          client_.lock()->cancel_cancellation_request(request_id);
           client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
         promise.set_cancel([](auto &) {
           std::cout << "WARNING: Promise from AsyncGoalHandle::cancel was not awaited" << std::endl;
         });
-      } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
+      } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, an exception can we thrown if we try to cancel, but the
         /// goal was already reached
         promise.reject(ex.what());
@@ -794,7 +796,7 @@ struct AsyncGoalHandle {
 
 private:
   NodeBase &node_;
-  std::weak_ptr<rclcpp_action::Client<ActionT>> client_;
+  std::weak_ptr<Client> client_;
   std::shared_ptr<GoalHandle> goal_handle_;
 };
 
@@ -804,15 +806,15 @@ private:
 template <class ActionT>
 struct ActionClient {
   using Goal = typename ActionT::Goal;
-  using Client = rclcpp_action::Client<ActionT>;
-  using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
+  using Client = icey::rclcpp_action::Client<ActionT>;
+  using GoalHandle = icey::rclcpp_action::ClientGoalHandle<ActionT>;
   using FeedbackCallback = typename GoalHandle::FeedbackCallback;
   using Result = typename GoalHandle::WrappedResult;
   using RequestID = int64_t;
-
   using AsyncGoalHandleT = std::shared_ptr<AsyncGoalHandle<ActionT>>;
+
   ActionClient(NodeBase &node, const std::string &action_name) : node_(node) {
-    client_ = rclcpp_action::create_client<ActionT>(
+    client_ = icey::  rclcpp_action::create_client<ActionT>(
         node.get_node_base_interface(), node.get_node_graph_interface(),
         node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
   }
@@ -824,11 +826,6 @@ struct ActionClient {
     return impl::Promise<AsyncGoalHandleT, std::string>([this, goal, timeout,
                                                          feedback_callback](auto &promise) {
       typename Client::SendGoalOptions options;
-      // Acceptance timeout: reject if no acceptance within timeout
-      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise]() {
-        std::cout << "Timeout in  promise " << get_type(promise) << std::endl;
-        promise.reject("TIMEOUT");
-      });
 
       options.goal_response_callback = [this, &promise](auto goal_handle) {
         // Cancel acceptance timeout
@@ -859,7 +856,13 @@ struct ActionClient {
       options.result_callback = [](const Result &) {
         std::cout << "Called options.result_callback " << std::endl;
       };
-      client_->async_send_goal(goal, options);
+      auto request_id = client_->async_send_goal(goal, options);
+      // Acceptance timeout: reject if no acceptance within timeout
+      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
+        std::cout << "Timeout in  promise " << get_type(promise) << std::endl;
+        client_->cancel_goal_request(request_id);
+        promise.reject("TIMEOUT");
+      });
       /// TODO Is there really no way to cancel this operation if the promise goes out of scope ?
       promise.set_cancel([this](auto &p) {
         node_.cancel_task_for(uint64_t(&p));
@@ -871,9 +874,9 @@ struct ActionClient {
 
 protected:
   NodeBase &node_;
-  std::shared_ptr<rclcpp_action::Client<ActionT>> client_;
+  std::shared_ptr<Client> client_;
 };
-*/
+
 /// A context that provides only async/await related entities.
 class ContextAsyncAwait : public NodeBase {
 public:
@@ -1006,7 +1009,7 @@ public:
       const rcl_action_server_options_t &options = rcl_action_server_get_default_options(),
       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using ServerGoalHandleT = icey::rclcpp_action::ServerGoalHandle<ActionT>;
-    using Server = icey::rclcpp_action::Server<ActionT>;  
+    using Server = icey::rclcpp_action::Server<ActionT>;
     auto server = icey::rclcpp_action::create_server<ActionT>(
         get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
         get_node_waitables_interface(), name,
