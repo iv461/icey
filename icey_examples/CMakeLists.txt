@@ -66,10 +66,10 @@ ament_auto_find_build_dependencies()
 #target_link_libraries(service_client_async_await_example fmt::fmt)
 
 ament_auto_add_executable(action_client_async_await_example src/action_client_async_await.cpp)
-target_link_libraries(action_client_async_await_example icey fmt::fmt)
+target_link_libraries(action_client_async_await_example fmt::fmt)
 
 ament_auto_add_executable(action_server_async_await_example src/action_server_async_await.cpp)
-target_link_libraries(action_server_async_await_example icey fmt::fmt)
+target_link_libraries(action_server_async_await_example fmt::fmt)
 
 ament_auto_add_executable(action_server2 src/action_server2.cpp)
 target_link_libraries(action_server2 fmt::fmt)

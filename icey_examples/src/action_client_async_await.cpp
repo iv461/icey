@@ -15,6 +15,7 @@
 
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
+using namespace icey::rclcpp_action;
 
 icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
   auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
@@ -43,7 +44,7 @@ icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
 
   } else {
     auto const &result = maybe_result.value();
-    if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+    if (result.code == ResultCode::SUCCEEDED) {
       RCLCPP_INFO(node->get_logger(), "Fibonacci done. Size: %zu", result.result->sequence.size());
     } else {
       RCLCPP_WARN(node->get_logger(), "Action finished with code %d",
