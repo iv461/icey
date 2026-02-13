@@ -60,17 +60,23 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   const auto l = [this, client]() -> icey::Promise<void> {
     Fibonacci::Goal goal;
     goal.order = 2;
+
     auto res1 = co_await client.send_goal(
         goal, 200ms, [](auto, auto) { std::cout << "Got feedback" << std::endl; });
 
     EXPECT_FALSE(res1.has_error());
-    std::cout << res1.error() << std::endl;
+    if (res1.has_error())
+      std::cout << "Goal error: " << res1.error() << std::endl;
+    else
+      std::cout << "Got goal" << std::endl;
 
     auto goal_handle = res1.value();
     auto ares = co_await goal_handle.result(200ms);
+    if (ares.has_error())
+      std::cout << "Goal result error: " << ares.error() << std::endl;
+    else
+      std::cout << "Goal result success: " << int(ares.value().code) << std::endl;
     EXPECT_FALSE(ares.has_error());
-    std::cout << res1.error() << std::endl;
-
     EXPECT_EQ(ares.value().code, rclcpp_action::ResultCode::SUCCEEDED);
     async_completed = true;
     co_return;

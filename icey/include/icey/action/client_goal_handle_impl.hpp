@@ -47,7 +47,7 @@ rclcpp::Time ClientGoalHandle<ActionT>::get_goal_stamp() const {
 }
 
 template <typename ActionT>
-std::shared_future<typename ClientGoalHandle<ActionT>::WrappedResult>
+int64_t
 ClientGoalHandle<ActionT>::async_get_result() {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   if (!is_result_aware_) {

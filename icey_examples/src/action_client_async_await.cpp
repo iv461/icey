@@ -35,7 +35,7 @@ icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
   }
   RCLCPP_INFO_STREAM(node->get_logger(),
                      "Goal request was accepted, starting to wait for the result..");
-  const auto &goal_handle = maybe_goal_handle.value();
+  auto goal_handle = maybe_goal_handle.value();
   /// Now wait for the result of the action for 20 seconds.
   auto maybe_result = co_await goal_handle.result(20s);
   if (maybe_result.has_error()) {
