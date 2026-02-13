@@ -367,8 +367,7 @@ public:
    * \param[in] goal The goal request.
    * \param[in] options Options for sending the goal request. Contains references to callbacks for
    *   the goal response (accepted/rejected), feedback, and the final result.
-   * \return A future that completes when the goal has been accepted or rejected.
-   *   If the goal is rejected, then the result will be a `nullptr`.
+   * \return The request Id
    */
   int64_t async_send_goal(const Goal& goal, const SendGoalOptions& options = SendGoalOptions()) {
     using GoalRequest = typename ActionT::Impl::SendGoalService::Request;

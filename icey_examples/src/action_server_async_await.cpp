@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     co_return;
   };
 
-  ctx->create_action_server<Fibonacci>("/icey_server_async_test", handle_goal, handle_cancel,
+  ctx->create_action_server<Fibonacci>("/icey_test_action_fibonacci", handle_goal, handle_cancel,
                                        handle_accepted);
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Created action sever");
