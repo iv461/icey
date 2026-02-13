@@ -204,7 +204,7 @@ protected:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
-  virtual void send_result_request(std::shared_ptr<void> request, ResponseCallback callback);
+  virtual int64_t send_result_request(std::shared_ptr<void> request, ResponseCallback callback);
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
@@ -432,10 +432,10 @@ public:
    *   state, or if there was an error requesting the result.
    * \param[in] goal_handle The goal handle for which to get the result.
    * \param[in] result_callback Optional callback that is called when the result is received.
-   * \return A future that is set to the goal result when the goal is finished.
+   * \return The request id, if the sending fails nothing.
    */
-  std::shared_future<WrappedResult> async_get_result(typename GoalHandle::SharedPtr goal_handle,
-                                                     ResultCallback result_callback = nullptr) {
+  std::optional<int64_t> async_get_result(typename GoalHandle::SharedPtr goal_handle,
+                                          ResultCallback result_callback = nullptr) {
     std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
     if (goal_handles_.count(goal_handle->get_goal_id()) == 0) {
       throw ::rclcpp_action::exceptions::UnknownGoalHandleError();
@@ -449,8 +449,7 @@ public:
       // This will override any previously registered callback
       goal_handle->set_result_callback(result_callback);
     }
-    this->make_result_aware(goal_handle);
-    return goal_handle->async_get_result();
+    return this->make_result_aware(goal_handle);
   }
 
   /// Asynchronously request a goal be canceled.
@@ -656,16 +655,18 @@ private:
   }
 
   /// \internal
-  void make_result_aware(typename GoalHandle::SharedPtr goal_handle) {
+  /// Makes the result "aware", aha.
+  std::optional<int64_t> make_result_aware(typename GoalHandle::SharedPtr goal_handle) {
     // Avoid making more than one request
+    std::optional<int64_t> maybe_request_id;
     if (goal_handle->set_result_awareness(true)) {
-      return;
+      return maybe_request_id;
     }
     using GoalResultRequest = typename ActionT::Impl::GetResultService::Request;
     auto goal_result_request = std::make_shared<GoalResultRequest>();
     goal_result_request->goal_id.uuid = goal_handle->get_goal_id();
     try {
-      this->send_result_request(
+      maybe_request_id = this->send_result_request(
           std::static_pointer_cast<void>(goal_result_request),
           [goal_handle, this](std::shared_ptr<void> response) mutable {
             // Wrap the response in a struct with the fields a user cares about
@@ -684,6 +685,7 @@ private:
       // This will cause an exception when the user tries to access the result
       goal_handle->invalidate(::rclcpp_action::exceptions::UnawareGoalHandleError(ex.message));
     }
+    return maybe_request_id;
   }
 
   /// \internal

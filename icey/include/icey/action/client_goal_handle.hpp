@@ -120,9 +120,9 @@ private:
    * `is_result_aware()` can be used to check if it is safe to call this method.
    *
    * \throws ::rclcpp_action::exceptions::UnawareGoalHandleError If the the goal handle is unaware
-   * of the result. \return A future to the result.
+   * of the result. \return The request id
    */
-  std::shared_future<WrappedResult> async_get_result();
+  int64_t async_get_result();
 
   /// Returns the previous value of awareness
   bool set_result_awareness(bool awareness);

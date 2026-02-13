@@ -720,15 +720,6 @@ struct AsyncGoalHandle {
                   const std::shared_ptr<GoalHandle> &goal_handle)
       : node_(node), client_(client), goal_handle_(goal_handle) {}
 
-  ~AsyncGoalHandle() {
-    /// This is a cleanup function that removes entries from a hashtable called "goal_handles_"
-    /// inside the rclcpp_action::Client, so we have to call it to prevent memory leaks apparently.
-#if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
-                               /// version: https://index.ros.org/p/rclcpp/#humble
-    client_.lock()->stop_callbacks(goal_handle_);
-#endif
-  }
-
   /// Get the goal UUID.
   const rclcpp_action::GoalUUID &get_goal_id() const { return goal_handle_->get_goal_id(); }
   /// Get the time when the goal was accepted.
@@ -739,24 +730,24 @@ struct AsyncGoalHandle {
   int8_t get_status() { return goal_handle_->get_status; }
 
   /// Obtain the result asynchronously.
-  /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
-  /// do we get a stack overflow ?
   ResultPromise result(const Duration &timeout) {
     return ResultPromise{[this, timeout](auto &promise) {
       try {
-        client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &result) {
-          node_.cancel_task_for(uint64_t(&promise));
-          promise.resolve(result);
-        });
-        node_.add_task_for(uint64_t(&promise), timeout, [this, &promise] {
-#if RCLCPP_VERSION_MAJOR > 16  /// This function does not exist on Humble, source for the rclcpp
-          /// version: https://index.ros.org/p/rclcpp/#humble
-          client_.lock()->stop_callbacks(goal_handle_);
-#endif
-          promise.reject("RESULT TIMEOUT");
-        });
+        auto request_id =
+            client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &result) {
+              node_.cancel_task_for(uint64_t(&promise));
+              promise.resolve(result);
+            });
+        if (!request_id) {
+          promise.reject("FAILED");
+        } else {
+          node_.add_task_for(uint64_t(&promise), timeout,
+                             [this, &promise, request_id = request_id.value()] {
+                               client_.lock()->cancel_result_request(request_id);
+                               promise.reject("RESULT TIMEOUT");
+                             });
+        }
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
-        /// According to the documentation, the
         promise.reject(ex.what());
       }
     }};
@@ -824,49 +815,41 @@ struct ActionClient {
   template <class F>
   impl::Promise<AsyncGoalHandleT, std::string> send_goal(const Goal &goal, const Duration &timeout,
                                                          F &&feedback_callback) const {
-    return impl::Promise<AsyncGoalHandleT, std::string>([this, goal, timeout,
-                                                         feedback_callback](auto &promise) {
-      typename Client::SendGoalOptions options;
+    return impl::Promise<AsyncGoalHandleT, std::string>(
+        [this, goal, timeout, feedback_callback](auto &promise) {
+          typename Client::SendGoalOptions options;
 
-      options.goal_response_callback = [this, &promise](auto goal_handle) {
-        // Cancel acceptance timeout
-        std::cout << "options.goal_response_callback" << std::endl;
-        node_.cancel_task_for(uint64_t(&promise));
-        if (goal_handle == nullptr) {
-          promise.reject("GOAL REJECTED");  /// TODO error type
-        } else {
-          promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
-        }
-      };
-      /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
-      options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
-        feedback_callback(goal_handle, feedback);
-      };
-      /// Citing the documentation of this function "[...] WARNING this method has inconsistent
-      /// behaviour and a memory leak bug. If you set the result callback in @param options, the
-      /// handle will be self referencing, and you will receive
-      /// * callbacks even though you do not hold a reference to the shared pointer. In this
-      /// case, the self reference will
-      /// * be deleted if the result callback was received. If there is no result callback,
-      /// there will be a memory leak.[...]".
-      // So apparently, we need to set this callback. Internally,
-      /// this leads the goal to be "result aware" (???).
-      options.result_callback = [](const Result &) {
-        std::cout << "Called options.result_callback " << std::endl;
-      };
-      auto request_id = client_->async_send_goal(goal, options);
-      // Acceptance timeout: reject if no acceptance within timeout
-      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
-        client_->cancel_goal_request(request_id);
-        promise.reject("TIMEOUT");
-      });
-      /// TODO Is there really no way to cancel this operation if the promise goes out of scope ?
-      promise.set_cancel([this](auto &p) {
-        node_.cancel_task_for(uint64_t(&p));
-        std::cout << "WARNING: Promise from ActionClient::send_goal " << "was not awaited"
-                  << std::endl;
-      });
-    });
+          options.goal_response_callback = [this, &promise](auto goal_handle) {
+            // Cancel acceptance timeout
+            std::cout << "options.goal_response_callback" << std::endl;
+            node_.cancel_task_for(uint64_t(&promise));
+            if (goal_handle == nullptr) {
+              std::cout << "rejectin g" << std::endl;
+              promise.reject("GOAL REJECTED");  /// TODO error type
+            } else {
+              std::cout << "resolving " << std::endl;
+              promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
+            }
+          };
+          /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
+          options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
+            feedback_callback(goal_handle, feedback);
+          };
+          auto request_id = client_->async_send_goal(goal, options);
+          // Acceptance timeout: reject if no acceptance within timeout
+          node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
+            client_->cancel_goal_request(request_id);
+            std::cout << "send goal timeout " << std::endl;
+            promise.reject("TIMEOUT");
+          });
+          /// TODO Is there really no way to cancel this operation if the promise goes out of scope
+          /// ?
+          promise.set_cancel([this](auto &p) {
+            node_.cancel_task_for(uint64_t(&p));
+            std::cout << "WARNING: Promise from ActionClient::send_goal " << "was not awaited"
+                      << std::endl;
+          });
+        });
   }
 
 protected:
