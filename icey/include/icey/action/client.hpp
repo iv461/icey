@@ -18,6 +18,7 @@
 #include <chrono>
 #include <functional>
 #include <future>
+#include <icey/action/client_goal_handle.hpp>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -25,7 +26,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include <icey/action/client_goal_handle.hpp>
 #include "rcl/event_callback.h"
 #include "rclcpp/exceptions.hpp"
 #include "rclcpp/logger.hpp"
@@ -200,7 +200,7 @@ protected:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
-  virtual void send_goal_request(std::shared_ptr<void> request, ResponseCallback callback);
+  virtual int64_t send_goal_request(std::shared_ptr<void> request, ResponseCallback callback);
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
@@ -370,22 +370,17 @@ public:
    * \return A future that completes when the goal has been accepted or rejected.
    *   If the goal is rejected, then the result will be a `nullptr`.
    */
-  std::shared_future<typename GoalHandle::SharedPtr> async_send_goal(
-      const Goal& goal, const SendGoalOptions& options = SendGoalOptions()) {
-    // Put promise in the heap to move it around.
-    auto promise = std::make_shared<std::promise<typename GoalHandle::SharedPtr>>();
-    std::shared_future<typename GoalHandle::SharedPtr> future(promise->get_future());
+  int64_t async_send_goal(const Goal& goal, const SendGoalOptions& options = SendGoalOptions()) {
     using GoalRequest = typename ActionT::Impl::SendGoalService::Request;
     auto goal_request = std::make_shared<GoalRequest>();
     goal_request->goal_id.uuid = this->generate_goal_id();
     goal_request->goal = goal;
-    this->send_goal_request(
+    auto req_id = this->send_goal_request(
         std::static_pointer_cast<void>(goal_request),
-        [this, goal_request, options, promise](std::shared_ptr<void> response) mutable {
+        [this, goal_request, options](std::shared_ptr<void> response) mutable {
           using GoalResponse = typename ActionT::Impl::SendGoalService::Response;
           auto goal_response = std::static_pointer_cast<GoalResponse>(response);
           if (!goal_response->accepted) {
-            promise->set_value(nullptr);
             if (options.goal_response_callback) {
               options.goal_response_callback(nullptr);
             }
@@ -401,7 +396,7 @@ public:
             std::lock_guard<std::recursive_mutex> guard(goal_handles_mutex_);
             goal_handles_[goal_handle->get_goal_id()] = goal_handle;
           }
-          promise->set_value(goal_handle);
+
           if (options.goal_response_callback) {
             options.goal_response_callback(goal_handle);
           }
@@ -429,7 +424,7 @@ public:
       }
     }
 
-    return future;
+    return req_id;
   }
 
   /// Asynchronously get the result for an active goal.
