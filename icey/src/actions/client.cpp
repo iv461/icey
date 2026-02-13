@@ -307,16 +307,21 @@ bool ClientBase::is_ready(const rcl_wait_set_t &wait_set) {
 
 void ClientBase::handle_goal_response(const rmw_request_id_t &response_header,
                                       std::shared_ptr<void> response) {
-  std::lock_guard<std::mutex> guard(pimpl_->goal_requests_mutex);
-  const int64_t &sequence_number = response_header.sequence_number;
-  if (pimpl_->pending_goal_responses.count(sequence_number) == 0) {
+  pimpl_->goal_requests_mutex.lock();
+  auto it = pimpl_->pending_goal_responses.find(response_header.sequence_number);
+  if (it == pimpl_->pending_goal_responses.end()) {
+    pimpl_->goal_requests_mutex.unlock();
     return;
   }
-  pimpl_->pending_goal_responses[sequence_number](response);
-  pimpl_->pending_goal_responses.erase(sequence_number);
+  auto callback = it->second;
+  pimpl_->goal_requests_mutex.unlock();
+  callback(response);
+  pimpl_->goal_requests_mutex.lock();
+  pimpl_->pending_goal_responses.erase(it);
+  pimpl_->goal_requests_mutex.unlock();
 }
 
-void ClientBase::send_goal_request(std::shared_ptr<void> request, ResponseCallback callback) {
+int64_t ClientBase::send_goal_request(std::shared_ptr<void> request, ResponseCallback callback) {
   std::unique_lock<std::mutex> guard(pimpl_->goal_requests_mutex);
   int64_t sequence_number;
   rcl_ret_t ret =
@@ -326,21 +331,23 @@ void ClientBase::send_goal_request(std::shared_ptr<void> request, ResponseCallba
   }
   assert(pimpl_->pending_goal_responses.count(sequence_number) == 0);
   pimpl_->pending_goal_responses[sequence_number] = callback;
+  return sequence_number;
 }
 
 void ClientBase::handle_result_response(const rmw_request_id_t &response_header,
                                         std::shared_ptr<void> response) {
-  std::map<int64_t, ResponseCallback>::node_type pending_result_response;
-  {
-    std::lock_guard<std::mutex> guard(pimpl_->result_requests_mutex);
-    const int64_t &sequence_number = response_header.sequence_number;
-    if (pimpl_->pending_result_responses.count(sequence_number) == 0) {
-      return;
-    }
-    pending_result_response = pimpl_->pending_result_responses.extract(sequence_number);
+  pimpl_->result_requests_mutex.lock();
+  auto it = pimpl_->pending_result_responses.find(response_header.sequence_number);
+  if (it == pimpl_->pending_result_responses.end()) {
+    pimpl_->result_requests_mutex.unlock();
+    return;
   }
-  auto &response_callback = pending_result_response.mapped();
-  response_callback(response);
+  auto callback = it->second;
+  pimpl_->result_requests_mutex.unlock();
+  callback(response);
+  pimpl_->result_requests_mutex.lock();
+  pimpl_->pending_result_responses.erase(it);
+  pimpl_->result_requests_mutex.unlock();
 }
 
 void ClientBase::send_result_request(std::shared_ptr<void> request, ResponseCallback callback) {
@@ -357,13 +364,19 @@ void ClientBase::send_result_request(std::shared_ptr<void> request, ResponseCall
 
 void ClientBase::handle_cancel_response(const rmw_request_id_t &response_header,
                                         std::shared_ptr<void> response) {
-  std::lock_guard<std::mutex> guard(pimpl_->cancel_requests_mutex);
+  pimpl_->cancel_requests_mutex.lock();
   const int64_t &sequence_number = response_header.sequence_number;
-  if (pimpl_->pending_cancel_responses.count(sequence_number) == 0) {
+  auto it = pimpl_->pending_cancel_responses.find(sequence_number);
+  if (it == pimpl_->pending_cancel_responses.end()) {
     return;
   }
-  pimpl_->pending_cancel_responses[sequence_number](response);
-  pimpl_->pending_cancel_responses.erase(sequence_number);
+  auto callback = it->second;
+  pimpl_->goal_requests_mutex.unlock();
+  callback(response);
+  pimpl_->cancel_requests_mutex.lock();
+  pimpl_->pending_cancel_responses.erase(
+      it);  /// imagine thread-safe datastructures like tbb::concurrent_hash_map would have been discovered already
+  pimpl_->cancel_requests_mutex.unlock();
 }
 
 int64_t ClientBase::send_cancel_request(std::shared_ptr<void> request, ResponseCallback callback) {

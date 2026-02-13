@@ -857,7 +857,6 @@ struct ActionClient {
       auto request_id = client_->async_send_goal(goal, options);
       // Acceptance timeout: reject if no acceptance within timeout
       node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
-        std::cout << "Timeout in  promise " << get_type(promise) << std::endl;
         client_->cancel_goal_request(request_id);
         promise.reject("TIMEOUT");
       });
