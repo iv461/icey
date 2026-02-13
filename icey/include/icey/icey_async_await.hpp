@@ -805,7 +805,7 @@ struct ActionClient {
   using FeedbackCallback = typename GoalHandle::FeedbackCallback;
   using Result = typename GoalHandle::WrappedResult;
   using RequestID = int64_t;
-  using AsyncGoalHandleT = std::shared_ptr<AsyncGoalHandle<ActionT>>;
+  using AsyncGoalHandleT = AsyncGoalHandle<ActionT>;
 
   ActionClient(NodeBase &node, const std::string &action_name) : node_(node) {
     client_ = icey::rclcpp_action::create_client<ActionT>(
@@ -828,7 +828,7 @@ struct ActionClient {
         if (goal_handle == nullptr) {
           promise.reject("GOAL REJECTED");  /// TODO error type
         } else {
-          promise.resolve(std::make_shared<AsyncGoalHandle<ActionT>>(node_, client_, goal_handle));
+          promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
         }
       };
       /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
