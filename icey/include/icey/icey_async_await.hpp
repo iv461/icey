@@ -780,7 +780,8 @@ struct AsyncGoalHandle {
           client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
-        promise.set_cancel([](auto &) {
+        promise.set_cancel([client = client_, request_id](auto &) {
+          client.lock()->cancel_cancellation_request(request_id);
           std::cout << "WARNING: Promise from AsyncGoalHandle::cancel was not awaited" << std::endl;
         });
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
@@ -814,7 +815,7 @@ struct ActionClient {
   using AsyncGoalHandleT = std::shared_ptr<AsyncGoalHandle<ActionT>>;
 
   ActionClient(NodeBase &node, const std::string &action_name) : node_(node) {
-    client_ = icey::  rclcpp_action::create_client<ActionT>(
+    client_ = icey::rclcpp_action::create_client<ActionT>(
         node.get_node_base_interface(), node.get_node_graph_interface(),
         node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
   }
@@ -832,16 +833,13 @@ struct ActionClient {
         std::cout << "options.goal_response_callback" << std::endl;
         node_.cancel_task_for(uint64_t(&promise));
         if (goal_handle == nullptr) {
-          std::cout << "Rejecting promise " << get_type(promise) << std::endl;
           promise.reject("GOAL REJECTED");  /// TODO error type
         } else {
-          std::cout << "Resolving promise " << get_type(promise) << std::endl;
           promise.resolve(std::make_shared<AsyncGoalHandle<ActionT>>(node_, client_, goal_handle));
         }
       };
       /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
       options.feedback_callback = [feedback_callback](auto goal_handle, auto feedback) {
-        std::cout << "options.feedback_callback" << std::endl;
         feedback_callback(goal_handle, feedback);
       };
       /// Citing the documentation of this function "[...] WARNING this method has inconsistent
@@ -866,8 +864,8 @@ struct ActionClient {
       /// TODO Is there really no way to cancel this operation if the promise goes out of scope ?
       promise.set_cancel([this](auto &p) {
         node_.cancel_task_for(uint64_t(&p));
-        std::cout << "WARNING: Promise from ActionClient::send_goal " << get_type(p)
-                  << "was not awaited" << std::endl;
+        std::cout << "WARNING: Promise from ActionClient::send_goal " << "was not awaited"
+                  << std::endl;
       });
     });
   }
@@ -1044,10 +1042,10 @@ public:
   }
 
   /// Create an action client that supports async/await send_goal
-  /*template <class ActionT>
+  template <class ActionT>
   ActionClient<ActionT> create_action_client(const std::string &action_name) {
     return ActionClient<ActionT>(node_base(), action_name);
-  }*/
+  }
 
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
   /// tf2_ros::TransformListener. It is used to `lookup()` transforms asynchronously at a specific
