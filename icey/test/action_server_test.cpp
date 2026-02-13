@@ -8,7 +8,7 @@
 #include <fmt/core.h>
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
-
+#include <std_srvs/srv/set_bool.hpp>
 #include "example_interfaces/action/fibonacci.hpp"
 #include "node_fixture.hpp"
 #include "rclcpp_action/client.hpp"
@@ -30,7 +30,7 @@ struct ActionsAsyncAwait : TwoNodesFixture {
 TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   /// Use coroutines as callbacks for the server
   auto upstream_service_client =
-      receiver_->icey().create_client<ExampleService>("set_bool_service_upstream");
+      receiver_->icey().create_client<std_srvs::srv::SetBool>("set_bool_service_upstream");
   auto handle_goal = [&](const GoalUUID &,
                          std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
     std::cout << "got goal request" << std::endl;

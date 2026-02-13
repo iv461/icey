@@ -12,64 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef RCLCPP_ACTION__CLIENT_GOAL_HANDLE_IMPL_HPP_
-#define RCLCPP_ACTION__CLIENT_GOAL_HANDLE_IMPL_HPP_
+#pragma once
 
 #include <rcl_action/types.h>
 
+#include <icey/action/client_goal_handle.hpp>
 #include <memory>
 
 #include "rclcpp/logging.hpp"
-#include "rclcpp_action/client_goal_handle.hpp"
 #include "rclcpp_action/exceptions.hpp"
 
-namespace rclcpp_action
-{
+namespace icey::rclcpp_action {
 
-template<typename ActionT>
-ClientGoalHandle<ActionT>::ClientGoalHandle(
-  const GoalInfo & info, FeedbackCallback feedback_callback, ResultCallback result_callback)
-: info_(info),
-  result_future_(result_promise_.get_future()),
-  feedback_callback_(feedback_callback),
-  result_callback_(result_callback)
-{
-}
+template <typename ActionT>
+ClientGoalHandle<ActionT>::ClientGoalHandle(const GoalInfo& info,
+                                            FeedbackCallback feedback_callback,
+                                            ResultCallback result_callback)
+    : info_(info),
+      result_future_(result_promise_.get_future()),
+      feedback_callback_(feedback_callback),
+      result_callback_(result_callback) {}
 
-template<typename ActionT>
-ClientGoalHandle<ActionT>::~ClientGoalHandle()
-{
-}
+template <typename ActionT>
+ClientGoalHandle<ActionT>::~ClientGoalHandle() {}
 
-template<typename ActionT>
-const GoalUUID &
-ClientGoalHandle<ActionT>::get_goal_id() const
-{
+template <typename ActionT>
+const GoalUUID& ClientGoalHandle<ActionT>::get_goal_id() const {
   return info_.goal_id.uuid;
 }
 
-template<typename ActionT>
-rclcpp::Time
-ClientGoalHandle<ActionT>::get_goal_stamp() const
-{
+template <typename ActionT>
+rclcpp::Time ClientGoalHandle<ActionT>::get_goal_stamp() const {
   return info_.stamp;
 }
 
-template<typename ActionT>
+template <typename ActionT>
 std::shared_future<typename ClientGoalHandle<ActionT>::WrappedResult>
-ClientGoalHandle<ActionT>::async_get_result()
-{
+ClientGoalHandle<ActionT>::async_get_result() {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   if (!is_result_aware_) {
-    throw exceptions::UnawareGoalHandleError();
+    throw ::rclcpp_action::exceptions::UnawareGoalHandleError();
   }
   return result_future_;
 }
 
-template<typename ActionT>
-void
-ClientGoalHandle<ActionT>::set_result(const WrappedResult & wrapped_result)
-{
+template <typename ActionT>
+void ClientGoalHandle<ActionT>::set_result(const WrappedResult& wrapped_result) {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   status_ = static_cast<int8_t>(wrapped_result.code);
   result_promise_.set_value(wrapped_result);
@@ -79,68 +67,52 @@ ClientGoalHandle<ActionT>::set_result(const WrappedResult & wrapped_result)
   }
 }
 
-template<typename ActionT>
-void
-ClientGoalHandle<ActionT>::set_feedback_callback(FeedbackCallback callback)
-{
+template <typename ActionT>
+void ClientGoalHandle<ActionT>::set_feedback_callback(FeedbackCallback callback) {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   feedback_callback_ = callback;
 }
 
-template<typename ActionT>
-void
-ClientGoalHandle<ActionT>::set_result_callback(ResultCallback callback)
-{
+template <typename ActionT>
+void ClientGoalHandle<ActionT>::set_result_callback(ResultCallback callback) {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   result_callback_ = callback;
 }
 
-template<typename ActionT>
-int8_t
-ClientGoalHandle<ActionT>::get_status()
-{
+template <typename ActionT>
+int8_t ClientGoalHandle<ActionT>::get_status() {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   return status_;
 }
 
-template<typename ActionT>
-void
-ClientGoalHandle<ActionT>::set_status(int8_t status)
-{
+template <typename ActionT>
+void ClientGoalHandle<ActionT>::set_status(int8_t status) {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   status_ = status;
 }
 
-template<typename ActionT>
-bool
-ClientGoalHandle<ActionT>::is_feedback_aware()
-{
+template <typename ActionT>
+bool ClientGoalHandle<ActionT>::is_feedback_aware() {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   return feedback_callback_ != nullptr;
 }
 
-template<typename ActionT>
-bool
-ClientGoalHandle<ActionT>::is_result_aware()
-{
+template <typename ActionT>
+bool ClientGoalHandle<ActionT>::is_result_aware() {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   return is_result_aware_;
 }
 
-template<typename ActionT>
-bool
-ClientGoalHandle<ActionT>::set_result_awareness(bool awareness)
-{
+template <typename ActionT>
+bool ClientGoalHandle<ActionT>::set_result_awareness(bool awareness) {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   bool previous = is_result_aware_;
   is_result_aware_ = awareness;
   return previous;
 }
 
-template<typename ActionT>
-void
-ClientGoalHandle<ActionT>::invalidate(const exceptions::UnawareGoalHandleError & ex)
-{
+template <typename ActionT>
+void ClientGoalHandle<ActionT>::invalidate(const ::rclcpp_action::exceptions::UnawareGoalHandleError& ex) {
   std::lock_guard<std::recursive_mutex> guard(handle_mutex_);
   // Guard against multiple calls
   if (is_invalidated()) {
@@ -152,19 +124,15 @@ ClientGoalHandle<ActionT>::invalidate(const exceptions::UnawareGoalHandleError &
   result_promise_.set_exception(invalidate_exception_);
 }
 
-template<typename ActionT>
-bool
-ClientGoalHandle<ActionT>::is_invalidated() const
-{
+template <typename ActionT>
+bool ClientGoalHandle<ActionT>::is_invalidated() const {
   return invalidate_exception_ != nullptr;
 }
 
-template<typename ActionT>
-void
-ClientGoalHandle<ActionT>::call_feedback_callback(
-  typename ClientGoalHandle<ActionT>::SharedPtr shared_this,
-  typename std::shared_ptr<const Feedback> feedback_message)
-{
+template <typename ActionT>
+void ClientGoalHandle<ActionT>::call_feedback_callback(
+    typename ClientGoalHandle<ActionT>::SharedPtr shared_this,
+    typename std::shared_ptr<const Feedback> feedback_message) {
   if (shared_this.get() != this) {
     RCLCPP_ERROR(rclcpp::get_logger("rclcpp_action"), "Sent feedback to wrong goal handle.");
     return;
@@ -179,5 +147,3 @@ ClientGoalHandle<ActionT>::call_feedback_callback(
 }
 
 }  // namespace rclcpp_action
-
-#endif  // RCLCPP_ACTION__CLIENT_GOAL_HANDLE_IMPL_HPP_

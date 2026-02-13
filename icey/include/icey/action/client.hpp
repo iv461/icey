@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include <icey/action/client_goal_handle.hpp>
 #include "rcl/event_callback.h"
 #include "rclcpp/exceptions.hpp"
 #include "rclcpp/logger.hpp"
@@ -34,14 +35,15 @@
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/time.hpp"
 #include "rclcpp/waitable.hpp"
-#include "rclcpp_action/client_goal_handle.hpp"
 #include "rclcpp_action/exceptions.hpp"
 #include "rclcpp_action/types.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 #include "rosidl_runtime_c/action_type_support_struct.h"
 #include "rosidl_typesupport_cpp/action_type_support.hpp"
 
-namespace rclcpp_action {
+namespace icey::rclcpp_action {
+
+using GoalUUID = std::array<uint8_t, UUID_SIZE>;
 // Forward declaration
 class ClientBaseImpl;
 
@@ -78,6 +80,22 @@ public:
     return wait_for_action_server_nanoseconds(
         std::chrono::duration_cast<std::chrono::nanoseconds>(timeout));
   }
+
+  /// @brief Cancel a goal cancellation request. The registered callback will not be called anymore
+  /// after this
+  /// @param request_id
+  /// @return True if something was cancelled, false if no such request was found.
+  bool cancel_cancellation_request(int64_t request_id);
+
+  /// @brief Cancel a goal request. The registered callback will not be called anymore after this.
+  /// @param request_id
+  /// @return
+  bool cancel_goal_request(int64_t request_id);
+
+  /// @brief Cancel a result request. The registered callback will not be called anymore after this.
+  /// @param request_id
+  /// @return
+  bool cancel_result_request(int64_t request_id);
 
   // -------------
   // Waitables API
@@ -190,7 +208,7 @@ protected:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
-  virtual void send_cancel_request(std::shared_ptr<void> request, ResponseCallback callback);
+  virtual int64_t send_cancel_request(std::shared_ptr<void> request, ResponseCallback callback);
 
   /// \internal
   virtual std::shared_ptr<void> create_goal_response() const = 0;
@@ -426,7 +444,7 @@ public:
                                                      ResultCallback result_callback = nullptr) {
     std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
     if (goal_handles_.count(goal_handle->get_goal_id()) == 0) {
-      throw exceptions::UnknownGoalHandleError();
+      throw ::rclcpp_action::exceptions::UnknownGoalHandleError();
     }
     if (goal_handle->is_invalidated()) {
       // This case can happen if there was a failure to send the result request
@@ -448,17 +466,16 @@ public:
    * \param[in] goal_handle The goal handle requesting to be canceled.
    * \param[in] cancel_callback Optional callback that is called when the response is received.
    *   The callback takes one parameter: a shared pointer to the CancelResponse message.
-   * \return A future to a CancelResponse message that is set when the request has been
-   * acknowledged by an action server.
+   * \return The request ID
    * See
    * <a href="https://github.com/ros2/rcl_interfaces/blob/master/action_msgs/srv/CancelGoal.srv">
    * action_msgs/CancelGoal.srv</a>.
    */
-  std::shared_future<typename CancelResponse::SharedPtr> async_cancel_goal(
-      typename GoalHandle::SharedPtr goal_handle, CancelCallback cancel_callback = nullptr) {
+  int64_t async_cancel_goal(typename GoalHandle::SharedPtr goal_handle,
+                            CancelCallback cancel_callback = nullptr) {
     std::lock_guard<std::recursive_mutex> lock(goal_handles_mutex_);
     if (goal_handles_.count(goal_handle->get_goal_id()) == 0) {
-      throw exceptions::UnknownGoalHandleError();
+      throw ::rclcpp_action::exceptions::UnknownGoalHandleError();
     }
     auto cancel_request = std::make_shared<CancelRequest>();
     // cancel_request->goal_info.goal_id = goal_handle->get_goal_id();
@@ -476,8 +493,7 @@ public:
    * <a href="https://github.com/ros2/rcl_interfaces/blob/master/action_msgs/srv/CancelGoal.srv">
    * action_msgs/CancelGoal.srv</a>.
    */
-  std::shared_future<typename CancelResponse::SharedPtr> async_cancel_all_goals(
-      CancelCallback cancel_callback = nullptr) {
+  int64_t async_cancel_all_goals(CancelCallback cancel_callback = nullptr) {
     auto cancel_request = std::make_shared<CancelRequest>();
     // std::fill(cancel_request->goal_info.goal_id.uuid, 0u);
     std::fill(cancel_request->goal_info.goal_id.uuid.begin(),
@@ -541,14 +557,13 @@ public:
    * \param[in] stamp The timestamp for the cancel goal request.
    * \param[in] cancel_callback Optional callback that is called when the response is received.
    *   The callback takes one parameter: a shared pointer to the CancelResponse message.
-   * \return A future to a CancelResponse message that is set when the request has been
-   * acknowledged by an action server.
+   * \return request ID
    * See
    * <a href="https://github.com/ros2/rcl_interfaces/blob/master/action_msgs/srv/CancelGoal.srv">
    * action_msgs/CancelGoal.srv</a>.
    */
-  std::shared_future<typename CancelResponse::SharedPtr> async_cancel_goals_before(
-      const rclcpp::Time& stamp, CancelCallback cancel_callback = nullptr) {
+  int64_t async_cancel_goals_before(const rclcpp::Time& stamp,
+                                    CancelCallback cancel_callback = nullptr) {
     auto cancel_request = std::make_shared<CancelRequest>();
     // std::fill(cancel_request->goal_info.goal_id.uuid, 0u);
     std::fill(cancel_request->goal_info.goal_id.uuid.begin(),
@@ -563,7 +578,7 @@ public:
     while (it != goal_handles_.end()) {
       typename GoalHandle::SharedPtr goal_handle = it->second.lock();
       if (goal_handle) {
-        goal_handle->invalidate(exceptions::UnawareGoalHandleError());
+        goal_handle->invalidate(::rclcpp_action::exceptions::UnawareGoalHandleError());
       }
       it = goal_handles_.erase(it);
     }
@@ -673,29 +688,24 @@ private:
           });
     } catch (rclcpp::exceptions::RCLError& ex) {
       // This will cause an exception when the user tries to access the result
-      goal_handle->invalidate(exceptions::UnawareGoalHandleError(ex.message));
+      goal_handle->invalidate(::rclcpp_action::exceptions::UnawareGoalHandleError(ex.message));
     }
   }
 
   /// \internal
-  std::shared_future<typename CancelResponse::SharedPtr> async_cancel(
-      typename CancelRequest::SharedPtr cancel_request, CancelCallback cancel_callback = nullptr) {
-    // Put promise in the heap to move it around.
-    auto promise = std::make_shared<std::promise<typename CancelResponse::SharedPtr>>();
-    std::shared_future<typename CancelResponse::SharedPtr> future(promise->get_future());
-    this->send_cancel_request(std::static_pointer_cast<void>(cancel_request),
-                              [cancel_callback, promise](std::shared_ptr<void> response) mutable {
-                                auto cancel_response =
-                                    std::static_pointer_cast<CancelResponse>(response);
-                                promise->set_value(cancel_response);
-                                if (cancel_callback) {
-                                  cancel_callback(cancel_response);
-                                }
-                              });
-    return future;
+  int64_t async_cancel(typename CancelRequest::SharedPtr cancel_request,
+                       CancelCallback cancel_callback = nullptr) {
+    return this->send_cancel_request(std::static_pointer_cast<void>(cancel_request),
+                                     [cancel_callback](std::shared_ptr<void> response) mutable {
+                                       auto cancel_response =
+                                           std::static_pointer_cast<CancelResponse>(response);
+                                       if (cancel_callback) {
+                                         cancel_callback(cancel_response);
+                                       }
+                                     });
   }
 
   std::map<GoalUUID, typename GoalHandle::WeakPtr> goal_handles_;
   std::recursive_mutex goal_handles_mutex_;
 };
-}  // namespace rclcpp_action
+}  // namespace icey::rclcpp_action
