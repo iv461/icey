@@ -8,7 +8,9 @@
 #include <fmt/core.h>
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
+
 #include <std_srvs/srv/set_bool.hpp>
+
 #include "example_interfaces/action/fibonacci.hpp"
 #include "node_fixture.hpp"
 #include "rclcpp_action/client.hpp"
@@ -65,10 +67,10 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   Fibonacci::Goal goal;
   goal.order = 2;
   typename rclcpp_action::Client<Fibonacci>::SendGoalOptions options;
-  options.goal_response_callback = [](auto goal_handle) {
+  options.goal_response_callback = [](auto) {
     std::cout << "options.goal_response_callback" << std::endl;
   };
-  options.feedback_callback = [](auto goal_handle, auto feedback) {
+  options.feedback_callback = [](auto, auto) {
     std::cout << "options.feedback_callback" << std::endl;
   };
   bool result_received = false;
