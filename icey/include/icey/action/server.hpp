@@ -30,6 +30,7 @@
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/waitable.hpp"
 #include "rclcpp_action/types.hpp"
+#include "rclcpp_action/server.hpp" /// For GoalResponse and CancelResponse
 #include "rclcpp_action/visibility_control.hpp"
 #include "rosidl_runtime_c/action_type_support_struct.h"
 #include "rosidl_typesupport_cpp/action_type_support.hpp"
@@ -39,23 +40,9 @@ namespace icey::rclcpp_action {
 // Forward declaration
 class ServerBaseImpl;
 
-/// A response returned by an action server callback when a goal is requested.
-enum class GoalResponse : int8_t {
-  /// The goal is rejected and will not be executed.
-  REJECT = 1,
-  /// The server accepts the goal, and is going to begin execution immediately.
-  ACCEPT_AND_EXECUTE = 2,
-  /// The server accepts the goal, and is going to execute it later.
-  ACCEPT_AND_DEFER = 3,
-};
-
-/// A response returned by an action server callback when a goal has been asked to be canceled.
-enum class CancelResponse : int8_t {
-  /// The server will not try to cancel the goal.
-  REJECT = 1,
-  /// The server has agreed to try to cancel the goal.
-  ACCEPT = 2,
-};
+// Do not redefine 
+using GoalResponse = ::rclcpp_action::GoalResponse;
+using CancelResponse = ::rclcpp_action::CancelResponse;
 
 /// A struct to store the stuff of a request, a type-erased version and a normal one.
 struct GoalRequestBase {
