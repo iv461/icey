@@ -3,24 +3,19 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-#define ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
-
 #include <fmt/core.h>
-#include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
 #include <std_srvs/srv/set_bool.hpp>
 
 #include "example_interfaces/action/fibonacci.hpp"
 #include "node_fixture.hpp"
-#include "rclcpp_action/client.hpp"
-#include "rclcpp_action/client_goal_handle.hpp"
-#include "rclcpp_action/create_client.hpp"
 #include "std_srvs/srv/set_bool.hpp"
+
 using namespace std::chrono_literals;
 
 using Fibonacci = example_interfaces::action::Fibonacci;
-using GoalHandleFibonacci = rclcpp_action::ClientGoalHandle<Fibonacci>;
+using GoalHandleFibonacci = icey::rclcpp_action::ClientGoalHandle<Fibonacci>;
 using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacci>;
 
 using namespace icey::rclcpp_action;
@@ -60,13 +55,13 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   auto server = receiver_->icey().create_action_server<Fibonacci>(
       "/icey_server_async_test", handle_goal, handle_cancel, handle_accepted);
 
-  auto client = rclcpp_action::create_client<Fibonacci>(
+  auto client = icey::rclcpp_action::create_client<Fibonacci>(
       receiver_->get_node_base_interface(), receiver_->get_node_graph_interface(),
       receiver_->get_node_logging_interface(), receiver_->get_node_waitables_interface(),
       "/icey_server_async_test");
   Fibonacci::Goal goal;
   goal.order = 2;
-  typename rclcpp_action::Client<Fibonacci>::SendGoalOptions options;
+  typename icey::rclcpp_action::Client<Fibonacci>::SendGoalOptions options;
   options.goal_response_callback = [](auto) {
     std::cout << "options.goal_response_callback" << std::endl;
   };

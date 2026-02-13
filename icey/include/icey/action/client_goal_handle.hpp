@@ -27,12 +27,9 @@
 #include "rclcpp_action/types.hpp"
 #include "rclcpp_action/visibility_control.hpp"
 
-namespace icey::rclcpp_action {
-
-using GoalUUID = std::array<uint8_t, UUID_SIZE>;
-using GoalStatus = action_msgs::msg::GoalStatus;
-using GoalInfo = action_msgs::msg::GoalInfo;
-
+// I'm defining this in namespace rclcpp_action so that people don't have to change their code unnecessarily. 
+// I could also just include the rclcpp_action header, but just defining the enum here is faster to compile.
+namespace rclcpp_action {
 /// The possible statuses that an action goal can finish with.
 enum class ResultCode : int8_t {
   UNKNOWN = action_msgs::msg::GoalStatus::STATUS_UNKNOWN,
@@ -40,6 +37,15 @@ enum class ResultCode : int8_t {
   CANCELED = action_msgs::msg::GoalStatus::STATUS_CANCELED,
   ABORTED = action_msgs::msg::GoalStatus::STATUS_ABORTED
 };
+}  // namespace rclcpp_action
+
+namespace icey::rclcpp_action {
+
+using GoalUUID = std::array<uint8_t, UUID_SIZE>;
+using GoalStatus = action_msgs::msg::GoalStatus;
+using GoalInfo = action_msgs::msg::GoalInfo;
+
+using ResultCode = ::rclcpp_action::ResultCode;
 
 // Forward declarations
 template <typename ActionT>
@@ -113,8 +119,8 @@ private:
    *
    * `is_result_aware()` can be used to check if it is safe to call this method.
    *
-   * \throws ::rclcpp_action::exceptions::UnawareGoalHandleError If the the goal handle is unaware of the result.
-   * \return A future to the result.
+   * \throws ::rclcpp_action::exceptions::UnawareGoalHandleError If the the goal handle is unaware
+   * of the result. \return A future to the result.
    */
   std::shared_future<WrappedResult> async_get_result();
 
