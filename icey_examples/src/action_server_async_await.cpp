@@ -16,6 +16,9 @@
 
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
+using GoalHandleFibonacci = icey::rclcpp_action::ClientGoalHandle<Fibonacci>;
+using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacci>;
+using namespace icey::rclcpp_action;
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
@@ -25,45 +28,33 @@ int main(int argc, char **argv) {
   using Upstream = std_srvs::srv::SetBool;
   auto upstream = ctx->create_client<Upstream>("set_bool_service1");
 
-  // Create server with async execute callback that calls an upstream service
-  ctx->create_action_server<Fibonacci>(
-      "/icey_test_action_fibonacci", [ctx, node, upstream](auto gh) -> icey::Promise<void> {
-        auto result =
-            co_await upstream.call(std::make_shared<std_srvs::srv::SetBool::Request>(), 1s);
+  auto handle_goal = [&](const GoalUUID &,
+                         std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<GoalResponse> {
+    std::cout << "got goal request" << std::endl;
 
-        // Read goal and compute sequence gradually, publishing feedback on a timer
-        auto goal = gh->get_goal();
-        RCLCPP_INFO_STREAM(node->get_logger(), "Received goal");
-        int32_t a = 0, b = 1;
-        std::vector<int32_t> seq;
-        seq.reserve(goal->order);
+    /// This will just timeout. Note that you always need at lease one co_await inside a coroutine
+    auto upstream_result =
+        co_await upstream.call(std::make_shared<std_srvs::srv::SetBool::Request>(), 1s);
 
-        for (int i = 0; i < static_cast<int>(goal->order); ++i) {
-          if (gh->is_canceling()) {
-            auto res = std::make_shared<Fibonacci::Result>();
-            res->sequence = seq;
-            gh->canceled(res);
-            co_return;
-          }
+    co_return GoalResponse::ACCEPT_AND_EXECUTE;
+  };
 
-          seq.push_back(a);
-          int32_t next = a + b;
-          a = b;
-          b = next;
+  auto handle_cancel =
+      [](std::shared_ptr<ServerGoalHandleFibonacci>) -> icey::Promise<CancelResponse> {
+    std::cout << "got reject request" << std::endl;
+    co_return CancelResponse::REJECT;
+  };
 
-          Fibonacci::Feedback fb;
-          fb.sequence = seq;
-          RCLCPP_INFO_STREAM(node->get_logger(), "Sending feedback ..");
+  std::shared_ptr<ServerGoalHandleFibonacci> stored_gh;
+  auto handle_accepted =
+      [&stored_gh](std::shared_ptr<ServerGoalHandleFibonacci> gh) -> icey::Promise<void> {
+    std::cout << "got  request accepted" << std::endl;
+    stored_gh = gh;
+    co_return;
+  };
 
-          gh->publish_feedback(std::make_shared<Fibonacci::Feedback>(fb));
-        }
-
-        auto result = std::make_shared<Fibonacci::Result>();
-        result->sequence = seq;
-        RCLCPP_INFO_STREAM(node->get_logger(), "Sending succeed");
-        gh->succeed(result);
-        co_return;
-      });
+  ctx->create_action_server<Fibonacci>("/icey_server_async_test", handle_goal, handle_cancel,
+                                       handle_accepted);
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Created action sever");
   rclcpp::spin(node);
