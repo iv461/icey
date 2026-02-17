@@ -6,6 +6,7 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 
+#include <atomic>
 #include <std_srvs/srv/set_bool.hpp>
 
 #include "example_interfaces/action/fibonacci.hpp"
@@ -83,5 +84,161 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
   };
   l();
   spin(1000ms);
+  ASSERT_TRUE(async_completed);
+}
+
+TEST_F(ActionsAsyncAwait, ActionServerWithSyncCallbacks) {
+  std::atomic<bool> goal_called{false};
+  std::atomic<bool> accepted_called{false};
+  std::atomic<bool> cancel_called{false};
+
+  auto handle_goal = [&goal_called](const GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
+    goal_called.store(true);
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  };
+
+  auto handle_cancel = [&cancel_called](std::shared_ptr<ServerGoalHandleFibonacci>) {
+    cancel_called.store(true);
+    return rclcpp_action::CancelResponse::REJECT;
+  };
+
+  auto handle_accepted = [&accepted_called](std::shared_ptr<ServerGoalHandleFibonacci> gh) {
+    accepted_called.store(true);
+    auto result = std::make_shared<Fibonacci::Result>();
+    result->sequence = {0, 1, 1, 2};
+    gh->succeed(result);
+  };
+
+  auto server = receiver_->icey().create_action_server<Fibonacci>(
+      "/icey_server_sync_callbacks_test", handle_goal, handle_cancel, handle_accepted);
+
+  auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_server_sync_callbacks_test");
+
+  const auto l = [this, client, &goal_called, &accepted_called,
+                  &cancel_called]() -> icey::Promise<void> {
+    Fibonacci::Goal goal;
+    goal.order = 4;
+
+    auto send_res = co_await client.send_goal(goal, 200ms, [](auto, auto) {});
+    EXPECT_TRUE(send_res.has_value());
+
+    auto result = co_await send_res.value().result(200ms);
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(result.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+
+    EXPECT_TRUE(goal_called.load());
+    EXPECT_TRUE(accepted_called.load());
+    EXPECT_FALSE(cancel_called.load());
+    async_completed = true;
+    co_return;
+  };
+
+  l();
+  spin(1000ms);
+  ASSERT_TRUE(async_completed);
+}
+
+TEST_F(ActionsAsyncAwait, ActionServerWithAsyncGoalAndSyncCancelCallbacks) {
+  std::atomic<bool> goal_called{false};
+  std::atomic<bool> accepted_called{false};
+  std::atomic<bool> cancel_called{false};
+  auto handle_goal = [this, &goal_called](const GoalUUID &,
+                                         std::shared_ptr<const Fibonacci::Goal>)
+      -> icey::Promise<rclcpp_action::GoalResponse> {
+    goal_called.store(true);
+    co_await receiver_->icey().create_timer(2ms);
+    co_return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  };
+
+  auto handle_cancel = [&cancel_called](std::shared_ptr<ServerGoalHandleFibonacci>) {
+    cancel_called.store(true);
+    return rclcpp_action::CancelResponse::REJECT;
+  };
+
+  auto handle_accepted = [&accepted_called](std::shared_ptr<ServerGoalHandleFibonacci> gh) {
+    accepted_called.store(true);
+    auto result = std::make_shared<Fibonacci::Result>();
+    gh->succeed(result);
+  };
+
+  auto server = receiver_->icey().create_action_server<Fibonacci>(
+      "/icey_server_mixed_goal_async_test", handle_goal, handle_cancel, handle_accepted);
+
+  auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_server_mixed_goal_async_test");
+
+  const auto l = [this, client, &goal_called, &accepted_called,
+                  &cancel_called]() -> icey::Promise<void> {
+    Fibonacci::Goal goal;
+    goal.order = 3;
+
+    auto send_res = co_await client.send_goal(goal, 250ms, [](auto, auto) {});
+    EXPECT_TRUE(send_res.has_value());
+
+    auto result = co_await send_res.value().result(250ms);
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(result.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+
+    EXPECT_TRUE(goal_called.load());
+    EXPECT_TRUE(accepted_called.load());
+    EXPECT_FALSE(cancel_called.load());
+    async_completed = true;
+    co_return;
+  };
+
+  l();
+  spin(1200ms);
+  ASSERT_TRUE(async_completed);
+}
+
+TEST_F(ActionsAsyncAwait, ActionServerWithSyncGoalAndAsyncCancelCallbacks) {
+  std::atomic<bool> goal_called{false};
+  std::atomic<bool> accepted_called{false};
+  std::atomic<bool> cancel_called{false};
+  auto handle_goal = [&goal_called](const GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
+    goal_called.store(true);
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  };
+
+  auto handle_cancel = [this, &cancel_called](std::shared_ptr<ServerGoalHandleFibonacci>)
+      -> icey::Promise<rclcpp_action::CancelResponse> {
+    cancel_called.store(true);
+    co_await receiver_->icey().create_timer(2ms);
+    co_return rclcpp_action::CancelResponse::ACCEPT;
+  };
+
+  auto handle_accepted = [&accepted_called](std::shared_ptr<ServerGoalHandleFibonacci> gh) {
+    accepted_called.store(true);
+    auto result = std::make_shared<Fibonacci::Result>();
+    result->sequence = {0, 1, 1};
+    gh->succeed(result);
+  };
+
+  auto server = receiver_->icey().create_action_server<Fibonacci>(
+      "/icey_server_mixed_cancel_async_test", handle_goal, handle_cancel, handle_accepted);
+
+  auto client =
+      receiver_->icey().create_action_client<Fibonacci>("/icey_server_mixed_cancel_async_test");
+
+  const auto l = [this, client, &goal_called, &accepted_called,
+                  &cancel_called]() -> icey::Promise<void> {
+    Fibonacci::Goal goal;
+    goal.order = 3;
+
+    auto send_res = co_await client.send_goal(goal, 200ms, [](auto, auto) {});
+    EXPECT_TRUE(send_res.has_value());
+
+    auto result = co_await send_res.value().result(300ms);
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(result.value().code, rclcpp_action::ResultCode::SUCCEEDED);
+
+    EXPECT_TRUE(goal_called.load());
+    EXPECT_TRUE(accepted_called.load());
+    EXPECT_FALSE(cancel_called.load());
+    async_completed = true;
+    co_return;
+  };
+
+  l();
+  spin(1500ms);
   ASSERT_TRUE(async_completed);
 }
