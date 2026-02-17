@@ -713,6 +713,10 @@ void ServerBase::clear_on_ready_callback() {
   entity_type_to_on_ready_callback_.clear();
 }
 
+#if RCLCPP_VERSION_GTE(29, 0, 0)
+std::vector<std::shared_ptr<rclcpp::TimerBase>> ServerBase::get_timers() const { return {}; }
+#endif
+
 void ServerBase::send_goal_response(const GoalRequestBase &goal_request, GoalResponse response) {
   int ret = 0;
   auto ros_response = create_goal_response(response);

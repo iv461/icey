@@ -21,6 +21,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "action_msgs/srv/cancel_goal.hpp"
 #include "rcl/event_callback.h"
@@ -177,6 +178,11 @@ public:
   /// Unset the callback to be called whenever the waitable becomes ready.
   RCLCPP_ACTION_PUBLIC
   void clear_on_ready_callback() override;
+
+#if RCLCPP_VERSION_GTE(29, 0, 0)
+  RCLCPP_ACTION_PUBLIC
+  std::vector<std::shared_ptr<rclcpp::TimerBase>> get_timers() const override;
+#endif
 
   RCLCPP_ACTION_PUBLIC
   void send_goal_response(const GoalRequestBase &goal_request, GoalResponse response);

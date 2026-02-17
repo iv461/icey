@@ -25,6 +25,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "rcl/event_callback.h"
 #include "rclcpp/exceptions.hpp"
@@ -183,6 +184,11 @@ public:
   /// Unset the callback registered for new events, if any.
   RCLCPP_ACTION_PUBLIC
   void clear_on_ready_callback() override;
+
+#if RCLCPP_VERSION_GTE(29, 0, 0)
+  RCLCPP_ACTION_PUBLIC
+  std::vector<std::shared_ptr<rclcpp::TimerBase>> get_timers() const override;
+#endif
 
   // End Waitables API
   // -----------------

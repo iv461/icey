@@ -559,6 +559,10 @@ void ClientBase::clear_on_ready_callback() {
   entity_type_to_on_ready_callback_.clear();
 }
 
+#if RCLCPP_VERSION_GTE(29, 0, 0)
+std::vector<std::shared_ptr<rclcpp::TimerBase>> ClientBase::get_timers() const { return {}; }
+#endif
+
 std::shared_ptr<void> ClientBase::take_data() {
   // next_ready_event is an atomic, caching localy
   size_t next_ready_event = pimpl_->next_ready_event.exchange(std::numeric_limits<uint32_t>::max());
