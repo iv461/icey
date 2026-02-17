@@ -773,7 +773,6 @@ struct AsyncGoalHandle {
         });
         promise.set_cancel([client = client_, request_id](auto &) {
           client.lock()->cancel_cancellation_request(request_id);
-          std::cout << "WARNING: Promise from AsyncGoalHandle::cancel was not awaited" << std::endl;
         });
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, an exception can we thrown if we try to cancel, but the
@@ -821,13 +820,10 @@ struct ActionClient {
 
           options.goal_response_callback = [this, &promise](auto goal_handle) {
             // Cancel acceptance timeout
-            std::cout << "options.goal_response_callback" << std::endl;
             node_.cancel_task_for(uint64_t(&promise));
             if (goal_handle == nullptr) {
-              std::cout << "rejectin g" << std::endl;
               promise.reject("GOAL REJECTED");  /// TODO error type
             } else {
-              std::cout << "resolving " << std::endl;
               promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
             }
           };
@@ -839,16 +835,11 @@ struct ActionClient {
           // Acceptance timeout: reject if no acceptance within timeout
           node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
             client_->cancel_goal_request(request_id);
-            std::cout << "send goal timeout " << std::endl;
             promise.reject("TIMEOUT");
           });
           /// TODO Is there really no way to cancel this operation if the promise goes out of scope
           /// ?
-          promise.set_cancel([this](auto &p) {
-            node_.cancel_task_for(uint64_t(&p));
-            std::cout << "WARNING: Promise from ActionClient::send_goal " << "was not awaited"
-                      << std::endl;
-          });
+          promise.set_cancel([this](auto &p) { node_.cancel_task_for(uint64_t(&p)); });
         });
   }
 
@@ -1003,8 +994,8 @@ public:
             const auto continuation =
                 [](auto server, auto handle_goal,
                    icey::rclcpp_action::GoalRequest<ActionT> goal_request) -> Promise<void> {
-              server->send_goal_response(goal_request,
-                                         co_await handle_goal(goal_request.uuid, goal_request.goal));
+              server->send_goal_response(
+                  goal_request, co_await handle_goal(goal_request.uuid, goal_request.goal));
               co_return;
             };
             continuation(server, handle_goal, goal_request);
