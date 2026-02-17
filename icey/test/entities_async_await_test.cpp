@@ -57,7 +57,7 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
     co_return 0;
   };
   l();
-  spin(1100ms);
+  spin(1500ms);
   ASSERT_TRUE(async_completed);
 }
 

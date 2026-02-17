@@ -47,6 +47,7 @@ if(BUILD_TESTING)
     test/nested_coroutines.cpp
   )  
   target_link_libraries(test_main fmt::fmt)
+  set_tests_properties(test_main PROPERTIES TIMEOUT 180)
 
 endif()
 

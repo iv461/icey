@@ -3,12 +3,6 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-#define ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
-
-#include <fmt/core.h>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
-
 #include "example_interfaces/action/fibonacci.hpp"
 #include "node_fixture.hpp"
 
@@ -36,8 +30,7 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
     EXPECT_EQ(res1.error(), "TIMEOUT");
 
     // Create server
-    auto handle_goal = [](const rclcpp_action::GoalUUID &,
-                          std::shared_ptr<const Fibonacci::Goal>) {
+    auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
     auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
@@ -205,10 +198,6 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
     EXPECT_TRUE(gh_res.has_value()) << (gh_res.has_error() ? gh_res.error() : "");
     auto r = co_await gh_res.value().result(100ms);
-    if (r.has_value()) {
-      std::cout << "Result code: " << int(r.value().code)
-                << ", result: " << fmt::format("{}", r.value().result->sequence) << std::endl;
-    }
     EXPECT_EQ(r.error(), "RESULT TIMEOUT");
     async_completed = true;
     co_return;
