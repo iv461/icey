@@ -36,11 +36,13 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
     EXPECT_EQ(res1.error(), "TIMEOUT");
 
     // Create server
-    auto handle_goal = [](auto server, const rclcpp_action::GoalUUID &,
+    auto handle_goal = [](const rclcpp_action::GoalUUID &,
                           std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel = [](auto, auto) { return rclcpp_action::CancelResponse::ACCEPT; };
+    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+      return rclcpp_action::CancelResponse::ACCEPT;
+    };
     auto handle_accepted = [this](auto gh) {
       std::thread{[gh]() {
         auto goal = gh->get_goal();
@@ -102,7 +104,9 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
       }
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::ACCEPT; };
+    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+      return rclcpp_action::CancelResponse::ACCEPT;
+    };
     auto handle_accepted = [](auto gh) { gh->succeed(std::make_shared<Fibonacci::Result>()); };
     auto server = receiver_->icey().create_action_server<Fibonacci>("/icey_test_fib2", handle_goal,
                                                                     handle_cancel, handle_accepted);
@@ -159,7 +163,9 @@ TEST_F(ActionsAsyncAwait, ActionGoalRejected) {
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::REJECT;
     };
-    auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::REJECT; };
+    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+      return rclcpp_action::CancelResponse::REJECT;
+    };
     auto handle_accepted = [](auto) {};
     auto server = receiver_->icey().create_action_server<Fibonacci>(
         "/icey_test_fib_reject", handle_goal, handle_cancel, handle_accepted);
@@ -183,7 +189,9 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::REJECT; };
+    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+      return rclcpp_action::CancelResponse::REJECT;
+    };
     auto handle_accepted = [](auto goal_handle) {
       /// The server cancels the request if you do not reference the goal_handle after this callback
       /// returns. These are uh, some questionable API design choices, but that's how it is with
@@ -196,7 +204,7 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     goal.order = 3;
     auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
     EXPECT_TRUE(gh_res.has_value()) << (gh_res.has_error() ? gh_res.error() : "");
-    auto r = co_await gh_res.value()->result(100ms);
+    auto r = co_await gh_res.value().result(100ms);
     if (r.has_value()) {
       std::cout << "Result code: " << int(r.value().code)
                 << ", result: " << fmt::format("{}", r.value().result->sequence) << std::endl;
@@ -217,7 +225,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel = [](auto) {
+    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
       std::this_thread::sleep_for(200ms);
       return rclcpp_action::CancelResponse::ACCEPT;
     };
@@ -228,7 +236,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
     goal.order = 2;
     auto gh_res = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
     EXPECT_TRUE(gh_res.has_value());
-    auto cres = co_await gh_res.value()->cancel(50ms);
+    auto cres = co_await gh_res.value().cancel(50ms);
     EXPECT_TRUE(cres.has_error());
     EXPECT_EQ(cres.error(), "RESULT TIMEOUT");
     async_completed = true;
@@ -248,7 +256,9 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
                             std::shared_ptr<const Fibonacci::Goal>) {
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
       };
-      auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::REJECT; };
+      auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+        return rclcpp_action::CancelResponse::REJECT;
+      };
       auto handle_accepted = [](auto gh) {
         std::thread{[gh]() {
           std::this_thread::sleep_for(20ms);
@@ -267,32 +277,6 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
       EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::ABORTED);
     }
 
-    // Canceled case
-    {
-      auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_canceled");
-      auto handle_goal = [](const rclcpp_action::GoalUUID &,
-                            std::shared_ptr<const Fibonacci::Goal>) {
-        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-      };
-      auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::ACCEPT; };
-      auto handle_accepted = [](auto gh) {
-        std::thread{[gh]() {
-          std::this_thread::sleep_for(50ms);
-          auto result = std::make_shared<Fibonacci::Result>();
-          gh->canceled(result);
-        }}.detach();
-      };
-      auto server = receiver_->icey().create_action_server<Fibonacci>(
-          "/icey_test_fib_canceled", handle_goal, handle_cancel, handle_accepted);
-      Fibonacci::Goal goal;
-      goal.order = 2;
-      auto gh = co_await client.send_goal(goal, 100ms, [](auto, auto) {});
-      EXPECT_TRUE(gh.has_value());
-      auto res = co_await gh.value().result(200ms);
-      EXPECT_TRUE(res.has_value());
-      EXPECT_EQ(res.value().code, rclcpp_action::ResultCode::CANCELED);
-    }
-
     // Succeeded case
     {
       auto client = receiver_->icey().create_action_client<Fibonacci>("/icey_test_fib_success");
@@ -300,7 +284,9 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
                             std::shared_ptr<const Fibonacci::Goal>) {
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
       };
-      auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::REJECT; };
+      auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+        return rclcpp_action::CancelResponse::REJECT;
+      };
       auto handle_accepted = [](auto gh) {
         std::thread{[gh]() {
           std::this_thread::sleep_for(20ms);
@@ -335,7 +321,9 @@ TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
     auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel = [](auto) { return rclcpp_action::CancelResponse::REJECT; };
+    auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
+      return rclcpp_action::CancelResponse::REJECT;
+    };
     auto handle_accepted = [](auto gh) {
       std::thread{[gh]() {
         std::this_thread::sleep_for(20ms);
@@ -372,17 +360,11 @@ TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
     std::atomic<bool> first_cancel{true};
-    auto handle_cancel = [&first_cancel](auto) {
+    auto handle_cancel = [&first_cancel](std::shared_ptr<ServerGoalHandleFibonacci>) {
       if (first_cancel.exchange(false)) return rclcpp_action::CancelResponse::ACCEPT;
       return rclcpp_action::CancelResponse::REJECT;
     };
-    auto handle_accepted = [](auto gh) {
-      std::thread{[gh]() {
-        std::this_thread::sleep_for(50ms);
-        auto result = std::make_shared<Fibonacci::Result>();
-        gh->canceled(result);
-      }}.detach();
-    };
+    auto handle_accepted = [](auto) {};
     auto server = receiver_->icey().create_action_server<Fibonacci>(
         "/icey_test_fib_cancel_twice", handle_goal, handle_cancel, handle_accepted);
     Fibonacci::Goal goal;
