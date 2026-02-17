@@ -34,6 +34,7 @@
 #include "rclcpp/node_interfaces/node_graph_interface.hpp"
 #include "rclcpp/node_interfaces/node_logging_interface.hpp"
 #include "rclcpp/time.hpp"
+#include "rclcpp/version.h"
 #include "rclcpp/waitable.hpp"
 #include "rclcpp_action/exceptions.hpp"
 #include "rclcpp_action/types.hpp"
@@ -122,11 +123,19 @@ public:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
+#if RCLCPP_VERSION_GTE(17, 0, 0)
   void add_to_wait_set(rcl_wait_set_t& wait_set) override;
+#else
+  void add_to_wait_set(rcl_wait_set_t* wait_set) override;
+#endif
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
+#if RCLCPP_VERSION_GTE(17, 0, 0)
   bool is_ready(const rcl_wait_set_t& wait_set) override;
+#else
+  bool is_ready(rcl_wait_set_t* wait_set) override;
+#endif
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
@@ -138,7 +147,11 @@ public:
 
   /// \internal
   RCLCPP_ACTION_PUBLIC
+#if RCLCPP_VERSION_GTE(17, 0, 0)
   void execute(const std::shared_ptr<void>& data) override;
+#else
+  void execute(std::shared_ptr<void>& data) override;
+#endif
 
   /// \internal
   /// Set a callback to be called when action client entities have an event

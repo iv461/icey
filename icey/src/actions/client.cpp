@@ -29,6 +29,13 @@
 #include "rclcpp_action/exceptions.hpp"
 
 namespace icey::rclcpp_action {
+namespace {
+template <typename CallbackT>
+void on_ready_trampoline(const void *user_data, size_t number_of_events) noexcept {
+  auto *callback = static_cast<const CallbackT *>(user_data);
+  (*callback)(number_of_events);
+}
+}  // namespace
 
 struct ClientBaseData {
   struct FeedbackReadyData {
@@ -248,16 +255,35 @@ size_t ClientBase::get_number_of_ready_clients() { return pimpl_->num_clients; }
 
 size_t ClientBase::get_number_of_ready_services() { return pimpl_->num_services; }
 
+#if RCLCPP_VERSION_GTE(17, 0, 0)
 void ClientBase::add_to_wait_set(rcl_wait_set_t &wait_set) {
   std::lock_guard<std::recursive_mutex> lock(pimpl_->action_client_mutex_);
   rcl_ret_t ret = rcl_action_wait_set_add_action_client(&wait_set, pimpl_->client_handle.get(),
-                                                        nullptr, nullptr);
+                                                         nullptr, nullptr);
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret, "ClientBase::add_to_wait_set() failed");
   }
 }
 
 bool ClientBase::is_ready(const rcl_wait_set_t &wait_set) {
+#else
+void ClientBase::add_to_wait_set(rcl_wait_set_t *wait_set) {
+  if (wait_set == nullptr) {
+    throw std::invalid_argument("'wait_set' is null");
+  }
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->action_client_mutex_);
+  rcl_ret_t ret = rcl_action_wait_set_add_action_client(wait_set, pimpl_->client_handle.get(),
+                                                         nullptr, nullptr);
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret, "ClientBase::add_to_wait_set() failed");
+  }
+}
+
+bool ClientBase::is_ready(rcl_wait_set_t *wait_set) {
+  if (wait_set == nullptr) {
+    return false;
+  }
+#endif
   bool is_feedback_ready{false};
   bool is_status_ready{false};
   bool is_goal_response_ready{false};
@@ -267,9 +293,15 @@ bool ClientBase::is_ready(const rcl_wait_set_t &wait_set) {
   rcl_ret_t ret;
   {
     std::lock_guard<std::recursive_mutex> lock(pimpl_->action_client_mutex_);
+#if RCLCPP_VERSION_GTE(17, 0, 0)
     ret = rcl_action_client_wait_set_get_entities_ready(
         &wait_set, pimpl_->client_handle.get(), &is_feedback_ready, &is_status_ready,
         &is_goal_response_ready, &is_cancel_response_ready, &is_result_response_ready);
+#else
+    ret = rcl_action_client_wait_set_get_entities_ready(
+        wait_set, pimpl_->client_handle.get(), &is_feedback_ready, &is_status_ready,
+        &is_goal_response_ready, &is_cancel_response_ready, &is_result_response_ready);
+#endif
     if (RCL_RET_OK != ret) {
       rclcpp::exceptions::throw_from_rcl_error(ret, "failed to check for any ready entities");
     }
@@ -441,10 +473,8 @@ void ClientBase::set_callback_to_entity(EntityType entity_type,
   // Set it temporarily to the new callback, while we replace the old one.
   // This two-step setting, prevents a gap where the old std::function has
   // been replaced but the middleware hasn't been told about the new one yet.
-  set_on_ready_callback(
-      entity_type,
-      rclcpp::detail::cpp_callback_trampoline<decltype(new_callback), const void *, size_t>,
-      static_cast<const void *>(&new_callback));
+  set_on_ready_callback(entity_type, &on_ready_trampoline<decltype(new_callback)>,
+                        static_cast<const void *>(&new_callback));
 
   std::lock_guard<std::recursive_mutex> lock(listener_mutex_);
   // Store the std::function to keep it in scope, also overwrites the existing one.
@@ -461,10 +491,8 @@ void ClientBase::set_callback_to_entity(EntityType entity_type,
 
   if (it != entity_type_to_on_ready_callback_.end()) {
     auto &cb = it->second;
-    set_on_ready_callback(
-        entity_type,
-        rclcpp::detail::cpp_callback_trampoline<decltype(it->second), const void *, size_t>,
-        static_cast<const void *>(&cb));
+    set_on_ready_callback(entity_type, &on_ready_trampoline<decltype(it->second)>,
+                          static_cast<const void *>(&cb));
   }
 
   on_ready_callback_set_ = true;
@@ -610,7 +638,11 @@ std::shared_ptr<void> ClientBase::take_data_by_entity_id(size_t id) {
   return std::static_pointer_cast<void>(data_ptr);
 }
 
+#if RCLCPP_VERSION_GTE(17, 0, 0)
 void ClientBase::execute(const std::shared_ptr<void> &data_in) {
+#else
+void ClientBase::execute(std::shared_ptr<void> &data_in) {
+#endif
   if (!data_in) {
     throw std::invalid_argument("'data_in' is unexpectedly empty");
   }
