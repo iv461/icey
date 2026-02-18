@@ -273,7 +273,7 @@ protected:
   State state_;
 
   /// Whether the promise was resolved or rejected.
-  std::atomic_bool is_done_;
+  std::atomic_bool is_done_{false};
 
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback
