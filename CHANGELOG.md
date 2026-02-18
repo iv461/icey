@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
  
+- Support for actions
 - Multi-threaded executor support for the async/await API
 
 ### Fixed

@@ -19,7 +19,7 @@ ICEY is a new client API for modern asynchronous programming in the Robot Operat
  - A consistent async/await-based API for all asynchronous operations, including service calls and TF lookup.
  - Topic synchronization without boilerplate code
 
-ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, and TF. Additionally, ICEY supports lifecycle nodes using a single API.
+ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, actions and TF. Additionally, ICEY supports lifecycle nodes using a single API.
 ICEY operates smoothly with the message_filters package, using it for synchronization. ICEY is also extensible, as demonstrated by its support for image transport camera subscription/publishers.
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
