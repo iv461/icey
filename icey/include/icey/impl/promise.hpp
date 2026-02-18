@@ -5,11 +5,11 @@
 
 #pragma once
 
+#include <atomic>
 #include <coroutine>
 #include <exception>  /// for std::exception_ptr
 #include <functional>
 #include <icey/impl/result.hpp>
-#include <mutex>
 
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
@@ -133,7 +133,10 @@ public:
     /// cancellation only happens when the promise is destroyed before it has a value: This happens
     /// only when the user forgets to add a co_await
     if (cancel_) {
-      std::call_once(has_any_, [this] { cancel_(*this); });
+      bool expected_done{false};
+      if (is_done_.compare_exchange_strong(expected_done, true)) {
+        cancel_(*this);
+      }
     }
   }
 
@@ -149,18 +152,27 @@ public:
   /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
   /// are synchronized, i.e. thread-safe.
   void set_value(const Value &x) {
-    std::call_once(has_any_, [this, &x]() { state_.set_value(x); });
+    bool expected_done{false};
+    if (is_done_.compare_exchange_strong(expected_done, true)) {
+      state_.set_value(x);
+    }
   }
 
   /// Sets the state to hold an error, but does not notify about this state change.
   /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
   /// are synchronized, i.e. thread-safe.
   void set_error(const Error &x) {
-    std::call_once(has_any_, [this, &x]() { state_.set_error(x); });
+    bool expected_done{false};
+    if (is_done_.compare_exchange_strong(expected_done, true)) {
+      state_.set_error(x);
+    }
   }
 
   void set_state(const State &x) {
-    std::call_once(has_any_, [this, &x]() { state_ = x; });
+    bool expected_done{false};
+    if (is_done_.compare_exchange_strong(expected_done, true)) {
+      state_ = x;
+    }
   }
 
   void resolve(const Value &value) {
@@ -253,7 +265,9 @@ protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
-  std::once_flag has_any_;
+  /// Whether the promise was resolved or rejected.
+  std::atomic_bool is_done_;
+
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback
   /// captures the Promises object by reference since it needs to write the result to it. But if we
