@@ -1,146 +1,116 @@
 # Actions with async/await
 
-ICEY provides an async/await API for ROS 2 actions on top of `rclcpp_action`.
-The goal is to keep action code sequential and explicit while preserving asynchronous execution.
+ICEY wraps `rclcpp_action` with coroutine-friendly APIs so goal flow stays linear instead of callback-driven.
 
-This page covers:
-- creating an async action client
-- sending goals and awaiting acceptance/result/cancellation
-- creating an action server with synchronous or coroutine callbacks
-- how this differs from plain ROS 2 action APIs
-
-All examples are aligned with:
+References:
 - `icey_examples/src/action_client_async_await.cpp`
 - `icey_examples/src/action_server_async_await.cpp`
 
-## Action client
+## Client API in three operations
 
-Create a context and action client:
+Create client once:
 
 ```c++
-#include <example_interfaces/action/fibonacci.hpp>
-#include <icey/icey_async_await.hpp>
+auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
+auto client = ctx->create_action_client<Fibonacci>("/icey_test_action_fibonacci");
+```
 
-using namespace std::chrono_literals;
-using Fibonacci = example_interfaces::action::Fibonacci;
+### 1) Send goal (`send_goal`)
 
-icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
-  auto ctx = std::make_shared<icey::ContextAsyncAwait>(node.get());
-  auto client = ctx->create_action_client<Fibonacci>("/icey_test_action_fibonacci");
+```c++
+Fibonacci::Goal goal;
+goal.order = 7;
 
-  Fibonacci::Goal goal;
-  goal.order = 7;
+auto maybe_handle = co_await client.send_goal(
+    goal,
+    5s,  // acceptance timeout
+    [node](auto, auto) { RCLCPP_INFO(node->get_logger(), "feedback"); });
 
-  auto maybe_goal_handle = co_await client.send_goal(
-      goal,
-      5s,  // timeout for goal acceptance
-      [node](auto /*goal_handle*/, auto /*feedback*/) {
-        RCLCPP_INFO(node->get_logger(), "Got action feedback");
-      });
+if (maybe_handle.has_error()) {
+  // e.g. "TIMEOUT", "GOAL REJECTED"
+  co_return;
+}
 
-  if (maybe_goal_handle.has_error()) {
-    RCLCPP_WARN_STREAM(node->get_logger(), "Goal send failed: " << maybe_goal_handle.error());
-    co_return;
-  }
+auto handle = maybe_handle.value();
+```
 
-  auto goal_handle = maybe_goal_handle.value();
+What you get:
+- `icey::Result<icey::AsyncGoalHandle<ActionT>, std::string>`
+- explicit timeout for acceptance
 
-  auto maybe_result = co_await goal_handle.result(20s);  // timeout for result
-  if (maybe_result.has_error()) {
-    RCLCPP_WARN_STREAM(node->get_logger(), "Result failed: " << maybe_result.error());
-    co_return;
-  }
+### 2) Await result (`result`)
 
-  const auto &result = maybe_result.value();
-  if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-    RCLCPP_INFO(node->get_logger(), "Goal succeeded");
-  } else {
-    RCLCPP_WARN(node->get_logger(), "Goal finished with code %d", static_cast<int>(result.code));
-  }
+```c++
+auto maybe_result = co_await handle.result(20s);  // result timeout
+if (maybe_result.has_error()) {
+  // e.g. "RESULT TIMEOUT", "FAILED"
+  co_return;
+}
+
+const auto &wrapped = maybe_result.value();
+if (wrapped.code == rclcpp_action::ResultCode::SUCCEEDED) {
+  // wrapped.result is ActionT::Result
 }
 ```
 
-### Client API behavior
+What you get:
+- `icey::Result<typename ClientGoalHandle::WrappedResult, std::string>`
+- result timeout and cleanup handled by ICEY
 
-`create_action_client<ActionT>(name)` returns `icey::ActionClient<ActionT>`.
+### 3) Cancel goal (`cancel`)
 
-`co_await client.send_goal(goal, timeout, feedback_cb)` returns:
-- `icey::Result<icey::AsyncGoalHandle<ActionT>, std::string>`
+```c++
+auto maybe_cancel = co_await handle.cancel(2s);
+if (maybe_cancel.has_error()) {
+  // timeout / invalid-handle style errors
+  co_return;
+}
+```
 
-`co_await goal_handle.result(timeout)` returns:
-- `icey::Result<typename GoalHandle::WrappedResult, std::string>`
-
-`co_await goal_handle.cancel(timeout)` returns:
+What you get:
 - `icey::Result<CancelResponse::SharedPtr, std::string>`
 
 Important:
-- `goal_handle.cancel(timeout)` should be `co_await`ed immediately (do not fire-and-forget it).
+- `cancel(...)` must be awaited immediately (do not fire-and-forget it).
 
-Common error strings include:
-- `TIMEOUT`
-- `GOAL REJECTED`
-- `RESULT TIMEOUT`
-- `FAILED`
-- exception messages from `rclcpp_action` in invalid-goal-handle scenarios
+## Server API
 
-## Action server
-
-The action server in `ContextAsyncAwait` accepts both synchronous and asynchronous callbacks.
+`create_action_server` accepts synchronous or coroutine callbacks for `handle_goal`, `handle_cancel` and `handle_accepted `.
 
 ```c++
-auto handle_goal =
-    [&](const rclcpp_action::GoalUUID &uuid,
-        std::shared_ptr<const Fibonacci::Goal> goal)
-        -> icey::Promise<rclcpp_action::GoalResponse> {
-  // You can do async work before accepting/rejecting:
-  // auto upstream = co_await some_client.call(req, 1s);
+auto handle_goal = [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Fibonacci::Goal>)
+    -> icey::Promise<rclcpp_action::GoalResponse> {
+  // can await service calls, timers, etc.
   co_return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 };
 
-auto handle_cancel =
-    [](std::shared_ptr<ServerGoalHandleFibonacci>) -> rclcpp_action::CancelResponse {
+auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>) {
   return rclcpp_action::CancelResponse::REJECT;
 };
 
-auto handle_accepted = [&](std::shared_ptr<ServerGoalHandleFibonacci> goal_handle) {
-  // Execute goal and publish final state
-  std::this_thread::sleep_for(5s);
-  goal_handle->succeed(std::make_shared<Fibonacci::Result>());
+auto handle_accepted = [](std::shared_ptr<ServerGoalHandleFibonacci> gh) {
+  gh->succeed(std::make_shared<Fibonacci::Result>());
 };
 
-ctx->create_action_server<Fibonacci>(
-    "/icey_test_action_fibonacci", handle_goal, handle_cancel, handle_accepted);
+ctx->create_action_server<Fibonacci>("/icey_test_action_fibonacci",
+                                     handle_goal,
+                                     handle_cancel,
+                                     handle_accepted);
 ```
 
-### Server callback types
+## What this enables (beyond syntactic sugar)
 
-`create_action_server` supports:
-- `handle_goal`: sync or coroutine callback
-- `handle_cancel`: sync or coroutine callback
-- `handle_accepted`: currently regular callback
-
-Coroutine callbacks let you `co_await` other async ICEY APIs (service calls, timers, other actions) before returning the action response.
+1. Compose action stages directly:
+`send_goal -> result -> conditional cancel/retry` in one coroutine.
+2. Perform async prechecks in server callbacks:
+await service calls or timers before accepting/rejecting a goal.
+3. Keep timeout policy close to business logic:
+acceptance/result/cancel each have separate timeouts.
+4. Write deterministic control flow:
+less shared mutable callback state, fewer manually managed request IDs.
 
 ## Plain ROS 2 vs ICEY
 
-With plain `rclcpp_action` client code, you typically:
-- build `SendGoalOptions`
-- register goal-response/result/feedback callbacks manually
-- track request and timeout lifecycle yourself
-- spread control flow across callbacks
+Plain `rclcpp_action` commonly needs manual `SendGoalOptions`, multiple callbacks, and external state to connect acceptance/result/cancel steps.
 
-With ICEY async/await client code, you:
-- call `send_goal(...)` and `co_await` it
-- receive a typed `Result` immediately in one expression
-- `co_await` result/cancel with explicit timeout
-- keep control flow local and linear
-
-With plain `rclcpp_action` server code, async pre-processing inside `handle_goal` / `handle_cancel` usually requires manual callback plumbing or additional state machines. ICEY allows these callbacks themselves to be coroutines, so asynchronous pre-checks can stay in one function.
-
-## Practical migration notes
-
-1. Replace `rclcpp_action::create_client` with `ctx->create_action_client<ActionT>(...)`.
-2. Replace callback-driven send/result flow with `co_await send_goal` then `co_await result`.
-3. Keep per-operation timeout values explicit in code.
-4. For servers, migrate `handle_goal` and/or `handle_cancel` to `icey::Promise<...>` return types only where asynchronous work is needed.
-5. Keep `rclcpp::spin(...)` as usual; ICEY integrates with the ROS 2 executor.
+ICEY keeps the same ROS executor model (`rclcpp::spin(...)`) but lets you express those steps with typed `co_await` operations and explicit per-step timeout handling.
