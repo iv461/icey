@@ -155,6 +155,7 @@ public:
   const Value &value() const { return state_.value(); }
   const Error &error() const { return state_.error(); }
   State &get_state() { return state_; }
+  bool is_done() const { return is_done_.load(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
   /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
@@ -260,9 +261,9 @@ public:
 
   /// We do not use structured concurrency approach, we want to start the coroutine directly.
   std::suspend_never initial_suspend() const noexcept { return {}; }
-  /// We do not suspend at the final suspend point, but continue so that the coroutine state is
-  /// destructed automaticall when the coroutine is finished.
-  std::suspend_never final_suspend() const noexcept { return {}; }
+  /// Suspend at final suspend and let the returned `icey::Promise` wrapper own/destroy the
+  /// coroutine frame.
+  std::suspend_always final_suspend() const noexcept { return {}; }
 
   /// Set the cancellation function that is called in the destructor if this promise has_none().
   void set_cancel(Cancel cancel) { cancel_ = cancel; }
@@ -401,9 +402,12 @@ public:
 #endif
   }
 
-  bool await_ready() const noexcept { return false; }
+  bool await_ready() const noexcept { return coroutine_ && coroutine_.promise().is_done(); }
 
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
+    if (coroutine_.promise().is_done()) {
+      return false;
+    }
     auto &p = coroutine_.promise();
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format("{} await_suspend(), coroutine 0x{:x} is awaited by 0x{:x}\n",

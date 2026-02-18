@@ -84,29 +84,35 @@ icey::Promise<void> cancellation_in_scope(bool &cancelled) {
 
 TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithoutErrorType) {
   bool completed = false;
+  int value = 0;
 
   [&]() -> icey::Promise<void> {
-    (void)co_await immediate_plain();
+    value = co_await immediate_plain();
     completed = true;
     co_return;
   }();
 
-  /// Documented current behavior: awaiting a synchronously completed coroutine does not continue.
-  EXPECT_FALSE(completed);
+  EXPECT_TRUE(completed);
+  EXPECT_EQ(value, 7);
 }
 
 TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithErrorType) {
   bool completed = false;
+  icey::Result<int, std::string> ok_result{icey::Err<std::string>("unset")};
+  icey::Result<int, std::string> err_result{icey::Err<std::string>("unset")};
 
   [&]() -> icey::Promise<void> {
-    (void)co_await immediate_result_ok();
-    (void)co_await immediate_result_err();
+    ok_result = co_await immediate_result_ok();
+    err_result = co_await immediate_result_err();
     completed = true;
     co_return;
   }();
 
-  /// Documented current behavior: awaiting a synchronously completed coroutine does not continue.
-  EXPECT_FALSE(completed);
+  EXPECT_TRUE(completed);
+  EXPECT_TRUE(ok_result.has_value());
+  EXPECT_EQ(ok_result.value(), 5);
+  EXPECT_TRUE(err_result.has_error());
+  EXPECT_EQ(err_result.error(), "immediate_error");
 }
 
 TEST(IceyPromiseAsyncAwaitTest, NestedCoroutinesWithoutErrorType) {
