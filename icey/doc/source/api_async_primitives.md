@@ -14,7 +14,10 @@ The asynchronous primitives like `Promise` and `Stream` are the building blocks 
 ```{doxygenclass} icey::Stream
 ```
 
-```{doxygenclass} icey::PromiseBase
+```{doxygenclass} icey::impl::PromiseBase
+```
+
+```{doxygenclass} icey::impl::Promise
 ```
 
 ```{doxygenclass} icey::Promise

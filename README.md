@@ -1,10 +1,11 @@
 <p align="center">
-  <img src="icey/doc/source/_static/icey_logo.png" alt="Project Logo" width="1000rem"/>
+  <img src="icey/doc/source/_static/icey_logo.png" alt="Project Logo" width="400rem"/>
 </p>
 
 ---
 
 <p align="center" height="30rem">
+  <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_kilted%20(kilted)&label=ROS%202%20Kilted&style=for-the-badge" alt="ROS 2 Humble Kilted Status" />
   <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_jazzy%20(jazzy)&label=ROS%202%20Jazzy&style=for-the-badge" alt="ROS 2 Jazzy Build Status"/>
   <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_humble%20(humble)&label=ROS%202%20Humble&style=for-the-badge" alt="ROS 2 Humble Build Status" />
 </p>
@@ -18,7 +19,7 @@ ICEY is a new client API for modern asynchronous programming in the Robot Operat
  - A consistent async/await-based API for all asynchronous operations, including service calls and TF lookup.
  - Topic synchronization without boilerplate code
 
-ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, and TF. Additionally, ICEY supports lifecycle nodes using a single API.
+ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, actions and TF. Additionally, ICEY supports lifecycle nodes using a single API.
 ICEY operates smoothly with the message_filters package, using it for synchronization. ICEY is also extensible, as demonstrated by its support for image transport camera subscription/publishers.
 
 ICEY supports ROS 2 Humble and ROS 2 Jazzy.
@@ -194,7 +195,7 @@ icey_context_->create_subscription<geometry_msgs::PoseStamped>("ego_pose")
 # Dependencies: 
 
 - C++20 
-- ROS 2 Humble or Jazzy
+- ROS 2 Humble, Jazzy or Kilted
 - Boost (Hana, typeinfo), not required if you need async/await only
 - FMT
 

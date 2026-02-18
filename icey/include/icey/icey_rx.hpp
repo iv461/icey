@@ -1000,7 +1000,8 @@ struct ValueOrParameter {
   /// Construct a ValueOrParameter implicitly from a something similar to a value, For example,
   /// `"hello"` is a const char[5] literal that is convertible to a std::string, the value.
   template <class T>
-  requires std::convertible_to<T, Value> &&(!AnyStream<T>)ValueOrParameter(const T &v)  // NOLINT
+    requires std::convertible_to<T, Value> && (!AnyStream<T>)
+  ValueOrParameter(const T &v)  // NOLINT
       : get([value = Value(v)]() { return value; }) {}
 
   /// Construct a ValueOrParameter implicitly from parameter (i.e. ParameterStream)

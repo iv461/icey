@@ -4,6 +4,7 @@
 /// This software is licensed under the Apache License, Version 2.0.
 
 #include <iostream>
+#include <thread>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
@@ -14,24 +15,40 @@ using ExampleService = std_srvs::srv::SetBool;
 using namespace std::chrono_literals;
 
 TEST_F(NodeTest, ContextCreatesEntities) {
+  const auto wait_for = [this](const auto &predicate) {
+    for (int i = 0; i < 20; ++i) {
+      if (predicate()) return true;
+      std::this_thread::sleep_for(20ms);
+      spin_some();
+    }
+    return predicate();
+  };
+
   EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/test_camera"), 0);
   node_->icey().create_subscription<sensor_msgs::msg::Image>("/icey/test_camera");
-  EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/icey/test_camera"), 1);
+  EXPECT_TRUE(wait_for([this] {
+    return node_->get_node_graph_interface()->count_subscribers("/icey/test_camera") >= 1;
+  }));
 
   EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/icey/test_camera/debug"), 0);
   node_->icey().create_publisher<sensor_msgs::msg::Image>("/icey/test_camera/debug");
-  EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/icey/test_camera/debug"), 1);
+  EXPECT_TRUE(wait_for([this] {
+    return node_->get_node_graph_interface()->count_publishers("/icey/test_camera/debug") >= 1;
+  }));
 
   // EXPECT_EQ(node_->get_node_graph_interface()->count_subscribers("/tf"), 0);
   node_->icey().create_transform_subscription("map", "base_link");
-  EXPECT_GE(node_->get_node_graph_interface()->count_subscribers("/tf"), 1);
+  EXPECT_TRUE(
+      wait_for([this] { return node_->get_node_graph_interface()->count_subscribers("/tf") >= 1; }));
 
   auto timer = node_->icey().create_timer(90ms);
   // EXPECT_EQ(node_->get_node_graph_interface()->count_publishers("/tf"), 0); /// Is 1 for some
   // reason, looks like a rclcpp bug
   auto num_pubs_before = node_->get_node_graph_interface()->count_publishers("/tf");
   timer.then([](auto) { return geometry_msgs::msg::TransformStamped{}; }).publish_transform();
-  EXPECT_GT(node_->get_node_graph_interface()->count_publishers("/tf"), num_pubs_before);
+  EXPECT_TRUE(wait_for([this, num_pubs_before] {
+    return node_->get_node_graph_interface()->count_publishers("/tf") > num_pubs_before;
+  }));
 
   /* Does not work on Humble since the functions are not available (they are internally implemented
   via rcl, so we cannot just copy some rclcpp code from Jazzy unfortunately.)

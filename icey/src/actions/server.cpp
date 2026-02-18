@@ -1,0 +1,839 @@
+// Copyright 2018 Open Source Robotics Foundation, Inc.
+// Copyright © 2026 Ivo Ivanov
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <inttypes.h>
+
+#include <deque>
+#include <icey/action/server.hpp>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "action_msgs/msg/goal_status_array.hpp"
+#include "rcl_action/action_server.h"
+#include "rcl_action/wait.h"
+#include "rclcpp/exceptions.hpp"
+#include "rcpputils/scope_exit.hpp"
+
+struct ServerBaseData;
+
+namespace icey::rclcpp_action {
+namespace {
+template <typename CallbackT>
+void on_ready_trampoline(const void *user_data, size_t number_of_events) noexcept {
+  auto *callback = static_cast<const CallbackT *>(user_data);
+  (*callback)(number_of_events);
+}
+}  // namespace
+
+struct ServerBaseData {
+  using GoalRequestData =
+      std::tuple<rcl_ret_t, const rcl_action_goal_info_t, rmw_request_id_t, std::shared_ptr<void>>;
+
+  using CancelRequestData =
+      std::tuple<rcl_ret_t, std::shared_ptr<action_msgs::srv::CancelGoal::Request>,
+                 rmw_request_id_t>;
+
+  using ResultRequestData = std::tuple<rcl_ret_t, std::shared_ptr<void>, rmw_request_id_t>;
+
+  using GoalExpiredData = struct Empty {};
+
+  std::variant<GoalRequestData, CancelRequestData, ResultRequestData, GoalExpiredData> data;
+
+  explicit ServerBaseData(GoalRequestData &&data_in) : data(std::move(data_in)) {}
+  explicit ServerBaseData(CancelRequestData &&data_in) : data(std::move(data_in)) {}
+  explicit ServerBaseData(ResultRequestData &&data_in) : data(std::move(data_in)) {}
+  explicit ServerBaseData(GoalExpiredData &&data_in) : data(std::move(data_in)) {}
+};
+
+class ServerBaseImpl {
+public:
+  ServerBaseImpl(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
+                 const rosidl_action_type_support_t *type_support, rclcpp::Clock::SharedPtr clock,
+                 rclcpp::Logger logger)
+      : node_handle_(node_base->get_shared_rcl_node_handle()),
+        action_type_support_(type_support),
+        clock_(clock),
+        logger_(logger) {}
+
+  // Lock for action_server_
+  std::recursive_mutex action_server_reentrant_mutex_;
+
+  std::shared_ptr<rcl_node_t> node_handle_;
+
+  const rosidl_action_type_support_t *action_type_support_;
+
+  rclcpp::Clock::SharedPtr clock_;
+
+  rclcpp::TimerBase::SharedPtr expire_timer_;
+
+  // Do not declare this before clock_ as this depends on clock_(see #1526)
+  std::shared_ptr<rcl_action_server_t> action_server_;
+
+  size_t num_subscriptions_ = 0;
+  size_t num_timers_ = 0;
+  size_t num_clients_ = 0;
+  size_t num_services_ = 0;
+  size_t num_guard_conditions_ = 0;
+
+  // Lock for unordered_maps
+  std::recursive_mutex unordered_map_mutex_;
+
+  // Results to be kept until the goal expires after reaching a terminal state
+  std::unordered_map<GoalUUID, std::shared_ptr<void>> goal_results_;
+  // Requests for results are kept until a result becomes available
+  std::unordered_map<GoalUUID, std::vector<rmw_request_id_t>> result_requests_;
+  // rcl goal handles are kept so api to send result doesn't try to access freed memory
+  std::unordered_map<GoalUUID, std::shared_ptr<rcl_action_goal_handle_t>> goal_handles_;
+
+  // next ready event for taking, will be set by is_ready and will be processed by take_data
+  std::atomic<size_t> next_ready_event;
+
+  rclcpp::Logger logger_;
+};
+
+ServerBase::ServerBase(rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_base,
+                       rclcpp::node_interfaces::NodeClockInterface::SharedPtr node_clock,
+                       rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr node_logging,
+                       const std::string &name, const rosidl_action_type_support_t *type_support,
+                       const rcl_action_server_options_t &options)
+    : pimpl_(new ServerBaseImpl(node_base, type_support, node_clock->get_clock(),
+                                node_logging->get_logger().get_child("rclcpp_action"))) {
+  auto deleter = [node_base](rcl_action_server_t *ptr) {
+    if (nullptr != ptr) {
+      rcl_node_t *rcl_node = node_base->get_rcl_node_handle();
+      rcl_ret_t ret = rcl_action_server_fini(ptr, rcl_node);
+      if (RCL_RET_OK != ret) {
+        RCLCPP_DEBUG(rclcpp::get_logger("rclcpp_action"),
+                     "failed to fini rcl_action_server_t in deleter");
+      }
+      delete ptr;
+    }
+  };
+
+  pimpl_->action_server_.reset(new rcl_action_server_t, deleter);
+  *(pimpl_->action_server_) = rcl_action_get_zero_initialized_server();
+
+  rcl_node_t *rcl_node = node_base->get_rcl_node_handle();
+  rcl_clock_t *clock_handle = node_clock->get_clock()->get_clock_handle();
+  rcl_ret_t ret = rcl_action_server_init(pimpl_->action_server_.get(), rcl_node, clock_handle,
+                                         type_support, name.c_str(), &options);
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  ret = rcl_action_server_wait_set_get_num_entities(
+      pimpl_->action_server_.get(), &pimpl_->num_subscriptions_, &pimpl_->num_guard_conditions_,
+      &pimpl_->num_timers_, &pimpl_->num_clients_, &pimpl_->num_services_);
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+}
+
+ServerBase::~ServerBase() {}
+
+size_t ServerBase::get_number_of_ready_subscriptions() { return pimpl_->num_subscriptions_; }
+
+size_t ServerBase::get_number_of_ready_timers() { return pimpl_->num_timers_; }
+
+size_t ServerBase::get_number_of_ready_clients() { return pimpl_->num_clients_; }
+
+size_t ServerBase::get_number_of_ready_services() { return pimpl_->num_services_; }
+
+size_t ServerBase::get_number_of_ready_guard_conditions() { return pimpl_->num_guard_conditions_; }
+
+#if RCLCPP_VERSION_GTE(17, 0, 0)
+void ServerBase::add_to_wait_set(rcl_wait_set_t &wait_set) {
+#else
+void ServerBase::add_to_wait_set(rcl_wait_set_t *wait_set) {
+  if (wait_set == nullptr) {
+    throw std::invalid_argument("'wait_set' is null");
+  }
+#endif
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+#if RCLCPP_VERSION_GTE(17, 0, 0)
+  rcl_ret_t ret =
+      rcl_action_wait_set_add_action_server(&wait_set, pimpl_->action_server_.get(), NULL);
+#else
+  rcl_ret_t ret =
+      rcl_action_wait_set_add_action_server(wait_set, pimpl_->action_server_.get(), NULL);
+#endif
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret, "ServerBase::add_to_wait_set() failed");
+  }
+}
+
+#if RCLCPP_VERSION_GTE(17, 0, 0)
+bool ServerBase::is_ready(const rcl_wait_set_t &wait_set) {
+#else
+bool ServerBase::is_ready(rcl_wait_set_t *wait_set) {
+  if (wait_set == nullptr) {
+    return false;
+  }
+#endif
+  bool goal_request_ready;
+  bool cancel_request_ready;
+  bool result_request_ready;
+  bool goal_expired;
+  rcl_ret_t ret;
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+#if RCLCPP_VERSION_GTE(17, 0, 0)
+    ret = rcl_action_server_wait_set_get_entities_ready(&wait_set, pimpl_->action_server_.get(),
+                                                        &goal_request_ready, &cancel_request_ready,
+                                                        &result_request_ready, &goal_expired);
+#else
+    ret = rcl_action_server_wait_set_get_entities_ready(wait_set, pimpl_->action_server_.get(),
+                                                        &goal_request_ready, &cancel_request_ready,
+                                                        &result_request_ready, &goal_expired);
+#endif
+  }
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  pimpl_->next_ready_event = std::numeric_limits<uint32_t>::max();
+
+  if (goal_request_ready) {
+    pimpl_->next_ready_event = static_cast<uint32_t>(EntityType::GoalService);
+    return true;
+  }
+
+  if (cancel_request_ready) {
+    pimpl_->next_ready_event = static_cast<uint32_t>(EntityType::CancelService);
+    return true;
+  }
+
+  if (result_request_ready) {
+    pimpl_->next_ready_event = static_cast<uint32_t>(EntityType::ResultService);
+    return true;
+  }
+
+  if (goal_expired) {
+    pimpl_->next_ready_event = static_cast<uint32_t>(EntityType::Expired);
+    return true;
+  }
+
+  return false;
+}
+
+std::shared_ptr<void> ServerBase::take_data() {
+  size_t next_ready_event = pimpl_->next_ready_event.exchange(std::numeric_limits<uint32_t>::max());
+
+  if (next_ready_event == std::numeric_limits<uint32_t>::max()) {
+    throw std::runtime_error("ServerBase::take_data() called but no data is ready");
+  }
+
+  return take_data_by_entity_id(next_ready_event);
+}
+
+std::shared_ptr<void> ServerBase::take_data_by_entity_id(size_t id) {
+  std::shared_ptr<ServerBaseData> data_ptr;
+  // Mark as ready the entity from which we want to take data
+  switch (static_cast<EntityType>(id)) {
+    case EntityType::GoalService: {
+      rcl_ret_t ret;
+      rcl_action_goal_info_t goal_info = rcl_action_get_zero_initialized_goal_info();
+      rmw_request_id_t request_header;
+
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+
+      std::shared_ptr<void> message = create_goal_request();
+      ret = rcl_action_take_goal_request(pimpl_->action_server_.get(), &request_header,
+                                         message.get());
+
+      data_ptr = std::make_shared<ServerBaseData>(
+          ServerBaseData::GoalRequestData(ret, goal_info, request_header, message));
+    } break;
+    case EntityType::ResultService: {
+      rcl_ret_t ret;
+      // Get the result request message
+      rmw_request_id_t request_header;
+      std::shared_ptr<void> result_request = create_result_request();
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+      ret = rcl_action_take_result_request(pimpl_->action_server_.get(), &request_header,
+                                           result_request.get());
+
+      data_ptr = std::make_shared<ServerBaseData>(
+          ServerBaseData::ResultRequestData(ret, result_request, request_header));
+    } break;
+    case EntityType::CancelService: {
+      rcl_ret_t ret;
+      rmw_request_id_t request_header;
+
+      // Initialize cancel request
+      auto request = std::make_shared<action_msgs::srv::CancelGoal::Request>();
+
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+      ret = rcl_action_take_cancel_request(pimpl_->action_server_.get(), &request_header,
+                                           request.get());
+
+      data_ptr = std::make_shared<ServerBaseData>(
+          ServerBaseData::CancelRequestData(ret, request, request_header));
+    } break;
+    case EntityType::Expired: {
+      data_ptr = std::make_shared<ServerBaseData>(ServerBaseData::GoalExpiredData());
+    } break;
+  }
+
+  return std::static_pointer_cast<void>(data_ptr);
+}
+
+#if RCLCPP_VERSION_GTE(17, 0, 0)
+void ServerBase::execute(const std::shared_ptr<void> &data_in) {
+#else
+void ServerBase::execute(std::shared_ptr<void> &data_in) {
+#endif
+  if (!data_in) {
+    throw std::runtime_error("ServerBase::execute: give data pointer was null");
+  }
+
+  std::shared_ptr<ServerBaseData> data_ptr = std::static_pointer_cast<ServerBaseData>(data_in);
+
+  std::visit(
+      [&](auto &&data) -> void {
+        using T = std::decay_t<decltype(data)>;
+        if constexpr (std::is_same_v<T, ServerBaseData::GoalRequestData>) {
+          execute_goal_request_received(std::get<0>(data), std::get<1>(data), std::get<2>(data),
+                                        std::get<3>(data));
+        }
+        if constexpr (std::is_same_v<T, ServerBaseData::CancelRequestData>) {
+          execute_cancel_request_received(std::get<0>(data), std::get<1>(data), std::get<2>(data));
+        }
+        if constexpr (std::is_same_v<T, ServerBaseData::ResultRequestData>) {
+          execute_result_request_received(std::get<0>(data), std::get<1>(data), std::get<2>(data));
+        }
+        if constexpr (std::is_same_v<T, ServerBaseData::GoalExpiredData>) {
+          execute_check_expired_goals();
+        }
+      },
+      data_ptr->data);
+}
+
+void ServerBase::execute_goal_request_received(rcl_ret_t ret, rcl_action_goal_info_t goal_info,
+                                               rmw_request_id_t request_header,
+                                               const std::shared_ptr<void> message) {
+  if (RCL_RET_ACTION_SERVER_TAKE_FAILED == ret) {
+    // Ignore take failure because connext fails if it receives a sample without valid data.
+    // This happens when a client shuts down and connext receives a sample saying the client is
+    // no longer alive.
+    return;
+  } else if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  GoalUUID uuid = get_goal_id_from_goal_request(message.get());
+  ::rclcpp_action::convert(uuid, &goal_info);
+
+  // Call user's callback, getting the user's response and a ros message to send back
+  GoalRequestBase gr{goal_info, request_header, uuid, message};
+  call_handle_goal_callback(gr);
+}
+
+void ServerBase::execute_cancel_request_received(
+    rcl_ret_t ret, std::shared_ptr<action_msgs::srv::CancelGoal::Request> request,
+    rmw_request_id_t request_header) {
+  if (RCL_RET_ACTION_SERVER_TAKE_FAILED == ret) {
+    // Ignore take failure because connext fails if it receives a sample without valid data.
+    // This happens when a client shuts down and connext receives a sample saying the client is
+    // no longer alive.
+    return;
+  } else if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  // Convert c++ message to C message
+  rcl_action_cancel_request_t cancel_request = rcl_action_get_zero_initialized_cancel_request();
+  ::rclcpp_action::convert(request->goal_info.goal_id.uuid, &cancel_request.goal_info);
+  cancel_request.goal_info.stamp.sec = request->goal_info.stamp.sec;
+  cancel_request.goal_info.stamp.nanosec = request->goal_info.stamp.nanosec;
+
+  // Get a list of goal info that should be attempted to be cancelled
+  rcl_action_cancel_response_t cancel_response = rcl_action_get_zero_initialized_cancel_response();
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    ret = rcl_action_process_cancel_request(pimpl_->action_server_.get(), &cancel_request,
+                                            &cancel_response);
+  }
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  RCPPUTILS_SCOPE_EXIT({
+    ret = rcl_action_cancel_response_fini(&cancel_response);
+    if (RCL_RET_OK != ret) {
+      RCLCPP_ERROR(pimpl_->logger_, "Failed to fini cancel response");
+    }
+  });
+
+  auto response = std::make_shared<action_msgs::srv::CancelGoal::Response>();
+
+  response->return_code = cancel_response.msg.return_code;
+  auto &goals = cancel_response.msg.goals_canceling;
+  // For each canceled goal, call cancel callback
+  for (size_t i = 0; i < goals.size; ++i) {
+    const rcl_action_goal_info_t &goal_info = goals.data[i];
+    GoalUUID uuid;
+    ::rclcpp_action::convert(goal_info, &uuid);
+    CancelRequest cr;
+    cr.goal_info = goal_info;
+    cr.request_header = request_header;
+    cr.uuid = uuid;
+    call_handle_cancel_callback(uuid, cr);
+  }
+}
+
+void ServerBase::execute_result_request_received(rcl_ret_t ret,
+                                                 std::shared_ptr<void> result_request,
+                                                 rmw_request_id_t request_header) {
+  if (RCL_RET_ACTION_SERVER_TAKE_FAILED == ret) {
+    // Ignore take failure because connext fails if it receives a sample without valid data.
+    // This happens when a client shuts down and connext receives a sample saying the client is
+    // no longer alive.
+    return;
+  } else if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  std::shared_ptr<void> result_response;
+
+  // check if the goal exists
+  GoalUUID uuid = get_goal_id_from_result_request(result_request.get());
+  rcl_action_goal_info_t goal_info;
+  ::rclcpp_action::convert(uuid, &goal_info);
+  bool goal_exists;
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    goal_exists = rcl_action_server_goal_exists(pimpl_->action_server_.get(), &goal_info);
+  }
+  if (!goal_exists) {
+    // Goal does not exists
+    result_response = create_result_response(action_msgs::msg::GoalStatus::STATUS_UNKNOWN);
+  } else {
+    // Goal exists, check if a result is already available
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+    auto iter = pimpl_->goal_results_.find(uuid);
+    if (iter != pimpl_->goal_results_.end()) {
+      result_response = iter->second;
+    } else {
+      // Store the request so it can be responded to later
+      pimpl_->result_requests_[uuid].push_back(request_header);
+    }
+  }
+
+  if (result_response) {
+    // Send the result now
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    rcl_ret_t rcl_ret = rcl_action_send_result_response(pimpl_->action_server_.get(),
+                                                        &request_header, result_response.get());
+    if (rcl_ret == RCL_RET_TIMEOUT) {
+      RCLCPP_WARN(pimpl_->logger_, "Failed to send result response %s (timeout): %s",
+                  ::rclcpp_action::to_string(uuid).c_str(), rcl_get_error_string().str);
+      rcl_reset_error();
+      return;
+    }
+    if (RCL_RET_OK != rcl_ret) {
+      rclcpp::exceptions::throw_from_rcl_error(rcl_ret);
+    }
+  }
+}
+
+void ServerBase::execute_check_expired_goals() {
+  // Allocate expecting only one goal to expire at a time
+  rcl_action_goal_info_t expired_goals[1];
+  size_t num_expired = 1;
+
+  // Loop in case more than 1 goal expired
+  while (num_expired > 0u) {
+    rcl_ret_t ret;
+    {
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+      ret = rcl_action_expire_goals(pimpl_->action_server_.get(), expired_goals, 1, &num_expired);
+    }
+    if (RCL_RET_OK != ret) {
+      rclcpp::exceptions::throw_from_rcl_error(ret);
+    } else if (num_expired) {
+      // A goal expired!
+      GoalUUID uuid;
+      ::rclcpp_action::convert(expired_goals[0], &uuid);
+      RCLCPP_DEBUG(pimpl_->logger_, "Expired goal %s", ::rclcpp_action::to_string(uuid).c_str());
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+      pimpl_->goal_results_.erase(uuid);
+      pimpl_->result_requests_.erase(uuid);
+      pimpl_->goal_handles_.erase(uuid);
+    }
+  }
+}
+
+void ServerBase::publish_status() {
+  rcl_ret_t ret;
+
+  // We need to hold the lock across this entire method because
+  // rcl_action_server_get_goal_handles() returns an internal pointer to the
+  // goal data.
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+
+  // Get all goal handles known to C action server
+  rcl_action_goal_handle_t **goal_handles = NULL;
+  size_t num_goals = 0;
+  ret = rcl_action_server_get_goal_handles(pimpl_->action_server_.get(), &goal_handles, &num_goals);
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  auto status_msg = std::make_shared<action_msgs::msg::GoalStatusArray>();
+  status_msg->status_list.reserve(num_goals);
+  // Populate a c++ status message with the goals and their statuses
+  rcl_action_goal_status_array_t c_status_array =
+      rcl_action_get_zero_initialized_goal_status_array();
+  ret = rcl_action_get_goal_status_array(pimpl_->action_server_.get(), &c_status_array);
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+
+  RCPPUTILS_SCOPE_EXIT({
+    ret = rcl_action_goal_status_array_fini(&c_status_array);
+    if (RCL_RET_OK != ret) {
+      RCLCPP_ERROR(pimpl_->logger_, "Failed to fini status array message");
+    }
+  });
+
+  for (size_t i = 0; i < c_status_array.msg.status_list.size; ++i) {
+    auto &c_status_msg = c_status_array.msg.status_list.data[i];
+
+    action_msgs::msg::GoalStatus msg;
+    msg.status = c_status_msg.status;
+    // Convert C goal info to C++ goal info
+    ::rclcpp_action::convert(c_status_msg.goal_info, &msg.goal_info.goal_id.uuid);
+    msg.goal_info.stamp.sec = c_status_msg.goal_info.stamp.sec;
+    msg.goal_info.stamp.nanosec = c_status_msg.goal_info.stamp.nanosec;
+
+    status_msg->status_list.push_back(msg);
+  }
+
+  // Publish the message through the status publisher
+  ret = rcl_action_publish_status(pimpl_->action_server_.get(), status_msg.get());
+
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+}
+
+void ServerBase::publish_result(const GoalUUID &uuid, std::shared_ptr<void> result_msg) {
+  // Check that the goal exists
+  rcl_action_goal_info_t goal_info;
+  ::rclcpp_action::convert(uuid, &goal_info);
+  bool goal_exists;
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    goal_exists = rcl_action_server_goal_exists(pimpl_->action_server_.get(), &goal_info);
+  }
+
+  if (!goal_exists) {
+    throw std::runtime_error("Asked to publish result for goal that does not exist");
+  }
+
+  {
+    /**
+     * NOTE: There is a potential deadlock issue if both unordered_map_mutex_ and
+     * action_server_reentrant_mutex_ locked in other block scopes. Unless using
+     * std::scoped_lock, locking order must be consistent with the current.
+     *
+     * Current locking order:
+     *
+     *   1. unordered_map_mutex_
+     *   2. action_server_reentrant_mutex_
+     *
+     */
+    std::lock_guard<std::recursive_mutex> unordered_map_lock(pimpl_->unordered_map_mutex_);
+    pimpl_->goal_results_[uuid] = result_msg;
+
+    // if there are clients who already asked for the result, send it to them
+    auto iter = pimpl_->result_requests_.find(uuid);
+    if (iter != pimpl_->result_requests_.end()) {
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+      for (auto &request_header : iter->second) {
+        rcl_ret_t ret = rcl_action_send_result_response(pimpl_->action_server_.get(),
+                                                        &request_header, result_msg.get());
+        if (ret == RCL_RET_TIMEOUT) {
+          RCLCPP_WARN(pimpl_->logger_, "Failed to send result response %s (timeout): %s",
+                      ::rclcpp_action::to_string(uuid).c_str(), rcl_get_error_string().str);
+          rcl_reset_error();
+        } else if (RCL_RET_OK != ret) {
+          rclcpp::exceptions::throw_from_rcl_error(ret);
+        }
+      }
+    }
+  }
+}
+
+void ServerBase::notify_goal_terminal_state() {
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+  rcl_ret_t ret = rcl_action_notify_goal_done(pimpl_->action_server_.get());
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+}
+
+void ServerBase::publish_feedback(std::shared_ptr<void> feedback_msg) {
+  std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+  rcl_ret_t ret = rcl_action_publish_feedback(pimpl_->action_server_.get(), feedback_msg.get());
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret, "Failed to publish feedback");
+  }
+}
+
+void ServerBase::set_on_ready_callback(std::function<void(size_t, int)> callback) {
+  if (!callback) {
+    throw std::invalid_argument(
+        "The callback passed to set_on_ready_callback "
+        "is not callable.");
+  }
+
+  set_callback_to_entity(EntityType::GoalService, callback);
+  set_callback_to_entity(EntityType::ResultService, callback);
+  set_callback_to_entity(EntityType::CancelService, callback);
+}
+
+void ServerBase::set_callback_to_entity(EntityType entity_type,
+                                        std::function<void(size_t, int)> callback) {
+  // Note: we bind the int identifier argument to this waitable's entity types
+  auto new_callback = [callback, entity_type, this](size_t number_of_events) {
+    try {
+      callback(number_of_events, static_cast<int>(entity_type));
+    } catch (const std::exception &exception) {
+      RCLCPP_ERROR_STREAM(
+          pimpl_->logger_,
+          "rclcpp_action::ServerBase@"
+              << this << " caught " << rmw::impl::cpp::demangle(exception)
+              << " exception in user-provided callback for the 'on ready' callback: "
+              << exception.what());
+    } catch (...) {
+      RCLCPP_ERROR_STREAM(pimpl_->logger_,
+                          "rclcpp_action::ServerBase@"
+                              << this << " caught unhandled exception in user-provided callback "
+                              << "for the 'on ready' callback");
+    }
+  };
+
+  // Set it temporarily to the new callback, while we replace the old one.
+  // This two-step setting, prevents a gap where the old std::function has
+  // been replaced but the middleware hasn't been told about the new one yet.
+  set_on_ready_callback(entity_type, &on_ready_trampoline<decltype(new_callback)>,
+                        static_cast<const void *>(&new_callback));
+
+  std::lock_guard<std::recursive_mutex> lock(listener_mutex_);
+  // Store the std::function to keep it in scope, also overwrites the existing one.
+  auto it = entity_type_to_on_ready_callback_.find(entity_type);
+
+  if (it != entity_type_to_on_ready_callback_.end()) {
+    it->second = new_callback;
+  } else {
+    entity_type_to_on_ready_callback_.emplace(entity_type, new_callback);
+  }
+
+  // Set it again, now using the permanent storage.
+  it = entity_type_to_on_ready_callback_.find(entity_type);
+
+  if (it != entity_type_to_on_ready_callback_.end()) {
+    auto &cb = it->second;
+    set_on_ready_callback(entity_type, &on_ready_trampoline<decltype(it->second)>,
+                          static_cast<const void *>(&cb));
+  }
+
+  on_ready_callback_set_ = true;
+}
+
+void ServerBase::set_on_ready_callback(EntityType entity_type, rcl_event_callback_t callback,
+                                       const void *user_data) {
+  rcl_ret_t ret = RCL_RET_ERROR;
+
+  switch (entity_type) {
+    case EntityType::GoalService: {
+      ret = rcl_action_server_set_goal_service_callback(pimpl_->action_server_.get(), callback,
+                                                        user_data);
+      break;
+    }
+
+    case EntityType::ResultService: {
+      ret = rcl_action_server_set_result_service_callback(pimpl_->action_server_.get(), callback,
+                                                          user_data);
+      break;
+    }
+
+    case EntityType::CancelService: {
+      ret = rcl_action_server_set_cancel_service_callback(pimpl_->action_server_.get(), callback,
+                                                          user_data);
+      break;
+    }
+
+    default:
+      throw std::runtime_error("ServerBase::set_on_ready_callback: Unknown entity type.");
+      break;
+  }
+
+  if (RCL_RET_OK != ret) {
+    using rclcpp::exceptions::throw_from_rcl_error;
+    throw_from_rcl_error(ret, "failed to set the on ready callback for action client");
+  }
+}
+
+void ServerBase::clear_on_ready_callback() {
+  std::lock_guard<std::recursive_mutex> lock(listener_mutex_);
+
+  if (on_ready_callback_set_) {
+    set_on_ready_callback(EntityType::GoalService, nullptr, nullptr);
+    set_on_ready_callback(EntityType::ResultService, nullptr, nullptr);
+    set_on_ready_callback(EntityType::CancelService, nullptr, nullptr);
+    on_ready_callback_set_ = false;
+  }
+
+  entity_type_to_on_ready_callback_.clear();
+}
+
+#if RCLCPP_VERSION_GTE(29, 0, 0)
+std::vector<std::shared_ptr<rclcpp::TimerBase>> ServerBase::get_timers() const { return {}; }
+#endif
+
+void ServerBase::send_goal_response(const GoalRequestBase &goal_request, GoalResponse response) {
+  int ret = 0;
+  auto ros_response = create_goal_response(response);
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    auto rqcpy = goal_request.request_header;
+    ret = rcl_action_send_goal_response(pimpl_->action_server_.get(), &rqcpy, ros_response.get());
+  }
+
+  if (RCL_RET_OK != ret) {
+    if (ret == RCL_RET_TIMEOUT) {
+      RCLCPP_WARN(pimpl_->logger_, "Failed to send goal response %s (timeout): %s",
+                  ::rclcpp_action::to_string(goal_request.uuid).c_str(),
+                  rcl_get_error_string().str);
+      rcl_reset_error();
+      return;
+    } else {
+      rclcpp::exceptions::throw_from_rcl_error(ret);
+    }
+  }
+  const auto &uuid = goal_request.uuid;
+  // if goal is accepted, create a goal handle, and store it
+  if (GoalResponse::ACCEPT_AND_EXECUTE == response || GoalResponse::ACCEPT_AND_DEFER == response) {
+    RCLCPP_DEBUG(pimpl_->logger_, "Accepted goal %s", ::rclcpp_action::to_string(uuid).c_str());
+    // rcl_action will set time stamp
+    auto deleter = [](rcl_action_goal_handle_t *ptr) {
+      if (nullptr != ptr) {
+        rcl_ret_t fail_ret = rcl_action_goal_handle_fini(ptr);
+        if (RCL_RET_OK != fail_ret) {
+          RCLCPP_DEBUG(rclcpp::get_logger("rclcpp_action"),
+                       "failed to fini rcl_action_goal_handle_t in deleter");
+        }
+        delete ptr;
+      }
+    };
+    rcl_action_goal_handle_t *rcl_handle;
+    {
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+      rcl_handle =
+          rcl_action_accept_new_goal(pimpl_->action_server_.get(), &goal_request.goal_info);
+    }
+    if (!rcl_handle) {
+      throw std::runtime_error("Failed to accept new goal\n");
+    }
+
+    std::shared_ptr<rcl_action_goal_handle_t> handle(new rcl_action_goal_handle_t, deleter);
+    // Copy out goal handle since action server storage disappears when it is fini'd
+    *handle = *rcl_handle;
+
+    {
+      std::lock_guard<std::recursive_mutex> lock(pimpl_->unordered_map_mutex_);
+      pimpl_->goal_handles_[uuid] = handle;
+    }
+
+    if (GoalResponse::ACCEPT_AND_EXECUTE == response) {
+      // Change response to executing
+      ret = rcl_action_update_goal_state(handle.get(), GOAL_EVENT_EXECUTE);
+      if (RCL_RET_OK != ret) {
+        rclcpp::exceptions::throw_from_rcl_error(ret);
+      }
+    }
+    // publish response since a goal's state has changed (was accepted or has begun execution)
+    publish_status();
+
+    // Tell user to start executing action
+    call_goal_accepted_callback(handle, uuid, goal_request.message);
+  }
+}
+
+void ServerBase::send_cancel_response(const CancelRequest &cancel_request,
+                                      CancelResponse response_code) {
+  auto response = std::make_shared<action_msgs::srv::CancelGoal::Response>();
+  int ret = 0;
+  if (CancelResponse::ACCEPT == response_code) {
+    action_msgs::msg::GoalInfo cpp_info;
+    cpp_info.goal_id.uuid = cancel_request.uuid;
+    cpp_info.stamp.sec = cancel_request.goal_info.stamp.sec;
+    cpp_info.stamp.nanosec = cancel_request.goal_info.stamp.nanosec;
+    response->goals_canceling.push_back(cpp_info);
+    /// TODO why would you effectively ignore this exception
+    // try {
+    /// TODO enable
+    // goal_handle->_cancel_goal();
+    /*} catch (const rclcpp::exceptions::RCLError &ex) {
+      RCLCPP_DEBUG(rclcpp::get_logger("rclcpp_action"),
+                   "Failed to cancel goal in call_handle_cancel_callback: %s", ex.what());
+      return CancelResponse::REJECT;
+    }*/
+  }
+
+  // If the user rejects all individual requests to cancel goals,
+  // then we consider the top-level cancel request as rejected.
+  if (response->goals_canceling.empty()) {
+    response->return_code = action_msgs::srv::CancelGoal::Response::ERROR_REJECTED;
+  }
+
+  if (!response->goals_canceling.empty()) {
+    // at least one goal state changed, publish a new status message
+    publish_status();
+  }
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(pimpl_->action_server_reentrant_mutex_);
+    auto rqcopy = cancel_request.request_header;
+    ret = rcl_action_send_cancel_response(pimpl_->action_server_.get(), &rqcopy, response.get());
+  }
+
+  if (ret == RCL_RET_TIMEOUT) {
+    RCLCPP_WARN(pimpl_->logger_, "Failed to send cancel response %s (timeout): %s",
+                ::rclcpp_action::to_string(cancel_request.uuid).c_str(),
+                rcl_get_error_string().str);
+    rcl_reset_error();
+    return;
+  }
+  if (RCL_RET_OK != ret) {
+    rclcpp::exceptions::throw_from_rcl_error(ret);
+  }
+}
+}  // namespace icey::rclcpp_action

@@ -24,8 +24,10 @@ template <class _Value, class _Error>
 struct Result : std::variant<_Value, _Error> {
   using Value = _Value;
   using Error = _Error;
-  Result(const Ok<Value> &ok_value) { set_value(ok_value.value); }
-  Result(const Err<Error> &err_value) { set_error(err_value.value); }
+  Result(const Ok<Value> &ok_value)
+      : std::variant<_Value, _Error>(std::in_place_index<0>, ok_value.value) {}
+  Result(const Err<Error> &err_value)
+      : std::variant<_Value, _Error>(std::in_place_index<1>, err_value.value) {}
   bool has_value() const { return this->index() == 0; }
   bool has_error() const { return this->index() == 1; }
   const Value &value() const { return std::get<0>(*this); }

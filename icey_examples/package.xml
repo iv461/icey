@@ -21,6 +21,8 @@
   <depend>nav_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_eigen</depend>
+  <depend>rclcpp_action</depend>
+  <depend>example_interfaces</depend>
 
   <depend>std_srvs</depend>
   <depend>diagnostic_updater</depend>

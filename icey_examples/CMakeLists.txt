@@ -24,7 +24,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Werror=return-local-addr -fmax-errors=1)
+  add_compile_options(-Werror=return-local-addr)
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=return-stack-address)
@@ -65,6 +65,12 @@ ament_auto_add_executable(coroutine_example src/coroutine_example.cpp)
 ament_auto_add_executable(service_client_async_await_example src/service_client_async_await.cpp)
 target_link_libraries(service_client_async_await_example fmt::fmt)
 
+ament_auto_add_executable(action_client_async_await_example src/action_client_async_await.cpp)
+target_link_libraries(action_client_async_await_example fmt::fmt)
+
+ament_auto_add_executable(action_server_async_await_example src/action_server_async_await.cpp)
+target_link_libraries(action_server_async_await_example fmt::fmt)
+
 if(ament_cmake_auto_VERSION EQUAL 2.7.3)
   ament_auto_package()
 else()
@@ -72,3 +78,4 @@ else()
     USE_SCOPED_HEADER_INSTALL_DIR  # can be removed after Jazzy EOL
   )
 endif()
+

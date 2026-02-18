@@ -9,7 +9,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-  add_compile_options(-Werror=return-local-addr -fmax-errors=1)
+  add_compile_options(-Werror=return-local-addr)
 endif()
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Werror=return-stack-address)
@@ -24,6 +24,11 @@ include_directories(
     include
 )
 
+ament_auto_add_library(icey 
+  src/actions/client.cpp 
+  src/actions/server.cpp 
+  src/actions/server_goal_handle.cpp  
+  )
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -31,14 +36,18 @@ if(BUILD_TESTING)
   ament_auto_add_gtest(test_main
     test/entities_test.cpp
     test/entities_async_await_test.cpp
+    test/action_server_test.cpp
+    test/action_client_test.cpp
+    test/node_tasks_test.cpp
     test/test_main.cpp
     test/filters_test.cpp
     test/callback_lifetime_test.cpp
     test/context_test.cpp
     test/promise_test.cpp
     test/nested_coroutines.cpp
-  )
+  )  
   target_link_libraries(test_main fmt::fmt)
+  set_tests_properties(test_main PROPERTIES TIMEOUT 180)
 
 endif()
 

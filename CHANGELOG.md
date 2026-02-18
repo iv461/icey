@@ -7,19 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Added
+### Removed 
 
+- Callback-based ServiceClient::call overload
+- ServiceClient::cancel because it does not cancel the timeout timer correctly
+
+### Added
+ 
+- Support for actions
 - Multi-threaded executor support for the async/await API
 
 ### Fixed
 
 - Correct result type implementation
+- Missing request cleanup in ServiceClientImpl::our_to_real_req_id_
+- Added missing cancellation of timeout timer in Promise destruction
 
 ## 0.3.0 
 
 ### Fixed
-
-- This release enables to use nested coroutines and fixes a coroutine state memory leak issue.
+- enables nested coroutines and with it fixes coroutine state memory leak
 
 ## 0.2.0 
 
