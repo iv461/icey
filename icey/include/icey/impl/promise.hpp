@@ -261,9 +261,9 @@ public:
 
   /// We do not use structured concurrency approach, we want to start the coroutine directly.
   std::suspend_never initial_suspend() const noexcept { return {}; }
-  /// Suspend at final suspend and let the returned `icey::Promise` wrapper own/destroy the
-  /// coroutine frame.
-  std::suspend_always final_suspend() const noexcept { return {}; }
+  /// We do not suspend at the final suspend point, but continue so that the coroutine state is
+  /// destructed automaticall when the coroutine is finished.
+  std::suspend_never final_suspend() const noexcept { return {}; }
 
   /// Set the cancellation function that is called in the destructor if this promise has_none().
   void set_cancel(Cancel cancel) { cancel_ = cancel; }
