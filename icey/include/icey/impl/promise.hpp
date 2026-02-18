@@ -8,8 +8,8 @@
 #include <coroutine>
 #include <exception>  /// for std::exception_ptr
 #include <functional>
-#include <mutex>
 #include <icey/impl/result.hpp>
+#include <mutex>
 
 #ifdef ICEY_CORO_DEBUG_PRINT
 #include <fmt/format.h>
@@ -50,16 +50,16 @@ template <typename T>
 inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 struct PromiseTag {};
 
-/// This state is a sum type that holds either a Value, Error, or none. 
+/// This state is a sum type that holds either a Value, Error, or none.
 template <class _Value, class _Error>
 struct PromiseState : private std::variant<std::monostate, _Value, _Error> {
   using Value = _Value;
   using Error = _Error;
   using Self = PromiseState<_Value, _Error>;
-  
+
   PromiseState() = default;
-  PromiseState(const Result<Value, Error> &result) { // NOLINT
-    if(result.has_value()) {
+  PromiseState(const Result<Value, Error> &result) {  // NOLINT
+    if (result.has_value()) {
       set_value(result.value());
     } else {
       set_error(result.error());
@@ -84,10 +84,10 @@ struct PromiseState : private std::variant<std::monostate, _Value, _Error> {
   }
 
   Result<Value, Error> to_result() const {
-    if(has_value()) {
-        return Ok(value());
-    } else  {
-        return Err(error());
+    if (has_value()) {
+      return Ok(value());
+    } else {
+      return Err(error());
     }
   }
 };
@@ -109,9 +109,9 @@ public:
   LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {}
 
-  PromiseBase(){
+  PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " Constructor()" << std::endl;
+    // std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -133,39 +133,34 @@ public:
     /// cancellation only happens when the promise is destroyed before it has a value: This happens
     /// only when the user forgets to add a co_await
     if (cancel_) {
-      std::call_once(has_any_, [this]{ cancel_(*this);});
+      std::call_once(has_any_, [this] { cancel_(*this); });
     }
-    
   }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
-  
+
   const Value &value() const { return state_.value(); }
   const Error &error() const { return state_.error(); }
   State &get_state() { return state_; }
 
   /// Sets the state to hold a value, but does not notify about this state change.
-  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state are synchronized, i.e. thread-safe.
-  void set_value(const Value &x) { 
-    std::call_once(has_any_, [this, &x]() {
-      state_.set_value(x); 
-    });
+  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
+  /// are synchronized, i.e. thread-safe.
+  void set_value(const Value &x) {
+    std::call_once(has_any_, [this, &x]() { state_.set_value(x); });
   }
 
-  /// Sets the state to hold an error, but does not notify about this state change. 
-  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state are synchronized, i.e. thread-safe.
-  void set_error(const Error &x) { 
-    std::call_once(has_any_, [this, &x]() {
-      state_.set_error(x); 
-    });
+  /// Sets the state to hold an error, but does not notify about this state change.
+  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
+  /// are synchronized, i.e. thread-safe.
+  void set_error(const Error &x) {
+    std::call_once(has_any_, [this, &x]() { state_.set_error(x); });
   }
 
-  void set_state(const State &x) { 
-    std::call_once(has_any_, [this, &x]() {
-      state_ = x; 
-    });
+  void set_state(const State &x) {
+    std::call_once(has_any_, [this, &x]() { state_ = x; });
   }
 
   void resolve(const Value &value) {

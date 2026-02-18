@@ -106,12 +106,13 @@ struct NodeBase {
                       const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                       rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_service<ServiceT>(node_base_, node_services_, service_name,
-                                            std::forward<CallbackT>(callback), 
-#if RCLCPP_VERSION_MAJOR >= 29 // Not removed yet like create_client, but likely will be in the near future
-                                            qos, 
-#else 
+                                            std::forward<CallbackT>(callback),
+#if RCLCPP_VERSION_MAJOR >= \
+    29  // Not removed yet like create_client, but likely will be in the near future
+                                            qos,
+#else
                                             qos.get_rmw_qos_profile(),
-#endif 
+#endif
                                             group);
   }
 
@@ -120,11 +121,12 @@ struct NodeBase {
                      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
                      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     return rclcpp::create_client<Service>(node_base_, node_graph_, node_services_, service_name,
-#if RCLCPP_VERSION_MAJOR >= 29 // The function overload taking the C QoS type was removed in https://github.com/ros2/rclcpp/pull/2575
-                                            qos, 
-#else 
-                                            qos.get_rmw_qos_profile(),
-#endif 
+#if RCLCPP_VERSION_MAJOR >= 29  // The function overload taking the C QoS type was removed in
+                                // https://github.com/ros2/rclcpp/pull/2575
+                                          qos,
+#else
+                                          qos.get_rmw_qos_profile(),
+#endif
                                           group);
   }
 
@@ -242,7 +244,7 @@ struct TransformBufferImpl {
       const tf2::TimePoint legacy_timepoint = tf2_ros::fromRclcpp(rclcpp_from_chrono(time));
       // Note that this call does not wait, the transform must already have arrived.
       auto tf = buffer_->lookupTransform(target_frame, source_frame, legacy_timepoint);
-      return Ok(tf); 
+      return Ok(tf);
     } catch (const tf2::TransformException &e) {
       return Err(std::string(e.what()));
     }
@@ -286,12 +288,12 @@ struct TransformBufferImpl {
               {
                 std::lock_guard<std::recursive_mutex> lock{mutex_};
                 active_timers_.at(request.lock())
-                ->cancel();  /// cancel this timer, (it still lives in the active_timers_)
+                    ->cancel();  /// cancel this timer, (it still lives in the active_timers_)
                 cancelled_timers_.emplace(active_timers_.at(
-                  request.lock()));  /// Copy the timer over to the cancelled ones so that we know
-                  /// we need to clean it up next time
-                  active_timers_.erase(request.lock());  // Erase this timer from active_timers_
-                  requests_.erase(request.lock());       // Destroy the request
+                    request.lock()));  /// Copy the timer over to the cancelled ones so that we know
+                /// we need to clean it up next time
+                active_timers_.erase(request.lock());  // Erase this timer from active_timers_
+                requests_.erase(request.lock());       // Destroy the request
               }
               on_error(tf2::TimeoutException{"Timed out waiting for transform"});
             },
@@ -316,9 +318,8 @@ struct TransformBufferImpl {
               target_frame, source_frame, time, timeout,
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
-          promise.set_cancel([this, request_handle](auto &) {
-            this->cancel_request(request_handle);
-          });
+          promise.set_cancel(
+              [this, request_handle](auto &) { this->cancel_request(request_handle); });
         });
   }
 
@@ -420,10 +421,10 @@ protected:
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully(because the lookup succeeded), destroy (and
       /// therefore cancel) the associated timeout timer:
-       {
-          std::lock_guard<std::recursive_mutex> lock{mutex_};
-          active_timers_.erase(request);
-       }
+      {
+        std::lock_guard<std::recursive_mutex> lock{mutex_};
+        active_timers_.erase(request);
+      }
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -436,12 +437,12 @@ protected:
     /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
     std::vector<RequestHandle> requests_to_delete;
     mutex_.lock();
-    auto requests = requests_; 
+    auto requests = requests_;
     mutex_.unlock();
 
-    for(auto req: requests) {
+    for (auto req : requests) {
       if (req->maybe_time) {
-        if(maybe_notify_specific_time(req)) {
+        if (maybe_notify_specific_time(req)) {
           requests_to_delete.push_back(req);
         }
       } else {
@@ -450,8 +451,7 @@ protected:
       }
     }
     mutex_.lock();
-    for(auto k: requests_to_delete)
-      requests_.erase(k);
+    for (auto k : requests_to_delete) requests_.erase(k);
     mutex_.unlock();
   }
 
@@ -617,16 +617,17 @@ struct ServiceClientImpl {
 protected:
   NodeBase &node_;
   RequestID request_counter_{
-    0};  /// We have to count the requests ourselves, since we cannot access
-    /// And a map in case rcl starts to create the request IDs differently compared to how  we are
-    /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
-    std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
-    /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
-    /// the timeout timers for pending requests.
-    std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
-    /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
-    std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
-    std::recursive_mutex mutex_; /// Mutex protecting request_counter_, our_to_real_req_id_, active_timers_ and cancelled_timers_.
+      0};  /// We have to count the requests ourselves, since we cannot access
+  /// And a map in case rcl starts to create the request IDs differently compared to how  we are
+  /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
+  std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
+  /// The timeout timers for every lookup transform request: These are only the active timers, i.e.
+  /// the timeout timers for pending requests.
+  std::unordered_map<RequestID, std::shared_ptr<rclcpp::TimerBase>> active_timers_;
+  /// A separate hashset for cancelled timers so that we know immediately which are cancelled.
+  std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> cancelled_timers_;
+  std::recursive_mutex mutex_;  /// Mutex protecting request_counter_, our_to_real_req_id_,
+                                /// active_timers_ and cancelled_timers_.
 
 public:
   /// The underlying rclcpp service client
@@ -749,10 +750,10 @@ public:
   /// received, the provided callback will be called. This callback receives the request and returns
   /// a shared pointer to the response. If it returns a nullptr, then no response is made. The
   /// callback can be either synchronous (a regular function) or asynchronous, i.e. a coroutine. The
-  /// callbacks returns the response. The context additionally provides bookkeeping for this service,
-  /// this means you do not have to store service in the node class. Works otherwise the same as
-  /// [rclcpp::Node::create_service]. \param service_name the name of the service \param callback
-  /// the callback \param qos quality of service \tparam Callback Either
+  /// callbacks returns the response. The context additionally provides bookkeeping for this
+  /// service, this means you do not have to store service in the node class. Works otherwise the
+  /// same as [rclcpp::Node::create_service]. \param service_name the name of the service \param
+  /// callback the callback \param qos quality of service \tparam Callback Either
   /// (std::shared_ptr<ServiceT::Request>) -> std::shared_ptr<ServiceT::Response> or
   /// (std::shared_ptr<ServiceT::Request>) ->
   /// icey::impl::Promise<std::shared_ptr<ServiceT::Response>>
@@ -824,7 +825,8 @@ public:
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
   /// We need bookkeeping for the service servers.
 protected:
-  std::once_flag tf_buffer_init_flag_; /// Needed for atomic, i.e. thread-safe initialization of tf buffer.
+  std::once_flag
+      tf_buffer_init_flag_;  /// Needed for atomic, i.e. thread-safe initialization of tf buffer.
   std::recursive_mutex bookkeeping_mutex_;
   std::vector<std::shared_ptr<rclcpp::TimerBase>> timers_;
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;

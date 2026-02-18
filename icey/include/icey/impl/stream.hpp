@@ -145,7 +145,8 @@ public:
 
   /// If no error is possible (Error is Nothing), this it just the Value instead of the State
   /// to not force the user to write unnecessary error handling/unwraping code.
-  using MaybeResult = std::conditional_t<std::is_same_v<Error, Nothing>, Value, Result<Value, Error>>;
+  using MaybeResult =
+      std::conditional_t<std::is_same_v<Error, Nothing>, Value, Result<Value, Error>>;
   using Handler = std::function<void(const State &)>;
 
   Stream() = default;
