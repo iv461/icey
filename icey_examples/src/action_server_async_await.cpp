@@ -3,16 +3,15 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// Action server example using ICEY coroutine execute callback.
-///
-/// Key differences vs regular rclcpp_action API:
-/// - Provide a single execute callback which can be a coroutine (impl::Promise<void>).
-/// - You don’t need to wire goal/feedback/result lambdas separately unless you want to customize.
-/// - Inside the execute callback you can co_await timers/services, making async flows explicit.
+/// Action server example that demonstrates how callbacks of the action server can be coroutines. In
+/// this case, the handle_goal-callback is a coroutine and calls a service. Once the service
+/// response, the goal is accepted. The handle_cancel and handle_accepted could be coroutines as
+/// well.
 
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
 #include <std_srvs/srv/set_bool.hpp>
+#include <thread>
 
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
@@ -30,27 +29,26 @@ int main(int argc, char **argv) {
   auto handle_goal =
       [&](const rclcpp_action::GoalUUID &,
           std::shared_ptr<const Fibonacci::Goal>) -> icey::Promise<rclcpp_action::GoalResponse> {
-    std::cout << "got goal request" << std::endl;
+    RCLCPP_INFO_STREAM(node->get_logger(), "Got goal request, sending upstream service request ..");
 
-    /// This will just timeout. Note that you always need at lease one co_await inside a coroutine
+    /// This will just timeout. Note that you always need at lease one co_await inside a coroutine.
     auto upstream_result =
-        co_await upstream.call(std::make_shared<std_srvs::srv::SetBool::Request>(), 1s);
+        co_await upstream.call(std::make_shared<std_srvs::srv::SetBool::Request>(), 5s);
 
+    RCLCPP_INFO_STREAM(node->get_logger(), "Received upstream service result, accepting goal ..");
     co_return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   };
 
-  auto handle_cancel = [](std::shared_ptr<ServerGoalHandleFibonacci>)
-      -> icey::Promise<rclcpp_action::CancelResponse> {
-    std::cout << "got reject request" << std::endl;
-    co_return rclcpp_action::CancelResponse::REJECT;
+  auto handle_cancel =
+      [](std::shared_ptr<ServerGoalHandleFibonacci>) -> rclcpp_action::CancelResponse {
+    return rclcpp_action::CancelResponse::REJECT;
   };
 
-  std::shared_ptr<ServerGoalHandleFibonacci> stored_gh;
-  auto handle_accepted =
-      [&stored_gh](std::shared_ptr<ServerGoalHandleFibonacci> gh) -> icey::Promise<void> {
-    std::cout << "got  request accepted" << std::endl;
-    stored_gh = gh;
-    co_return;
+  auto handle_accepted = [&](std::shared_ptr<ServerGoalHandleFibonacci> goal_handle) {
+    RCLCPP_INFO_STREAM(node->get_logger(), "Executing goal ..");
+    std::this_thread::sleep_for(5s);
+    RCLCPP_INFO_STREAM(node->get_logger(), "Finished executing goal.");
+    goal_handle->succeed(std::make_shared<Fibonacci::Result>());
   };
 
   ctx->create_action_server<Fibonacci>("/icey_test_action_fibonacci", handle_goal, handle_cancel,

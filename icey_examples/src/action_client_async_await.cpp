@@ -26,7 +26,7 @@ icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
   RCLCPP_INFO_STREAM(node->get_logger(), "Sending goal.. ");
   // Request a goal with 2 seconds timeout
   auto maybe_goal_handle = co_await client.send_goal(
-      goal, 2s, [node](auto, auto) { RCLCPP_WARN(node->get_logger(), "Got some feedback"); });
+      goal, 5s, [node](auto, auto) { RCLCPP_WARN(node->get_logger(), "Got some feedback"); });
 
   if (maybe_goal_handle.has_error()) {
     RCLCPP_WARN_STREAM(node->get_logger(),
