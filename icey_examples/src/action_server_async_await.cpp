@@ -1,4 +1,4 @@
-/// Copyright © 2026 Technische Hochschule Augsburg
+/// Copyright © 2026 Ivo Ivanov
 /// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icey/doc/source/_static/icey_logo.png" alt="Project Logo" width="1000rem"/>
+  <img src="icey/doc/source/_static/icey_logo.png" alt="Project Logo" width="400rem"/>
 </p>
 
 ---

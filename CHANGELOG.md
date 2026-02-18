@@ -18,8 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.3.0 
 
 ### Fixed
-
-- This release enables to use nested coroutines and fixes a coroutine state memory leak issue.
+- enables nested coroutines and with it fixes coroutine state memory leak
 
 ## 0.2.0 
 
