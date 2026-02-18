@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
 
     /// This will just timeout. Note that you always need at lease one co_await inside a coroutine.
     auto upstream_result =
-        co_await upstream.call(std::make_shared<std_srvs::srv::SetBool::Request>(), 5s);
+        co_await upstream.call(std::make_shared<std_srvs::srv::SetBool::Request>(), 3s);
 
     RCLCPP_INFO_STREAM(node->get_logger(), "Received upstream service result, accepting goal ..");
     co_return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
