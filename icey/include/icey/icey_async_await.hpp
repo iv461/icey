@@ -861,7 +861,7 @@ public:
   /// callback the callback \param qos quality of service \tparam Callback Either
   /// (std::shared_ptr<ServiceT::Request>) -> std::shared_ptr<ServiceT::Response> or
   /// (std::shared_ptr<ServiceT::Request>) ->
-  /// icey::impl::Promise<std::shared_ptr<ServiceT::Response>>
+  /// icey::Promise<std::shared_ptr<ServiceT::Response>>
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
       const std::string &service_name, Callback callback,
