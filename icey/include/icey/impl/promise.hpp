@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <coroutine>
 #include <exception>  /// for std::exception_ptr
 #include <functional>
@@ -33,6 +34,10 @@ inline bool icey_coro_debug_print = false;
 template <class Value, class Error>
 class Promise;
 
+/// A special type that indicates that there is no value. (Using `void` for this would cause many
+/// problems, so defining an extra struct is easier.)
+struct Nothing {};
+
 namespace impl {
 
 template <typename, typename = std::void_t<>>
@@ -45,8 +50,50 @@ template <typename T>
 inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 struct PromiseTag {};
 
-/// A Promise is an asynchronous abstraction that yields a single value or an error.
-/// I can be used with async/await syntax coroutines in C++20.
+/// This state is a sum type that holds either a Value, Error, or none.
+template <class _Value, class _Error>
+struct PromiseState : private std::variant<std::monostate, _Value, _Error> {
+  using Value = _Value;
+  using Error = _Error;
+  using Self = PromiseState<_Value, _Error>;
+
+  PromiseState() = default;
+  PromiseState(const Result<Value, Error> &result) {  // NOLINT
+    if (result.has_value()) {
+      set_value(result.value());
+    } else {
+      set_error(result.error());
+    }
+  }
+
+  bool has_none() const { return this->index() == 0; }
+  bool has_value() const { return this->index() == 1; }
+  bool has_error() const { return this->index() == 2; }
+  const Value &value() const { return std::get<1>(*this); }
+  const Error &error() const { return std::get<2>(*this); }
+  void set_none() { this->template emplace<0>(std::monostate{}); }
+  void set_value(const Value &x) { this->template emplace<1>(x); }
+  void set_error(const Error &x) { this->template emplace<2>(x); }
+
+  auto get() const {
+    if constexpr (std::is_same_v<Error, Nothing>) {
+      return this->value();
+    } else {
+      return to_result();
+    }
+  }
+
+  Result<Value, Error> to_result() const {
+    if (has_value()) {
+      return Ok(value());
+    } else {
+      return Err(error());
+    }
+  }
+};
+
+/// A Promise is an asynchronous abstraction that yields a value or an error.
+/// It can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
 /// It does not use dynamic memory allocation to store the value.
 template <class _Value = Nothing, class _Error = Nothing>
@@ -54,7 +101,7 @@ class PromiseBase : public PromiseTag {
 public:
   using Value = _Value;
   using Error = _Error;
-  using State = Result<_Value, _Error>;
+  using State = PromiseState<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
 
   using Cancel = std::function<void(Self &)>;
@@ -62,9 +109,9 @@ public:
   LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {}
 
-  PromiseBase(){
+  PromiseBase() {
 #ifdef ICEY_CORO_DEBUG_PRINT
-  // std::cout << get_type(*this) << " Constructor()" << std::endl;
+    // std::cout << get_type(*this) << " Constructor()" << std::endl;
 // std::cout << get_type(*this) << " Constructor()" << std::endl;
 #endif
   }
@@ -85,28 +132,48 @@ public:
 #endif
     /// cancellation only happens when the promise is destroyed before it has a value: This happens
     /// only when the user forgets to add a co_await
-    if (cancel_ && has_none()) cancel_(*this);
+    if (cancel_) {
+      bool expected_done{false};
+      if (is_done_.compare_exchange_strong(expected_done, true)) {
+        cancel_(*this);
+      }
+    }
   }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
-  bool has_none() const { return state_.has_none(); }
-  bool has_value() const { return state_.has_value(); }
-  bool has_error() const { return state_.has_error(); }
   const Value &value() const { return state_.value(); }
   const Error &error() const { return state_.error(); }
   State &get_state() { return state_; }
-  const State &get_state() const { return state_; }
 
-  /// Sets the state to hold none, but does not notify about this state change.
-  void set_none() { state_.set_none(); }
   /// Sets the state to hold a value, but does not notify about this state change.
-  void set_value(const Value &x) { state_.set_value(x); }
+  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
+  /// are synchronized, i.e. thread-safe.
+  void set_value(const Value &x) {
+    bool expected_done{false};
+    if (is_done_.compare_exchange_strong(expected_done, true)) {
+      state_.set_value(x);
+    }
+  }
+
   /// Sets the state to hold an error, but does not notify about this state change.
-  void set_error(const Error &x) { state_.set_error(x); }
-  void set_state(const State &x) { state_ = x; }
+  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
+  /// are synchronized, i.e. thread-safe.
+  void set_error(const Error &x) {
+    bool expected_done{false};
+    if (is_done_.compare_exchange_strong(expected_done, true)) {
+      state_.set_error(x);
+    }
+  }
+
+  void set_state(const State &x) {
+    bool expected_done{false};
+    if (is_done_.compare_exchange_strong(expected_done, true)) {
+      state_ = x;
+    }
+  }
 
   void resolve(const Value &value) {
     set_value(value);
@@ -177,9 +244,9 @@ public:
     if constexpr (std::is_same_v<Value, Nothing>)
       return;
     else {
-      if (has_none()) {
+      /*if (has_none()) {
         // TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
-      }
+      }*/
       return get_state().get();
     }
   }
@@ -197,6 +264,9 @@ public:
 protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
+
+  /// Whether the promise was resolved or rejected.
+  std::atomic_bool is_done_;
 
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback

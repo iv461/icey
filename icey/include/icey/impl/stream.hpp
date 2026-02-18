@@ -69,8 +69,14 @@ constexpr bool is_tuple_v = is_tuple<T>::value;
 template <class T>
 constexpr bool is_pair_v = is_pair<T>::value;
 
+template <class>
+struct is_result : std::false_type {};
+
+template <class T, class E>
+struct is_result<Result<T, E>> : std::true_type {};
+
 template <class T>
-constexpr bool is_result = std::is_base_of_v<ResultTag, T>;
+constexpr bool is_result_v = is_result<T>::value;
 
 /// The error type of the given Stream type
 template <class T>
@@ -135,11 +141,12 @@ public:
   using Value = _Value;
   using Error = _Error;
   using Self = Stream<Value, Error, Base, DefaultBase>;
-  using State = Result<Value, Error>;
+  using State = PromiseState<Value, Error>;
 
   /// If no error is possible (Error is Nothing), this it just the Value instead of the State
   /// to not force the user to write unnecessary error handling/unwraping code.
-  using MaybeResult = std::conditional_t<std::is_same_v<Error, Nothing>, Value, State>;
+  using MaybeResult =
+      std::conditional_t<std::is_same_v<Error, Nothing>, Value, Result<Value, Error>>;
   using Handler = std::function<void(const State &)>;
 
   Stream() = default;
@@ -270,7 +277,7 @@ protected:
         co_return;
       };
       continuation(x, f);
-    } else if constexpr (is_result<ReturnType>) {
+    } else if constexpr (is_result_v<ReturnType>) {
       /// support callbacks that at runtime may return value or error
       output->state_ = unpack_if_tuple(f, x);
       output->notify();
@@ -328,7 +335,7 @@ protected:
       auto output = create_stream<Stream<Nothing, NewError, DefaultBase, DefaultBase>>();
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
-    } else if constexpr (is_result<ReturnType>) {  /// But it may be an result type
+    } else if constexpr (is_result_v<ReturnType>) {  /// But it may be an result type
       /// In this case we want to be able to pass over the same error
       auto output = create_stream<Stream<typename ReturnType::Value, typename ReturnType::Error,
                                          DefaultBase, DefaultBase>>();  // Must pass over error
