@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Added
+### Removed 
 
+- Callback-based ServiceClient::call overload
+- ServiceClient::cancel because it does not cancel the timeout timer correctly
+
+### Added
+ 
 - Multi-threaded executor support for the async/await API
 
 ### Fixed
 
 - Correct result type implementation
+- Missing request cleanup in ServiceClientImpl::our_to_real_req_id_
+- Added missing cancellation of timeout timer in Promise destruction
 
 ## 0.3.0 
 

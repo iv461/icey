@@ -485,6 +485,7 @@ protected:
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
 
+  std::recursive_mutex mutex_;
   std::unordered_set<RequestHandle> requests_;
 };
 
@@ -572,61 +573,32 @@ struct ServiceClientImpl {
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : node_(node), client(node.create_client<ServiceT>(service_name, qos)) {}
 
-  RequestID call(Request request, const Duration &timeout,
-                 std::function<void(Response)> on_response,
-                 std::function<void(const std::string &)> on_error) {
-    /// We have to count the requests ourselves since we need it inside the callback to cancel the
-    /// timeout timer but there is no way with the current rclcpp API to obtain the id in the
-    /// callback
-    auto request_id = request_counter_++;
-    auto future_and_req_id = client->async_send_request(
-        request, [this, on_response, on_error, request_id](typename Client::SharedFuture result) {
-          /// Cancel the timeout task since we got a response
-          node_.cancel_task_for(request_id);
-          if (!result.valid()) {
-            on_error(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
-          } else {
-            on_response(result.get());
-          }
-        });
-    our_to_real_req_id_.emplace(request_id, future_and_req_id.request_id);
-    node_.add_task_for(request_id, timeout, [this, on_error, request_id] {
-      auto it = our_to_real_req_id_.find(request_id);
-      if (it != our_to_real_req_id_.end()) {
-        client->remove_pending_request(it->second);
-        our_to_real_req_id_.erase(it);
-      }
-      on_error("TIMEOUT");
-    });
-    return request_id;
-  }
-
   impl::Promise<Response, std::string> call(Request request, const Duration &timeout) {
     return impl::Promise<Response, std::string>([this, request, timeout](auto &promise) {
-      auto request_id = this->call(
-          request, timeout, [&promise](const auto &x) { promise.resolve(x); },
-          [&promise](const auto &x) { promise.reject(x); });
-      promise.set_cancel([this, request_id](auto &) { cancel_request(request_id); });
+      auto future_and_req_id = client->async_send_request(
+          request, [this, &promise](typename Client::SharedFuture result) {
+            /// Cancel the timeout task since we got a response
+            node_.cancel_task_for(uint64_t(&promise));
+            if (!result.valid()) {
+              promise.reject(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
+            } else {
+              promise.resolve(result.get());
+            }
+          });
+      auto request_id = future_and_req_id.request_id;
+      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
+        client->remove_pending_request(request_id);
+        promise.reject("TIMEOUT");
+      });
+      promise.set_cancel([this, request_id](auto &promise) {
+        node_.cancel_task_for(uint64_t(&promise));
+        client->remove_pending_request(request_id);
+      });
     });
-  }
-
-  /// Cancel the request so that callbacks will not be called anymore.
-  bool cancel_request(RequestID request_id) {
-    auto it = our_to_real_req_id_.find(request_id);
-    if (it == our_to_real_req_id_.end()) return false;
-    client->remove_pending_request(it->second);
-    our_to_real_req_id_.erase(it);
-    node_.cancel_task_for(request_id);
-    return true;
   }
 
 protected:
   NodeBase &node_;
-  RequestID request_counter_{
-      0};  /// We have to count the requests ourselves, since we cannot access
-  /// And a map in case rcl starts to create the request IDs differently compared to how  we are
-  /// doing it (otherwise we would depend on an implementation detail of rcl/RMW)
-  std::unordered_map<RequestID, RequestID> our_to_real_req_id_;
 
 public:
   /// The underlying rclcpp service client
@@ -655,20 +627,6 @@ struct ServiceClient {
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : impl_(std::make_shared<ServiceClientImpl<ServiceT>>(node, service_name, qos)) {}
 
-  /*! Make an asynchronous call to the service with a timeout. Two callbacks may be provided: One
-  for the response and one in case of error (timeout or service unavailable).  Requests can never
-  hang forever but will eventually time out. Also you don't need to clean up pending requests --
-  they will be cleaned up automatically. So this function will never cause any memory leaks. \param
-  request the request.
-  \param timeout The timeout for the service call, both for service discovery
-  and the actual call. \returns The request id using which this request can be cancelled.
-  */
-  RequestID call(Request request, const Duration &timeout,
-                 std::function<void(Response)> on_response,
-                 std::function<void(const std::string &)> on_error) {
-    return impl_->call(request, timeout, on_response, on_error);
-  }
-
   // clang-format off
   /*! Make an asynchronous call to the service. Returns a impl::Promise that can be awaited using `co_await`.
   Requests can never hang forever but will eventually time out. Also you don't need to clean up pending requests -- they will be cleaned up automatically. So this function will never cause any memory leaks.
@@ -687,9 +645,6 @@ struct ServiceClient {
   impl::Promise<Response, std::string> call(Request request, const Duration &timeout) const {
     return impl_->call(request, timeout);
   }
-
-  /// Cancel the request so that callbacks will not be called anymore.
-  bool cancel_request(RequestID request_id) { return impl_->cancel_request(request_id); }
 
   /// Returns the underlying rclcpp service client.
   std::shared_ptr<rclcpp::Client<ServiceT>> client() const { return impl_->client; }
@@ -771,8 +726,9 @@ struct AsyncGoalHandle {
           client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
-        promise.set_cancel([client = client_, request_id](auto &) {
-          client.lock()->cancel_cancellation_request(request_id);
+        promise.set_cancel([this, request_id](auto &promise) {
+          client_.lock()->cancel_cancellation_request(request_id);
+          node_.cancel_task_for(uint64_t(&promise));
         });
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, an exception can we thrown if we try to cancel, but the

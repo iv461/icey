@@ -197,7 +197,7 @@ public:
     notify();
   }
 
-  bool await_ready() const noexcept { return !has_none(); }
+  bool await_ready() const noexcept { return false; }
   /// Launches the asynchronous operation that was previously stored and sets the awaiting coroutine
   /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
   /// callback-based API.
