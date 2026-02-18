@@ -1,4 +1,5 @@
 /// Copyright © 2025 Technische Hochschule Augsburg
+/// Copyright 2018 Open Source Robotics Foundation, Inc.
 /// All rights reserved.
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
@@ -696,6 +697,10 @@ struct AsyncGoalHandle {
         if (!request_id) {
           promise.reject("FAILED");
         } else {
+          promise.set_cancel([this, request_id = request_id.value()](auto &promise) {
+            client_.lock()->cancel_cancellation_request(request_id);
+            node_.cancel_task_for(uint64_t(&promise));
+          });
           node_.add_task_for(uint64_t(&promise), timeout,
                              [this, &promise, request_id = request_id.value()] {
                                client_.lock()->cancel_result_request(request_id);
@@ -749,7 +754,6 @@ private:
 
 /// A action client offering an async/await API and per-request timeouts. Everything happens
 /// asynchronously and returns a promise that can be awaited using co_await.
-
 template <class ActionT>
 struct ActionClient {
   using Goal = typename ActionT::Goal;
@@ -773,9 +777,7 @@ struct ActionClient {
     return impl::Promise<AsyncGoalHandleT, std::string>(
         [this, goal, timeout, feedback_callback](auto &promise) {
           typename Client::SendGoalOptions options;
-
           options.goal_response_callback = [this, &promise](auto goal_handle) {
-            // Cancel acceptance timeout
             node_.cancel_task_for(uint64_t(&promise));
             if (goal_handle == nullptr) {
               promise.reject("GOAL REJECTED");  /// TODO error type
@@ -793,9 +795,10 @@ struct ActionClient {
             client_->cancel_goal_request(request_id);
             promise.reject("TIMEOUT");
           });
-          /// TODO Is there really no way to cancel this operation if the promise goes out of scope
-          /// ?
-          promise.set_cancel([this](auto &p) { node_.cancel_task_for(uint64_t(&p)); });
+          promise.set_cancel([this, request_id](auto &promise) {
+            client_->cancel_goal_request(request_id);
+            node_.cancel_task_for(uint64_t(&promise));
+          });
         });
   }
 
@@ -905,28 +908,6 @@ public:
                                         const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
     return ServiceClient<ServiceT>(node_base(), service_name, qos);
   }
-
-  /*
-  template <class ActionT>
-  static auto make_sync_handle_goal_cb(
-      std::function<Promise<icey::rclcpp::GoalResponse>(
-        const icey::rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal>)>
-        handle_goal) {
-          using Server = icey::rclcpp_action::Server<ActionT>;
-          return [handle_goal](std::shared_ptr<Server> server,
-          const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
-            const auto continuation =
-            [](auto server, auto handle_goal,
-            icey::rclcpp_action::GoalRequest<ActionT> goal_request) -> Promise<void> {
-              server->send_goal_response(goal_request,
-              co_await handle_goal(goal_request.uuid, goal_request.goal));
-            };
-            continuation(server, handle_goal, goal_request);
-            server->send_goal_response(goal_request, handle_goal(goal_request.uuid,
-  goal_request.goal));
-          };
-        }
-        */
 
   /// Create an action server with a synchronous or asynchronous callbacks.
   template <class ActionT, class GoalCallback, class CancelCallback, class AcceptedCallback>

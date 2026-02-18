@@ -106,6 +106,7 @@ public:
 
   using Cancel = std::function<void(Self &)>;
   using LaunchAsync = std::function<void(Self &)>;
+  
   LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {
 #ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
