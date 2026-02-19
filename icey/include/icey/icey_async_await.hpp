@@ -9,6 +9,7 @@
 /// can include this header only and get faster compile times.
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <icey/action/action.hpp>
 #include <icey/impl/promise.hpp>
@@ -28,6 +29,10 @@
 #include "tf2_ros/qos.hpp"
 
 namespace icey {
+
+#ifndef ICEY_ASYNC_AWAIT_THREAD_SAFE
+#define ICEY_ASYNC_AWAIT_THREAD_SAFE 1
+#endif
 
 using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
@@ -116,7 +121,9 @@ struct NodeBase {
   template <class CallbackT>
   void add_task_for(uint64_t id, const Duration &timeout, CallbackT on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
     oneoff_cancelled_timers_.clear();
     oneoff_active_timers_.emplace(id, create_wall_timer(
                                           timeout,
@@ -129,7 +136,9 @@ struct NodeBase {
 
   /// Cancel a previously scheduled task by key (no-op if not present)
   bool cancel_task_for(uint64_t id) {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
     auto it = oneoff_active_timers_.find(id);
     if (it == oneoff_active_timers_.end()) return false;
     auto timer = it->second;
@@ -206,16 +215,22 @@ protected:
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
   /// Active one-off tasks keyed by a stable uintptr_t key
   std::unordered_map<uint64_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
   mutable std::mutex oneoff_tasks_mutex_;
+#endif
 
 public:
   // Test helpers (introspection)
   std::size_t oneoff_active_task_count() const {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
     return oneoff_active_timers_.size();
   }
   std::size_t oneoff_cancelled_task_count() const {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
     return oneoff_cancelled_timers_.size();
   }
 };
@@ -265,8 +280,10 @@ struct TransformBufferImpl {
     OnTransform on_transform;
     OnError on_error;
     std::optional<Time> maybe_time;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::atomic_bool finished{false};
     mutable std::mutex state_mutex;
+#endif
   };
 
   /// A request for a transform lookup: It represents effectively a single call to the async_lookup
@@ -328,22 +345,22 @@ struct TransformBufferImpl {
                                                     on_transform, on_error, time)};
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
-    {
-      std::lock_guard<std::recursive_mutex> lock{mutex_};
-      requests_.emplace(request);
-    }
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
+#endif
+    requests_.emplace(request);
     node_.lock()->add_task_for(
         uint64_t(request.get()), timeout, [this, on_error, request = weak_request]() {
           if (auto req = request.lock()) {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
             bool expected = false;
             if (!req->finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
                                                        std::memory_order_acquire)) {
               return;
             }
-            {
-              std::lock_guard<std::recursive_mutex> lock{mutex_};
-              requests_.erase(req);  // Destroy the request
-            }
+            std::lock_guard<std::recursive_mutex> lock{mutex_};
+#endif
+            requests_.erase(req);  // Destroy the request
             on_error(tf2::TimeoutException{"Timed out waiting for transform"});
           }
         });
@@ -448,14 +465,17 @@ protected:
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg =
           buffer_->lookupTransform(info.target_frame(), info.source_frame(), tf2::TimePointZero);
-      bool changed = false;
+      bool changed;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
       {
         std::lock_guard<std::mutex> lock{info.state_mutex};
-        if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
-          info.last_received_transform = tf_msg;
-          changed = true;
-        }
+        changed = !info.last_received_transform || tf_msg != *info.last_received_transform;
+        if (changed) info.last_received_transform = tf_msg;
       }
+#else
+      changed = !info.last_received_transform || tf_msg != *info.last_received_transform;
+      if (changed) info.last_received_transform = tf_msg;
+#endif
       if (changed) {
         info.on_transform(tf_msg);
         return true;
@@ -472,11 +492,13 @@ protected:
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg = buffer_->lookupTransform(
           request->target_frame(), request->source_frame(), request->maybe_time.value());
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
       bool expected = false;
       if (!request->finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
         return false;
       }
+#endif
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
       /// timer
@@ -492,12 +514,16 @@ protected:
   void notify_if_any_relevant_transform_was_received() {
     /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
     std::vector<RequestHandle> requests_to_delete;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::vector<RequestHandle> requests;
     {
       std::lock_guard<std::recursive_mutex> lock{mutex_};
       requests.reserve(requests_.size());
       for (const auto &req : requests_) requests.push_back(req);
     }
+#else
+    auto requests = requests_;
+#endif
 
     for (auto req : requests) {
       if (req->maybe_time) {
@@ -509,10 +535,10 @@ protected:
         maybe_notify(*req);
       }
     }
-    {
-      std::lock_guard<std::recursive_mutex> lock{mutex_};
-      for (const auto &k : requests_to_delete) requests_.erase(k);
-    }
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
+#endif
+    for (const auto &k : requests_to_delete) requests_.erase(k);
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
