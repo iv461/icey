@@ -877,7 +877,7 @@ public:
                 server->send_response(*request_id, *response);
               co_return;
             };
-            continuation(server, callback, request_id, request);
+            continuation(server, callback, request_id, request).detach();
           }
         },
         qos);
@@ -921,7 +921,7 @@ public:
                   goal_request, co_await handle_goal(goal_request.uuid, goal_request.goal));
               co_return;
             };
-            continuation(server, handle_goal, goal_request);
+            continuation(server, handle_goal, goal_request).detach();
           }
         },
         [handle_cancel](std::shared_ptr<Server> server,
@@ -939,7 +939,7 @@ public:
               server->send_cancel_response(cancel_request, response);
               co_return;
             };
-            continuation(server, handle_cancel, cancel_request, goal_handle);
+            continuation(server, handle_cancel, cancel_request, goal_handle).detach();
           }
         },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {

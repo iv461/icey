@@ -73,9 +73,8 @@ icey::Promise<void> nested_result_log(InlineEventLoop &loop, bool fail,
 }
 
 icey::Promise<void> cancellation_in_scope(bool &cancelled) {
-  auto pending = icey::impl::Promise<int, std::string>([&cancelled](auto &promise) {
-    promise.set_cancel([&cancelled](auto &) { cancelled = true; });
-  });
+  auto pending = icey::impl::Promise<int, std::string>([&cancelled](auto &) { cancelled = true; });
+  pending.detach();
   (void)pending;
   co_return;
 }
@@ -90,7 +89,7 @@ TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithoutErrorType) {
     value = co_await immediate_plain();
     completed = true;
     co_return;
-  }();
+  }().detach();
 
   EXPECT_TRUE(completed);
   EXPECT_EQ(value, 7);
@@ -106,7 +105,7 @@ TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithErrorType) {
     err_result = co_await immediate_result_err();
     completed = true;
     co_return;
-  }();
+  }().detach();
 
   EXPECT_TRUE(completed);
   EXPECT_TRUE(ok_result.has_value());
@@ -143,7 +142,7 @@ TEST(IceyPromiseAsyncAwaitTest, NestedCoroutinesWithErrorType) {
 TEST(IceyPromiseAsyncAwaitTest, CancellationInUnawaitedCoroutineScopeIsNotTriggered) {
   bool cancelled = false;
 
-  cancellation_in_scope(cancelled);
+  cancellation_in_scope(cancelled).detach();
 
   EXPECT_FALSE(cancelled);
 }

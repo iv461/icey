@@ -10,6 +10,7 @@
 #include <exception>  /// for std::exception_ptr
 #include <functional>
 #include <icey/impl/result.hpp>
+#include <optional>
 #include <utility>
 
 #if defined(ICEY_CORO_DEBUG_PRINT) || defined(ICEY_PROMISE_LIFETIMES_DEBUG_PRINT)
@@ -51,6 +52,38 @@ template <typename T>
 inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 struct PromiseTag {};
 
+/// Compatibility state wrapper kept for stream/promise APIs.
+/// Internally stores optional<Result<Value, Error>>.
+template <class _Value, class _Error>
+struct PromiseState {
+  using Value = _Value;
+  using Error = _Error;
+  using ResultT = Result<Value, Error>;
+
+  PromiseState() = default;
+  PromiseState(const ResultT &result) : state(result) {}  // NOLINT
+
+  bool has_none() const { return !state.has_value(); }
+  bool has_value() const { return state.has_value() && state->has_value(); }
+  bool has_error() const { return state.has_value() && state->has_error(); }
+  const Value &value() const { return state->value(); }
+  const Error &error() const { return state->error(); }
+  void set_none() { state.reset(); }
+  void set_value(const Value &x) { state = Ok(x); }
+  void set_error(const Error &x) { state = Err(x); }
+  ResultT to_result() const { return state.value(); }
+  auto get() const {
+    if constexpr (std::is_same_v<Error, Nothing>) {
+      return value();
+    } else {
+      return to_result();
+    }
+  }
+
+private:
+  std::optional<ResultT> state;
+};
+
 /// A Promise is an asynchronous abstraction that yields a value or an error.
 /// It can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
@@ -60,7 +93,7 @@ class PromiseBase : public PromiseTag {
 public:
   using Value = _Value;
   using Error = _Error;
-  using State = std::optional<Result<_Value, _Error>>;
+  using State = PromiseState<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
   using LaunchAsync = std::function<void(Self &)>;
 
@@ -100,8 +133,8 @@ public:
   /// compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
-  const Value &value() const { return state_.value().value(); }
-  const Error &error() const { return state_.value().error(); }
+  const Value &value() const { return state_.value(); }
+  const Error &error() const { return state_.error(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
   /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
@@ -109,7 +142,7 @@ public:
   void set_value(const Value &x) {
     bool expected_done{false};
     if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_ = Ok(x);
+      state_.set_value(x);
     }
   }
 
@@ -119,7 +152,7 @@ public:
   void set_error(const Error &x) {
     bool expected_done{false};
     if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_ = Err(x);
+      state_.set_error(x);
     }
   }
 
@@ -197,11 +230,7 @@ public:
     if constexpr (std::is_same_v<Value, Nothing>)
       return;
     else {
-      if constexpr (std::is_same_v<Error, Nothing>) {
-        return this->value();
-      } else {
-        return state_.value();
-      }
+      return state_.get();
     }
   }
 

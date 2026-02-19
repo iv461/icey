@@ -276,7 +276,7 @@ protected:
         co_await unpack_if_tuple(f, x);
         co_return;
       };
-      continuation(x, f);
+      continuation(x, f).detach();
     } else if constexpr (is_result_v<ReturnType>) {
       /// support callbacks that at runtime may return value or error
       output->state_ = unpack_if_tuple(f, x);
