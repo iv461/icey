@@ -132,15 +132,11 @@ public:
 
   /// Sets the state to hold a value, but does not notify about this state change.
   /// Thread-safety: not synchronized; use resolve/reject/put_state for concurrent producers.
-  void set_value(const Value &x) {
-    state_.set_value(x);
-  }
+  void set_value(const Value &x) { state_.set_value(x); }
 
   /// Sets the state to hold an error, but does not notify about this state change.
   /// Thread-safety: not synchronized; use resolve/reject/put_state for concurrent producers.
-  void set_error(const Error &x) {
-    state_.set_error(x);
-  }
+  void set_error(const Error &x) { state_.set_error(x); }
 
   /// Sets the state but does not notify. Thread-safety: not synchronized.
   void set_state(const State &x) { state_ = x; }
@@ -264,7 +260,7 @@ protected:
 
   /// A function called on await_suspend that starts the asynchronous operation
   LaunchAsync launch_async_;
-  
+
   /// Indicates whether the promise is done, i.e. was either resolved or rejected.
   std::atomic_bool is_done_{false};
   /// Indicates whether wrapper ownership was released before completion.
