@@ -50,12 +50,13 @@ icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
                   static_cast<int>(result.code));
     }
   }
+  co_return;
 }
 
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("icey_action_client_async_await_example");
-  call_action(node);
+  (void)call_action(node);
   rclcpp::spin(node);
   return 0;
 }

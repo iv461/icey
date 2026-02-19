@@ -943,7 +943,12 @@ public:
           }
         },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
-          handle_accepted(goal_handle);
+          using ReturnType = decltype(handle_accepted(goal_handle));
+          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+            handle_accepted(goal_handle);
+          } else {
+            handle_accepted(goal_handle).detach();
+          }
         },
         options, group);
     action_servers_.push_back(std::dynamic_pointer_cast<icey::rclcpp_action::ServerBase>(server));
