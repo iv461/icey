@@ -131,43 +131,55 @@ public:
   const Error &error() const { return state_.error(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
-  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
-  /// are synchronized, i.e. thread-safe.
+  /// Thread-safety: not synchronized; use resolve/reject/put_state for concurrent producers.
   void set_value(const Value &x) {
-    bool expected_done{false};
-    if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_.set_value(x);
-    }
+    state_.set_value(x);
   }
 
   /// Sets the state to hold an error, but does not notify about this state change.
-  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
-  /// are synchronized, i.e. thread-safe.
+  /// Thread-safety: not synchronized; use resolve/reject/put_state for concurrent producers.
   void set_error(const Error &x) {
-    bool expected_done{false};
-    if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_.set_error(x);
-    }
+    state_.set_error(x);
   }
 
-  void set_state(const State &x) {
-    bool expected_done{false};
-    if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_ = x;
-    }
-  }
+  /// Sets the state but does not notify. Thread-safety: not synchronized.
+  void set_state(const State &x) { state_ = x; }
 
+  /// Tries to complete the promise with a value and notifies once.
+  /// Thread-safety: concurrent resolve/reject/put_state calls are synchronized via is_done_ CAS.
+  /// After the first successful completion, all subsequent completion attempts are ignored.
   void resolve(const Value &value) {
+    bool expected_done{false};
+    if (!is_done_.compare_exchange_strong(expected_done, true, std::memory_order_acq_rel,
+                                          std::memory_order_acquire)) {
+      return;
+    }
     set_value(value);
     notify();
   }
 
+  /// Tries to complete the promise with an error and notifies once.
+  /// Thread-safety: concurrent resolve/reject/put_state calls are synchronized via is_done_ CAS.
+  /// After the first successful completion, all subsequent completion attempts are ignored.
   void reject(const Error &error) {
+    bool expected_done{false};
+    if (!is_done_.compare_exchange_strong(expected_done, true, std::memory_order_acq_rel,
+                                          std::memory_order_acquire)) {
+      return;
+    }
     set_error(error);
     notify();
   }
 
+  /// Tries to complete the promise with an explicit state and notifies once.
+  /// Thread-safety: concurrent resolve/reject/put_state calls are synchronized via is_done_ CAS.
+  /// After the first successful completion, all subsequent completion attempts are ignored.
   void put_state(const State &error) {
+    bool expected_done{false};
+    if (!is_done_.compare_exchange_strong(expected_done, true, std::memory_order_acq_rel,
+                                          std::memory_order_acquire)) {
+      return;
+    }
     set_state(error);
     notify();
   }
@@ -243,8 +255,8 @@ public:
   FinalAwaiter final_suspend() const noexcept { return {}; }
 
   void set_continuation(std::coroutine_handle<> continuation) { continuation_ = continuation; }
-  void detach() { is_detached_.store(true); }
-  bool is_detached() const { return is_detached_.load(); }
+  void detach() { is_detached_.store(true, std::memory_order_release); }
+  bool is_detached() const { return is_detached_.load(std::memory_order_acquire); }
 
 protected:
   /// State of the promise: May be nothing, value or error.
