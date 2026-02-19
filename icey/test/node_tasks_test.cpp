@@ -93,7 +93,8 @@ void run_tf_stress() {
 
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
   for (auto &timer : timers) {
-    timer = h.receiver->create_wall_timer(6ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
+    timer = h.receiver->create_wall_timer(
+        6ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
   }
 
   spin_until(h, [&] { return dispatches.load(std::memory_order_relaxed) >= 5000; }, 12s);
@@ -110,12 +111,12 @@ void run_tf_stress() {
 
 void run_service_stress() {
   Harness h;
-  h.sender_ctx->create_service<ExampleService>("stress_set_bool",
-                                               [](std::shared_ptr<ExampleService::Request> req) {
-                                                 auto resp = std::make_shared<ExampleService::Response>();
-                                                 resp->success = req->data;
-                                                 return resp;
-                                               });
+  h.sender_ctx->create_service<ExampleService>(
+      "stress_set_bool", [](std::shared_ptr<ExampleService::Request> req) {
+        auto resp = std::make_shared<ExampleService::Response>();
+        resp->success = req->data;
+        return resp;
+      });
   auto client = h.receiver_ctx->create_client<ExampleService>("stress_set_bool");
   std::atomic_uint64_t dispatches{0};
   std::atomic_uint64_t ok{0};
@@ -139,7 +140,8 @@ void run_service_stress() {
 
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
   for (auto &timer : timers) {
-    timer = h.receiver->create_wall_timer(5ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
+    timer = h.receiver->create_wall_timer(
+        5ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
   }
 
   spin_until(h, [&] { return dispatches.load(std::memory_order_relaxed) >= 5000; }, 12s);
@@ -192,7 +194,8 @@ void run_action_stress() {
 
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
   for (auto &timer : timers) {
-    timer = h.receiver->create_wall_timer(5ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
+    timer = h.receiver->create_wall_timer(
+        5ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
   }
 
   spin_until(h, [&] { return dispatches.load(std::memory_order_relaxed) >= 5000; }, 12s);

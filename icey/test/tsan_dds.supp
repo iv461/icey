@@ -1,0 +1,6 @@
+# Suppress all known CycloneDDS / DDS runtime races so TSAN reports focus on icey.
+# Intentionally broad per project policy for DDS noise filtering.
+race:libddsc.so
+race:dds_
+race:ddsi_
+race:ddsrt_
