@@ -12,6 +12,7 @@
 #include <icey/impl/result.hpp>
 #include <optional>
 #include <utility>
+#include <variant>
 
 #if defined(ICEY_CORO_DEBUG_PRINT) || defined(ICEY_PROMISE_LIFETIMES_DEBUG_PRINT)
 #include <fmt/format.h>
@@ -36,20 +37,13 @@ inline bool icey_coro_debug_print = false;
 template <class Value, class Error>
 class Promise;
 
-/// A special type that indicates that there is no value. (Using `void` for this would cause many
-/// problems, so defining an extra struct is easier.)
-struct Nothing {};
+/// Alias used where "no value"/"no error" is needed while preserving existing API spelling.
+using Nothing = std::monostate;
 
 namespace impl {
 
-template <typename, typename = std::void_t<>>
-struct has_promise_type : std::false_type {};
-
 template <typename T>
-struct has_promise_type<T, std::void_t<typename T::promise_type>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
+concept HasPromiseType = requires { typename T::promise_type; };
 struct PromiseTag {};
 
 /// Compatibility state wrapper kept for stream/promise APIs.
@@ -282,7 +276,7 @@ protected:
 /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019) So we need to use different
 /// classes and partial specialization.
 template <class _Value, class _Error = Nothing>
-class [[nodiscard("Promise must be awaited")]] Promise : public PromiseBase<_Value, _Error> {
+class [[nodiscard("Promise must be used")]] Promise : public PromiseBase<_Value, _Error> {
 public:
   using Self = Promise<_Value, _Error>;
   using Base = PromiseBase<_Value, _Error>;
@@ -318,7 +312,7 @@ public:
 /// specification being weird. There was an attempt to make it less weird, unfortunately
 /// unsuccessful: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1713r0.pdf)
 template <>
-class [[nodiscard("Promise must be awaited")]] Promise<void, Nothing>
+class [[nodiscard("Promise must be used")]] Promise<void, Nothing>
     : public PromiseBase<Nothing, Nothing> {
 public:
   using Base = PromiseBase<Nothing, Nothing>;
@@ -353,7 +347,7 @@ public:
 /// We cannot use the structured programming approach because it requires a custom executor but we
 /// want to use the existing ROS executor.
 template <class _Value, class _Error = Nothing>
-class [[nodiscard("Promise must be awaited")]] Promise {
+class [[nodiscard("Promise must be used")]] Promise {
 public:
   using Self = Promise<_Value, _Error>;
   using Value = _Value;

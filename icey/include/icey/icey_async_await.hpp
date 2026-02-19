@@ -865,7 +865,7 @@ public:
         [callback](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
                    Request request) {
           using ReturnType = decltype(callback(request));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             auto response = callback(request);
             if (response)  /// If we got nullptr, this means we do not respond.
               server->send_response(*request_id, *response);
@@ -910,7 +910,7 @@ public:
         [handle_goal](std::shared_ptr<Server> server,
                       const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
           using ReturnType = decltype(handle_goal(goal_request.uuid, goal_request.goal));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             server->send_goal_response(goal_request,
                                        handle_goal(goal_request.uuid, goal_request.goal));
           } else {
@@ -928,7 +928,7 @@ public:
                         std::shared_ptr<ServerGoalHandleT> goal_handle,
                         const icey::rclcpp_action::CancelRequest &cancel_request) {
           using ReturnType = decltype(handle_cancel(goal_handle));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             auto response = handle_cancel(goal_handle);
             server->send_cancel_response(cancel_request, response);
           } else {
@@ -944,7 +944,7 @@ public:
         },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
           using ReturnType = decltype(handle_accepted(goal_handle));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             handle_accepted(goal_handle);
           } else {
             handle_accepted(goal_handle).detach();

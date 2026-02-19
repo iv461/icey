@@ -85,9 +85,6 @@ struct Weak {
 /// `AnyStream` concept. \sa AnyStream
 struct StreamTag {};
 
-template <class T>
-constexpr bool is_stream = std::is_base_of_v<StreamTag, T>;
-
 /// A stream type with any error or value type. \sa StreamTag
 template <class T>
 concept AnyStream = std::is_base_of_v<StreamTag, T>;
@@ -1435,7 +1432,7 @@ void Context::declare_parameter_struct(
                                                std::string_view field_name, auto &field_value) {
     using Field = std::remove_reference_t<decltype(field_value)>;
     std::string field_name_r = name_prefix + std::string(field_name);
-    if constexpr (is_stream<Field>) {
+    if constexpr (AnyStream<Field>) {
       field_value.impl_ = this->create_stream_impl<typename Field::Impl>();
       field_value.impl()->context =
           std::enable_shared_from_this<Context>::shared_from_this();  /// First, give it the missing

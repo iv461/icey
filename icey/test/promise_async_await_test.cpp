@@ -38,7 +38,9 @@ struct InlineEventLoop {
 };
 
 icey::impl::Promise<int> deferred_plain(InlineEventLoop &loop, int value) {
-  return {[&loop, value](auto &promise) { loop.dispatch([&promise, value]() { promise.resolve(value); }); }};
+  return {[&loop, value](auto &promise) {
+    loop.dispatch([&promise, value]() { promise.resolve(value); });
+  }};
 }
 
 icey::impl::Promise<int, std::string> deferred_result(InlineEventLoop &loop, bool fail) {
@@ -89,7 +91,8 @@ TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithoutErrorType) {
     value = co_await immediate_plain();
     completed = true;
     co_return;
-  }().detach();
+  }()
+               .detach();
 
   EXPECT_TRUE(completed);
   EXPECT_EQ(value, 7);
@@ -105,7 +108,8 @@ TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithErrorType) {
     err_result = co_await immediate_result_err();
     completed = true;
     co_return;
-  }().detach();
+  }()
+               .detach();
 
   EXPECT_TRUE(completed);
   EXPECT_TRUE(ok_result.has_value());
