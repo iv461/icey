@@ -9,6 +9,12 @@ cd <colcon-ws root>
 ./build/icey/test_main
 ```
 
+For TSAN runs, fail fast on the first detected race:
+
+```sh
+TSAN_OPTIONS=halt_on_error=1 ./build/icey/test_main
+```
+
 ## Debug example node 
 
 Useful: Install mixins: https://github.com/colcon/colcon-mixin-repository
