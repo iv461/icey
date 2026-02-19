@@ -107,7 +107,7 @@ void run_service_stress() {
   auto ok = std::make_shared<std::atomic_uint64_t>(0);
   auto errors = std::make_shared<std::atomic_uint64_t>(0);
   auto done = std::make_shared<std::atomic_bool>(false);
-  [=]() -> icey::Promise<void> {
+  const auto service_loop = [=]() -> icey::Promise<void> {
     for (int i = 0; i < 200; ++i) {
       try {
         auto req = std::make_shared<ExampleService::Request>();
@@ -123,8 +123,8 @@ void run_service_stress() {
     }
     done->store(true, std::memory_order_release);
     co_return;
-  }()
-      .detach();
+  };
+  service_loop().detach();
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
   for (size_t i = 0; i < timers.size(); ++i) {
     timers[i] = h.receiver->create_wall_timer(5ms, [=]() {
@@ -161,7 +161,7 @@ void run_action_stress() {
   auto ok = std::make_shared<std::atomic_uint64_t>(0);
   auto errors = std::make_shared<std::atomic_uint64_t>(0);
   auto done = std::make_shared<std::atomic_bool>(false);
-  [=]() -> icey::Promise<void> {
+  const auto action_loop = [=]() -> icey::Promise<void> {
     for (int i = 0; i < 120; ++i) {
       try {
         Fibonacci::Goal goal;
@@ -182,8 +182,8 @@ void run_action_stress() {
     }
     done->store(true, std::memory_order_release);
     co_return;
-  }()
-      .detach();
+  };
+  action_loop().detach();
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
   for (size_t i = 0; i < timers.size(); ++i) {
     timers[i] = h.receiver->create_wall_timer(5ms, [=]() {
