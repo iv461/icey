@@ -22,7 +22,7 @@ struct AsyncAwaitNodeTest : NodeTest {
 };
 
 TEST_F(AsyncAwaitNodeTest, ParameterTest) {
-  [this]() -> icey::Stream<int> {
+  [this]() -> icey::Promise<int> {
     auto string_param = node_->icey().declare_parameter<std::string>("icey_test_my_param", "hello");
 
     EXPECT_TRUE(node_->has_parameter("icey_test_my_param"));
@@ -39,7 +39,7 @@ TEST_F(AsyncAwaitNodeTest, ParameterTest) {
 }
 
 TEST_F(AsyncAwaitNodeTest, TimerTest) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<int> {
     size_t timer_ticked{0};
     auto timer = node_->icey().create_timer(100ms);
     EXPECT_EQ(timer_ticked, 0);
@@ -69,7 +69,7 @@ struct AsyncAwaitTwoNodeTest : TwoNodesFixture {
 };
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<int> {
     sender_->icey()
         .create_timer(100ms)
         .then([](size_t ticks) {
@@ -96,12 +96,12 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
   };
   l();  /// Temporary lifetime extention is unaware of coroutines and would destroy the lambda after
         /// first suspend if we would not assign a name l to it
-  spin(1100ms);
+  spin(1500ms);
   ASSERT_TRUE(async_completed);
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<int> {
     std::size_t received_cnt{0};
 
     receiver_->icey()
@@ -136,7 +136,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<int> {
     // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
 
@@ -191,7 +191,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
 // It also tests whether we can make multiple calls to a service before awaiting them all and after
 // awaiting, we receive all of them
 TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<int> {
     // The response we are going to receive from the service call:
     using Response = ExampleService::Response::SharedPtr;
 
@@ -239,7 +239,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
 }
 
 TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
-  const auto l = [this]() -> icey::Stream<int> {
+  const auto l = [this]() -> icey::Promise<int> {
     const icey::Time base_time{1700000000s};
 
     sender_->icey()
