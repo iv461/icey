@@ -24,41 +24,40 @@ struct Harness {
       std::make_shared<icey::ContextAsyncAwait>(sender.get())};
   std::shared_ptr<icey::ContextAsyncAwait> receiver_ctx{
       std::make_shared<icey::ContextAsyncAwait>(receiver.get())};
-  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 2};
-  std::thread spin_thread;
+  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
 
   Harness() {
     exec.add_node(sender->get_node_base_interface());
     exec.add_node(receiver->get_node_base_interface());
-    spin_thread = std::thread([this]() { exec.spin(); });
   }
 
   ~Harness() {
     exec.cancel();
-    if (spin_thread.joinable()) spin_thread.join();
     exec.remove_node(sender->get_node_base_interface());
     exec.remove_node(receiver->get_node_base_interface());
   }
 };
 
-void wait_for_dispatches(const std::atomic_uint64_t &dispatches, uint64_t target,
-                         std::chrono::seconds max_time) {
-  const auto deadline = std::chrono::steady_clock::now() + max_time;
-  while (std::chrono::steady_clock::now() < deadline &&
-         dispatches.load(std::memory_order_relaxed) < target) {
-    std::this_thread::sleep_for(10ms);
+template <class Pred>
+void spin_until(Harness &h, Pred pred, std::chrono::milliseconds timeout) {
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline && !pred()) {
+    h.exec.spin_some();
   }
 }
 
 void run_tf_stress() {
   Harness h;
-  auto tf = std::make_shared<icey::TransformBuffer>(h.receiver_ctx->create_transform_buffer());
+  auto tf = h.receiver_ctx->create_transform_buffer();
   auto tf_pub = h.sender->create_publisher<tf2_msgs::msg::TFMessage>("/tf", 10);
-  auto stamp_ns = std::make_shared<std::atomic_int64_t>(0);
-  auto dispatches = std::make_shared<std::atomic_uint64_t>(0);
-  auto tf_hits = std::make_shared<std::atomic_uint64_t>(0);
-  auto errors = std::make_shared<std::atomic_uint64_t>(0);
-  auto pub_timer = h.sender->create_wall_timer(6ms, [stamp_ns, tf_pub]() {
+  std::atomic_int64_t stamp_ns{0};
+  std::atomic_uint64_t dispatches{0};
+  std::atomic_uint64_t hits{0};
+  std::atomic_uint64_t timeout_scenarios{0};
+  std::atomic_uint64_t unexpected_errors{0};
+  std::atomic_bool done{false};
+
+  auto pub_timer = h.sender->create_wall_timer(6ms, [&]() {
     static std::atomic_uint64_t tick{0};
     geometry_msgs::msg::TransformStamped t;
     auto ns = 1700000000000000000LL + int64_t((tick.fetch_add(1) + 1) * 1000000ULL);
@@ -69,28 +68,44 @@ void run_tf_stress() {
     tf2_msgs::msg::TFMessage msg;
     msg.transforms.push_back(t);
     tf_pub->publish(msg);
-    stamp_ns->store(ns, std::memory_order_release);
+    stamp_ns.store(ns, std::memory_order_release);
   });
+  spin_until(h, [&] { return stamp_ns.load(std::memory_order_acquire) != 0; }, 2s);
+
+  const auto tf_loop = [&]() -> icey::Promise<void> {
+    for (int i = 0; i < 300; ++i) {
+      auto ns = stamp_ns.load(std::memory_order_acquire);
+      const bool should_hit = (i % 2) == 0;
+      auto res = co_await tf.lookup("map", should_hit ? "base_link" : "missing_frame",
+                                    rclcpp::Time(ns), 40ms);
+      if (res.has_value()) {
+        hits.fetch_add(1, std::memory_order_relaxed);
+      } else if (should_hit) {
+        unexpected_errors.fetch_add(1, std::memory_order_relaxed);
+      } else {
+        timeout_scenarios.fetch_add(1, std::memory_order_relaxed);
+      }
+    }
+    done.store(true, std::memory_order_release);
+    co_return;
+  };
+  tf_loop().detach();
+
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
-  for (size_t i = 0; i < timers.size(); ++i) {
-    timers[i] = h.receiver->create_wall_timer(6ms, [=]() {
-      dispatches->fetch_add(1, std::memory_order_relaxed);
-      auto ns = stamp_ns->load(std::memory_order_acquire);
-      if (ns == 0) return;
-      auto handle = tf->lookup(
-          "map", "base_link", icey::Time{std::chrono::nanoseconds(ns)}, 200ms,
-          [tf_hits](const auto &) { tf_hits->fetch_add(1, std::memory_order_relaxed); },
-          [errors](const auto &) { errors->fetch_add(1, std::memory_order_relaxed); });
-      if ((dispatches->load(std::memory_order_relaxed) % 3U) == 0U) tf->cancel_request(handle);
-    });
+  for (auto &timer : timers) {
+    timer = h.receiver->create_wall_timer(6ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
   }
-  wait_for_dispatches(*dispatches, 5000, 10s);
+
+  spin_until(h, [&] { return dispatches.load(std::memory_order_relaxed) >= 5000; }, 12s);
+  spin_until(h, [&] { return done.load(std::memory_order_acquire); }, 12s);
   for (auto &timer : timers) timer->cancel();
   pub_timer->cancel();
-  std::this_thread::sleep_for(200ms);
-  EXPECT_GE(dispatches->load(std::memory_order_relaxed), 5000U);
-  EXPECT_GT(tf_hits->load(std::memory_order_relaxed), 0U);
-  EXPECT_EQ(errors->load(std::memory_order_relaxed), 0U);
+
+  EXPECT_GE(dispatches.load(std::memory_order_relaxed), 5000U);
+  EXPECT_TRUE(done.load(std::memory_order_acquire));
+  EXPECT_GT(hits.load(std::memory_order_relaxed), 0U);
+  EXPECT_GT(timeout_scenarios.load(std::memory_order_relaxed), 0U);
+  EXPECT_EQ(unexpected_errors.load(std::memory_order_relaxed), 0U);
 }
 
 void run_service_stress() {
@@ -101,45 +116,39 @@ void run_service_stress() {
                                                  resp->success = req->data;
                                                  return resp;
                                                });
-  auto client = std::make_shared<icey::ServiceClient<ExampleService>>(
-      h.receiver_ctx->create_client<ExampleService>("stress_set_bool"));
-  auto dispatches = std::make_shared<std::atomic_uint64_t>(0);
-  auto ok = std::make_shared<std::atomic_uint64_t>(0);
-  auto errors = std::make_shared<std::atomic_uint64_t>(0);
-  auto done = std::make_shared<std::atomic_bool>(false);
-  const auto service_loop = [=]() -> icey::Promise<void> {
+  auto client = h.receiver_ctx->create_client<ExampleService>("stress_set_bool");
+  std::atomic_uint64_t dispatches{0};
+  std::atomic_uint64_t ok{0};
+  std::atomic_uint64_t errors{0};
+  std::atomic_bool done{false};
+
+  const auto service_loop = [&]() -> icey::Promise<void> {
     for (int i = 0; i < 200; ++i) {
-      try {
-        auto req = std::make_shared<ExampleService::Request>();
-        req->data = true;
-        auto res = co_await client->call(req, 400ms);
-        if (res.has_value() && res.value()->success)
-          ok->fetch_add(1, std::memory_order_relaxed);
-        else
-          errors->fetch_add(1, std::memory_order_relaxed);
-      } catch (...) {
-        errors->fetch_add(1, std::memory_order_relaxed);
-      }
+      auto req = std::make_shared<ExampleService::Request>();
+      req->data = true;
+      auto res = co_await client.call(req, 400ms);
+      if (res.has_value() && res.value()->success)
+        ok.fetch_add(1, std::memory_order_relaxed);
+      else
+        errors.fetch_add(1, std::memory_order_relaxed);
     }
-    done->store(true, std::memory_order_release);
+    done.store(true, std::memory_order_release);
     co_return;
   };
   service_loop().detach();
+
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
-  for (size_t i = 0; i < timers.size(); ++i) {
-    timers[i] = h.receiver->create_wall_timer(5ms, [=]() {
-      dispatches->fetch_add(1, std::memory_order_relaxed);
-    });
+  for (auto &timer : timers) {
+    timer = h.receiver->create_wall_timer(5ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
   }
-  wait_for_dispatches(*dispatches, 5000, 12s);
-  const auto done_deadline = std::chrono::steady_clock::now() + 12s;
-  while (std::chrono::steady_clock::now() < done_deadline &&
-         !done->load(std::memory_order_acquire))
-    std::this_thread::sleep_for(10ms);
+
+  spin_until(h, [&] { return dispatches.load(std::memory_order_relaxed) >= 5000; }, 12s);
+  spin_until(h, [&] { return done.load(std::memory_order_acquire); }, 12s);
   for (auto &timer : timers) timer->cancel();
-  EXPECT_GE(dispatches->load(std::memory_order_relaxed), 5000U);
-  EXPECT_TRUE(done->load(std::memory_order_acquire));
-  EXPECT_GT(ok->load(std::memory_order_relaxed) + errors->load(std::memory_order_relaxed), 0U);
+
+  EXPECT_GE(dispatches.load(std::memory_order_relaxed), 5000U);
+  EXPECT_TRUE(done.load(std::memory_order_acquire));
+  EXPECT_GT(ok.load(std::memory_order_relaxed) + errors.load(std::memory_order_relaxed), 0U);
 }
 
 void run_action_stress() {
@@ -155,50 +164,44 @@ void run_action_stress() {
         result->sequence = {0, 1, 1, 2};
         gh->succeed(result);
       });
-  auto client = std::make_shared<icey::ActionClient<Fibonacci>>(
-      h.receiver_ctx->create_action_client<Fibonacci>("stress_fib"));
-  auto dispatches = std::make_shared<std::atomic_uint64_t>(0);
-  auto ok = std::make_shared<std::atomic_uint64_t>(0);
-  auto errors = std::make_shared<std::atomic_uint64_t>(0);
-  auto done = std::make_shared<std::atomic_bool>(false);
-  const auto action_loop = [=]() -> icey::Promise<void> {
+  auto client = h.receiver_ctx->create_action_client<Fibonacci>("stress_fib");
+  std::atomic_uint64_t dispatches{0};
+  std::atomic_uint64_t ok{0};
+  std::atomic_uint64_t errors{0};
+  std::atomic_bool done{false};
+
+  const auto action_loop = [&]() -> icey::Promise<void> {
     for (int i = 0; i < 120; ++i) {
-      try {
-        Fibonacci::Goal goal;
-        goal.order = 4;
-        auto sent = co_await client->send_goal(goal, 400ms, [](auto, auto) {});
-        if (!sent.has_value()) {
-          errors->fetch_add(1, std::memory_order_relaxed);
-        } else {
-          auto res = co_await sent.value().result(400ms);
-          if (res.has_value() && res.value().code == rclcpp_action::ResultCode::SUCCEEDED)
-            ok->fetch_add(1, std::memory_order_relaxed);
-          else
-            errors->fetch_add(1, std::memory_order_relaxed);
-        }
-      } catch (...) {
-        errors->fetch_add(1, std::memory_order_relaxed);
+      Fibonacci::Goal goal;
+      goal.order = 4;
+      auto sent = co_await client.send_goal(goal, 400ms, [](auto, auto) {});
+      if (!sent.has_value()) {
+        errors.fetch_add(1, std::memory_order_relaxed);
+      } else {
+        auto res = co_await sent.value().result(400ms);
+        if (res.has_value() && res.value().code == rclcpp_action::ResultCode::SUCCEEDED)
+          ok.fetch_add(1, std::memory_order_relaxed);
+        else
+          errors.fetch_add(1, std::memory_order_relaxed);
       }
     }
-    done->store(true, std::memory_order_release);
+    done.store(true, std::memory_order_release);
     co_return;
   };
   action_loop().detach();
+
   std::array<std::shared_ptr<rclcpp::TimerBase>, 4> timers;
-  for (size_t i = 0; i < timers.size(); ++i) {
-    timers[i] = h.receiver->create_wall_timer(5ms, [=]() {
-      dispatches->fetch_add(1, std::memory_order_relaxed);
-    });
+  for (auto &timer : timers) {
+    timer = h.receiver->create_wall_timer(5ms, [&]() { dispatches.fetch_add(1, std::memory_order_relaxed); });
   }
-  wait_for_dispatches(*dispatches, 5000, 12s);
-  const auto done_deadline = std::chrono::steady_clock::now() + 15s;
-  while (std::chrono::steady_clock::now() < done_deadline &&
-         !done->load(std::memory_order_acquire))
-    std::this_thread::sleep_for(10ms);
+
+  spin_until(h, [&] { return dispatches.load(std::memory_order_relaxed) >= 5000; }, 12s);
+  spin_until(h, [&] { return done.load(std::memory_order_acquire); }, 15s);
   for (auto &timer : timers) timer->cancel();
-  EXPECT_GE(dispatches->load(std::memory_order_relaxed), 5000U);
-  EXPECT_TRUE(done->load(std::memory_order_acquire));
-  EXPECT_GT(ok->load(std::memory_order_relaxed) + errors->load(std::memory_order_relaxed), 0U);
+
+  EXPECT_GE(dispatches.load(std::memory_order_relaxed), 5000U);
+  EXPECT_TRUE(done.load(std::memory_order_acquire));
+  EXPECT_GT(ok.load(std::memory_order_relaxed) + errors.load(std::memory_order_relaxed), 0U);
 }
 
 }  // namespace
