@@ -261,20 +261,32 @@ public:
 
   /// We do not use structured concurrency approach, we want to start the coroutine directly.
   std::suspend_never initial_suspend() const noexcept { return {}; }
-  /// We do not suspend at the final suspend point, but continue so that the coroutine state is
-  /// destructed automaticall when the coroutine is finished.
-  std::suspend_never final_suspend() const noexcept { return {}; }
+  /// Keep completed coroutines suspended while a `icey::Promise` wrapper still owns them. If the
+  /// wrapper was destroyed before completion (detached), destroy the frame automatically.
+  struct FinalAwaiter {
+    bool await_ready() const noexcept { return false; }
+    template <class PromiseT>
+    bool await_suspend(std::coroutine_handle<PromiseT> h) const noexcept {
+      return !h.promise().is_detached();
+    }
+    void await_resume() const noexcept {}
+  };
+  FinalAwaiter final_suspend() const noexcept { return {}; }
 
   /// Set the cancellation function that is called in the destructor if this promise has_none().
   void set_cancel(Cancel cancel) { cancel_ = cancel; }
   void set_continuation(std::coroutine_handle<> continuation) { continuation_ = continuation; }
+  void detach() { is_detached_.store(true); }
+  bool is_detached() const { return is_detached_.load(); }
 
 protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
-  /// Whether the promise was resolved or rejected.
+  /// Indicates whether the promise is done, i.e. was either resolved or rejected.
   std::atomic_bool is_done_{false};
+  /// Indicates whether wrapper ownership was released before completion.
+  std::atomic_bool is_detached_{false};
 
   /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
   /// not going to be called anymore. Such cancellations are needed because the ROS callback
@@ -400,12 +412,17 @@ public:
                              std::size_t(coroutine_.address()))
               << std::endl;
 #endif
+    if (coroutine_ && coroutine_.done()) {
+      coroutine_.destroy();
+    } else if (coroutine_) {
+      coroutine_.promise().detach();
+    }
   }
 
-  bool await_ready() const noexcept { return coroutine_ && coroutine_.promise().is_done(); }
+  bool await_ready() const noexcept { return coroutine_ && coroutine_.done(); }
 
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-    if (coroutine_.promise().is_done()) {
+    if (coroutine_.done()) {
       return false;
     }
     auto &p = coroutine_.promise();

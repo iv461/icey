@@ -118,23 +118,26 @@ TEST(IceyPromiseAsyncAwaitTest, AwaitImmediateCoReturnWithErrorType) {
 TEST(IceyPromiseAsyncAwaitTest, NestedCoroutinesWithoutErrorType) {
   InlineEventLoop loop;
   std::vector<std::string> events;
-  nested_plain_log(loop, events);
+  auto nested = nested_plain_log(loop, events);
   loop.run_all();
   std::vector<std::string> expected{"outer_start", "42"};
   EXPECT_EQ(events, expected);
+  (void)nested;
 }
 
 TEST(IceyPromiseAsyncAwaitTest, NestedCoroutinesWithErrorType) {
   InlineEventLoop loop;
   std::vector<std::string> events_ok;
   std::vector<std::string> events_err;
-  nested_result_log(loop, false, events_ok);
-  nested_result_log(loop, true, events_err);
+  auto nested_ok = nested_result_log(loop, false, events_ok);
+  auto nested_err = nested_result_log(loop, true, events_err);
   loop.run_all();
   std::vector<std::string> expected_ok{"outer_start", "42"};
   std::vector<std::string> expected_err{"outer_start", "inner_error"};
   EXPECT_EQ(events_ok, expected_ok);
   EXPECT_EQ(events_err, expected_err);
+  (void)nested_ok;
+  (void)nested_err;
 }
 
 TEST(IceyPromiseAsyncAwaitTest, CancellationInUnawaitedCoroutineScopeIsNotTriggered) {
@@ -142,7 +145,5 @@ TEST(IceyPromiseAsyncAwaitTest, CancellationInUnawaitedCoroutineScopeIsNotTrigge
 
   cancellation_in_scope(cancelled);
 
-  /// Documented current behavior: without coroutine frame destruction, local promise cancellation
-  /// callbacks are not reached.
   EXPECT_FALSE(cancelled);
 }
