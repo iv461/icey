@@ -45,6 +45,7 @@ if(BUILD_TESTING)
     test/context_test.cpp
     test/promise_test.cpp
     test/nested_coroutines.cpp
+    test/promise_async_await_test.cpp
   )  
   target_link_libraries(test_main fmt::fmt)
   set_tests_properties(test_main PROPERTIES TIMEOUT 180)
