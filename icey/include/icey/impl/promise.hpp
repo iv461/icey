@@ -109,7 +109,7 @@ public:
   void set_value(const Value &x) {
     bool expected_done{false};
     if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_ = x;
+      state_ = Ok(x);
     }
   }
 
@@ -119,7 +119,7 @@ public:
   void set_error(const Error &x) {
     bool expected_done{false};
     if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_ = x;
+      state_ = Err(x);
     }
   }
 
@@ -219,8 +219,6 @@ public:
   };
   FinalAwaiter final_suspend() const noexcept { return {}; }
 
-  /// Set the cancellation function that is called in the destructor if this promise has_none().
-  void set_cancel(Cancel cancel) { cancel_ = cancel; }
   void set_continuation(std::coroutine_handle<> continuation) { continuation_ = continuation; }
   void detach() { is_detached_.store(true); }
   bool is_detached() const { return is_detached_.load(); }
@@ -229,19 +227,13 @@ protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
+  /// A function called on await_suspend that starts the asynchronous operation
+  LaunchAsync launch_async_;
+  
   /// Indicates whether the promise is done, i.e. was either resolved or rejected.
   std::atomic_bool is_done_{false};
   /// Indicates whether wrapper ownership was released before completion.
   std::atomic_bool is_detached_{false};
-
-  /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
-  /// not going to be called anymore. Such cancellations are needed because the ROS callback
-  /// captures the Promises object by reference since it needs to write the result to it. But if we
-  /// would destruct the Promise and after that this ROS callback gets called, we get an
-  /// use-after-free bug. The promise must therefore cancel the ROS callback in the destructor.
-  /// Everything that we have in ROS can be cancelled synchronously, so a synchronous cancellation
-  /// function called in the destructor is sufficient.
-  Cancel cancel_;
 
   /// The continuation that is registered when co_awaiting this promise
   std::coroutine_handle<> continuation_{nullptr};

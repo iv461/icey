@@ -341,8 +341,6 @@ struct TransformBufferImpl {
               target_frame, source_frame, time, timeout,
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
-          promise.set_cancel(
-              [this, request_handle](auto &) { this->cancel_request(request_handle); });
         });
   }
 
@@ -592,10 +590,6 @@ struct ServiceClientImpl {
         client->remove_pending_request(request_id);
         promise.reject("TIMEOUT");
       });
-      promise.set_cancel([this, request_id](auto &promise) {
-        node_.lock()->cancel_task_for(uint64_t(&promise));
-        client->remove_pending_request(request_id);
-      });
     });
   }
 
@@ -698,10 +692,6 @@ struct AsyncGoalHandle {
         if (!request_id) {
           promise.reject("FAILED");
         } else {
-          promise.set_cancel([this, request_id = request_id.value()](auto &promise) {
-            client_.lock()->cancel_cancellation_request(request_id);
-            node_.lock()->cancel_task_for(uint64_t(&promise));
-          });
           node_.lock()->add_task_for(uint64_t(&promise), timeout,
                                      [this, &promise, request_id = request_id.value()] {
                                        client_.lock()->cancel_result_request(request_id);
@@ -732,10 +722,7 @@ struct AsyncGoalHandle {
           client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
-        promise.set_cancel([this, request_id](auto &promise) {
-          client_.lock()->cancel_cancellation_request(request_id);
-          node_.lock()->cancel_task_for(uint64_t(&promise));
-        });
+
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, an exception can we thrown if we try to cancel, but the
         /// goal was already reached
@@ -796,10 +783,6 @@ struct ActionClient {
           node_.lock()->add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
             client_->cancel_goal_request(request_id);
             promise.reject("TIMEOUT");
-          });
-          promise.set_cancel([this, request_id](auto &promise) {
-            client_->cancel_goal_request(request_id);
-            node_.lock()->cancel_task_for(uint64_t(&promise));
           });
         });
   }
