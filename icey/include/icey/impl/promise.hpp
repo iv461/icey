@@ -10,6 +10,7 @@
 #include <exception>  /// for std::exception_ptr
 #include <functional>
 #include <icey/impl/result.hpp>
+#include <utility>
 
 #if defined(ICEY_CORO_DEBUG_PRINT) || defined(ICEY_PROMISE_LIFETIMES_DEBUG_PRINT)
 #include <fmt/format.h>
@@ -225,18 +226,18 @@ public:
 
   /// Calls the continuation coroutine
   void notify() {
-    if (continuation_) {
+    auto continuation = std::exchange(continuation_, std::coroutine_handle<>{});
+    if (continuation) {
       /// If a coro handle is done, the function ptr is nullptr, so we get a crash on resume
-      if (!continuation_.done()) {
+      if (!continuation.done()) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address()))
+        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation.address()))
                   << std::endl;
 #endif
-        continuation_.resume();
+        continuation.resume();
       } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
-        fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
-                   size_t(continuation_.address()));
+        fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n", size_t(continuation.address()));
         getchar();
 
 #endif
@@ -252,9 +253,6 @@ public:
     if constexpr (std::is_same_v<Value, Nothing>)
       return;
     else {
-      /*if (has_none()) {
-        // TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
-      }*/
       return get_state().get();
     }
   }

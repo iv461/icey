@@ -683,7 +683,7 @@ struct AsyncGoalHandle {
   /// Get the goal status code. See
   /// https://docs.ros.org/en/ros2_packages/rolling/api/action_msgs/msg/GoalStatus.html for possible
   /// values
-  int8_t get_status() { return goal_handle_->get_status; }
+  int8_t get_status() { return goal_handle_->get_status(); }
 
   /// Obtain the result asynchronously.
   ResultPromise result(const Duration &timeout) const {
