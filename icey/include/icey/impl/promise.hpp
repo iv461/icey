@@ -51,48 +51,6 @@ template <typename T>
 inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
 struct PromiseTag {};
 
-/// This state is a sum type that holds either a Value, Error, or none.
-template <class _Value, class _Error>
-struct PromiseState : private std::variant<std::monostate, _Value, _Error> {
-  using Value = _Value;
-  using Error = _Error;
-  using Self = PromiseState<_Value, _Error>;
-
-  PromiseState() = default;
-  PromiseState(const Result<Value, Error> &result) {  // NOLINT
-    if (result.has_value()) {
-      set_value(result.value());
-    } else {
-      set_error(result.error());
-    }
-  }
-
-  bool has_none() const { return this->index() == 0; }
-  bool has_value() const { return this->index() == 1; }
-  bool has_error() const { return this->index() == 2; }
-  const Value &value() const { return std::get<1>(*this); }
-  const Error &error() const { return std::get<2>(*this); }
-  void set_none() { this->template emplace<0>(std::monostate{}); }
-  void set_value(const Value &x) { this->template emplace<1>(x); }
-  void set_error(const Error &x) { this->template emplace<2>(x); }
-
-  auto get() const {
-    if constexpr (std::is_same_v<Error, Nothing>) {
-      return this->value();
-    } else {
-      return to_result();
-    }
-  }
-
-  Result<Value, Error> to_result() const {
-    if (has_value()) {
-      return Ok(value());
-    } else {
-      return Err(error());
-    }
-  }
-};
-
 /// A Promise is an asynchronous abstraction that yields a value or an error.
 /// It can be used with async/await syntax coroutines in C++20.
 /// It also allows for wrapping an existing callback-based API.
@@ -102,13 +60,10 @@ class PromiseBase : public PromiseTag {
 public:
   using Value = _Value;
   using Error = _Error;
-  using State = PromiseState<_Value, _Error>;
+  using State = std::optional<Result<_Value, _Error>>;
   using Self = PromiseBase<Value, Error>;
-
-  using Cancel = std::function<void(Self &)>;
   using LaunchAsync = std::function<void(Self &)>;
 
-  LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {
 #ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
     std::cout << fmt::format("Constructing promise {}", get_type(*this)) << std::endl;
@@ -139,24 +94,14 @@ public:
 #ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
     std::cout << fmt::format("Destructing promise {}", get_type(*this)) << std::endl;
 #endif
-    /// cancellation only happens when the promise is destroyed before it has a value: This happens
-    /// only when the user forgets to add a co_await
-    if (cancel_) {
-      bool expected_done{false};
-      if (is_done_.compare_exchange_strong(expected_done, true)) {
-        cancel_(*this);
-      }
-    }
   }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
   /// compiler can't do this for us because of reasons)
   void unhandled_exception() { exception_ptr_ = std::current_exception(); }
 
-  const Value &value() const { return state_.value(); }
-  const Error &error() const { return state_.error(); }
-  State &get_state() { return state_; }
-  bool is_done() const { return is_done_.load(); }
+  const Value &value() const { return state_.value().value(); }
+  const Error &error() const { return state_.value().error(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
   /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
@@ -164,7 +109,7 @@ public:
   void set_value(const Value &x) {
     bool expected_done{false};
     if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_.set_value(x);
+      state_ = x;
     }
   }
 
@@ -174,7 +119,7 @@ public:
   void set_error(const Error &x) {
     bool expected_done{false};
     if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_.set_error(x);
+      state_ = x;
     }
   }
 
@@ -207,8 +152,6 @@ public:
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
     this->continuation_ = awaiting_coroutine;
     if (this->launch_async_) {
-      /// The only place where we currently  do not launch anything asynchronously is in the actions
-      /// API (because it already has been launched)
       this->launch_async_(*this);
     }
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -237,7 +180,8 @@ public:
         continuation.resume();
       } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
-        fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n", size_t(continuation.address()));
+        fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
+                   size_t(continuation.address()));
         getchar();
 
 #endif
@@ -253,7 +197,11 @@ public:
     if constexpr (std::is_same_v<Value, Nothing>)
       return;
     else {
-      return get_state().get();
+      if constexpr (std::is_same_v<Error, Nothing>) {
+        return this->value();
+      } else {
+        return state_.value();
+      }
     }
   }
 
@@ -313,7 +261,7 @@ protected:
 /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019) So we need to use different
 /// classes and partial specialization.
 template <class _Value, class _Error = Nothing>
-class Promise : public PromiseBase<_Value, _Error> {
+class [[nodiscard("Promise must be awaited")]] Promise : public PromiseBase<_Value, _Error> {
 public:
   using Self = Promise<_Value, _Error>;
   using Base = PromiseBase<_Value, _Error>;
@@ -349,7 +297,8 @@ public:
 /// specification being weird. There was an attempt to make it less weird, unfortunately
 /// unsuccessful: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1713r0.pdf)
 template <>
-class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
+class [[nodiscard("Promise must be awaited")]] Promise<void, Nothing>
+    : public PromiseBase<Nothing, Nothing> {
 public:
   using Base = PromiseBase<Nothing, Nothing>;
   using Self = Promise<void, Nothing>;
@@ -383,7 +332,7 @@ public:
 /// We cannot use the structured programming approach because it requires a custom executor but we
 /// want to use the existing ROS executor.
 template <class _Value, class _Error = Nothing>
-class Promise {
+class [[nodiscard("Promise must be awaited")]] Promise {
 public:
   using Self = Promise<_Value, _Error>;
   using Value = _Value;
@@ -413,9 +362,15 @@ public:
     if (coroutine_ && coroutine_.done()) {
       coroutine_.destroy();
     } else if (coroutine_) {
+      /// TODO to enforce users explicitly detaching, this should probably throw
       coroutine_.promise().detach();
     }
   }
+
+  /// You need to detach a Promise if you are not awaiting it but it should still continue to run.
+  /// Detaching this outer promise means the coroutine state won't be destroyed on destruction of
+  /// outer promise. This also avoid the discarting warning
+  void detach() { coroutine_.promise().detach(); }
 
   bool await_ready() const noexcept { return coroutine_ && coroutine_.done(); }
 

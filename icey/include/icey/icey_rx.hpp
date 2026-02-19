@@ -264,10 +264,9 @@ public:
                      FValidate f_validate = {}, bool ignore_override = false) {
     parameter_validators_.emplace(name, f_validate);
     add_parameter_validator_if_needed();
-    auto param = node_parameters_->declare_parameter(name, rclcpp::ParameterValue(default_value),
-                                                     parameter_descriptor, ignore_override);
-    auto param_subscription =
-        std::make_shared<rclcpp::ParameterEventHandler>(static_cast<NodeBase &>(*this));
+    auto param = this->node_base()->get_node_parameters_interface()->declare_parameter(
+        name, rclcpp::ParameterValue(default_value), parameter_descriptor, ignore_override);
+    auto param_subscription = std::make_shared<rclcpp::ParameterEventHandler>(this->node_base());
     auto cb_handle =
         param_subscription->add_parameter_callback(name, std::forward<CallbackT>(update_callback));
     parameters_.emplace(name, std::make_pair(param_subscription, cb_handle));
@@ -307,26 +306,25 @@ public:
     return impl;
   }
 
-  /// Get the NodeBase, i.e. the ROS node using which this Context was created.
-  NodeBase &node_base() { return static_cast<NodeBase &>(*this); }
-
 protected:
   /// Installs the validator callback
   void add_parameter_validator_if_needed() {
     if (validate_param_cb_) return;
-    this->validate_param_cb_ = node_parameters_->add_on_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter> &parameters) {
-          rcl_interfaces::msg::SetParametersResult result;
-          for (const auto &parameter : parameters) {
-            /// We want to skip validating parameters that we didn't declare, for example here we
-            /// are getting called for parameters like "qos_overrides./tf.publisher.durability"
-            if (parameter_validators_.contains(parameter.get_name())) {
-              result.reason = parameter_validators_.at(parameter.get_name())(parameter);
-            }
-          }
-          result.successful = result.reason == "";
-          return result;
-        });
+    this->validate_param_cb_ =
+        this->node_base()->get_node_parameters_interface()->add_on_set_parameters_callback(
+            [this](const std::vector<rclcpp::Parameter> &parameters) {
+              rcl_interfaces::msg::SetParametersResult result;
+              for (const auto &parameter : parameters) {
+                /// We want to skip validating parameters that we didn't declare, for example here
+                /// we are getting called for parameters like
+                /// "qos_overrides./tf.publisher.durability"
+                if (parameter_validators_.contains(parameter.get_name())) {
+                  result.reason = parameter_validators_.at(parameter.get_name())(parameter);
+                }
+              }
+              result.successful = result.reason == "";
+              return result;
+            });
   }
 
   /// A map that stores for each parameter name some ROS entities that we need to hold to be able to
@@ -951,7 +949,7 @@ struct ParameterStream : public Stream<_Value> {
         },
         this->create_descriptor(), this->validator.validate, this->ignore_override);
     /// Set the default value
-    this->impl()->put_value(context.node_base().get_parameter<Value>(this->parameter_name));
+    this->impl()->put_value(context.node_base()->get_parameter<Value>(this->parameter_name));
   }
 
   /// Get the value. Parameters are initialized always at the beginning, so they always have a
@@ -1029,7 +1027,7 @@ struct SubscriptionStream
   SubscriptionStream(Context &context, const std::string &topic_name, const rclcpp::QoS &qos,
                      const rclcpp::SubscriptionOptions &options)
       : Base(context) {
-    this->impl()->subscription = context.node_base().create_subscription<_Message>(
+    this->impl()->subscription = context.node_base()->create_subscription<_Message>(
         topic_name,
         [impl = this->impl()](typename _Message::SharedPtr msg) { impl->put_value(msg); }, qos,
         options);
@@ -1076,7 +1074,7 @@ struct TimerStream : public Stream<size_t, Nothing, TimerImpl> {
   TimerStream() = default;
   TimerStream(Context &context, const Duration &interval, bool is_one_off_timer) : Base(context) {
     this->impl()->timer =
-        context.node_base().create_wall_timer(interval, [impl = this->impl(), is_one_off_timer]() {
+        context.node_base()->create_wall_timer(interval, [impl = this->impl(), is_one_off_timer]() {
           /// Needed as separate state as it might be reset in async/await mode
           auto cnt = impl->ticks_counter;
           impl->ticks_counter++;
@@ -1128,7 +1126,7 @@ struct PublisherStream : public Stream<_Value, Nothing, PublisherImpl<_Value>> {
                   Input *maybe_input = nullptr)
       : Base(context) {
     this->impl()->publisher =
-        context.node_base().create_publisher<Message>(topic_name, qos, publisher_options);
+        context.node_base()->create_publisher<Message>(topic_name, qos, publisher_options);
     this->impl()->register_handler(
         [impl = this->impl()](const auto &new_state) { impl->publish(new_state.value()); });
     if (maybe_input) {
@@ -1182,7 +1180,7 @@ struct TimeoutFilter
   TimeoutFilter(Context &context, Input input, const Duration &max_age,
                 bool create_extra_timer = true)
       : Base(context) {
-    auto node_clock = context.node_base().get_node_clock_interface();
+    auto node_clock = context.node_base()->get_node_clock_interface();
     rclcpp::Duration max_age_ros(max_age);
     auto check_state = [impl = this->impl(), node_clock, max_age_ros](const auto &new_state) {
       if (!new_state.has_value()) return true;
@@ -1339,8 +1337,8 @@ struct TransformSynchronizerImpl {
     /// because we must buffer every message for as long as we are waiting for a transform.
     synchronizer = std::make_shared<tf2_ros::MessageFilter<Message>>(
         *input_filter->impl(), *tf_listener->buffer_, target_frame, 0,
-        context.node_base().get_node_logging_interface(),
-        context.node_base().get_node_clock_interface(), lookup_timeout);
+        context.node_base()->get_node_logging_interface(),
+        context.node_base()->get_node_clock_interface(), lookup_timeout);
 
     synchronizer->registerCallback(&Self::on_message, this);
   }
