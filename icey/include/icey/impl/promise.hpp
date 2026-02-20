@@ -146,8 +146,7 @@ public:
   /// After the first successful completion, all subsequent completion attempts are ignored.
   void resolve(const Value &value) {
     bool expected_done{false};
-    if (!is_done_.compare_exchange_strong(expected_done, true, std::memory_order_acq_rel,
-                                          std::memory_order_acquire)) {
+    if (!is_done_.compare_exchange_strong(expected_done, true)) {
       return;
     }
     set_value(value);
@@ -159,8 +158,7 @@ public:
   /// After the first successful completion, all subsequent completion attempts are ignored.
   void reject(const Error &error) {
     bool expected_done{false};
-    if (!is_done_.compare_exchange_strong(expected_done, true, std::memory_order_acq_rel,
-                                          std::memory_order_acquire)) {
+    if (!is_done_.compare_exchange_strong(expected_done, true)) {
       return;
     }
     set_error(error);
@@ -172,8 +170,7 @@ public:
   /// After the first successful completion, all subsequent completion attempts are ignored.
   void put_state(const State &error) {
     bool expected_done{false};
-    if (!is_done_.compare_exchange_strong(expected_done, true, std::memory_order_acq_rel,
-                                          std::memory_order_acquire)) {
+    if (!is_done_.compare_exchange_strong(expected_done, true)) {
       return;
     }
     set_state(error);
