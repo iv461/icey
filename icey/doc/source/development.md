@@ -9,12 +9,6 @@ cd <colcon-ws root>
 ./build/icey/test_main
 ```
 
-For TSAN runs, fail fast on the first detected race:
-
-```sh
-TSAN_OPTIONS=halt_on_error=1 ./build/icey/test_main
-```
-
 ## Debug example node 
 
 Useful: Install mixins: https://github.com/colcon/colcon-mixin-repository
@@ -56,6 +50,32 @@ Then, do not use FastDDS since it uses exceptions as part of it's regular (inste
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp gdb ./build/icey/test_main
 ```
 
+
+## TSAN (ThreadSanitizer)
+
+TSAN is used to detect data races with multi-threaded executors. 
+Build both `icey` and `icey_examples` with TSAN instrumentation:
+
+```sh
+cd <colcon-ws root>
+source /opt/ros/jazzy/setup.bash
+MAKEFLAGS="-j6" colcon build --packages-select icey icey_examples --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DICEY_ENABLE_TSAN=ON -DICEY_ASYNC_AWAIT_THREAD_SAFE=1
+```
+
+Run an example binary under TSAN:
+
+```sh
+TSAN_OPTIONS="halt_on_error=1:detect_deadlocks=1:suppressions=/home/ivo/colcon_ws/src/icey/icey/test/tsan_dds.supp" setarch x86_64 -R /home/ivo/colcon_ws/install/icey_examples/lib/icey_examples/service_client_async_await_example
+```
+
+Why these workarounds are needed:
+
+- `setarch x86_64 -R`: disables ASLR for the process. Without this, TSAN can fail early with `unexpected memory mapping` on Ubuntu 24 (https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2056762, https://github.com/google/sanitizers/issues/1716#issuecomment-2010399341)
+- `suppressions=.../tsan_dds.supp`: filters for known DDS races and deadlocks that only cause noise. 
+- `halt_on_error=1`: fail fast 
+- `detect_deadlocks=0`: There is lock inversion issue in the rclcpp_actions currently
+
+By setting `-DICEY_ASYNC_AWAIT_THREAD_SAFE=0` during build, you can verify that indeed TSAN is able to detect the data races. 
 ## Run clang-tidy: 
 
 
