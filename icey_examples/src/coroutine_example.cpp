@@ -24,6 +24,8 @@ int main(int argc, char **argv) {
   std::cout << "1. Before calling coroutine " << std::endl;
   (void)a_coroutine(node->icey());
   std::cout << "5. After calling coroutine " << std::endl;
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
+  exec.add_node(node->get_node_base_interface());
+  exec.spin();
   std::cout << "6. After sync_wait " << std::endl;
 }

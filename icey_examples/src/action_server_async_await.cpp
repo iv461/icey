@@ -55,6 +55,8 @@ int main(int argc, char **argv) {
                                        handle_accepted);
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Created action sever");
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
+  exec.add_node(node->get_node_base_interface());
+  exec.spin();
   return 0;
 }

@@ -33,9 +33,7 @@ ament_auto_add_library(icey
   src/actions/server_goal_handle.cpp  
   )
 
-if(NOT ICEY_ASYNC_AWAIT_THREAD_SAFE)
-  target_compile_definitions(icey PUBLIC ICEY_ASYNC_AWAIT_THREAD_SAFE=0)
-endif()
+
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -57,9 +55,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_main fmt::fmt)
   set_tests_properties(test_main PROPERTIES TIMEOUT 180)
 
-  if(NOT ICEY_ASYNC_AWAIT_THREAD_SAFE)
-    target_compile_definitions(test_main PRIVATE ICEY_ASYNC_AWAIT_THREAD_SAFE=0)
-  endif()
+
 
   if(ICEY_ENABLE_TSAN)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

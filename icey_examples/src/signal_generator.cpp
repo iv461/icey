@@ -45,5 +45,7 @@ int main(int argc, char **argv) {
       })
       .publish("sine_signal");
 
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
+  exec.add_node(node->get_node_base_interface());
+  exec.spin();
 }

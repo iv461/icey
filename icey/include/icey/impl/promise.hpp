@@ -29,7 +29,6 @@ static std::string get_type(T &t) {
 #endif
 
 /// This header defines a promise type supporting async/await (C++ 20 coroutines) only.
-/// Not thread-safe.
 namespace icey {
 
 inline bool icey_coro_debug_print = false;
@@ -37,7 +36,6 @@ inline bool icey_coro_debug_print = false;
 template <class Value, class Error>
 class Promise;
 
-/// Alias used where "no value"/"no error" is needed while preserving existing API spelling.
 using Nothing = std::monostate;
 
 namespace impl {

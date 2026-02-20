@@ -36,5 +36,7 @@ int main(int argc, char **argv) {
   // gets updated dynamically when the parameter changes.
   create_yaw_rotation(*node, base_frame_param).publish_transform();
 
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
+  exec.add_node(node->get_node_base_interface());
+  exec.spin();
 }

@@ -51,5 +51,7 @@ int main(int argc, char **argv) {
       /// And now publish again using image_transport, creating an image_transport::Publisher:
       .publish<icey::ImageTransportPublisher>("camera_left_painted", rclcpp::SensorDataQoS());
 
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
+  exec.add_node(node->get_node_base_interface());
+  exec.spin();
 }

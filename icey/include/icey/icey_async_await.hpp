@@ -31,7 +31,7 @@
 namespace icey {
 
 #ifndef ICEY_ASYNC_AWAIT_THREAD_SAFE
-#define ICEY_ASYNC_AWAIT_THREAD_SAFE 1
+#define ICEY_ASYNC_AWAIT_THREAD_SAFE 0
 #endif
 
 using Clock = std::chrono::system_clock;
@@ -512,19 +512,15 @@ protected:
   }
 
   void notify_if_any_relevant_transform_was_received() {
-    /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
-    std::vector<RequestHandle> requests_to_delete;
+/// Iterate all requests, notify and maybe erase them if they are requests for a specific time
 #if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::vector<RequestHandle> requests_to_delete;
     std::vector<RequestHandle> requests;
     {
       std::lock_guard<std::recursive_mutex> lock{mutex_};
       requests.reserve(requests_.size());
       for (const auto &req : requests_) requests.push_back(req);
     }
-#else
-    auto requests = requests_;
-#endif
-
     for (auto req : requests) {
       if (req->maybe_time) {
         if (maybe_notify_specific_time(req)) {
@@ -535,10 +531,19 @@ protected:
         maybe_notify(*req);
       }
     }
-#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::lock_guard<std::recursive_mutex> lock{mutex_};
-#endif
     for (const auto &k : requests_to_delete) requests_.erase(k);
+#else
+    std::erase_if(requests_, [this](auto req) {
+      if (req->maybe_time) {
+        return maybe_notify_specific_time(req);
+      } else {
+        // If it is a regular subscription, is is persistend and never erased
+        maybe_notify(*req);
+        return false;
+      }
+    });
+#endif
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
