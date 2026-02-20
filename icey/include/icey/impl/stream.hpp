@@ -271,12 +271,12 @@ protected:
     using ReturnType = decltype(unpack_if_tuple(f, x));
     if constexpr (std::is_void_v<ReturnType>) {
       unpack_if_tuple(f, x);
-    } else if constexpr (has_promise_type_v<ReturnType>) {  /// Is a coroutine, i.e. async function
+    } else if constexpr (HasPromiseType<ReturnType>) {  /// Is a coroutine, i.e. async function
       const auto continuation = [](const auto &x, F &f) -> ReturnType {
         co_await unpack_if_tuple(f, x);
         co_return;
       };
-      continuation(x, f);
+      continuation(x, f).detach();
     } else if constexpr (is_result_v<ReturnType>) {
       /// support callbacks that at runtime may return value or error
       output->state_ = unpack_if_tuple(f, x);
@@ -341,7 +341,7 @@ protected:
                                          DefaultBase, DefaultBase>>();  // Must pass over error
       create_handler<put_value>(output, std::forward<F>(f));
       return output;
-    } else if constexpr (has_promise_type_v<ReturnType>) {  /// If it has promise type, it's a
+    } else if constexpr (HasPromiseType<ReturnType>) {  /// If it has promise type, it's a
                                                             /// coroutine
       auto output =
           create_stream<Stream<Nothing, Nothing, DefaultBase, DefaultBase>>();  // Must pass over

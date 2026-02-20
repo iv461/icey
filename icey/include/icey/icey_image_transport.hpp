@@ -23,7 +23,7 @@ namespace icey {
 
 /// Image_transport does not yet support lifecycle_nodes:
 void assert_is_not_lifecycle_node(Context &context) {
-  if (context.node_base().is_lifecycle_node())
+  if (context.node_base()->is_lifecycle_node())
     throw std::runtime_error(
         "You tried to use image_transport with a lifecycle node, unfortunately ROS Humble does not "
         "currently support image_transport with lifecycle nodes.");
@@ -51,7 +51,7 @@ struct ImageTransportSubscription
     };
     try {
       this->impl()->subscription =
-          image_transport::create_subscription(&context.node_base().as_node(), base_topic_name, cb,
+          image_transport::create_subscription(&context.node_base()->as_node(), base_topic_name, cb,
                                                transport, qos.get_rmw_qos_profile(), options);
     } catch (const image_transport::TransportLoadException &exception) {
       this->impl()->put_error(exception);
@@ -68,7 +68,7 @@ struct ImageTransportPublisher : public Stream<sensor_msgs::msg::Image::SharedPt
         context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes
                    /// and lifecycle nodes, so we can only assert this at runtime
     image_transport::Publisher publisher = image_transport::create_publisher(
-        &context.node_base().as_node(), base_topic_name, qos.get_rmw_qos_profile());
+        &context.node_base()->as_node(), base_topic_name, qos.get_rmw_qos_profile());
     this->impl()->register_handler([publisher](const auto &new_state) {
       publisher.publish(new_state.value());  /// There can be no error
     });
@@ -101,7 +101,7 @@ struct CameraSubscription
                    /// and lifecycle nodes, so we can only assert this at runtime
     try {
       this->impl()->subscription = image_transport::create_camera_subscription(
-          &context.node_base().as_node(), base_topic_name, cb, transport,
+          &context.node_base()->as_node(), base_topic_name, cb, transport,
           qos.get_rmw_qos_profile());
     } catch (const image_transport::TransportLoadException &exception) {
       this->impl()->put_error(exception);
@@ -120,7 +120,7 @@ struct CameraPublisher
         context);  /// NodeBookkeeping acts a type-erasing common interface between regular Nodes
                    /// and lifecycle nodes, so we can only assert this at runtime
     image_transport::CameraPublisher publisher = image_transport::create_camera_publisher(
-        &context.node_base().as_node(), base_topic_name, qos.get_rmw_qos_profile());
+        &context.node_base()->as_node(), base_topic_name, qos.get_rmw_qos_profile());
     this->impl()->register_handler([publisher](const auto &new_state) {
       const auto [image_msg, camera_info_msg] = new_state.value();  /// There can be no error;
       publisher.publish(image_msg, camera_info_msg);

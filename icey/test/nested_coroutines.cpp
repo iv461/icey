@@ -82,7 +82,7 @@ TEST_F(EventLoop, NestedCoroutines) {
       [&]() {
         // std::cout << "before_coro" << std::endl;
         event_log.push_back("before_coro");
-        wrapper1(*this);
+        wrapper1(*this).detach();
         event_log.push_back("after_coro");
         // std::cout << "after_coro" << std::endl;
       },

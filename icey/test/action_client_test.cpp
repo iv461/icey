@@ -78,7 +78,7 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalTest) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(1000ms);
   ASSERT_TRUE(async_completed);
 }
@@ -127,7 +127,7 @@ TEST_F(ActionsAsyncAwait, ActionTimeoutAndMultipleGoalsTest) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(1200ms);
   ASSERT_TRUE(async_completed);
 }
@@ -145,7 +145,7 @@ TEST_F(ActionsAsyncAwait, ActionSendGoalAcceptanceTimeout) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(400ms);
   ASSERT_TRUE(async_completed);
 }
@@ -170,7 +170,7 @@ TEST_F(ActionsAsyncAwait, ActionGoalRejected) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(400ms);
   ASSERT_TRUE(async_completed);
 }
@@ -202,7 +202,7 @@ TEST_F(ActionsAsyncAwait, ActionResultTimeout) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(600ms);
   ASSERT_TRUE(async_completed);
 }
@@ -231,7 +231,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTimeout) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(800ms);
   ASSERT_TRUE(async_completed);
 }
@@ -298,7 +298,7 @@ TEST_F(ActionsAsyncAwait, ActionAbortAndCanceledAndSucceeded) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(2000ms);
   ASSERT_TRUE(async_completed);
 }
@@ -337,7 +337,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelAfterSuccessInvalidTransition) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(800ms);
   ASSERT_TRUE(async_completed);
 }
@@ -368,7 +368,7 @@ TEST_F(ActionsAsyncAwait, ActionCancelTwiceInvalidTransition) {
     async_completed = true;
     co_return;
   };
-  l();
+  l().detach();
   spin(1000ms);
   ASSERT_TRUE(async_completed);
 }

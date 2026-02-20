@@ -52,6 +52,6 @@ icey::Promise<void> create_and_spin_node(std::shared_ptr<icey::Node> node) {
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<icey::Node>("icey_signal_generator_async_await_example");
-  create_and_spin_node(node);
+  (void)create_and_spin_node(node);
   rclcpp::spin(node);
 }

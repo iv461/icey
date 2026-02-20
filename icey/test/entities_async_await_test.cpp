@@ -34,7 +34,7 @@ TEST_F(AsyncAwaitNodeTest, ParameterTest) {
 
     async_completed = true;
     co_return 0;
-  }();
+  }().detach();
   ASSERT_TRUE(async_completed);
 }
 
@@ -56,7 +56,7 @@ TEST_F(AsyncAwaitNodeTest, TimerTest) {
     async_completed = true;
     co_return 0;
   };
-  l();
+  l().detach();
   spin(1500ms);
   ASSERT_TRUE(async_completed);
 }
@@ -94,7 +94,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
     async_completed = true;
     co_return 0;
   };
-  l();  /// Temporary lifetime extention is unaware of coroutines and would destroy the lambda after
+  l().detach();  /// Temporary lifetime extention is unaware of coroutines and would destroy the lambda after
         /// first suspend if we would not assign a name l to it
   spin(1500ms);
   ASSERT_TRUE(async_completed);
@@ -130,7 +130,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
     async_completed = true;
     co_return 0;
   };
-  l();
+  l().detach();
   spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
@@ -182,7 +182,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTest) {
     async_completed = true;
     co_return 0;
   };
-  l();
+  l().detach();
   spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
@@ -233,7 +233,7 @@ TEST_F(AsyncAwaitTwoNodeTest, ServiceTimeoutTest) {
     async_completed = true;
     co_return 0;
   };
-  l();
+  l().detach();
   spin(1100ms);
   ASSERT_TRUE(async_completed);
 }
@@ -296,7 +296,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
     async_completed = true;
     co_return 0;
   };
-  l();
+  l().detach();
   spin(2700ms);
   ASSERT_TRUE(async_completed);
 }

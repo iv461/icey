@@ -77,7 +77,7 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncCallbacks) {
     co_await send_goal_and_expect_success(client, 2, 200ms, 200ms, async_completed);
     co_return;
   };
-  l();
+  l().detach();
   spin(1000ms);
   ASSERT_TRUE(async_completed);
 }
@@ -119,7 +119,7 @@ TEST_F(ActionsAsyncAwait, ActionServerWithSyncCallbacks) {
     co_return;
   };
 
-  l();
+  l().detach();
   spin(1000ms);
   ASSERT_TRUE(async_completed);
 }
@@ -161,7 +161,7 @@ TEST_F(ActionsAsyncAwait, ActionServerWithAsyncGoalAndSyncCancelCallbacks) {
     co_return;
   };
 
-  l();
+  l().detach();
   spin(1200ms);
   ASSERT_TRUE(async_completed);
 }
@@ -204,7 +204,7 @@ TEST_F(ActionsAsyncAwait, ActionServerWithSyncGoalAndAsyncCancelCallbacks) {
     co_return;
   };
 
-  l();
+  l().detach();
   spin(1500ms);
   ASSERT_TRUE(async_completed);
 }

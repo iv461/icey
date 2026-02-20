@@ -10,6 +10,9 @@
 #include <exception>  /// for std::exception_ptr
 #include <functional>
 #include <icey/impl/result.hpp>
+#include <optional>
+#include <utility>
+#include <variant>
 
 #if defined(ICEY_CORO_DEBUG_PRINT) || defined(ICEY_PROMISE_LIFETIMES_DEBUG_PRINT)
 #include <fmt/format.h>
@@ -34,62 +37,45 @@ inline bool icey_coro_debug_print = false;
 template <class Value, class Error>
 class Promise;
 
-/// A special type that indicates that there is no value. (Using `void` for this would cause many
-/// problems, so defining an extra struct is easier.)
-struct Nothing {};
+/// Alias used where "no value"/"no error" is needed while preserving existing API spelling.
+using Nothing = std::monostate;
 
 namespace impl {
 
-template <typename, typename = std::void_t<>>
-struct has_promise_type : std::false_type {};
-
 template <typename T>
-struct has_promise_type<T, std::void_t<typename T::promise_type>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool has_promise_type_v = has_promise_type<T>::value;
+concept HasPromiseType = requires { typename T::promise_type; };
 struct PromiseTag {};
 
-/// This state is a sum type that holds either a Value, Error, or none.
+/// Compatibility state wrapper kept for stream/promise APIs.
+/// Internally stores optional<Result<Value, Error>>.
 template <class _Value, class _Error>
-struct PromiseState : private std::variant<std::monostate, _Value, _Error> {
+struct PromiseState {
   using Value = _Value;
   using Error = _Error;
-  using Self = PromiseState<_Value, _Error>;
+  using ResultT = Result<Value, Error>;
 
   PromiseState() = default;
-  PromiseState(const Result<Value, Error> &result) {  // NOLINT
-    if (result.has_value()) {
-      set_value(result.value());
-    } else {
-      set_error(result.error());
-    }
-  }
+  PromiseState(const ResultT &result) : state(result) {}  // NOLINT
 
-  bool has_none() const { return this->index() == 0; }
-  bool has_value() const { return this->index() == 1; }
-  bool has_error() const { return this->index() == 2; }
-  const Value &value() const { return std::get<1>(*this); }
-  const Error &error() const { return std::get<2>(*this); }
-  void set_none() { this->template emplace<0>(std::monostate{}); }
-  void set_value(const Value &x) { this->template emplace<1>(x); }
-  void set_error(const Error &x) { this->template emplace<2>(x); }
-
+  bool has_none() const { return !state.has_value(); }
+  bool has_value() const { return state.has_value() && state->has_value(); }
+  bool has_error() const { return state.has_value() && state->has_error(); }
+  const Value &value() const { return state->value(); }
+  const Error &error() const { return state->error(); }
+  void set_none() { state.reset(); }
+  void set_value(const Value &x) { state = Ok(x); }
+  void set_error(const Error &x) { state = Err(x); }
+  ResultT to_result() const { return state.value(); }
   auto get() const {
     if constexpr (std::is_same_v<Error, Nothing>) {
-      return this->value();
+      return value();
     } else {
       return to_result();
     }
   }
 
-  Result<Value, Error> to_result() const {
-    if (has_value()) {
-      return Ok(value());
-    } else {
-      return Err(error());
-    }
-  }
+private:
+  std::optional<ResultT> state;
 };
 
 /// A Promise is an asynchronous abstraction that yields a value or an error.
@@ -103,11 +89,8 @@ public:
   using Error = _Error;
   using State = PromiseState<_Value, _Error>;
   using Self = PromiseBase<Value, Error>;
-
-  using Cancel = std::function<void(Self &)>;
   using LaunchAsync = std::function<void(Self &)>;
 
-  LaunchAsync launch_async_;
   PromiseBase(LaunchAsync l) : launch_async_(l) {
 #ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
     std::cout << fmt::format("Constructing promise {}", get_type(*this)) << std::endl;
@@ -138,14 +121,6 @@ public:
 #ifdef ICEY_PROMISE_LIFETIMES_DEBUG_PRINT
     std::cout << fmt::format("Destructing promise {}", get_type(*this)) << std::endl;
 #endif
-    /// cancellation only happens when the promise is destroyed before it has a value: This happens
-    /// only when the user forgets to add a co_await
-    if (cancel_) {
-      bool expected_done{false};
-      if (is_done_.compare_exchange_strong(expected_done, true)) {
-        cancel_(*this);
-      }
-    }
   }
 
   /// Store the unhandled exception in case it occurs: We will re-throw it when it's time. (The
@@ -154,47 +129,50 @@ public:
 
   const Value &value() const { return state_.value(); }
   const Error &error() const { return state_.error(); }
-  State &get_state() { return state_; }
-  bool is_done() const { return is_done_.load(); }
 
   /// Sets the state to hold a value, but does not notify about this state change.
-  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
-  /// are synchronized, i.e. thread-safe.
-  void set_value(const Value &x) {
-    bool expected_done{false};
-    if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_.set_value(x);
-    }
-  }
+  /// Thread-safety: not synchronized; use resolve/reject/put_state for concurrent producers.
+  void set_value(const Value &x) { state_.set_value(x); }
 
   /// Sets the state to hold an error, but does not notify about this state change.
-  /// Thread-safety: Concurrent calls to set_state, set_error, set_value, resolve, reject, put_state
-  /// are synchronized, i.e. thread-safe.
-  void set_error(const Error &x) {
-    bool expected_done{false};
-    if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_.set_error(x);
-    }
-  }
+  /// Thread-safety: not synchronized; use resolve/reject/put_state for concurrent producers.
+  void set_error(const Error &x) { state_.set_error(x); }
 
-  void set_state(const State &x) {
-    bool expected_done{false};
-    if (is_done_.compare_exchange_strong(expected_done, true)) {
-      state_ = x;
-    }
-  }
+  /// Sets the state but does not notify. Thread-safety: not synchronized.
+  void set_state(const State &x) { state_ = x; }
 
+  /// Tries to complete the promise with a value and notifies once.
+  /// Thread-safety: concurrent resolve/reject/put_state calls are synchronized via is_done_ CAS.
+  /// After the first successful completion, all subsequent completion attempts are ignored.
   void resolve(const Value &value) {
+    bool expected_done{false};
+    if (!is_done_.compare_exchange_strong(expected_done, true)) {
+      return;
+    }
     set_value(value);
     notify();
   }
 
+  /// Tries to complete the promise with an error and notifies once.
+  /// Thread-safety: concurrent resolve/reject/put_state calls are synchronized via is_done_ CAS.
+  /// After the first successful completion, all subsequent completion attempts are ignored.
   void reject(const Error &error) {
+    bool expected_done{false};
+    if (!is_done_.compare_exchange_strong(expected_done, true)) {
+      return;
+    }
     set_error(error);
     notify();
   }
 
+  /// Tries to complete the promise with an explicit state and notifies once.
+  /// Thread-safety: concurrent resolve/reject/put_state calls are synchronized via is_done_ CAS.
+  /// After the first successful completion, all subsequent completion attempts are ignored.
   void put_state(const State &error) {
+    bool expected_done{false};
+    if (!is_done_.compare_exchange_strong(expected_done, true)) {
+      return;
+    }
     set_state(error);
     notify();
   }
@@ -206,8 +184,6 @@ public:
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
     this->continuation_ = awaiting_coroutine;
     if (this->launch_async_) {
-      /// The only place where we currently  do not launch anything asynchronously is in the actions
-      /// API (because it already has been launched)
       this->launch_async_(*this);
     }
 #ifdef ICEY_CORO_DEBUG_PRINT
@@ -225,18 +201,19 @@ public:
 
   /// Calls the continuation coroutine
   void notify() {
-    if (continuation_) {
+    auto continuation = std::exchange(continuation_, std::coroutine_handle<>{});
+    if (continuation) {
       /// If a coro handle is done, the function ptr is nullptr, so we get a crash on resume
-      if (!continuation_.done()) {
+      if (!continuation.done()) {
 #ifdef ICEY_CORO_DEBUG_PRINT
-        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation_.address()))
+        std::cout << fmt::format("Continuing coroutine: 0x{:x}\n", size_t(continuation.address()))
                   << std::endl;
 #endif
-        continuation_.resume();
+        continuation.resume();
       } else {
 #ifdef ICEY_CORO_DEBUG_PRINT
         fmt::print("NOT continuing coroutine: 0x{:x}, it is done!\n",
-                   size_t(continuation_.address()));
+                   size_t(continuation.address()));
         getchar();
 
 #endif
@@ -252,10 +229,7 @@ public:
     if constexpr (std::is_same_v<Value, Nothing>)
       return;
     else {
-      /*if (has_none()) {
-        // TODOthrow std::runtime_error("Promise has nothing, called resume too early.");
-      }*/
-      return get_state().get();
+      return state_.get();
     }
   }
 
@@ -273,29 +247,21 @@ public:
   };
   FinalAwaiter final_suspend() const noexcept { return {}; }
 
-  /// Set the cancellation function that is called in the destructor if this promise has_none().
-  void set_cancel(Cancel cancel) { cancel_ = cancel; }
   void set_continuation(std::coroutine_handle<> continuation) { continuation_ = continuation; }
-  void detach() { is_detached_.store(true); }
-  bool is_detached() const { return is_detached_.load(); }
+  void detach() { is_detached_.store(true, std::memory_order_release); }
+  bool is_detached() const { return is_detached_.load(std::memory_order_acquire); }
 
 protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
+  /// A function called on await_suspend that starts the asynchronous operation
+  LaunchAsync launch_async_;
+
   /// Indicates whether the promise is done, i.e. was either resolved or rejected.
   std::atomic_bool is_done_{false};
   /// Indicates whether wrapper ownership was released before completion.
   std::atomic_bool is_detached_{false};
-
-  /// A synchronous cancellation function. It unregisters for example a ROS callback so that it is
-  /// not going to be called anymore. Such cancellations are needed because the ROS callback
-  /// captures the Promises object by reference since it needs to write the result to it. But if we
-  /// would destruct the Promise and after that this ROS callback gets called, we get an
-  /// use-after-free bug. The promise must therefore cancel the ROS callback in the destructor.
-  /// Everything that we have in ROS can be cancelled synchronously, so a synchronous cancellation
-  /// function called in the destructor is sufficient.
-  Cancel cancel_;
 
   /// The continuation that is registered when co_awaiting this promise
   std::coroutine_handle<> continuation_{nullptr};
@@ -315,7 +281,7 @@ protected:
 /// https://devblogs.microsoft.com/oldnewthing/20210330-00/?p=105019) So we need to use different
 /// classes and partial specialization.
 template <class _Value, class _Error = Nothing>
-class Promise : public PromiseBase<_Value, _Error> {
+class [[nodiscard("Promise must be used")]] Promise : public PromiseBase<_Value, _Error> {
 public:
   using Self = Promise<_Value, _Error>;
   using Base = PromiseBase<_Value, _Error>;
@@ -351,7 +317,8 @@ public:
 /// specification being weird. There was an attempt to make it less weird, unfortunately
 /// unsuccessful: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1713r0.pdf)
 template <>
-class Promise<void, Nothing> : public PromiseBase<Nothing, Nothing> {
+class [[nodiscard("Promise must be used")]] Promise<void, Nothing>
+    : public PromiseBase<Nothing, Nothing> {
 public:
   using Base = PromiseBase<Nothing, Nothing>;
   using Self = Promise<void, Nothing>;
@@ -385,7 +352,7 @@ public:
 /// We cannot use the structured programming approach because it requires a custom executor but we
 /// want to use the existing ROS executor.
 template <class _Value, class _Error = Nothing>
-class Promise {
+class [[nodiscard("Promise must be used")]] Promise {
 public:
   using Self = Promise<_Value, _Error>;
   using Value = _Value;
@@ -415,9 +382,15 @@ public:
     if (coroutine_ && coroutine_.done()) {
       coroutine_.destroy();
     } else if (coroutine_) {
+      /// TODO to enforce users explicitly detaching, this should probably throw
       coroutine_.promise().detach();
     }
   }
+
+  /// You need to detach a Promise if you are not awaiting it but it should still continue to run.
+  /// Detaching this outer promise means the coroutine state won't be destroyed on destruction of
+  /// outer promise. This also avoid the discarting warning
+  void detach() { coroutine_.promise().detach(); }
 
   bool await_ready() const noexcept { return coroutine_ && coroutine_.done(); }
 

@@ -260,7 +260,7 @@ struct TransformBufferImpl {
   /// this will count as two separate requests.
   using RequestHandle = std::shared_ptr<TransformRequest>;
 
-  explicit TransformBufferImpl(NodeBase &node) : node_(node) { init(); }
+  explicit TransformBufferImpl(std::weak_ptr<NodeBase> node) : node_(node) { init(); }
 
   /// @brief Subscribe to a single transform between two coordinate systems. Every time this
   /// transform changes, the `on_transform` callback function is called. More precisely, every time
@@ -315,13 +315,13 @@ struct TransformBufferImpl {
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
     requests_.emplace(request);
-    node_.add_task_for(uint64_t(request.get()), timeout,
-                       [this, on_error, request = weak_request]() {
-                         if (auto req = request.lock()) {
-                           requests_.erase(req);  // Destroy the request
-                           on_error(tf2::TimeoutException{"Timed out waiting for transform"});
-                         }
-                       });
+    node_.lock()->add_task_for(
+        uint64_t(request.get()), timeout, [this, on_error, request = weak_request]() {
+          if (auto req = request.lock()) {
+            requests_.erase(req);  // Destroy the request
+            on_error(tf2::TimeoutException{"Timed out waiting for transform"});
+          }
+        });
     return request;
   }
 
@@ -341,8 +341,6 @@ struct TransformBufferImpl {
               target_frame, source_frame, time, timeout,
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
-          promise.set_cancel(
-              [this, request_handle](auto &) { this->cancel_request(request_handle); });
         });
   }
 
@@ -364,7 +362,7 @@ struct TransformBufferImpl {
   bool cancel_request(RequestHandle request) {
     std::lock_guard<std::recursive_mutex> lock{mutex_};
     requests_.erase(request);
-    return node_.cancel_task_for(uint64_t(request.get()));
+    return node_.lock()->cancel_task_for(uint64_t(request.get()));
   }
 
   /// We take a tf2_ros::Buffer instead of a tf2::BufferImpl only to be able to use ROS-time API
@@ -375,10 +373,10 @@ struct TransformBufferImpl {
 protected:
   void init() {
     init_tf_buffer();
-    message_subscription_tf_ = node_.create_subscription<tf2_msgs::msg::TFMessage>(
+    message_subscription_tf_ = node_.lock()->create_subscription<tf2_msgs::msg::TFMessage>(
         "/tf", [this](TransformsMsg msg) { on_tf_message(msg, false); },
         tf2_ros::DynamicListenerQoS());
-    message_subscription_tf_static_ = node_.create_subscription<tf2_msgs::msg::TFMessage>(
+    message_subscription_tf_static_ = node_.lock()->create_subscription<tf2_msgs::msg::TFMessage>(
         "/tf_static", [this](TransformsMsg msg) { on_tf_message(msg, true); },
         tf2_ros::StaticListenerQoS());
   }
@@ -392,9 +390,10 @@ protected:
     /// https://answers.ros.org/question/372608/?sort=votes
     /// https://github.com/ros-navigation/navigation2/issues/1182
     /// https://github.com/ros2/geometry2/issues/446
-    buffer_ = std::make_shared<tf2_ros::Buffer>(node_.get_node_clock_interface()->get_clock());
+    buffer_ =
+        std::make_shared<tf2_ros::Buffer>(node_.lock()->get_node_clock_interface()->get_clock());
     auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-        node_.get_node_base_interface(), node_.get_node_timers_interface());
+        node_.lock()->get_node_base_interface(), node_.lock()->get_node_timers_interface());
     buffer_->setCreateTimerInterface(timer_interface);
   }
 
@@ -406,7 +405,7 @@ protected:
         buffer_->setTransform(transform, authority, is_static);
       } catch (const tf2::TransformException &ex) {
         std::string temp = ex.what();
-        RCLCPP_ERROR(node_.get_node_logging_interface()->get_logger(),
+        RCLCPP_ERROR(node_.lock()->get_node_logging_interface()->get_logger(),
                      "Failure to set received transform from %s to %s with error: %s\n",
                      transform.child_frame_id.c_str(), transform.header.frame_id.c_str(),
                      temp.c_str());
@@ -444,7 +443,7 @@ protected:
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
       /// timer
-      node_.cancel_task_for(uint64_t(request.get()));
+      node_.lock()->cancel_task_for(uint64_t(request.get()));
       return true;
     } catch (
         const tf2::TransformException &e) {  /// TODO we could catch for extrapolation here as well
@@ -480,8 +479,8 @@ protected:
     notify_if_any_relevant_transform_was_received();
   }
 
-  NodeBase &node_;  /// Hold weak reference to the NodeBase because the Context owns the NodeBase as
-                    /// well, so we avoid circular reference
+  std::weak_ptr<NodeBase> node_;  /// Hold weak reference to the NodeBase because the Context owns
+                                  /// the NodeBase as well, so we avoid circular reference
 
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
@@ -570,16 +569,16 @@ struct ServiceClientImpl {
   ServiceClientImpl &operator=(const ServiceClientImpl &) = delete;
   ServiceClientImpl &operator=(ServiceClientImpl &&) = delete;
 
-  ServiceClientImpl(NodeBase &node, const std::string &service_name,
+  ServiceClientImpl(std::weak_ptr<NodeBase> node, const std::string &service_name,
                     const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : node_(node), client(node.create_client<ServiceT>(service_name, qos)) {}
+      : node_(node), client(node.lock()->create_client<ServiceT>(service_name, qos)) {}
 
   impl::Promise<Response, std::string> call(Request request, const Duration &timeout) {
     return impl::Promise<Response, std::string>([this, request, timeout](auto &promise) {
       auto future_and_req_id = client->async_send_request(
           request, [this, &promise](typename Client::SharedFuture result) {
             /// Cancel the timeout task since we got a response
-            node_.cancel_task_for(uint64_t(&promise));
+            node_.lock()->cancel_task_for(uint64_t(&promise));
             if (!result.valid()) {
               promise.reject(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
             } else {
@@ -587,19 +586,15 @@ struct ServiceClientImpl {
             }
           });
       auto request_id = future_and_req_id.request_id;
-      node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
+      node_.lock()->add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
         client->remove_pending_request(request_id);
         promise.reject("TIMEOUT");
-      });
-      promise.set_cancel([this, request_id](auto &promise) {
-        node_.cancel_task_for(uint64_t(&promise));
-        client->remove_pending_request(request_id);
       });
     });
   }
 
 protected:
-  NodeBase &node_;
+  std::weak_ptr<NodeBase> node_;
 
 public:
   /// The underlying rclcpp service client
@@ -624,7 +619,7 @@ struct ServiceClient {
 
   /// Constructs the service client. A node has to be provided because it is needed to create
   /// timeout timers for every service call.
-  ServiceClient(NodeBase &node, const std::string &service_name,
+  ServiceClient(std::weak_ptr<NodeBase> node, const std::string &service_name,
                 const rclcpp::QoS &qos = rclcpp::ServicesQoS())
       : impl_(std::make_shared<ServiceClientImpl<ServiceT>>(node, service_name, qos)) {}
 
@@ -672,7 +667,7 @@ struct AsyncGoalHandle {
 
   using ResultPromise = impl::Promise<Result, std::string>;
 
-  AsyncGoalHandle(NodeBase &node, std::shared_ptr<Client> client,
+  AsyncGoalHandle(std::weak_ptr<NodeBase> node, std::shared_ptr<Client> client,
                   const std::shared_ptr<GoalHandle> &goal_handle)
       : node_(node), client_(client), goal_handle_(goal_handle) {}
 
@@ -683,7 +678,7 @@ struct AsyncGoalHandle {
   /// Get the goal status code. See
   /// https://docs.ros.org/en/ros2_packages/rolling/api/action_msgs/msg/GoalStatus.html for possible
   /// values
-  int8_t get_status() { return goal_handle_->get_status; }
+  int8_t get_status() { return goal_handle_->get_status(); }
 
   /// Obtain the result asynchronously.
   ResultPromise result(const Duration &timeout) const {
@@ -691,21 +686,17 @@ struct AsyncGoalHandle {
       try {
         auto request_id =
             client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &result) {
-              node_.cancel_task_for(uint64_t(&promise));
+              node_.lock()->cancel_task_for(uint64_t(&promise));
               promise.resolve(result);
             });
         if (!request_id) {
           promise.reject("FAILED");
         } else {
-          promise.set_cancel([this, request_id = request_id.value()](auto &promise) {
-            client_.lock()->cancel_cancellation_request(request_id);
-            node_.cancel_task_for(uint64_t(&promise));
-          });
-          node_.add_task_for(uint64_t(&promise), timeout,
-                             [this, &promise, request_id = request_id.value()] {
-                               client_.lock()->cancel_result_request(request_id);
-                               promise.reject("RESULT TIMEOUT");
-                             });
+          node_.lock()->add_task_for(uint64_t(&promise), timeout,
+                                     [this, &promise, request_id = request_id.value()] {
+                                       client_.lock()->cancel_result_request(request_id);
+                                       promise.reject("RESULT TIMEOUT");
+                                     });
         }
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         promise.reject(ex.what());
@@ -722,19 +713,16 @@ struct AsyncGoalHandle {
       try {
         auto request_id = client_.lock()->async_cancel_goal(
             goal_handle_, [this, &promise](CancelResponse cancel_response) {
-              node_.cancel_task_for(uint64_t(&promise));
+              node_.lock()->cancel_task_for(uint64_t(&promise));
               promise.resolve(cancel_response);
             });
         /// Add timeout task
-        node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
+        node_.lock()->add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
           client_.lock()->cancel_cancellation_request(request_id);
           client_.lock()->stop_callbacks(goal_handle_);
           promise.reject("RESULT TIMEOUT");
         });
-        promise.set_cancel([this, request_id](auto &promise) {
-          client_.lock()->cancel_cancellation_request(request_id);
-          node_.cancel_task_for(uint64_t(&promise));
-        });
+
       } catch (const ::rclcpp_action::exceptions::UnknownGoalHandleError &ex) {
         /// According to the documentation, an exception can we thrown if we try to cancel, but the
         /// goal was already reached
@@ -747,7 +735,7 @@ struct AsyncGoalHandle {
   std::shared_ptr<GoalHandle> get_goal_handle() const { return goal_handle_; }
 
 private:
-  NodeBase &node_;
+  std::weak_ptr<NodeBase> node_;
   std::weak_ptr<Client> client_;
   std::shared_ptr<GoalHandle> goal_handle_;
 };
@@ -764,10 +752,11 @@ struct ActionClient {
   using RequestID = int64_t;
   using AsyncGoalHandleT = AsyncGoalHandle<ActionT>;
 
-  ActionClient(NodeBase &node, const std::string &action_name) : node_(node) {
+  ActionClient(std::weak_ptr<NodeBase> node, const std::string &action_name) : node_(node) {
     client_ = icey::rclcpp_action::create_client<ActionT>(
-        node.get_node_base_interface(), node.get_node_graph_interface(),
-        node.get_node_logging_interface(), node.get_node_waitables_interface(), action_name);
+        node.lock()->get_node_base_interface(), node.lock()->get_node_graph_interface(),
+        node.lock()->get_node_logging_interface(), node.lock()->get_node_waitables_interface(),
+        action_name);
   }
 
   /// Send asynchronously an action goal: if it is accepted, then you get a goal handle.
@@ -778,7 +767,7 @@ struct ActionClient {
         [this, goal, timeout, feedback_callback](auto &promise) {
           typename Client::SendGoalOptions options;
           options.goal_response_callback = [this, &promise](auto goal_handle) {
-            node_.cancel_task_for(uint64_t(&promise));
+            node_.lock()->cancel_task_for(uint64_t(&promise));
             if (goal_handle == nullptr) {
               promise.reject("GOAL REJECTED");  /// TODO error type
             } else {
@@ -791,24 +780,20 @@ struct ActionClient {
           };
           auto request_id = client_->async_send_goal(goal, options);
           // Acceptance timeout: reject if no acceptance within timeout
-          node_.add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
+          node_.lock()->add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id]() {
             client_->cancel_goal_request(request_id);
             promise.reject("TIMEOUT");
-          });
-          promise.set_cancel([this, request_id](auto &promise) {
-            client_->cancel_goal_request(request_id);
-            node_.cancel_task_for(uint64_t(&promise));
           });
         });
   }
 
 protected:
-  NodeBase &node_;
+  std::weak_ptr<NodeBase> node_;
   std::shared_ptr<Client> client_;
 };
 
 /// A context that provides only async/await related entities.
-class ContextAsyncAwait : public NodeBase {
+class ContextAsyncAwait {
 public:
   ContextAsyncAwait(const ContextAsyncAwait &) = delete;
   ContextAsyncAwait(ContextAsyncAwait &&) = delete;
@@ -820,7 +805,7 @@ public:
   /// @param node the node
   /// @tparam NodeT rclcpp::Node or rclcpp_lifecycle::LifecycleNode
   template <class NodeT>
-  explicit ContextAsyncAwait(NodeT *node) : NodeBase(node) {}
+  explicit ContextAsyncAwait(NodeT *node) : node_base_(std::make_shared<NodeBase>(node)) {}
 
   /// Create a subscription and registers the given callback. The callback can be either
   /// synchronous or asynchronous. Works otherwise the same as [rclcpp::Node::create_subscription].
@@ -829,7 +814,7 @@ public:
       const std::string &topic_name, Callback &&callback,
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
-    auto subscription = node_base().create_subscription<MessageT>(
+    auto subscription = node_base()->create_subscription<MessageT>(
         topic_name, [callback](typename MessageT::SharedPtr msg) { callback(msg); }, qos, options);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     subscriptions_.push_back(std::dynamic_pointer_cast<rclcpp::SubscriptionBase>(subscription));
@@ -845,7 +830,7 @@ public:
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
-    auto timer = node_base().create_wall_timer(period, [callback]() { callback(std::size_t{}); });
+    auto timer = node_base()->create_wall_timer(period, [callback]() { callback(std::size_t{}); });
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
     return timer;
@@ -875,12 +860,12 @@ public:
     /// - https://github.com/ros2/rclcpp/issues/1707
     /// -
     /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
-    auto service = node_base().create_service<ServiceT>(
+    auto service = node_base()->create_service<ServiceT>(
         service_name,
         [callback](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
                    Request request) {
-          using ReturnType = decltype(callback(std::declval<Request>()));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          using ReturnType = decltype(callback(request));
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             auto response = callback(request);
             if (response)  /// If we got nullptr, this means we do not respond.
               server->send_response(*request_id, *response);
@@ -892,7 +877,7 @@ public:
                 server->send_response(*request_id, *response);
               co_return;
             };
-            continuation(server, callback, request_id, request);
+            continuation(server, callback, request_id, request).detach();
           }
         },
         qos);
@@ -919,12 +904,13 @@ public:
     using ServerGoalHandleT = icey::rclcpp_action::ServerGoalHandle<ActionT>;
     using Server = icey::rclcpp_action::Server<ActionT>;
     auto server = icey::rclcpp_action::create_server<ActionT>(
-        get_node_base_interface(), get_node_clock_interface(), get_node_logging_interface(),
-        get_node_waitables_interface(), name,
+        node_base()->get_node_base_interface(), node_base()->get_node_clock_interface(),
+        node_base()->get_node_logging_interface(), node_base()->get_node_waitables_interface(),
+        name,
         [handle_goal](std::shared_ptr<Server> server,
                       const icey::rclcpp_action::GoalRequest<ActionT> &goal_request) {
           using ReturnType = decltype(handle_goal(goal_request.uuid, goal_request.goal));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             server->send_goal_response(goal_request,
                                        handle_goal(goal_request.uuid, goal_request.goal));
           } else {
@@ -935,14 +921,14 @@ public:
                   goal_request, co_await handle_goal(goal_request.uuid, goal_request.goal));
               co_return;
             };
-            continuation(server, handle_goal, goal_request);
+            continuation(server, handle_goal, goal_request).detach();
           }
         },
         [handle_cancel](std::shared_ptr<Server> server,
                         std::shared_ptr<ServerGoalHandleT> goal_handle,
                         const icey::rclcpp_action::CancelRequest &cancel_request) {
           using ReturnType = decltype(handle_cancel(goal_handle));
-          if constexpr (!impl::has_promise_type_v<ReturnType>) {
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
             auto response = handle_cancel(goal_handle);
             server->send_cancel_response(cancel_request, response);
           } else {
@@ -953,11 +939,16 @@ public:
               server->send_cancel_response(cancel_request, response);
               co_return;
             };
-            continuation(server, handle_cancel, cancel_request, goal_handle);
+            continuation(server, handle_cancel, cancel_request, goal_handle).detach();
           }
         },
         [handle_accepted](std::shared_ptr<ServerGoalHandleT> goal_handle) -> void {
-          handle_accepted(goal_handle);
+          using ReturnType = decltype(handle_accepted(goal_handle));
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
+            handle_accepted(goal_handle);
+          } else {
+            handle_accepted(goal_handle).detach();
+          }
         },
         options, group);
     action_servers_.push_back(std::dynamic_pointer_cast<icey::rclcpp_action::ServerBase>(server));
@@ -976,7 +967,7 @@ public:
   TransformBuffer create_transform_buffer() { return TransformBuffer{add_tf_listener_if_needed()}; }
 
   /// Get the NodeBase, i.e. the ROS node using which this Context was created.
-  NodeBase &node_base() { return static_cast<NodeBase &>(*this); }
+  std::shared_ptr<NodeBase> node_base() { return node_base_; }
 
   std::shared_ptr<TransformBufferImpl> add_tf_listener_if_needed() {
     std::call_once(tf_buffer_init_flag_, [this]() {
@@ -991,6 +982,7 @@ public:
   std::shared_ptr<TransformBufferImpl> tf_buffer_impl_;
   /// We need bookkeeping for the service servers.
 protected:
+  std::shared_ptr<NodeBase> node_base_;
   std::once_flag
       tf_buffer_init_flag_;  /// Needed for atomic, i.e. thread-safe initialization of tf buffer.
   std::recursive_mutex bookkeeping_mutex_;

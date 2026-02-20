@@ -24,6 +24,6 @@ icey::Promise<void> receive(std::shared_ptr<icey::Node> node) {
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<icey::Node>("icey_listener_node");
-  receive(node);
+  (void)receive(node);
   rclcpp::spin(node);
 }
