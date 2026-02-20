@@ -3,6 +3,7 @@ project(icey_examples)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
+option(ICEY_ENABLE_TSAN "Build examples with ThreadSanitizer instrumentation" OFF)
 
 set(USE_ASAN_CHECKS OFF)
 if(USE_ASAN_CHECKS)
@@ -71,6 +72,41 @@ target_link_libraries(action_client_async_await_example fmt::fmt)
 ament_auto_add_executable(action_server_async_await_example src/action_server_async_await.cpp)
 target_link_libraries(action_server_async_await_example fmt::fmt)
 
+if(ICEY_ENABLE_TSAN)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(ICEY_EXAMPLE_TARGETS
+      service_server_example
+      signal_generator_example
+      parameters_struct_example
+      tf_subscription_example
+      tf_broadcaster_example
+      using_icey_context_example
+      signal_generator_async_await_example
+      listener_async_await_example
+      talker_async_await_example
+      tf_pub_test_example
+      tf_sychronization_example
+      service_server_async_await_example
+      using_async_await_only_context_example
+      tf_lookup_async_await_example
+      using_image_transport_example
+      listener_example
+      synchronization_example
+      lifecycle_node_example
+      coroutine_example
+      service_client_async_await_example
+      action_client_async_await_example
+      action_server_async_await_example
+    )
+    foreach(target_name IN LISTS ICEY_EXAMPLE_TARGETS)
+      target_compile_options(${target_name} PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+      target_link_options(${target_name} PRIVATE -fsanitize=thread)
+    endforeach()
+  else()
+    message(WARNING "ICEY_ENABLE_TSAN is ON but compiler does not support TSAN flags")
+  endif()
+endif()
+
 if(ament_cmake_auto_VERSION EQUAL 2.7.3)
   ament_auto_package()
 else()
@@ -78,4 +114,3 @@ else()
     USE_SCOPED_HEADER_INSTALL_DIR  # can be removed after Jazzy EOL
   )
 endif()
-

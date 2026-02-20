@@ -103,7 +103,6 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
   const auto l = [this]() -> icey::Promise<int> {
     std::size_t received_cnt{0};
-
     receiver_->icey()
         .create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal")
         .then([&](auto msg) {
