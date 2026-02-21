@@ -243,7 +243,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
 
     sender_->icey()
         .create_timer(100ms)
-        .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+        .then([base_time](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
           geometry_msgs::msg::TransformStamped tf1;
           tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms);
           tf1.header.frame_id = "icey_test_frame1";
@@ -256,7 +256,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
 
     sender_->icey()
         .create_timer(100ms)
-        .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+        .then([base_time](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
           geometry_msgs::msg::TransformStamped tf1;
           tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms);
           tf1.header.frame_id = "icey_test_frame2";
