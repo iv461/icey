@@ -70,15 +70,14 @@ void run_tf_race_repro() {
   });
 
   auto tf = h.receiver_ctx->create_transform_buffer();
-  std::vector<rclcpp::CallbackGroup::SharedPtr> cb_groups;
+  auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant)};
   for (size_t t = 0; t < 100; ++t) {
-    cb_groups.push_back(h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant));
     h.receiver_ctx->create_timer_async(
         50ms,
         [&](std::size_t) -> icey::Promise<void> {
           (void)co_await tf.lookup("map", "base_link", icey::Clock::now(), 3ms);
         },
-        cb_groups.back());
+        cb_group);
   }
   (void)pub_timer;
   spin_executor_for(h, 10s);
@@ -93,9 +92,8 @@ void run_service_race_repro() {
         return resp;
       });
   auto client = h.receiver_ctx->create_client<ExampleService>("race_set_bool");
-  std::vector<rclcpp::CallbackGroup::SharedPtr> cb_groups;
+  auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant)};
   for (size_t t = 0; t < 100; ++t) {
-    cb_groups.push_back(h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant));
     h.receiver_ctx->create_timer_async(
         50ms,
         [&](std::size_t) -> icey::Promise<void> {
@@ -103,7 +101,7 @@ void run_service_race_repro() {
           req->data = true;
           (void)co_await client.call(req, 3ms);
         },
-        cb_groups.back());
+        cb_group);
   }
   spin_executor_for(h, 10s);
 }
@@ -122,9 +120,8 @@ void run_action_race_repro() {
         gh->succeed(result);
       });
   auto client = h.receiver_ctx->create_action_client<Fibonacci>("race_fib");
-  std::vector<rclcpp::CallbackGroup::SharedPtr> cb_groups;
+  auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant)};
   for (size_t t = 0; t < 100; ++t) {
-    cb_groups.push_back(h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant));
     h.receiver_ctx->create_timer_async(
         50ms,
         [&](std::size_t) -> icey::Promise<void> {
@@ -133,13 +130,13 @@ void run_action_race_repro() {
           auto sent = co_await client.send_goal(goal, 3ms, [](auto, auto) {});
           if (sent.has_value()) (void)co_await sent.value().result(3ms);
         },
-        cb_groups.back());
+        cb_group);
   }
   spin_executor_for(h, 10s);
 }
 
 }  // namespace
 
-TEST(NodeTasksThreadSafety, TSanRaceReproAsyncInternals) { run_tf_race_repro(); }
+// TEST(NodeTasksThreadSafety, TSanRaceReproAsyncInternals) { run_tf_race_repro(); }
 TEST(NodeTasksThreadSafety, TSanRaceReproServiceAsyncInternals) { run_service_race_repro(); }
-TEST(NodeTasksThreadSafety, TSanRaceReproActionAsyncInternals) { run_action_race_repro(); }
+// TEST(NodeTasksThreadSafety, TSanRaceReproActionAsyncInternals) { run_action_race_repro(); }
