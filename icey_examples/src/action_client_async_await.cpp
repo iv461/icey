@@ -3,14 +3,13 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// Action client example using ICEY async/await. Demonstrates an async/await API for sending the
-/// goal and obtaining the result. The feedback messages are still received through a callback
-/// because ROS does not guarantee that no feedback can be received before the result request or
-/// even after the result has arrived
-/// (https://github.com/ros2/rclcpp/issues/2782#issuecomment-2761123049). Therefore, to prevent
-/// losing any feedback messages, ICEY does not provide an async/await API for obtaining feedback
-/// and instead uses a callback. See also https://github.com/iv461/icey/pull/17 for an alternative
-/// API proposal once this issue is fixed in rclcpp.
+/// Action client example using ICEY async/await. It demonstrates an async/await API for sending the
+/// goal and obtaining the result. Feedback messages are received via a callback because ROS does
+/// not guarantee that feedback cannot be received before or after the result request
+/// (https://github.com/ros2/rclcpp/issues/2782#issuecomment-2761123049). To prevent losing any
+/// feedback messages, ICEY does not provide an async/await API for obtaining feedback and instead
+/// uses a callback. See https://github.com/iv461/icey/pull/17 for an alternative API proposal once
+/// this issue is fixed in rclcpp.
 
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
@@ -30,7 +29,7 @@ icey::Promise<void> call_action(std::shared_ptr<rclcpp::Node> node) {
   const auto on_feedback = [node](auto, auto) {
     RCLCPP_WARN(node->get_logger(), "Got some feedback");
   };
-  
+
   RCLCPP_INFO_STREAM(node->get_logger(), "Sending goal.. ");
   // Request a goal with 2 seconds timeout, pass a callback for obtaining feedback messages
   icey::Result<icey::AsyncGoalHandle<Fibonacci>, std::string> maybe_goal_handle =
