@@ -138,5 +138,5 @@ void run_action_race_repro() {
 }  // namespace
 
 TEST(NodeTasksThreadSafety, TSanRaceReproAsyncInternals) { run_tf_race_repro(); }
-// TEST(NodeTasksThreadSafety, TSanRaceReproServiceAsyncInternals) { run_service_race_repro(); }
-// TEST(NodeTasksThreadSafety, TSanRaceReproActionAsyncInternals) { run_action_race_repro(); }
+TEST(NodeTasksThreadSafety, TSanRaceReproServiceAsyncInternals) { run_service_race_repro(); }
+TEST(NodeTasksThreadSafety, TSanRaceReproActionAsyncInternals) { run_action_race_repro(); }

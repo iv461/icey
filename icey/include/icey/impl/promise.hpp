@@ -182,7 +182,8 @@ public:
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
     this->continuation_ = awaiting_coroutine;
     if (this->launch_async_) {
-      this->launch_async_(*this);
+      auto launch = std::move(launch_async_); // copy the lambda to avoid a race between two threads, one resuming the coroutine that holds this promise object stored and therefore eventually destroying this promise, while this thread still has not finished calling launch_async
+      launch(*this);
     }
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format(
@@ -391,7 +392,9 @@ public:
   /// Detaching this outer promise means the coroutine state won't be destroyed on destruction of
   /// outer promise. This also avoid the discarting warning
   void detach() {
-    coroutine_.promise().detach(); // Tell the promise it must continue after final suspend so that it reaches the final state where the coroutine state is destroyed. 
+    coroutine_.promise()
+        .detach();  // Tell the promise it must continue after final suspend so that it reaches the
+                    // final state where the coroutine state is destroyed.
     coroutine_ = nullptr;  /// set to nullptr so that we do not access coroutine and cause a race on
                            /// destruction where potentially another thread continues the coroutine
                            /// that this thread has just detached
