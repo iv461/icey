@@ -158,6 +158,7 @@ public:
   std::map<int64_t, ResponseCallback> pending_cancel_responses;
   std::mutex cancel_requests_mutex;
 
+  std::mutex goal_id_rng_mutex;
   std::independent_bits_engine<std::mt19937, 8, unsigned int> random_bytes_generator;
 };
 
@@ -428,6 +429,7 @@ int64_t ClientBase::send_cancel_request(std::shared_ptr<void> request, ResponseC
 
 GoalUUID ClientBase::generate_goal_id() {
   GoalUUID goal_id;
+  std::lock_guard<std::mutex> lock(pimpl_->goal_id_rng_mutex);
   // TODO(hidmic): Do something better than this for UUID generation.
   // std::generate(
   //   goal_id.uuid.begin(), goal_id.uuid.end(),
@@ -697,14 +699,17 @@ void ClientBase::execute(std::shared_ptr<void> &data_in) {
 }
 
 bool ClientBase::cancel_cancellation_request(int64_t request_id) {
+  std::lock_guard<std::mutex> lock(pimpl_->cancel_requests_mutex);
   return pimpl_->pending_cancel_responses.erase(request_id);
 }
 
 bool ClientBase::cancel_goal_request(int64_t request_id) {
+  std::lock_guard<std::mutex> lock(pimpl_->goal_requests_mutex);
   return pimpl_->pending_goal_responses.erase(request_id);
 }
 
 bool ClientBase::cancel_result_request(int64_t request_id) {
+  std::lock_guard<std::mutex> lock(pimpl_->result_requests_mutex);
   return pimpl_->pending_result_responses.erase(request_id);
 }
 
