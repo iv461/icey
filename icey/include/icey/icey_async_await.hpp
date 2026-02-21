@@ -31,7 +31,7 @@
 namespace icey {
 
 #ifndef ICEY_ASYNC_AWAIT_THREAD_SAFE
-#define ICEY_ASYNC_AWAIT_THREAD_SAFE 0
+#define ICEY_ASYNC_AWAIT_THREAD_SAFE 1
 #endif
 
 using Clock = std::chrono::system_clock;
