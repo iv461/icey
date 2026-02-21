@@ -227,18 +227,20 @@ void run_race_repro_async_internals() {
   });
 
   auto tf = h.receiver_ctx->create_transform_buffer();
-  auto group = h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  std::vector<rclcpp::CallbackGroup::SharedPtr> cb_groups;
+
   for (size_t t = 0; t < 100; t++) {
+    cb_groups.push_back(h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant));
     h.receiver_ctx->create_timer_async(
         50ms,
         [&, t](std::size_t) -> icey::Promise<void> {
           std::cout << "Timer #" << t << " Thread ID: " << std::this_thread::get_id() << std::endl;
           auto transform = co_await tf.lookup("map", "base_link", icey::Clock::now(), 3ms);
         },
-        group);
+        cb_groups.back());
   }
 
-  spin_until(h, []() { return false; }, 2s);
+  spin_until(h, []() { return false; }, 10s);
   std::cout << "Main Thread ID: " << std::this_thread::get_id() << std::endl;
 }
 
