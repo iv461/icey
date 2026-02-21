@@ -42,14 +42,16 @@ struct Harness {
 };
 
 template <class Pred>
+[[maybe_unused]]
 void spin_until(Harness &h, Pred pred, std::chrono::milliseconds timeout) {
-  auto start = icey::Clock::now();
-  while ((icey::Clock::now() - start) < timeout) {
-    h.exec.spin_once(10ms);
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline && !pred()) {
+    h.exec.spin_some();
+    std::this_thread::sleep_for(1ms);
   }
 }
 
-void run_tf_stress() {
+[[maybe_unused]] void run_tf_stress() {
   Harness h;
   auto tf = h.receiver_ctx->create_transform_buffer();
   auto tf_pub = h.sender->create_publisher<tf2_msgs::msg::TFMessage>("/tf", 10);
@@ -112,7 +114,7 @@ void run_tf_stress() {
   EXPECT_EQ(unexpected_errors.load(std::memory_order_relaxed), 0U);
 }
 
-void run_service_stress() {
+[[maybe_unused]] void run_service_stress() {
   Harness h;
   h.sender_ctx->create_service<ExampleService>(
       "stress_set_bool", [](std::shared_ptr<ExampleService::Request> req) {
@@ -156,7 +158,7 @@ void run_service_stress() {
   EXPECT_GT(ok.load(std::memory_order_relaxed) + errors.load(std::memory_order_relaxed), 0U);
 }
 
-void run_action_stress() {
+[[maybe_unused]] void run_action_stress() {
   Harness h;
   h.sender_ctx->create_action_server<Fibonacci>(
       "stress_fib",
@@ -235,12 +237,16 @@ void run_race_repro_async_internals() {
         50ms,
         [&, t](std::size_t) -> icey::Promise<void> {
           std::cout << "Timer #" << t << " Thread ID: " << std::this_thread::get_id() << std::endl;
-          auto transform = co_await tf.lookup("map", "base_link", icey::Clock::now(), 3ms);
+          (void)co_await tf.lookup("map", "base_link", icey::Clock::now(), 3ms);
         },
         cb_groups.back());
   }
 
-  spin_until(h, []() { return false; }, 10s);
+  std::thread spin_thread([&]() { h.exec.spin(); });
+  std::this_thread::sleep_for(10s);
+  h.exec.cancel();
+  if (spin_thread.joinable()) spin_thread.join();
+  pub_timer->cancel();
   std::cout << "Main Thread ID: " << std::this_thread::get_id() << std::endl;
 }
 
