@@ -903,8 +903,17 @@ public:
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(
       const Duration &period, Callback callback, rclcpp::CallbackGroup::SharedPtr group = nullptr) {
-    auto timer =
-        node_base()->create_wall_timer(period, [callback]() { callback(std::size_t{}); }, group);
+    auto timer = node_base()->create_wall_timer(
+        period,
+        [callback]() {
+          using ReturnType = decltype(callback(std::size_t{}));
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
+            callback(std::size_t{});
+          } else {
+            callback(std::size_t{}).detach();
+          }
+        },
+        group);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
     return timer;
