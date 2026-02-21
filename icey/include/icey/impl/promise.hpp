@@ -377,18 +377,25 @@ public:
                              std::size_t(coroutine_.address()))
               << std::endl;
 #endif
-    if (coroutine_ && coroutine_.done()) {
-      coroutine_.destroy();
-    } else if (coroutine_) {
-      /// TODO to enforce users explicitly detaching, this should probably throw
-      coroutine_.promise().detach();
+    if (coroutine_) {
+      if (coroutine_.done()) {
+        coroutine_.destroy();
+      } else {
+        /// TODO to enforce users explicitly detaching, this should probably throw
+        detach();
+      }
     }
   }
 
   /// You need to detach a Promise if you are not awaiting it but it should still continue to run.
   /// Detaching this outer promise means the coroutine state won't be destroyed on destruction of
   /// outer promise. This also avoid the discarting warning
-  void detach() { coroutine_.promise().detach(); }
+  void detach() {
+    coroutine_.promise().detach(); // Tell the promise it must continue after final suspend so that it reaches the final state where the coroutine state is destroyed. 
+    coroutine_ = nullptr;  /// set to nullptr so that we do not access coroutine and cause a race on
+                           /// destruction where potentially another thread continues the coroutine
+                           /// that this thread has just detached
+  }
 
   bool await_ready() const noexcept { return coroutine_ && coroutine_.done(); }
 
