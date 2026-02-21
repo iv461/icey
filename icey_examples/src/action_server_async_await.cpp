@@ -15,7 +15,6 @@
 
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
-using GoalHandleFibonacci = icey::rclcpp_action::ClientGoalHandle<Fibonacci>;
 using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacci>;
 
 int main(int argc, char **argv) {
