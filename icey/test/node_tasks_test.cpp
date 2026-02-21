@@ -70,7 +70,9 @@ void run_tf_race_repro() {
   });
 
   auto tf = h.receiver_ctx->create_transform_buffer();
-  auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant)};
+  auto cb_group{
+      h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant, false)};
+  h.exec.add_callback_group(cb_group, h.receiver->get_node_base_interface());
   for (size_t t = 0; t < 100; ++t) {
     h.receiver_ctx->create_timer_async(
         50ms,
@@ -92,7 +94,9 @@ void run_service_race_repro() {
         return resp;
       });
   auto client = h.receiver_ctx->create_client<ExampleService>("race_set_bool");
-  auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant)};
+  auto cb_group{
+      h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant, false)};
+  h.exec.add_callback_group(cb_group, h.receiver->get_node_base_interface());
   for (size_t t = 0; t < 100; ++t) {
     h.receiver_ctx->create_timer_async(
         50ms,
@@ -120,7 +124,9 @@ void run_action_race_repro() {
         gh->succeed(result);
       });
   auto client = h.receiver_ctx->create_action_client<Fibonacci>("race_fib");
-  auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant)};
+  auto cb_group{
+      h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant, false)};
+  h.exec.add_callback_group(cb_group, h.receiver->get_node_base_interface());
   for (size_t t = 0; t < 100; ++t) {
     h.receiver_ctx->create_timer_async(
         50ms,
