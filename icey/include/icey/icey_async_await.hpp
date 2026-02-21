@@ -901,8 +901,10 @@ public:
   /// \note A callback signature that accepts a TimerInfo argument is not implemented yet
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
-  std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
-    auto timer = node_base()->create_wall_timer(period, [callback]() { callback(std::size_t{}); });
+  std::shared_ptr<rclcpp::TimerBase> create_timer_async(
+      const Duration &period, Callback callback, rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    auto timer =
+        node_base()->create_wall_timer(period, [callback]() { callback(std::size_t{}); }, group);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
     return timer;

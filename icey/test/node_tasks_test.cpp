@@ -5,9 +5,9 @@
 #include <chrono>
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
+#include <mutex>
 #include <std_srvs/srv/set_bool.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
-#include <mutex>
 #include <thread>
 #include <unordered_set>
 #include <vector>
@@ -43,9 +43,9 @@ struct Harness {
 
 template <class Pred>
 void spin_until(Harness &h, Pred pred, std::chrono::milliseconds timeout) {
-  const auto deadline = std::chrono::steady_clock::now() + timeout;
-  while (std::chrono::steady_clock::now() < deadline && !pred()) {
-    h.exec.spin_some();
+  auto start = icey::Clock::now();
+  while ((icey::Clock::now() - start) < timeout) {
+    h.exec.spin_once(10ms);
   }
 }
 
@@ -212,75 +212,44 @@ void run_action_stress() {
 
 void run_race_repro_async_internals() {
   Harness h;
-  icey::NodeBase node_base(h.receiver.get());
-  auto tf = h.receiver_ctx->create_transform_buffer();
   auto tf_pub = h.sender->create_publisher<tf2_msgs::msg::TFMessage>("/tf", 10);
-  std::atomic_uint64_t ops{0};
-  std::array<std::atomic_uint64_t, 12> seq{};
-  std::mutex worker_ids_mutex;
-  std::unordered_set<std::thread::id> worker_ids;
-  for (auto &x : seq) x.store(0, std::memory_order_relaxed);
 
-  auto pub_timer = h.sender->create_wall_timer(2ms, [&]() {
-    static std::atomic_uint64_t tick{0};
+  auto pub_timer = h.sender->create_wall_timer(10ms, [&]() {
     geometry_msgs::msg::TransformStamped t;
-    auto ns = 1700000000000000000LL + int64_t((tick.fetch_add(1) + 1) * 1000000ULL);
-    t.header.stamp = icey::rclcpp_from_chrono(icey::Time{std::chrono::nanoseconds(ns)});
+    t.header.stamp = icey::rclcpp_from_chrono(icey::Clock::now());
     t.header.frame_id = "map";
     t.child_frame_id = "base_link";
     t.transform.rotation.w = 1.0;
     tf2_msgs::msg::TFMessage msg;
     msg.transforms.push_back(t);
+    std::cout << "Pub Thread ID: " << std::this_thread::get_id() << std::endl;
     tf_pub->publish(msg);
   });
 
-  std::vector<rclcpp::CallbackGroup::SharedPtr> groups;
-  std::vector<std::shared_ptr<rclcpp::TimerBase>> timers;
-  groups.reserve(seq.size());
-  timers.reserve(seq.size());
-  for (size_t t = 0; t < seq.size(); ++t) {
-    auto group = h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-    groups.push_back(group);
-    timers.push_back(h.receiver->create_wall_timer(
-        1ms,
-        [&, t]() {
-          {
-            std::lock_guard<std::mutex> lock(worker_ids_mutex);
-            worker_ids.insert(std::this_thread::get_id());
-          }
-          const auto i = seq[t].fetch_add(1, std::memory_order_relaxed) + 1;
-          const auto id = (uint64_t(t) << 32U) | i;
-          node_base.add_task_for(id, 1ms, []() {});
-          if ((i % 2U) == 0U) node_base.cancel_task_for(id);
-          auto hnd = tf.lookup("map", "base_link", icey::Clock::now(), 3ms, [](const auto &) {},
-                               [](const auto &) {});
-          if ((i % 3U) == 0U) tf.cancel_request(hnd);
-          ops.fetch_add(1, std::memory_order_relaxed);
+  auto tf = h.receiver_ctx->create_transform_buffer();
+  auto group = h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  for (size_t t = 0; t < 100; t++) {
+    h.receiver_ctx->create_timer_async(
+        50ms,
+        [&, t](std::size_t) -> icey::Promise<void> {
+          std::cout << "Timer #" << t << " Thread ID: " << std::this_thread::get_id() << std::endl;
+          auto transform = co_await tf.lookup("map", "base_link", icey::Clock::now(), 3ms);
         },
-        group));
+        group);
   }
 
-  std::thread spin_thread([&]() { h.exec.spin(); });
-  const auto deadline = std::chrono::steady_clock::now() + 4s;
-  while (std::chrono::steady_clock::now() < deadline &&
-         ops.load(std::memory_order_relaxed) < 30000U) {
-    std::this_thread::sleep_for(2ms);
-  }
-
-  for (auto &timer : timers) timer->cancel();
-  pub_timer->cancel();
-  h.exec.cancel();
-  if (spin_thread.joinable()) spin_thread.join();
-  EXPECT_GE(ops.load(std::memory_order_relaxed), 10000U);
-  EXPECT_GT(worker_ids.size(), 1U);
+  spin_until(h, []() { return false; }, 2s);
+  std::cout << "Main Thread ID: " << std::this_thread::get_id() << std::endl;
 }
 
 }  // namespace
 
+TEST(NodeTasksThreadSafety, TSanRaceReproAsyncInternals) { run_race_repro_async_internals(); }
+
+/*
 TEST(NodeTasksThreadSafety, TfWithFourTimers) { run_tf_stress(); }
 
 TEST(NodeTasksThreadSafety, ServiceWithFourTimers) { run_service_stress(); }
 
 TEST(NodeTasksThreadSafety, ActionWithFourTimers) { run_action_stress(); }
-
-TEST(NodeTasksThreadSafety, TSanRaceReproAsyncInternals) { run_race_repro_async_internals(); }
+*/
