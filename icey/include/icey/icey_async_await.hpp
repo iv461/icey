@@ -9,12 +9,16 @@
 /// can include this header only and get faster compile times.
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <icey/action/action.hpp>
 #include <icey/impl/promise.hpp>
+#include <mutex>
 #include <optional>
 #include <thread>  /// for ID
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/version.h"
@@ -25,6 +29,10 @@
 #include "tf2_ros/qos.hpp"
 
 namespace icey {
+
+#ifndef ICEY_ASYNC_AWAIT_THREAD_SAFE
+#define ICEY_ASYNC_AWAIT_THREAD_SAFE 1
+#endif
 
 using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
@@ -113,6 +121,9 @@ struct NodeBase {
   template <class CallbackT>
   void add_task_for(uint64_t id, const Duration &timeout, CallbackT on_timeout,
                     rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
     oneoff_cancelled_timers_.clear();
     oneoff_active_timers_.emplace(id, create_wall_timer(
                                           timeout,
@@ -125,6 +136,9 @@ struct NodeBase {
 
   /// Cancel a previously scheduled task by key (no-op if not present)
   bool cancel_task_for(uint64_t id) {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
     auto it = oneoff_active_timers_.find(id);
     if (it == oneoff_active_timers_.end()) return false;
     auto timer = it->second;
@@ -201,11 +215,24 @@ protected:
   std::unordered_set<std::shared_ptr<rclcpp::TimerBase>> oneoff_cancelled_timers_;
   /// Active one-off tasks keyed by a stable uintptr_t key
   std::unordered_map<uint64_t, std::shared_ptr<rclcpp::TimerBase>> oneoff_active_timers_;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+  mutable std::mutex oneoff_tasks_mutex_;
+#endif
 
 public:
   // Test helpers (introspection)
-  std::size_t oneoff_active_task_count() const { return oneoff_active_timers_.size(); }
-  std::size_t oneoff_cancelled_task_count() const { return oneoff_cancelled_timers_.size(); }
+  std::size_t oneoff_active_task_count() const {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
+    return oneoff_active_timers_.size();
+  }
+  std::size_t oneoff_cancelled_task_count() const {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::mutex> lock{oneoff_tasks_mutex_};
+#endif
+    return oneoff_cancelled_timers_.size();
+  }
 };
 
 /// A subscription + buffer for transforms that allows for asynchronous lookups and to subscribe on
@@ -253,6 +280,10 @@ struct TransformBufferImpl {
     OnTransform on_transform;
     OnError on_error;
     std::optional<Time> maybe_time;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::atomic_bool finished{false};
+    mutable std::mutex state_mutex;
+#endif
   };
 
   /// A request for a transform lookup: It represents effectively a single call to the async_lookup
@@ -314,10 +345,21 @@ struct TransformBufferImpl {
                                                     on_transform, on_error, time)};
 
     auto weak_request = std::weak_ptr<TransformRequest>(request);
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
+#endif
     requests_.emplace(request);
     node_.lock()->add_task_for(
         uint64_t(request.get()), timeout, [this, on_error, request = weak_request]() {
           if (auto req = request.lock()) {
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+            bool expected = false;
+            if (!req->finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
+                                                       std::memory_order_acquire)) {
+              return;
+            }
+            std::lock_guard<std::recursive_mutex> lock{mutex_};
+#endif
             requests_.erase(req);  // Destroy the request
             on_error(tf2::TimeoutException{"Timed out waiting for transform"});
           }
@@ -423,8 +465,18 @@ protected:
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg =
           buffer_->lookupTransform(info.target_frame(), info.source_frame(), tf2::TimePointZero);
-      if (!info.last_received_transform || tf_msg != *info.last_received_transform) {
-        info.last_received_transform = tf_msg;
+      bool changed;
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+      {
+        std::lock_guard<std::mutex> lock{info.state_mutex};
+        changed = !info.last_received_transform || tf_msg != *info.last_received_transform;
+        if (changed) info.last_received_transform = tf_msg;
+      }
+#else
+      changed = !info.last_received_transform || tf_msg != *info.last_received_transform;
+      if (changed) info.last_received_transform = tf_msg;
+#endif
+      if (changed) {
         info.on_transform(tf_msg);
         return true;
       }
@@ -440,6 +492,13 @@ protected:
       /// std::vector/tree.
       geometry_msgs::msg::TransformStamped tf_msg = buffer_->lookupTransform(
           request->target_frame(), request->source_frame(), request->maybe_time.value());
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
+      bool expected = false;
+      if (!request->finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
+                                                     std::memory_order_acquire)) {
+        return false;
+      }
+#endif
       request->on_transform(tf_msg);
       /// If the request is destroyed gracefully (lookup succeeded), cancel the associated task
       /// timer
@@ -453,12 +512,15 @@ protected:
   }
 
   void notify_if_any_relevant_transform_was_received() {
-    /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
+/// Iterate all requests, notify and maybe erase them if they are requests for a specific time
+#if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::vector<RequestHandle> requests_to_delete;
-    mutex_.lock();
-    auto requests = requests_;
-    mutex_.unlock();
-
+    std::vector<RequestHandle> requests;
+    {
+      std::lock_guard<std::recursive_mutex> lock{mutex_};
+      requests.reserve(requests_.size());
+      for (const auto &req : requests_) requests.push_back(req);
+    }
     for (auto req : requests) {
       if (req->maybe_time) {
         if (maybe_notify_specific_time(req)) {
@@ -469,9 +531,19 @@ protected:
         maybe_notify(*req);
       }
     }
-    mutex_.lock();
-    for (auto k : requests_to_delete) requests_.erase(k);
-    mutex_.unlock();
+    std::lock_guard<std::recursive_mutex> lock{mutex_};
+    for (const auto &k : requests_to_delete) requests_.erase(k);
+#else
+    std::erase_if(requests_, [this](auto req) {
+      if (req->maybe_time) {
+        return maybe_notify_specific_time(req);
+      } else {
+        // If it is a regular subscription, is is persistend and never erased
+        maybe_notify(*req);
+        return false;
+      }
+    });
+#endif
   }
 
   void on_tf_message(const TransformsMsg &msg, bool is_static) {
@@ -570,8 +642,9 @@ struct ServiceClientImpl {
   ServiceClientImpl &operator=(ServiceClientImpl &&) = delete;
 
   ServiceClientImpl(std::weak_ptr<NodeBase> node, const std::string &service_name,
-                    const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : node_(node), client(node.lock()->create_client<ServiceT>(service_name, qos)) {}
+                    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                    rclcpp::CallbackGroup::SharedPtr group = nullptr)
+      : node_(node), client(node.lock()->create_client<ServiceT>(service_name, qos, group)) {}
 
   impl::Promise<Response, std::string> call(Request request, const Duration &timeout) {
     return impl::Promise<Response, std::string>([this, request, timeout](auto &promise) {
@@ -620,8 +693,9 @@ struct ServiceClient {
   /// Constructs the service client. A node has to be provided because it is needed to create
   /// timeout timers for every service call.
   ServiceClient(std::weak_ptr<NodeBase> node, const std::string &service_name,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : impl_(std::make_shared<ServiceClientImpl<ServiceT>>(node, service_name, qos)) {}
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                rclcpp::CallbackGroup::SharedPtr group = nullptr)
+      : impl_(std::make_shared<ServiceClientImpl<ServiceT>>(node, service_name, qos, group)) {}
 
   // clang-format off
   /*! Make an asynchronous call to the service. Returns a impl::Promise that can be awaited using `co_await`.
@@ -752,11 +826,21 @@ struct ActionClient {
   using RequestID = int64_t;
   using AsyncGoalHandleT = AsyncGoalHandle<ActionT>;
 
-  ActionClient(std::weak_ptr<NodeBase> node, const std::string &action_name) : node_(node) {
+  /// Construct an async action client wrapper.
+  /// @param node Node base used to create the underlying rclcpp_action client.
+  /// @param action_name Name of the action topic (e.g. "/fibonacci").
+  /// @param group Optional callback group for the action client waitable. If nullptr, the node's
+  /// default callback group is used.
+  /// @param options rcl_action client options. Defaults to
+  /// rcl_action_client_get_default_options().
+  ActionClient(std::weak_ptr<NodeBase> node, const std::string &action_name,
+               rclcpp::CallbackGroup::SharedPtr group = nullptr,
+               const rcl_action_client_options_t &options = rcl_action_client_get_default_options())
+      : node_(node) {
     client_ = icey::rclcpp_action::create_client<ActionT>(
         node.lock()->get_node_base_interface(), node.lock()->get_node_graph_interface(),
         node.lock()->get_node_logging_interface(), node.lock()->get_node_waitables_interface(),
-        action_name);
+        action_name, group, options);
   }
 
   /// Send asynchronously an action goal: if it is accepted, then you get a goal handle.
@@ -814,8 +898,16 @@ public:
       const std::string &topic_name, Callback &&callback,
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
+    auto callback_wrapper = [callback = std::forward<Callback>(callback)](auto... args) {
+      using ReturnType = decltype(callback(args...));
+      if constexpr (!impl::HasPromiseType<ReturnType>) {
+        callback(args...);
+      } else {
+        callback(args...).detach();
+      }
+    };
     auto subscription = node_base()->create_subscription<MessageT>(
-        topic_name, [callback](typename MessageT::SharedPtr msg) { callback(msg); }, qos, options);
+        topic_name, std::move(callback_wrapper), qos, options);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     subscriptions_.push_back(std::dynamic_pointer_cast<rclcpp::SubscriptionBase>(subscription));
     return subscription;
@@ -829,8 +921,22 @@ public:
   /// \note A callback signature that accepts a TimerInfo argument is not implemented yet
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
-  std::shared_ptr<rclcpp::TimerBase> create_timer_async(const Duration &period, Callback callback) {
-    auto timer = node_base()->create_wall_timer(period, [callback]() { callback(std::size_t{}); });
+  std::shared_ptr<rclcpp::TimerBase> create_timer_async(
+      const Duration &period, Callback &&callback,
+      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    auto timer = node_base()->create_wall_timer(
+        period,
+        [callback = std::forward<Callback>(callback)]() {
+          static_assert(std::is_invocable_v<const std::decay_t<Callback> &>,
+                        "create_timer_async callback must be invocable as ()");
+          using ReturnType = decltype(callback());
+          if constexpr (!impl::HasPromiseType<ReturnType>) {
+            callback();
+          } else {
+            callback().detach();
+          }
+        },
+        group);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     timers_.push_back(std::dynamic_pointer_cast<rclcpp::TimerBase>(timer));
     return timer;
@@ -849,8 +955,9 @@ public:
   /// icey::Promise<std::shared_ptr<ServiceT::Response>>
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
-      const std::string &service_name, Callback callback,
-      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+      const std::string &service_name, Callback &&callback,
+      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using Request = std::shared_ptr<typename ServiceT::Request>;
     using RequestID = std::shared_ptr<rmw_request_id_t>;
     /// The type of the user callback that can response synchronously (i.e. immediately): It
@@ -862,8 +969,9 @@ public:
     /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
     auto service = node_base()->create_service<ServiceT>(
         service_name,
-        [callback](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
-                   Request request) {
+        [callback = std::forward<Callback>(callback)](
+            std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
+            Request request) {
           using ReturnType = decltype(callback(request));
           if constexpr (!impl::HasPromiseType<ReturnType>) {
             auto response = callback(request);
@@ -880,7 +988,7 @@ public:
             continuation(server, callback, request_id, request).detach();
           }
         },
-        qos);
+        qos, group);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     services_.push_back(std::dynamic_pointer_cast<rclcpp::ServiceBase>(service));
     return service;
@@ -890,8 +998,9 @@ public:
   /// Works otherwise the same as [rclcpp::Node::create_client].
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name,
-                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return ServiceClient<ServiceT>(node_base(), service_name, qos);
+                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                                        rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    return ServiceClient<ServiceT>(node_base(), service_name, qos, group);
   }
 
   /// Create an action server with a synchronous or asynchronous callbacks.
@@ -955,10 +1064,17 @@ public:
     return server;
   }
 
-  /// Create an action client that supports async/await send_goal
+  /// Create an action client that supports async/await send_goal.
+  /// @param action_name Name of the action topic (e.g. "/fibonacci").
+  /// @param group Optional callback group for the action client waitable. If nullptr, the node's
+  /// default callback group is used.
+  /// @param options rcl_action client options. Defaults to
+  /// rcl_action_client_get_default_options().
   template <class ActionT>
-  ActionClient<ActionT> create_action_client(const std::string &action_name) {
-    return ActionClient<ActionT>(node_base(), action_name);
+  ActionClient<ActionT> create_action_client(
+      const std::string &action_name, rclcpp::CallbackGroup::SharedPtr group = nullptr,
+      const rcl_action_client_options_t &options = rcl_action_client_get_default_options()) {
+    return ActionClient<ActionT>(node_base(), action_name, group, options);
   }
 
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a

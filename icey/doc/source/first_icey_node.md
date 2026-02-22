@@ -67,9 +67,4 @@ ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over
 
 We also do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. In ICEY, you do not need to store subscriptions/timers/services as members of the class, ICEY does this bookkeeping for you.
 
-
-```{warning}
-ICEY-nodes can currently only be used with a single-threaded executor.
-```
-
 In the following, we will look more closely into how Subscriptions and Timers follow the `Stream` concept and how this changes the way of asynchronous programming. 
