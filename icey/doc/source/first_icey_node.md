@@ -56,9 +56,7 @@ public:
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<MyNode>();
-  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
-  exec.add_node(node->get_node_base_interface());
-  exec.spin();
+  rclcpp::spin(node);
 }
 ```
 
@@ -68,10 +66,5 @@ In this example, we can already see some interesting things:
 ICEY represents ROS primitives such as timers as a `Stream`, an abstraction over an asynchronous sequence of values. Streams have a method `.then` that registers a callback on each new value and returns a new stream. 
 
 We also do not need to store the timer object anywhere, because the lifetime of entities in ICEY is bound to the lifetime of the node. In ICEY, you do not need to store subscriptions/timers/services as members of the class, ICEY does this bookkeeping for you.
-
-
-```{warning}
-ICEY-nodes can currently only be used with a single-threaded executor.
-```
 
 In the following, we will look more closely into how Subscriptions and Timers follow the `Stream` concept and how this changes the way of asynchronous programming. 
