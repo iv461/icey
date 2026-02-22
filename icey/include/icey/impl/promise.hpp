@@ -180,11 +180,6 @@ public:
   /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
   /// callback-based API.
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-    this->continuation_ = awaiting_coroutine;
-    if (this->launch_async_) {
-      auto launch = std::move(launch_async_); // copy the lambda to avoid a race between two threads, one resuming the coroutine that holds this promise object stored and therefore eventually destroying this promise, while this thread still has not finished calling launch_async
-      launch(*this);
-    }
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format(
                      "PromiseBase await_suspend(), awaiting coroutine is 0x{:x}, "
@@ -192,6 +187,20 @@ public:
                      std::size_t(awaiting_coroutine.address()), get_type(*this))
               << std::endl;
 #endif
+    this->continuation_ = awaiting_coroutine;
+    if (this->launch_async_) {
+      // copy the lambda to avoid a race between two threads, one resuming the coroutine that holds
+      // this promise object  and therefore eventually destroying this promise, while this
+      // thread still has not finished calling launch_async (such a race is detected by TSAN
+      // otherwise)
+      /// Note that it is perfectly legal that when calling launch, another thread might imediately
+      /// resume this coroutine. Citing cppreference
+      /// (https://en.cppreference.com/w/cpp/language/coroutines.html): "Note that the coroutine is
+      /// fully suspended before entering awaiter.await_suspend(). Its handle can be shared with
+      /// another thread and resumed before the await_suspend() function returns."
+      auto launch = launch_async_;
+      launch(*this);
+    }
     return true;
   }
 
@@ -254,6 +263,9 @@ protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
+  /// An exception that may be present additionally
+  std::exception_ptr exception_ptr_{nullptr};
+
   /// A function called on await_suspend that starts the asynchronous operation
   LaunchAsync launch_async_;
 
@@ -264,8 +276,6 @@ protected:
 
   /// The continuation that is registered when co_awaiting this promise
   std::coroutine_handle<> continuation_{nullptr};
-  /// An exception that may be present additionally
-  std::exception_ptr exception_ptr_{nullptr};
 };
 
 /// A Promise is used in ICEY for async/await. It is returned from asynchronous operations such as a
@@ -400,7 +410,7 @@ public:
                            /// that this thread has just detached
   }
 
-  bool await_ready() const noexcept { return coroutine_ && coroutine_.done(); }
+  bool await_ready() const noexcept { return !coroutine_ || coroutine_.done(); }
 
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
     if (coroutine_.done()) {
