@@ -17,7 +17,5 @@ int main(int argc, char **argv) {
       "my_string", [&](std_msgs::msg::String::SharedPtr msg) {
         RCLCPP_INFO_STREAM(node->get_logger(), "Got value: " << msg->data);
       });
-  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
-  exec.add_node(node->get_node_base_interface());
-  exec.spin();
+  rclcpp::spin(node);
 }

@@ -40,7 +40,5 @@ int main(int argc, char **argv) {
         << " and point cloud with time " << point_cloud->header.stamp);
         */
       });
-  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
-  exec.add_node(node->get_node_base_interface());
-  exec.spin();
+  rclcpp::spin(node);
 }

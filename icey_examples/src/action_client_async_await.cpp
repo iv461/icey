@@ -64,8 +64,6 @@ int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("icey_action_client_async_await_example");
   (void)call_action(node);
-  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
-  exec.add_node(node->get_node_base_interface());
-  exec.spin();
+  rclcpp::spin(node);
   return 0;
 }

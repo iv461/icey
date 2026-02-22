@@ -35,7 +35,5 @@ int main(int argc, char **argv) {
   node->icey().create_service<ExampleService>("set_bool_service3", service_cb);
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Started services " << service_name.value());
-  rclcpp::executors::MultiThreadedExecutor exec{rclcpp::ExecutorOptions(), 8};
-  exec.add_node(node->get_node_base_interface());
-  exec.spin();
+  rclcpp::spin(node);
 }
