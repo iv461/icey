@@ -824,11 +824,22 @@ struct ActionClient {
   using RequestID = int64_t;
   using AsyncGoalHandleT = AsyncGoalHandle<ActionT>;
 
-  ActionClient(std::weak_ptr<NodeBase> node, const std::string &action_name) : node_(node) {
+  /// Construct an async action client wrapper.
+  /// @param node Node base used to create the underlying rclcpp_action client.
+  /// @param action_name Name of the action topic (e.g. "/fibonacci").
+  /// @param group Optional callback group for the action client waitable. If nullptr, the node's
+  /// default callback group is used.
+  /// @param options rcl_action client options. Defaults to
+  /// rcl_action_client_get_default_options().
+  ActionClient(
+      std::weak_ptr<NodeBase> node, const std::string &action_name,
+      rclcpp::CallbackGroup::SharedPtr group = nullptr,
+      const rcl_action_client_options_t &options = rcl_action_client_get_default_options())
+      : node_(node) {
     client_ = icey::rclcpp_action::create_client<ActionT>(
         node.lock()->get_node_base_interface(), node.lock()->get_node_graph_interface(),
         node.lock()->get_node_logging_interface(), node.lock()->get_node_waitables_interface(),
-        action_name);
+        action_name, group, options);
   }
 
   /// Send asynchronously an action goal: if it is accepted, then you get a goal handle.
@@ -1038,10 +1049,17 @@ public:
     return server;
   }
 
-  /// Create an action client that supports async/await send_goal
+  /// Create an action client that supports async/await send_goal.
+  /// @param action_name Name of the action topic (e.g. "/fibonacci").
+  /// @param group Optional callback group for the action client waitable. If nullptr, the node's
+  /// default callback group is used.
+  /// @param options rcl_action client options. Defaults to
+  /// rcl_action_client_get_default_options().
   template <class ActionT>
-  ActionClient<ActionT> create_action_client(const std::string &action_name) {
-    return ActionClient<ActionT>(node_base(), action_name);
+  ActionClient<ActionT> create_action_client(
+      const std::string &action_name, rclcpp::CallbackGroup::SharedPtr group = nullptr,
+      const rcl_action_client_options_t &options = rcl_action_client_get_default_options()) {
+    return ActionClient<ActionT>(node_base(), action_name, group, options);
   }
 
   /// Creates a transform buffer that works like the usual combination of a tf2_ros::Buffer and a
