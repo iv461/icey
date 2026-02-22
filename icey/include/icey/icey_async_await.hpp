@@ -642,8 +642,9 @@ struct ServiceClientImpl {
   ServiceClientImpl &operator=(ServiceClientImpl &&) = delete;
 
   ServiceClientImpl(std::weak_ptr<NodeBase> node, const std::string &service_name,
-                    const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : node_(node), client(node.lock()->create_client<ServiceT>(service_name, qos)) {}
+                    const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                    rclcpp::CallbackGroup::SharedPtr group = nullptr)
+      : node_(node), client(node.lock()->create_client<ServiceT>(service_name, qos, group)) {}
 
   impl::Promise<Response, std::string> call(Request request, const Duration &timeout) {
     return impl::Promise<Response, std::string>([this, request, timeout](auto &promise) {
@@ -692,8 +693,9 @@ struct ServiceClient {
   /// Constructs the service client. A node has to be provided because it is needed to create
   /// timeout timers for every service call.
   ServiceClient(std::weak_ptr<NodeBase> node, const std::string &service_name,
-                const rclcpp::QoS &qos = rclcpp::ServicesQoS())
-      : impl_(std::make_shared<ServiceClientImpl<ServiceT>>(node, service_name, qos)) {}
+                const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                rclcpp::CallbackGroup::SharedPtr group = nullptr)
+      : impl_(std::make_shared<ServiceClientImpl<ServiceT>>(node, service_name, qos, group)) {}
 
   // clang-format off
   /*! Make an asynchronous call to the service. Returns a impl::Promise that can be awaited using `co_await`.
@@ -831,10 +833,9 @@ struct ActionClient {
   /// default callback group is used.
   /// @param options rcl_action client options. Defaults to
   /// rcl_action_client_get_default_options().
-  ActionClient(
-      std::weak_ptr<NodeBase> node, const std::string &action_name,
-      rclcpp::CallbackGroup::SharedPtr group = nullptr,
-      const rcl_action_client_options_t &options = rcl_action_client_get_default_options())
+  ActionClient(std::weak_ptr<NodeBase> node, const std::string &action_name,
+               rclcpp::CallbackGroup::SharedPtr group = nullptr,
+               const rcl_action_client_options_t &options = rcl_action_client_get_default_options())
       : node_(node) {
     client_ = icey::rclcpp_action::create_client<ActionT>(
         node.lock()->get_node_base_interface(), node.lock()->get_node_graph_interface(),
@@ -897,8 +898,16 @@ public:
       const std::string &topic_name, Callback &&callback,
       const rclcpp::QoS &qos = rclcpp::SystemDefaultsQoS(),
       const rclcpp::SubscriptionOptions &options = rclcpp::SubscriptionOptions()) {
+    auto callback_wrapper = [callback = std::forward<Callback>(callback)](auto... args) {
+      using ReturnType = decltype(callback(args...));
+      if constexpr (!impl::HasPromiseType<ReturnType>) {
+        callback(args...);
+      } else {
+        callback(args...).detach();
+      }
+    };
     auto subscription = node_base()->create_subscription<MessageT>(
-        topic_name, [callback](typename MessageT::SharedPtr msg) { callback(msg); }, qos, options);
+        topic_name, std::move(callback_wrapper), qos, options);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     subscriptions_.push_back(std::dynamic_pointer_cast<rclcpp::SubscriptionBase>(subscription));
     return subscription;
@@ -913,15 +922,18 @@ public:
   /// Works otherwise the same as [rclcpp::Node::create_timer].
   template <class Callback>
   std::shared_ptr<rclcpp::TimerBase> create_timer_async(
-      const Duration &period, Callback callback, rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+      const Duration &period, Callback &&callback,
+      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     auto timer = node_base()->create_wall_timer(
         period,
-        [callback]() {
-          using ReturnType = decltype(callback(std::size_t{}));
+        [callback = std::forward<Callback>(callback)]() {
+          static_assert(std::is_invocable_v<const std::decay_t<Callback> &>,
+                        "create_timer_async callback must be invocable as ()");
+          using ReturnType = decltype(callback());
           if constexpr (!impl::HasPromiseType<ReturnType>) {
-            callback(std::size_t{});
+            callback();
           } else {
-            callback(std::size_t{}).detach();
+            callback().detach();
           }
         },
         group);
@@ -943,8 +955,9 @@ public:
   /// icey::Promise<std::shared_ptr<ServiceT::Response>>
   template <class ServiceT, class Callback>
   std::shared_ptr<rclcpp::Service<ServiceT>> create_service(
-      const std::string &service_name, Callback callback,
-      const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
+      const std::string &service_name, Callback &&callback,
+      const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+      rclcpp::CallbackGroup::SharedPtr group = nullptr) {
     using Request = std::shared_ptr<typename ServiceT::Request>;
     using RequestID = std::shared_ptr<rmw_request_id_t>;
     /// The type of the user callback that can response synchronously (i.e. immediately): It
@@ -956,8 +969,9 @@ public:
     /// [rcl_send_response](http://docs.ros.org/en/jazzy/p/rcl/generated/function_service_8h_1a8631f47c48757228b813d0849d399d81.html#_CPPv417rcl_send_responsePK13rcl_service_tP16rmw_request_id_tPv)
     auto service = node_base()->create_service<ServiceT>(
         service_name,
-        [callback](std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
-                   Request request) {
+        [callback = std::forward<Callback>(callback)](
+            std::shared_ptr<rclcpp::Service<ServiceT>> server, RequestID request_id,
+            Request request) {
           using ReturnType = decltype(callback(request));
           if constexpr (!impl::HasPromiseType<ReturnType>) {
             auto response = callback(request);
@@ -974,7 +988,7 @@ public:
             continuation(server, callback, request_id, request).detach();
           }
         },
-        qos);
+        qos, group);
     std::lock_guard<std::recursive_mutex> lock{bookkeeping_mutex_};
     services_.push_back(std::dynamic_pointer_cast<rclcpp::ServiceBase>(service));
     return service;
@@ -984,8 +998,9 @@ public:
   /// Works otherwise the same as [rclcpp::Node::create_client].
   template <class ServiceT>
   ServiceClient<ServiceT> create_client(const std::string &service_name,
-                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS()) {
-    return ServiceClient<ServiceT>(node_base(), service_name, qos);
+                                        const rclcpp::QoS &qos = rclcpp::ServicesQoS(),
+                                        rclcpp::CallbackGroup::SharedPtr group = nullptr) {
+    return ServiceClient<ServiceT>(node_base(), service_name, qos, group);
   }
 
   /// Create an action server with a synchronous or asynchronous callbacks.

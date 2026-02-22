@@ -261,7 +261,7 @@ size_t ClientBase::get_number_of_ready_services() { return pimpl_->num_services;
 void ClientBase::add_to_wait_set(rcl_wait_set_t &wait_set) {
   std::lock_guard<std::recursive_mutex> lock(pimpl_->action_client_mutex_);
   rcl_ret_t ret = rcl_action_wait_set_add_action_client(&wait_set, pimpl_->client_handle.get(),
-                                                         nullptr, nullptr);
+                                                        nullptr, nullptr);
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret, "ClientBase::add_to_wait_set() failed");
   }
@@ -275,7 +275,7 @@ void ClientBase::add_to_wait_set(rcl_wait_set_t *wait_set) {
   }
   std::lock_guard<std::recursive_mutex> lock(pimpl_->action_client_mutex_);
   rcl_ret_t ret = rcl_action_wait_set_add_action_client(wait_set, pimpl_->client_handle.get(),
-                                                         nullptr, nullptr);
+                                                        nullptr, nullptr);
   if (RCL_RET_OK != ret) {
     rclcpp::exceptions::throw_from_rcl_error(ret, "ClientBase::add_to_wait_set() failed");
   }
