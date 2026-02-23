@@ -92,12 +92,13 @@ void run_service_race_repro() {
         resp->success = req->data;
         return resp;
       });
-  auto client = h.receiver_ctx->create_client<ExampleService>("race_set_bool");
   auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant, false)};
   h.exec.add_callback_group(cb_group, h.receiver->get_node_base_interface());
+  auto client = h.receiver_ctx->create_client<ExampleService>("race_set_bool",
+                                                              rclcpp::ServicesQoS(), cb_group);
   for (size_t t = 0; t < 100; ++t) {
     h.receiver_ctx->create_timer_async(
-        50ms,
+        1ms,
         [&]() -> icey::Promise<void> {
           auto req = std::make_shared<ExampleService::Request>();
           req->data = true;
@@ -121,12 +122,12 @@ void run_action_race_repro() {
         result->sequence = {0, 1, 1, 2};
         gh->succeed(result);
       });
-  auto client = h.receiver_ctx->create_action_client<Fibonacci>("race_fib");
   auto cb_group{h.receiver->create_callback_group(rclcpp::CallbackGroupType::Reentrant, false)};
   h.exec.add_callback_group(cb_group, h.receiver->get_node_base_interface());
+  auto client = h.receiver_ctx->create_action_client<Fibonacci>("race_fib", cb_group);
   for (size_t t = 0; t < 100; ++t) {
     h.receiver_ctx->create_timer_async(
-        50ms,
+        5ms,
         [&]() -> icey::Promise<void> {
           Fibonacci::Goal goal;
           goal.order = 4;

@@ -128,8 +128,9 @@ struct NodeBase {
     oneoff_active_timers_.emplace(id, create_wall_timer(
                                           timeout,
                                           [this, id, on_timeout]() {
-                                            cancel_task_for(id);
-                                            on_timeout();
+                                            if (cancel_task_for(id)) {
+                                              on_timeout();
+                                            }
                                           },
                                           group));
   }
@@ -651,11 +652,12 @@ struct ServiceClientImpl {
       auto future_and_req_id = client->async_send_request(
           request, [this, &promise](typename Client::SharedFuture result) {
             /// Cancel the timeout task since we got a response
-            node_.lock()->cancel_task_for(uint64_t(&promise));
-            if (!result.valid()) {
-              promise.reject(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
-            } else {
-              promise.resolve(result.get());
+            if (node_.lock()->cancel_task_for(uint64_t(&promise))) {
+              if (!result.valid()) {
+                promise.reject(rclcpp::ok() ? "TIMEOUT" : "INTERRUPTED");
+              } else {
+                promise.resolve(result.get());
+              }
             }
           });
       auto request_id = future_and_req_id.request_id;
@@ -760,8 +762,9 @@ struct AsyncGoalHandle {
       try {
         auto request_id =
             client_.lock()->async_get_result(goal_handle_, [this, &promise](const Result &result) {
-              node_.lock()->cancel_task_for(uint64_t(&promise));
-              promise.resolve(result);
+              if (node_.lock()->cancel_task_for(uint64_t(&promise))) {
+                promise.resolve(result);
+              }
             });
         if (!request_id) {
           promise.reject("FAILED");
@@ -787,8 +790,9 @@ struct AsyncGoalHandle {
       try {
         auto request_id = client_.lock()->async_cancel_goal(
             goal_handle_, [this, &promise](CancelResponse cancel_response) {
-              node_.lock()->cancel_task_for(uint64_t(&promise));
-              promise.resolve(cancel_response);
+              if (node_.lock()->cancel_task_for(uint64_t(&promise))) {
+                promise.resolve(cancel_response);
+              }
             });
         /// Add timeout task
         node_.lock()->add_task_for(uint64_t(&promise), timeout, [this, &promise, request_id] {
