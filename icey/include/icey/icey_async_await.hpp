@@ -355,8 +355,7 @@ struct TransformBufferImpl {
           if (auto req = request.lock()) {
 #if ICEY_ASYNC_AWAIT_THREAD_SAFE
             bool expected = false;
-            if (!req->finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
-                                                       std::memory_order_acquire)) {
+            if (!req->finished.compare_exchange_strong(expected, true)) {
               return;
             }
             std::lock_guard<std::recursive_mutex> lock{mutex_};
@@ -766,7 +765,7 @@ struct AsyncGoalHandle {
                 promise.resolve(result);
               }
             });
-        if (!request_id) {
+        if (!request_id) { /// This can only happen in case the rcl/rmw function fails
           promise.reject("FAILED");
         } else {
           node_.lock()->add_task_for(uint64_t(&promise), timeout,
@@ -783,8 +782,6 @@ struct AsyncGoalHandle {
 
   /// Cancel this goal. Warning: Not co_awaiting this promise leads to use-after free !
   // The promise is rejected in case the goal was already reached.
-  /// TODO check in gdb whether it is a problem that this promise might resolve synchronously, i.e.
-  /// do we get a stack overflow ?
   impl::Promise<CancelResponse, std::string> cancel(const Duration &timeout) const {
     return impl::Promise<CancelResponse, std::string>([this, timeout](auto &promise) {
       try {
@@ -855,11 +852,12 @@ struct ActionClient {
         [this, goal, timeout, feedback_callback](auto &promise) {
           typename Client::SendGoalOptions options;
           options.goal_response_callback = [this, &promise](auto goal_handle) {
-            node_.lock()->cancel_task_for(uint64_t(&promise));
-            if (goal_handle == nullptr) {
-              promise.reject("GOAL REJECTED");  /// TODO error type
-            } else {
-              promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
+            if (node_.lock()->cancel_task_for(uint64_t(&promise))) {
+              if (goal_handle == nullptr) {
+                promise.reject("GOAL REJECTED");  /// TODO error type
+              } else {
+                promise.resolve(AsyncGoalHandle<ActionT>(node_, client_, goal_handle));
+              }
             }
           };
           /// HINT:  Wrap inside a lambda to support feedback_callback being a coroutine
