@@ -38,13 +38,13 @@ using Clock = std::chrono::system_clock;
 using Time = std::chrono::time_point<Clock>;
 using Duration = Clock::duration;
 
-static rclcpp::Time rclcpp_from_chrono(const Time &time_point) {
+[[maybe_unused]] static rclcpp::Time rclcpp_from_chrono(const Time &time_point) {
   return rclcpp::Time(std::chrono::time_point_cast<std::chrono::nanoseconds>(time_point)
                           .time_since_epoch()
                           .count());
 }
 
-static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
+[[maybe_unused]] static Time rclcpp_to_chrono(const rclcpp::Time &time_point) {
   return Time(std::chrono::nanoseconds(time_point.nanoseconds()));
 }
 
@@ -237,18 +237,21 @@ public:
 };
 
 struct TransformBufferImpl;
-
-/// A TransformBuffer offers a modern, asynchronous interface for looking up transforms at a given
+/// A TransformBuffer offers an async/await interface for looking up transforms at a given
 /// point in time. This class is lightweight pointer to underlying implementation and can therefore
 /// be copied and passed around by value (PIMPL idiom)
 struct TransformBuffer {
   using RequestHandle = uint64_t;
   using OnTransform = std::function<void(const geometry_msgs::msg::TransformStamped &)>;
   using OnError = std::function<void(const tf2::TransformException &)>;
+  using GetFrame = std::function<std::string()>;
 
   /// Initializes the transform buffer by starting the subscriptions on TF. Returns *this;
   /// Does nothing if already initialized.
-  TransformBuffer &init(std:weak_ptr<NodeBase> node_base);
+  TransformBuffer &init(std::weak_ptr<NodeBase> node_base);
+
+  /// Return the underlying tf2_ros::Buffer.
+  std::shared_ptr<tf2_ros::Buffer> get_buffer() const;
 
   /// @brief Makes an asynchronous lookup for a for a transform at the given time between the given
   /// frames. Callback-based API.
@@ -265,16 +268,20 @@ struct TransformBuffer {
   /// @warning Currently the timeout is measured with wall-time, i.e. does not consider sim-time due
   /// to the limitation of ROS 2 Humble only offering wall-timers
   uint64_t lookup(const std::string &target_frame, const std::string &source_frame, Time time,
-                       const Duration &timeout, OnTransform on_transform, OnError on_error) {
-    return impl_->lookup(target_frame, source_frame, time, timeout, on_transform, on_error);
-  }
+                  const Duration &timeout, OnTransform on_transform, OnError on_error);
+
+  /// @brief Subscribe to a single transform between two coordinate systems. Every time this
+  /// transform changes, the `on_transform` callback function is called. More precisely, every time
+  /// a message arrives on the `/tf` or `/tf_static` topic, a lookup is attempted. If the lookup
+  /// fails, `on_error` is called. If the lookup succeeds and if the looked up transform is
+  // different to the previously emitted one, the `on_transform` callback is called.
+  void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
+                        const OnTransform &on_transform, const OnError &on_error);
 
   /// Cancel a transform request: This means that the registered callbacks will no longer be called.
   /// If the given request does not exist, this function does nothing, in this case it returns
   /// false. If a request was cleaned up, this function returns true.
-  bool cancel_request(uint64_t request_id) {
-    return impl_->cancel_request(request_id);
-  }
+  bool cancel_request(uint64_t request_id);
 
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
   ///
@@ -285,9 +292,7 @@ struct TransformBuffer {
   /// @return A future that resolves with the transform or with an error if a timeout occurs
   impl::Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(
       const std::string &target_frame, const std::string &source_frame, const Time &time,
-      const Duration &timeout) {
-    return impl_->lookup(target_frame, source_frame, time, timeout);
-  }
+      const Duration &timeout);
 
   /// @brief Same as `lookup`, but accepts a ROS time point
   ///
@@ -298,9 +303,7 @@ struct TransformBuffer {
   /// @return A future that resolves with the transform or with an error if a timeout occurs
   impl::Promise<geometry_msgs::msg::TransformStamped, std::string> lookup(
       const std::string &target_frame, const std::string &source_frame, const rclcpp::Time &time,
-      const Duration &timeout) {
-    return impl_->lookup(target_frame, source_frame, time, timeout);
-  }
+      const Duration &timeout);
 
 private:
   std::shared_ptr<TransformBufferImpl> impl_;

@@ -22,13 +22,6 @@ struct TransformBufferImpl {
   using OnTransform = std::function<void(const TransformMsg &)>;
   using OnError = std::function<void(const tf2::TransformException &)>;
   using GetFrame = std::function<std::string()>;
-
-  /// We make this class non-copyable since it captures the this-pointer in clojures.
-  TransformBufferImpl(const TransformBufferImpl &) = delete;
-  TransformBufferImpl(TransformBufferImpl &&) = delete;
-  TransformBufferImpl &operator=(const TransformBufferImpl &) = delete;
-  TransformBufferImpl &operator=(TransformBufferImpl &&) = delete;
-
   /// A transform request stores a request for looking up a transform between two coordinate
   /// systems. Either (1) at a particular time with a timeout, or (2) as a subscription. When
   /// "subscribing" to a transform, we yield a transform each time it changes.
@@ -56,7 +49,14 @@ struct TransformBufferImpl {
   /// A request for a transform lookup: It represents effectively a single call to the async_lookup
   /// function. Even if you call async_lookup with the exact same arguments (same frames and time),
   /// this will count as two separate requests.
+  /// TODO do not use the address, ABA problem !
   using RequestHandle = std::shared_ptr<TransformRequest>;
+
+  /// We make this class non-copyable since it captures the this-pointer in clojures.
+  TransformBufferImpl(const TransformBufferImpl &) = delete;
+  TransformBufferImpl(TransformBufferImpl &&) = delete;
+  TransformBufferImpl &operator=(const TransformBufferImpl &) = delete;
+  TransformBufferImpl &operator=(TransformBufferImpl &&) = delete;
 
   explicit TransformBufferImpl(std::weak_ptr<NodeBase> node) : node_(node) { init(); }
 
@@ -68,8 +68,9 @@ struct TransformBufferImpl {
   void add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
                         const OnTransform &on_transform, const OnError &on_error) {
     std::lock_guard<std::recursive_mutex> lock{mutex_};
-    requests_.emplace(
-        std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error));
+    auto req =
+        std::make_shared<TransformRequest>(target_frame, source_frame, on_transform, on_error);
+    requests_.emplace(uint64_t(req.get()), req);
   }
 
   /// @brief Queries the TF buffer for a transform at the given time between the given frames. It
@@ -105,8 +106,8 @@ struct TransformBufferImpl {
   /// `cancel_request` if you want to cancel the request.
   /// @warning Currently the timeout is measured with wall-time, i.e. does not consider sim-time due
   /// to the limitation of ROS 2 Humble only offering wall-timers
-  RequestHandle lookup(const std::string &target_frame, const std::string &source_frame, Time time,
-                       const Duration &timeout, OnTransform on_transform, OnError on_error) {
+  uint64_t lookup(const std::string &target_frame, const std::string &source_frame, Time time,
+                  const Duration &timeout, OnTransform on_transform, OnError on_error) {
     auto request{std::make_shared<TransformRequest>([target_frame]() { return target_frame; },
                                                     [source_frame]() { return source_frame; },
                                                     on_transform, on_error, time)};
@@ -115,7 +116,7 @@ struct TransformBufferImpl {
 #if ICEY_ASYNC_AWAIT_THREAD_SAFE
     std::lock_guard<std::recursive_mutex> lock{mutex_};
 #endif
-    requests_.emplace(request);
+    requests_.emplace(uint64_t(request.get()), request);
     node_.lock()->add_task_for(
         uint64_t(request.get()), timeout, [this, on_error, request = weak_request]() {
           if (auto req = request.lock()) {
@@ -126,11 +127,11 @@ struct TransformBufferImpl {
             }
             std::lock_guard<std::recursive_mutex> lock{mutex_};
 #endif
-            requests_.erase(req);  // Destroy the request
+            requests_.erase(uint64_t(req.get()));  // Destroy the request
             on_error(tf2::TimeoutException{"Timed out waiting for transform"});
           }
         });
-    return request;
+    return uint64_t(request.get());
   }
 
   /// @brief Does an asynchronous lookup for a single transform that can be awaited using `co_await`
@@ -169,7 +170,7 @@ struct TransformBufferImpl {
   /// If the given request does not exist, this function does nothing.
   bool cancel_request(uint64_t request_id) {
     std::lock_guard<std::recursive_mutex> lock{mutex_};
-    requests_.erase(request);
+    requests_.erase(request_id);
     return node_.lock()->cancel_task_for(request_id);
   }
 
@@ -280,17 +281,17 @@ protected:
   void notify_if_any_relevant_transform_was_received() {
 /// Iterate all requests, notify and maybe erase them if they are requests for a specific time
 #if ICEY_ASYNC_AWAIT_THREAD_SAFE
-    std::vector<RequestHandle> requests_to_delete;
-    std::vector<RequestHandle> requests;
+    std::vector<uint64_t> requests_to_delete;
+    std::unordered_map<uint64_t, RequestHandle> requests_copy;
+    /// TODO do something more clever than copying the entire hashtable under a lock
     {
       std::lock_guard<std::recursive_mutex> lock{mutex_};
-      requests.reserve(requests_.size());
-      for (const auto &req : requests_) requests.push_back(req);
+      requests_copy = requests_;
     }
-    for (auto req : requests) {
+    for (auto [req_id, req] : requests_copy) {
       if (req->maybe_time) {
         if (maybe_notify_specific_time(req)) {
-          requests_to_delete.push_back(req);
+          requests_to_delete.push_back(req_id);
         }
       } else {
         // If it is a regular subscription, is is persistend and never erased
@@ -324,7 +325,7 @@ protected:
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr message_subscription_tf_static_;
 
   std::recursive_mutex mutex_;
-  std::unordered_set<RequestHandle> requests_;
+  std::unordered_map<uint64_t, RequestHandle> requests_;
 };
 
 TransformBuffer &TransformBuffer::init(std::weak_ptr<NodeBase> node_base) {
@@ -334,4 +335,32 @@ TransformBuffer &TransformBuffer::init(std::weak_ptr<NodeBase> node_base) {
   return *this;
 }
 
+uint64_t TransformBuffer::lookup(const std::string &target_frame, const std::string &source_frame,
+                                 Time time, const Duration &timeout, OnTransform on_transform,
+                                 OnError on_error) {
+  return impl_->lookup(target_frame, source_frame, time, timeout, on_transform, on_error);
+}
+
+bool TransformBuffer::cancel_request(uint64_t request_id) {
+  return impl_->cancel_request(request_id);
+}
+
+void TransformBuffer::add_subscription(const GetFrame &target_frame, const GetFrame &source_frame,
+                                       const OnTransform &on_transform, const OnError &on_error) {
+  impl_->add_subscription(target_frame, source_frame, on_transform, on_error);
+}
+
+impl::Promise<geometry_msgs::msg::TransformStamped, std::string> TransformBuffer::lookup(
+    const std::string &target_frame, const std::string &source_frame, const Time &time,
+    const Duration &timeout) {
+  return impl_->lookup(target_frame, source_frame, time, timeout);
+}
+
+impl::Promise<geometry_msgs::msg::TransformStamped, std::string> TransformBuffer::lookup(
+    const std::string &target_frame, const std::string &source_frame, const rclcpp::Time &time,
+    const Duration &timeout) {
+  return impl_->lookup(target_frame, source_frame, time, timeout);
+}
+
+std::shared_ptr<tf2_ros::Buffer> TransformBuffer::get_buffer() const { return impl_->buffer_; }
 }  // namespace icey
