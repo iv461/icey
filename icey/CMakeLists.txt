@@ -28,6 +28,7 @@ include_directories(
 )
 
 ament_auto_add_library(icey 
+  src/icey_async_await.cpp
   src/actions/client.cpp 
   src/actions/server.cpp 
   src/actions/server_goal_handle.cpp  
