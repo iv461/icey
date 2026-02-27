@@ -1,4 +1,13 @@
+/// Copyright © 2025 Technische Hochschule Augsburg
+/// Copyright 2018 Open Source Robotics Foundation, Inc.
+/// All rights reserved.
+/// Author: Ivo Ivanov
+/// This software is licensed under the Apache License, Version 2.0.
+
 #include <icey/icey_async_await.hpp>
+
+#include "tf2_ros/create_timer_ros.hpp"
+#include "tf2_ros/qos.hpp"
 
 namespace icey {
 
@@ -146,7 +155,7 @@ struct TransformBufferImpl {
       const Duration &timeout) {
     return impl::Promise<geometry_msgs::msg::TransformStamped, std::string>(
         [this, target_frame, source_frame, time, timeout](auto &promise) {
-          auto request_handle = this->lookup(
+          (void)this->lookup(
               target_frame, source_frame, time, timeout,
               [&promise](const geometry_msgs::msg::TransformStamped &tf) { promise.resolve(tf); },
               [&promise](const tf2::TransformException &ex) { promise.reject(ex.what()); });
