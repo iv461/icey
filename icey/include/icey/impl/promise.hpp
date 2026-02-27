@@ -29,7 +29,6 @@ static std::string get_type(T &t) {
 #endif
 
 /// This header defines a promise type supporting async/await (C++ 20 coroutines) only.
-/// Not thread-safe.
 namespace icey {
 
 inline bool icey_coro_debug_print = false;
@@ -37,7 +36,6 @@ inline bool icey_coro_debug_print = false;
 template <class Value, class Error>
 class Promise;
 
-/// Alias used where "no value"/"no error" is needed while preserving existing API spelling.
 using Nothing = std::monostate;
 
 namespace impl {
@@ -182,10 +180,6 @@ public:
   /// as continuation. Suspends the current coroutine, i.e. returns true. Used only when wrapping a
   /// callback-based API.
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
-    this->continuation_ = awaiting_coroutine;
-    if (this->launch_async_) {
-      this->launch_async_(*this);
-    }
 #ifdef ICEY_CORO_DEBUG_PRINT
     std::cout << fmt::format(
                      "PromiseBase await_suspend(), awaiting coroutine is 0x{:x}, "
@@ -193,6 +187,20 @@ public:
                      std::size_t(awaiting_coroutine.address()), get_type(*this))
               << std::endl;
 #endif
+    this->continuation_ = awaiting_coroutine;
+    if (this->launch_async_) {
+      // copy the lambda to avoid a race between two threads, one resuming the coroutine that holds
+      // this promise object  and therefore eventually destroying this promise, while this
+      // thread still has not finished calling launch_async (such a race is detected by TSAN
+      // otherwise)
+      /// Note that it is perfectly legal that when calling launch, another thread might imediately
+      /// resume this coroutine. Citing cppreference
+      /// (https://en.cppreference.com/w/cpp/language/coroutines.html): "Note that the coroutine is
+      /// fully suspended before entering awaiter.await_suspend(). Its handle can be shared with
+      /// another thread and resumed before the await_suspend() function returns."
+      auto launch = launch_async_;
+      launch(*this);
+    }
     return true;
   }
 
@@ -255,6 +263,9 @@ protected:
   /// State of the promise: May be nothing, value or error.
   State state_;
 
+  /// An exception that may be present additionally
+  std::exception_ptr exception_ptr_{nullptr};
+
   /// A function called on await_suspend that starts the asynchronous operation
   LaunchAsync launch_async_;
 
@@ -265,8 +276,6 @@ protected:
 
   /// The continuation that is registered when co_awaiting this promise
   std::coroutine_handle<> continuation_{nullptr};
-  /// An exception that may be present additionally
-  std::exception_ptr exception_ptr_{nullptr};
 };
 
 /// A Promise is used in ICEY for async/await. It is returned from asynchronous operations such as a
@@ -379,20 +388,29 @@ public:
                              std::size_t(coroutine_.address()))
               << std::endl;
 #endif
-    if (coroutine_ && coroutine_.done()) {
-      coroutine_.destroy();
-    } else if (coroutine_) {
-      /// TODO to enforce users explicitly detaching, this should probably throw
-      coroutine_.promise().detach();
+    if (coroutine_) {
+      if (coroutine_.done()) {
+        coroutine_.destroy();
+      } else {
+        /// TODO to enforce users explicitly detaching, this should probably throw
+        detach();
+      }
     }
   }
 
   /// You need to detach a Promise if you are not awaiting it but it should still continue to run.
   /// Detaching this outer promise means the coroutine state won't be destroyed on destruction of
   /// outer promise. This also avoid the discarting warning
-  void detach() { coroutine_.promise().detach(); }
+  void detach() {
+    coroutine_.promise()
+        .detach();  // Tell the promise it must continue after final suspend so that it reaches the
+                    // final state where the coroutine state is destroyed.
+    coroutine_ = nullptr;  /// set to nullptr so that we do not access coroutine and cause a race on
+                           /// destruction where potentially another thread continues the coroutine
+                           /// that this thread has just detached
+  }
 
-  bool await_ready() const noexcept { return coroutine_ && coroutine_.done(); }
+  bool await_ready() const noexcept { return !coroutine_ || coroutine_.done(); }
 
   auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept {
     if (coroutine_.done()) {

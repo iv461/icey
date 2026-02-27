@@ -102,13 +102,12 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest) {
 
 TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
   const auto l = [this]() -> icey::Promise<int> {
-    std::size_t received_cnt{0};
-
+    auto received_cnt = std::make_shared<std::size_t>(0);
     receiver_->icey()
         .create_subscription<std_msgs::msg::Float32>("/icey_test/sine_signal")
-        .then([&](auto msg) {
-          EXPECT_EQ(received_cnt, std::size_t(msg->data));
-          received_cnt++;
+        .then([received_cnt](auto msg) {
+          EXPECT_EQ(*received_cnt, std::size_t(msg->data));
+          (*received_cnt)++;
         });
 
     auto timer = sender_->icey().create_timer(100ms);
@@ -126,7 +125,7 @@ TEST_F(AsyncAwaitTwoNodeTest, PubSubTest2) {
     /// We do not await till the published message was received.
     /// Since the ACK from DDS is exposed in rclcpp via PublisherBase::wait_for_all_acked, we could
     /// implement a co_await publish(msg, timeout).
-    EXPECT_EQ(received_cnt, 9);
+    EXPECT_EQ(*received_cnt, 9);
     async_completed = true;
     co_return 0;
   };
@@ -244,7 +243,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
 
     sender_->icey()
         .create_timer(100ms)
-        .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+        .then([base_time](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
           geometry_msgs::msg::TransformStamped tf1;
           tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms);
           tf1.header.frame_id = "icey_test_frame1";
@@ -257,7 +256,7 @@ TEST_F(AsyncAwaitTwoNodeTest, TFAsyncLookupTest) {
 
     sender_->icey()
         .create_timer(100ms)
-        .then([&](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
+        .then([base_time](size_t ticks) -> std::optional<geometry_msgs::msg::TransformStamped> {
           geometry_msgs::msg::TransformStamped tf1;
           tf1.header.stamp = icey::rclcpp_from_chrono(base_time + ticks * 100ms);
           tf1.header.frame_id = "icey_test_frame2";

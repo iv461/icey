@@ -23,21 +23,10 @@
 #include "rcl_action/action_client.h"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/time.hpp"
+#include "rclcpp_action/client_goal_handle.hpp"
 #include "rclcpp_action/exceptions.hpp"
 #include "rclcpp_action/types.hpp"
 #include "rclcpp_action/visibility_control.hpp"
-
-// I'm defining this in namespace rclcpp_action so that people don't have to change their code unnecessarily. 
-// I could also just include the rclcpp_action header, but just defining the enum here is faster to compile.
-namespace rclcpp_action {
-/// The possible statuses that an action goal can finish with.
-enum class ResultCode : int8_t {
-  UNKNOWN = action_msgs::msg::GoalStatus::STATUS_UNKNOWN,
-  SUCCEEDED = action_msgs::msg::GoalStatus::STATUS_SUCCEEDED,
-  CANCELED = action_msgs::msg::GoalStatus::STATUS_CANCELED,
-  ABORTED = action_msgs::msg::GoalStatus::STATUS_ABORTED
-};
-}  // namespace rclcpp_action
 
 namespace icey::rclcpp_action {
 
@@ -66,14 +55,7 @@ public:
   RCLCPP_SMART_PTR_DEFINITIONS_NOT_COPYABLE(ClientGoalHandle)
 
   // A wrapper that defines the result of an action
-  struct WrappedResult {
-    /// The unique identifier of the goal
-    GoalUUID goal_id;
-    /// A status to indicate if the goal was canceled, aborted, or succeeded
-    ResultCode code;
-    /// User defined fields sent back with an action
-    typename ActionT::Result::SharedPtr result;
-  };
+  using WrappedResult = typename ::rclcpp_action::ClientGoalHandle<ActionT>::WrappedResult;
 
   using Feedback = typename ActionT::Feedback;
   using Result = typename ActionT::Result;

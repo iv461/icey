@@ -3,10 +3,10 @@
 /// Author: Ivo Ivanov
 /// This software is licensed under the Apache License, Version 2.0.
 
-/// Action server example that demonstrates how callbacks of the action server can be coroutines. In
-/// this case, the handle_goal-callback is a coroutine and calls a service. Once the service
-/// response, the goal is accepted. The handle_cancel and handle_accepted could be coroutines as
-/// well.
+/// This is an action server example that demonstrates how callbacks of the action server can be
+/// coroutines. In this case, the handle_goal callback is a coroutine that calls a service. Once the
+/// service responds, the goal is accepted. handle_cancel and handle_accepted could also be
+/// coroutines.
 
 #include <example_interfaces/action/fibonacci.hpp>
 #include <icey/icey_async_await.hpp>
@@ -15,7 +15,6 @@
 
 using namespace std::chrono_literals;
 using Fibonacci = example_interfaces::action::Fibonacci;
-using GoalHandleFibonacci = icey::rclcpp_action::ClientGoalHandle<Fibonacci>;
 using ServerGoalHandleFibonacci = icey::rclcpp_action::ServerGoalHandle<Fibonacci>;
 
 int main(int argc, char **argv) {

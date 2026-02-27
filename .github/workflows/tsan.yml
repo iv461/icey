@@ -1,0 +1,52 @@
+name: TSAN Race Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  tsan:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ros_distro: humble
+            container_image: rostooling/setup-ros-docker:ubuntu-jammy-latest
+          - ros_distro: jazzy
+            container_image: rostooling/setup-ros-docker:ubuntu-noble-latest
+          - ros_distro: kilted
+            container_image: rostooling/setup-ros-docker:ubuntu-noble-latest
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.container_image }}
+    env:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tooling
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends util-linux
+
+      - name: Build with TSAN
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.bash
+          MAKEFLAGS="-j6" colcon build \
+            --packages-select icey icey_examples \
+            --cmake-args \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DICEY_ENABLE_TSAN=ON \
+              -DICEY_ASYNC_AWAIT_THREAD_SAFE=1
+
+      - name: Run TSAN race repro tests
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.bash
+          source install/setup.bash
+          TSAN_OPTIONS="halt_on_error=1:detect_deadlocks=1:suppressions=${GITHUB_WORKSPACE}/icey/test/tsan_dds.supp" \
+            setarch x86_64 -R \
+            ${GITHUB_WORKSPACE}/build/icey/test_main \
+            --gtest_filter=NodeTasksThreadSafety.TSanRaceRepro*

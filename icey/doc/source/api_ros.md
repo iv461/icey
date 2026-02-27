@@ -21,9 +21,6 @@ Convenience node wrappers containing the Icey context
 ```{doxygenclass} icey::NodeWithIceyContext
 ```
 
-```{doxygenstruct} icey::TransformBufferImpl
-```
-
 ```{doxygenstruct} icey::NodeBase
 ```
 

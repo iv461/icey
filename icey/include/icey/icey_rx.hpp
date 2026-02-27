@@ -274,8 +274,8 @@ public:
   template <class OnTransform, class OnError>
   void add_tf_subscription(GetValue<std::string> target_frame, GetValue<std::string> source_frame,
                            OnTransform &&on_transform, OnError &&on_error) {
-    this->add_tf_listener_if_needed();
-    tf_buffer_impl_->add_subscription(target_frame, source_frame, on_transform, on_error);
+    this->create_transform_buffer().add_subscription(target_frame, source_frame, on_transform,
+                                                     on_error);
   }
 
   auto add_tf_broadcaster_if_needed() {
@@ -1316,7 +1316,7 @@ template <class Message>
 struct TransformSynchronizerImpl {
   using Self = TransformSynchronizerImpl<Message>;
   /// The book owns it.
-  Weak<TransformBufferImpl> tf_listener;
+  std::weak_ptr<tf2_ros::Buffer> tf_buffer;
   std::string target_frame;
   std::shared_ptr<SimpleFilterAdapter<Message>> input_filter;
   std::shared_ptr<tf2_ros::MessageFilter<Message>> synchronizer;
@@ -1327,13 +1327,14 @@ struct TransformSynchronizerImpl {
 
   void create_synchronizer(Context &context, const std::string &_target_frame,
                            const Duration &lookup_timeout) {
-    tf_listener = context.add_tf_listener_if_needed();
+    auto buf = context.create_transform_buffer();
+    tf_buffer = buf.get_buffer();
     target_frame = _target_frame;
     input_filter = std::make_shared<SimpleFilterAdapter<Message>>(context);
     /// The argument "0" means here infinite message queue size. We set it so
     /// because we must buffer every message for as long as we are waiting for a transform.
     synchronizer = std::make_shared<tf2_ros::MessageFilter<Message>>(
-        *input_filter->impl(), *tf_listener->buffer_, target_frame, 0,
+        *input_filter->impl(), *tf_buffer.lock(), target_frame, 0,
         context.node_base()->get_node_logging_interface(),
         context.node_base()->get_node_clock_interface(), lookup_timeout);
 
@@ -1341,16 +1342,18 @@ struct TransformSynchronizerImpl {
   }
 
   void on_message(typename Message::SharedPtr message) {
-    const auto timestamp = rclcpp_to_chrono(rclcpp::Time(message->header.stamp));
-    auto maybe_transform =
-        this->tf_listener->get_from_buffer(target_frame, message->header.frame_id, timestamp);
-    if (maybe_transform.has_value())
-      static_cast<Derived *>(this)->put_value(std::make_tuple(message, maybe_transform.value()));
-    else  /// Invariant trap since I don't own the tf2_ros code and therefore can't prove it is
-          /// correct:
+    try {
+      // Note that this call does not wait, the transform must already have arrived.
+      auto transform = tf_buffer.lock()->lookupTransform(target_frame, message->header.frame_id,
+                                                         rclcpp::Time(message->header.stamp));
+      static_cast<Derived *>(this)->put_value(std::make_tuple(message, transform));
+    } catch (const tf2::TransformException &e) {
+      /// Invariant trap since I don't own the tf2_ros code and therefore can't prove it is
+      /// correct:
       throw std::logic_error(
           "Invariant broke: tf2_ros::MessageFilter broke the promise that the transform is "
           "available");
+    }
   }
 };
 

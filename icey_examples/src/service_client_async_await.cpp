@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
   /// Create the service client beforehand
   auto client = ctx->create_client<ExampleService>("set_bool_service");
-  auto timer = ctx->create_timer_async(500ms, [&](std::size_t) -> icey::Promise<void> {
+  auto timer = ctx->create_timer_async(500ms, [&]() -> icey::Promise<void> {
     RCLCPP_INFO_STREAM(node->get_logger(), "Timer ticked");
 
     auto request = std::make_shared<ExampleService::Request>();

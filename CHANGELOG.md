@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.4.0
 
+### Changed 
+
+- Timer callback signature not longer taking size_t as an argument
+- Added CallbackGroup arguments to API
+
 ### Added
  
 - Support for actions
@@ -22,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - allowing coroutines without suspension points (i.e. co_await) but only a single co_return
 - Correct result type implementation
 - Missing request cleanup in ServiceClientImpl::our_to_real_req_id_
-- Added missing cancellation of timeout timer in Promise destruction
+- Missing cancellation of timeout timer in Promise destruction
 
 ## 0.3.0 
 

@@ -10,6 +10,11 @@
   <img src="https://img.shields.io/github/actions/workflow/status/iv461/icey/build.yml?branch=main&job=build_and_test_ros2_humble%20(humble)&label=ROS%202%20Humble&style=for-the-badge" alt="ROS 2 Humble Build Status" />
 </p>
 
+### Updates:
+- v0.4.0: 
+  - Adds support multi-threaded executor, the async/await API is now thread-safe. 
+  - Also adds support for actions.
+
 ICEY is a new client API for modern asynchronous programming in the Robot Operating System (ROS) 2. It uses C++20 coroutines with async/await syntax for service calls and TF lookups. ICEY allows you to model data flows based on streams and promises. These features simplify application code and make asynchronous data flows clearly visible.
 
 ### Problems ICEY solves:
@@ -22,7 +27,7 @@ ICEY is a new client API for modern asynchronous programming in the Robot Operat
 ICEY is fully compatible with the ROS 2 API since it is built on top of rclcpp. This allows for gradual adoption. It supports all major ROS features: parameters, subscriptions, publishers, timers, services, clients, actions and TF. Additionally, ICEY supports lifecycle nodes using a single API.
 ICEY operates smoothly with the message_filters package, using it for synchronization. ICEY is also extensible, as demonstrated by its support for image transport camera subscription/publishers.
 
-ICEY supports ROS 2 Humble and ROS 2 Jazzy.
+ICEY supports ROS 2 Humble/Jazzy/Kilted.
 
 The [icey_examples](icey_examples) package contains many different example nodes, demonstrating the capabilities of ICEY.
 
